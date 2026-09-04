@@ -13,4 +13,5 @@ local-*.env
 dev.env
 prd.env
 *.log
+*.tsbuildinfo
 .DS_Store

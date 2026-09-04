@@ -135,6 +135,7 @@ overrides:
 allowBuilds:
   esbuild: true
   sharp: true
+  unrs-resolver: true
 ```
 
 Create `turbo.json`:

@@ -1,8 +1,9 @@
 import { ArrowDownLeft, ArrowUpRight, CalendarDays } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
 
 export default function TimelinePage() {
   return (
-    <div className="timeline-page">
+    <AppShell><div className="timeline-page">
       <header className="page-heading">
         <div>
           <p className="date-line">Sua visão de hoje</p>
@@ -53,6 +54,6 @@ export default function TimelinePage() {
           </p>
         </div>
       </section>
-    </div>
+    </div></AppShell>
   );
 }

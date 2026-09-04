@@ -1,0 +1,23 @@
+{
+  "name": "@receivy/common",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Platform-neutral contracts and rules shared by Receivy clients and API.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --pool=forks",
+    "test:watch": "vitest --pool=forks"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

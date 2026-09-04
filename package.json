@@ -1,0 +1,27 @@
+{
+  "name": "receivy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x",
+    "pnpm": "11.5.3"
+  },
+  "packageManager": "pnpm@11.5.3",
+  "scripts": {
+    "dev": "turbo dev --filter=!@receivy/mobile",
+    "dev:api": "turbo dev --filter=@receivy/api",
+    "dev:web": "turbo dev --filter=@receivy/web",
+    "dev:mobile": "turbo dev --filter=@receivy/mobile",
+    "lint": "turbo lint",
+    "check-types": "turbo check-types",
+    "test": "turbo test",
+    "build": "turbo build",
+    "verify:workspace": "node scripts/verify-workspace.mjs",
+    "verify": "pnpm verify:workspace && pnpm lint && pnpm check-types && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "turbo": "^2.9.18",
+    "typescript": "catalog:"
+  }
+}

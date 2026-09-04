@@ -1,0 +1,11 @@
+.git
+.github
+**/node_modules
+**/.next
+**/.expo
+**/dist
+**/coverage
+**/*.log
+**/*.local
+**/local.env
+.DS_Store

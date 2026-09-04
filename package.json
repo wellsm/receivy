@@ -18,7 +18,8 @@
     "test": "turbo test",
     "build": "turbo build",
     "verify:workspace": "node scripts/verify-workspace.mjs",
-    "verify": "pnpm verify:workspace && pnpm lint && pnpm check-types && pnpm test && pnpm build"
+    "verify:mobile-sdk": "node scripts/verify-expo-doctor.mjs",
+    "verify": "pnpm verify:workspace && pnpm lint && pnpm check-types && pnpm test && pnpm build && pnpm verify:mobile-sdk"
   },
   "devDependencies": {
     "turbo": "^2.9.18",

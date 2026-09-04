@@ -508,9 +508,9 @@ Run: `pnpm --filter @receivy/api test && pnpm --filter @receivy/api check-types`
 
 Expected: PASS with the health contract test and no EZ4 declaration errors.
 
-Run: `pnpm --filter @receivy/api exec ez4 output -e local.env.example --local`
+Run `pnpm dev:api` from a shell where `nvm use 24` has selected Node 24, then request `http://127.0.0.1:3735/local-receivy-api/health`.
 
-Expected: PASS and output containing `GET /health` without contacting AWS.
+Expected: HTTP 200 with `{ "status": "ok", "service": "receivy-api" }`. Do not use `ez4 output` as a local validation command: EZ4 0.52 ignores `--local` for `output` and attempts to read remote AWS state.
 
 - [ ] **Step 7: Commit the API foundation**
 
@@ -594,7 +594,8 @@ import { NextResponse } from "next/server";
 export async function GET(): Promise<NextResponse<HealthResponse | { status: "unavailable" }>> {
   const baseUrl = process.env.EZ4_API_URL;
   if (!baseUrl) return NextResponse.json({ status: "unavailable" }, { status: 503 });
-  const response = await fetch(new URL("/health", baseUrl), { cache: "no-store" });
+  const upstream = new URL("health", baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  const response = await fetch(upstream, { cache: "no-store" });
   if (!response.ok) return NextResponse.json({ status: "unavailable" }, { status: 503 });
   return NextResponse.json((await response.json()) as HealthResponse, { headers: { "Cache-Control": "no-store" } });
 }
@@ -827,11 +828,11 @@ pnpm --filter @receivy/api db:up
 pnpm dev:api
 ```
 
-Expected: Postgres becomes healthy and EZ4 serves `GET /health` on `http://127.0.0.1:3735`.
+Expected: Postgres becomes healthy and EZ4 serves `GET /health` under the local service base `http://127.0.0.1:3735/local-receivy-api`.
 
 - [ ] **Step 2: Prove the API and BFF responses**
 
-Run: `curl --fail http://127.0.0.1:3735/health`
+Run: `curl --fail http://127.0.0.1:3735/local-receivy-api/health`
 
 Expected:
 
@@ -839,7 +840,7 @@ Expected:
 {"status":"ok","service":"receivy-api"}
 ```
 
-Start web with `EZ4_API_URL=http://127.0.0.1:3735 pnpm dev:web`, then run `curl --fail http://127.0.0.1:3000/api/health` and expect the same JSON.
+Start web with `EZ4_API_URL=http://127.0.0.1:3735/local-receivy-api pnpm dev:web`, then run `curl --fail http://127.0.0.1:3000/api/health` and expect the same JSON.
 
 - [ ] **Step 3: Visually inspect the responsive shell**
 

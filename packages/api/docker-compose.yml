@@ -1,0 +1,23 @@
+name: receivy-api
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: receivy-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: receivy
+      POSTGRES_PASSWORD: receivy
+      POSTGRES_DB: receivy
+    ports:
+      - "55434:5432"
+    volumes:
+      - receivy_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U receivy -d receivy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  receivy_pg_data:

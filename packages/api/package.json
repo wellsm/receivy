@@ -1,0 +1,42 @@
+{
+  "name": "@receivy/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "dev": "node --env-file=local.env ./node_modules/@ez4/project/bin/cli.mjs serve -e local.env --local",
+    "serve:dev": "APP_STAGE=dev node --env-file=dev.env --env-file-if-exists=local-dev.env ./node_modules/@ez4/project/bin/cli.mjs serve -e dev.env",
+    "serve:prd": "APP_STAGE=prd node --env-file=prd.env ./node_modules/@ez4/project/bin/cli.mjs serve -e prd.env",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "check-types": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --pool=forks",
+    "test:watch": "vitest --pool=forks",
+    "output:dev": "APP_STAGE=dev ez4 output -e dev.env",
+    "deploy:dev": "tsc -p tsconfig.json --noEmit && APP_STAGE=dev ez4 deploy -e dev.env",
+    "deploy:prd": "tsc -p tsconfig.json --noEmit && APP_STAGE=prd ez4 deploy -e prd.env"
+  },
+  "dependencies": {
+    "@ez4/common": "0.52.0",
+    "@ez4/database": "0.52.0",
+    "@ez4/gateway": "0.52.0",
+    "@ez4/pgclient": "0.52.0",
+    "@ez4/project": "0.52.0",
+    "@ez4/raw-pg": "0.52.0",
+    "@ez4/schema": "0.52.0",
+    "@receivy/common": "workspace:*"
+  },
+  "devDependencies": {
+    "@ez4/aws-gateway": "0.52.0",
+    "@ez4/local-database": "0.52.0",
+    "@ez4/local-gateway": "0.52.0",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

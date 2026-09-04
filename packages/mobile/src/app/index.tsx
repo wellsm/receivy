@@ -1,1 +1,1 @@
-export { HomeScreen as default } from "@/components/home-screen";
+export { SessionGate as default } from "@/components/session-gate";

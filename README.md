@@ -34,8 +34,13 @@ pnpm dev
 Em outro terminal, inicie o app mobile:
 
 ```bash
+cp packages/mobile/.env.example packages/mobile/.env.local
 pnpm dev:mobile
 ```
+
+No Android Emulator, troque o host da API móvel por `10.0.2.2`. Em aparelho
+físico, use o endereço LAN alcançável da máquina de desenvolvimento; nunca
+coloque segredos em variáveis `EXPO_PUBLIC_*`.
 
 Para validar tudo localmente:
 

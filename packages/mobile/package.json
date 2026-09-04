@@ -13,6 +13,7 @@
     "expo-image": "~56.0.12",
     "expo-linking": "~56.0.17",
     "expo-router": "~56.2.20",
+    "expo-secure-store": "~56.0.4",
     "expo-splash-screen": "~56.0.15",
     "expo-status-bar": "~56.0.4",
     "expo-symbols": "~56.0.7",

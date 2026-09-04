@@ -5,6 +5,7 @@ dist/
 .next/
 coverage/
 .expo/
+.ez4/
 android/
 ios/
 *.local

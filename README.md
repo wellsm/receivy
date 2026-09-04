@@ -58,6 +58,20 @@ Defina `EZ4_API_URL=http://127.0.0.1:3735/local-receivy-api` apenas no ambiente
 de execução do servidor Next. Nenhum segredo de API entra no bundle do navegador
 ou como argumento de build da imagem.
 
+## Autenticação local
+
+O backend já expõe o núcleo passwordless em `/auth/email/code`,
+`/auth/email/confirm`, `/auth/refresh`, `/auth/logout` e `/auth/me`. O arquivo de
+exemplo usa `EMAIL_TRANSPORT=disabled`: ele exercita persistência e limitação de
+reenvio sem imprimir códigos no terminal. Para entrega real, defina
+`EMAIL_TRANSPORT=resend`, `RESEND_API_KEY` e `RESEND_FROM_EMAIL` em um gerenciador
+de segredos, além de gerar valores independentes e aleatórios de pelo menos 32
+bytes para `AUTH_JWT_SECRET` e `LOGIN_CODE_HASH_KEY`.
+
+O acesso dura 15 minutos. O refresh é opaco, vive por 30 dias, gira a cada uso e
+fica armazenado apenas como hash. Reutilizar um refresh já consumido revoga toda
+a família daquela sessão.
+
 ## Restrição conhecida do Expo 56
 
 O projeto permanece intencionalmente no Expo SDK 56. O `expo-doctor` aprova 21 de
@@ -68,9 +82,9 @@ explícita, depois de reproduzir os problemas já observados nesse SDK.
 
 ## Escopo desta entrega
 
-Esta fundação termina em health connectivity e nos shells web/mobile. Login por
-código de e-mail, dados financeiros, comprovantes, Pix, recorrências e notificações
-entram nos próximos incrementos descritos em
+Esta fundação inclui o núcleo e os endpoints EZ4 do login por código. A interface
+passwordless no BFF/web/mobile, provedores sociais, dados financeiros,
+comprovantes, Pix, recorrências e notificações entram nos próximos incrementos descritos em
 `docs/superpowers/specs/2026-09-04-receivy-mvp-design.md`.
 
 ## Verificação da fundação — 2026-09-04

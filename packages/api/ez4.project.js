@@ -1,6 +1,15 @@
 import { ArchitectureType, LogLevel, RuntimeType } from "@ez4/project";
 
-const { APP_STAGE = "dev", APP_DEBUG, EZ4_RAW_PG_DB_URL } = process.env;
+const {
+  APP_STAGE = "dev",
+  APP_DEBUG,
+  EZ4_RAW_PG_DB_URL,
+  AUTH_JWT_SECRET,
+  LOGIN_CODE_HASH_KEY,
+  EMAIL_TRANSPORT = "disabled",
+  RESEND_API_KEY = "disabled",
+  RESEND_FROM_EMAIL = "disabled",
+} = process.env;
 
 /** @type {import("@ez4/project").ProjectOptions} */
 export default {
@@ -45,5 +54,10 @@ export default {
   variables: {
     APP_STAGE,
     APP_DEBUG,
+    AUTH_JWT_SECRET,
+    LOGIN_CODE_HASH_KEY,
+    EMAIL_TRANSPORT,
+    RESEND_API_KEY,
+    RESEND_FROM_EMAIL,
   },
 };

@@ -406,33 +406,16 @@ a {
   }
 
   .main-content {
-    padding: 70px 48px 90px;
+    padding: 64px 32px 90px;
   }
 
   .page-heading {
-    grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr);
-    align-items: end;
-    gap: 50px;
-  }
-
-  .balance-ledger {
-    grid-template-columns: 1fr 1px 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
   }
 
   .balance-side {
     padding: 30px;
-  }
-
-  .ledger-spine {
-    width: 1px;
-    height: auto;
-    margin-block: 24px;
-    margin-inline: 0;
-  }
-
-  .ledger-spine span {
-    top: 50%;
-    left: -5px;
   }
 
   .floating-action {
@@ -451,6 +434,24 @@ a {
   }
 }
 
+@media (min-width: 1024px) {
+  .balance-ledger {
+    grid-template-columns: 1fr 1px 1fr;
+  }
+
+  .ledger-spine {
+    width: 1px;
+    height: auto;
+    margin-block: 24px;
+    margin-inline: 0;
+  }
+
+  .ledger-spine span {
+    top: 50%;
+    left: -5px;
+  }
+}
+
 @media (min-width: 1180px) {
   .app-shell {
     grid-template-columns: 264px minmax(0, 1fr);
@@ -458,6 +459,16 @@ a {
 
   .sidebar {
     padding-inline: 28px;
+  }
+
+  .main-content {
+    padding: 70px 48px 90px;
+  }
+
+  .page-heading {
+    grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr);
+    align-items: end;
+    gap: 50px;
   }
 }
 

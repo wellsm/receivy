@@ -5,6 +5,8 @@ import type {
   RotateRefreshTokenOutcome,
   SessionRepository,
 } from "../auth/refresh-session";
+import type { OauthFlowRepository } from "../auth/oauth-flow";
+import { OauthFlowError } from "../auth/oauth-flow";
 import {
   canAttemptEmailCode,
   createEmailCodeHash,
@@ -235,6 +237,207 @@ async function issueSession(
   return { familyId, refreshToken };
 }
 
+async function createOauthAttempt(
+  db: DbClient,
+  input: Parameters<OauthFlowRepository["createAttempt"]>[0],
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db.oauth_attempts.insertOne({
+    select: { id: true },
+    data: {
+      id: crypto.randomUUID(),
+      provider: input.provider,
+      state_hash: input.stateHash,
+      client_challenge: input.clientChallenge,
+      destination: input.destination,
+      code_verifier: input.codeVerifier,
+      nonce: input.nonce,
+      expires_at: input.expiresAt.toISOString(),
+      created_at: now,
+    },
+  });
+}
+
+async function consumeOauthAttempt(
+  db: DbClient,
+  input: Parameters<OauthFlowRepository["consumeAttempt"]>[0],
+): ReturnType<OauthFlowRepository["consumeAttempt"]> {
+  return db.transaction(async (tx) => {
+    const attempt = await tx.oauth_attempts.findOne({
+      select: {
+        id: true,
+        destination: true,
+        code_verifier: true,
+        client_challenge: true,
+        nonce: true,
+        expires_at: true,
+        consumed_at: true,
+      },
+      where: { provider: input.provider, state_hash: input.stateHash },
+      lock: true,
+    });
+    if (
+      !attempt ||
+      attempt.consumed_at ||
+      new Date(attempt.expires_at).getTime() <= Date.now()
+    ) {
+      return null;
+    }
+
+    await tx.oauth_attempts.updateOne({
+      select: { id: true },
+      data: { consumed_at: new Date().toISOString() },
+      where: { id: attempt.id },
+    });
+    return {
+      destination: attempt.destination,
+      codeVerifier: attempt.code_verifier,
+      clientChallenge: attempt.client_challenge,
+      nonce: attempt.nonce,
+    };
+  });
+}
+
+async function resolveOauthUser(
+  db: DbClient,
+  input: Parameters<OauthFlowRepository["resolveUser"]>[0],
+): ReturnType<OauthFlowRepository["resolveUser"]> {
+  const select = {
+    id: true,
+    email: true,
+    name: true,
+    avatar_url: true,
+    locale: true,
+    timezone: true,
+    country: true,
+    currency: true,
+  } as const;
+
+  return db.transaction(async (tx) => {
+    const existingIdentity = await tx.auth_identities.findOne({
+      select: { user_id: true },
+      where: {
+        provider: input.provider,
+        provider_user_id: input.identity.subject,
+      },
+      lock: true,
+    });
+    if (existingIdentity) {
+      const existingUser = await tx.users.findOne({
+        select,
+        where: { id: existingIdentity.user_id },
+      });
+      if (!existingUser) {
+        throw new Error("OAuth identity references a missing user");
+      }
+      return toAuthUser(existingUser);
+    }
+
+    let account = await tx.users.findOne({
+      select,
+      where: { email: input.identity.email },
+      lock: true,
+    });
+    // Google does not vouch for continued ownership of third-party email inboxes.
+    // An established provider subject may log in above; linking a new subject
+    // to an existing email account requires authoritative email ownership.
+    if (account && !input.identity.emailAuthoritative) {
+      throw new OauthFlowError("EMAIL_LOGIN_REQUIRED");
+    }
+    const now = new Date().toISOString();
+    if (!account) {
+      account = await tx.users.insertOne({
+        select,
+        data: {
+          id: crypto.randomUUID(),
+          email: input.identity.email,
+          name: input.identity.name,
+          avatar_url: input.identity.picture,
+          locale: "pt-BR",
+          timezone: "America/Sao_Paulo",
+          country: "BR",
+          currency: "BRL",
+          created_at: now,
+          updated_at: now,
+        },
+      });
+    }
+
+    await tx.auth_identities.insertOne({
+      select: { id: true },
+      data: {
+        id: crypto.randomUUID(),
+        user: { id: account.id },
+        provider: input.provider,
+        provider_user_id: input.identity.subject,
+        email: input.identity.email,
+        email_verified: true,
+        created_at: now,
+        updated_at: now,
+      },
+    });
+    return toAuthUser(account);
+  });
+}
+
+async function createOauthGrant(
+  db: DbClient,
+  input: Parameters<OauthFlowRepository["createGrant"]>[0],
+): Promise<void> {
+  await db.oauth_grants.insertOne({
+    select: { id: true },
+    data: {
+      id: crypto.randomUUID(),
+      user: { id: input.userId },
+      grant_hash: input.grantHash,
+      client_challenge: input.clientChallenge,
+      expires_at: input.expiresAt.toISOString(),
+      created_at: new Date().toISOString(),
+    },
+  });
+}
+
+async function consumeOauthGrant(
+  db: DbClient,
+  grantHash: string,
+  clientChallenge: string,
+): ReturnType<OauthFlowRepository["consumeGrant"]> {
+  return db.transaction(async (tx) => {
+    const grant = await tx.oauth_grants.findOne({
+      select: { id: true, user_id: true, expires_at: true, consumed_at: true },
+      where: { grant_hash: grantHash, client_challenge: clientChallenge },
+      lock: true,
+    });
+    if (
+      !grant ||
+      grant.consumed_at ||
+      new Date(grant.expires_at).getTime() <= Date.now()
+    ) {
+      return null;
+    }
+
+    await tx.oauth_grants.updateOne({
+      select: { id: true },
+      data: { consumed_at: new Date().toISOString() },
+      where: { id: grant.id },
+    });
+    const account = await tx.users.findOne({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        avatar_url: true,
+        locale: true,
+        timezone: true,
+        country: true,
+        currency: true,
+      },
+      where: { id: grant.user_id },
+    });
+    return account ? toAuthUser(account) : null;
+  });
+}
+
 async function rotateRefreshToken(
   db: DbClient,
   clearToken: string,
@@ -325,7 +528,9 @@ async function revokeFamilyByRefreshToken(db: DbClient, clearToken: string): Pro
   }
 }
 
-export function createAuthRepository(db: DbClient): AuthRepository & SessionRepository {
+export function createAuthRepository(
+  db: DbClient,
+): AuthRepository & SessionRepository & OauthFlowRepository {
   return {
     replaceLoginCode: (input) => replaceLoginCode(db, input),
     consumeLoginCode: (input) => consumeLoginCode(db, input),
@@ -333,6 +538,11 @@ export function createAuthRepository(db: DbClient): AuthRepository & SessionRepo
     issueSession: (userId, deviceName) => issueSession(db, userId, deviceName),
     rotateRefreshToken: (token) => rotateRefreshToken(db, token),
     revokeFamilyByRefreshToken: (token) => revokeFamilyByRefreshToken(db, token),
+    createAttempt: (input) => createOauthAttempt(db, input),
+    consumeAttempt: (input) => consumeOauthAttempt(db, input),
+    resolveUser: (input) => resolveOauthUser(db, input),
+    createGrant: (input) => createOauthGrant(db, input),
+    consumeGrant: (grantHash, clientChallenge) => consumeOauthGrant(db, grantHash, clientChallenge),
   };
 }
 

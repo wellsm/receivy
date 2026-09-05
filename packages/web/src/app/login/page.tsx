@@ -3,11 +3,12 @@ import { LoginForm } from "@/components/login-form";
 import { safeNextPath } from "@/lib/auth/cookies";
 
 type LoginPageProps = {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const nextPath = safeNextPath((await searchParams).next ?? null);
+  const params = await searchParams;
+  const nextPath = safeNextPath(params.next ?? null);
 
   return (
     <main className="login-page">
@@ -38,7 +39,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <p className="login-eyebrow">Bem-vindo</p>
           <h2 id="login-title">Entre no Receivy</h2>
           <p className="login-intro">Sem senha. Enviaremos um código de uso único para o seu e-mail.</p>
-          <LoginForm nextPath={nextPath} />
+          <LoginForm nextPath={nextPath} oauthError={params.error === "oauth"} />
         </div>
         <p className="login-legal">Ao continuar, você concorda com os termos e a política de privacidade.</p>
       </section>

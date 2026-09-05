@@ -57,6 +57,11 @@ no secrets/tokens/codes in logs, localStorage or AsyncStorage.
 
 ## Task 5: Google and Apple authorization-code flows
 
+Implementation checkpoint: API/BFF/Expo wired; real provider activation remains
+credential-bound. Google uses provider PKCE; both flows bind the Receivy grant
+to the initiating client's S256 challenge. Apple uses confidential code exchange
+with state/nonce (its provider API does not document PKCE). See `docs/oauth-setup.md`.
+
 - Add PKCE/state/nonce start and callback/exchange endpoints with issuer,
   signature, audience, expiry and verified-email checks.
 - Add Next callback routes and Expo development-build clients.
@@ -64,6 +69,10 @@ no secrets/tokens/codes in logs, localStorage or AsyncStorage.
   secrets. Document exact redirect URIs and Apple Private Relay setup.
 
 ## Task 6: Auth verification checkpoint
+
+Local Postgres smoke validated wrong verifier 401, valid grant exchange 200,
+replayed grant 401, and removed only its isolated fixtures. Google/Apple
+consent and native development-build checks remain pending real configuration.
 
 - Run `pnpm verify` and focused API/BFF/mobile auth tests.
 - Exercise email-code login locally with a fake transport fixture.

@@ -2,9 +2,10 @@
 
 import { Apple, ArrowRight, KeyRound, Mail } from "lucide-react";
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { isProviderAuthorizationUrl } from "@/lib/auth/oauth";
 
-type LoginFormProps = { nextPath: string };
+type LoginFormProps = { nextPath: string; oauthError?: boolean };
 
 async function responseMessage(response: Response, fallback: string): Promise<string> {
   try {
@@ -15,12 +16,38 @@ async function responseMessage(response: Response, fallback: string): Promise<st
   }
 }
 
-export function LoginForm({ nextPath }: LoginFormProps) {
+export function LoginForm({ nextPath, oauthError = false }: LoginFormProps) {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(oauthError
+    ? "Não foi possível concluir o login. Tente novamente ou use seu e-mail." : null);
+  const [providers, setProviders] = useState({ google: false, apple: false });
+
+  useEffect(() => {
+    void fetch("/api/auth/oauth/providers").then(async (response) => {
+      if (response.ok) {
+        const data = await response.json();
+        setProviders({ google: data.google === true, apple: data.apple === true });
+      }
+    }).catch(() => {});
+  }, []);
+
+  async function socialLogin(provider: "google" | "apple") {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/oauth/start", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider }),
+      });
+      if (!response.ok) throw new Error();
+      const { authorizationUrl } = await response.json();
+      if (!isProviderAuthorizationUrl(authorizationUrl, provider)) throw new Error();
+      window.location.assign(authorizationUrl);
+    } catch { setError("Não foi possível iniciar o login. Tente novamente."); setBusy(false); }
+  }
 
   async function sendCode(event?: FormEvent) {
     event?.preventDefault();
@@ -72,18 +99,18 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   return (
     <div className="login-form-wrap">
       <div className="social-login-grid" aria-describedby="social-login-note">
-        <button type="button" className="social-login-button" disabled>
+        <button type="button" className="social-login-button" disabled={busy || !providers.google} onClick={() => void socialLogin("google")}>
           <span className="google-g" aria-hidden="true">G</span>
           Continuar com Google
         </button>
-        <button type="button" className="social-login-button" disabled>
+        <button type="button" className="social-login-button" disabled={busy || !providers.apple} onClick={() => void socialLogin("apple")}>
           <Apple aria-hidden="true" size={19} />
           Continuar com Apple
         </button>
       </div>
-      <p id="social-login-note" className="social-login-note">
-        Google e Apple serão liberados após a configuração dos provedores.
-      </p>
+      {(!providers.google || !providers.apple) && <p id="social-login-note" className="social-login-note">
+        Algumas opções de login estão temporariamente indisponíveis.
+      </p>}
 
       <div className="login-divider"><span>ou use seu e-mail</span></div>
 

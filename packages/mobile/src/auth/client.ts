@@ -85,6 +85,35 @@ export function createAuthClient({
   return {
     getAccessToken: () => accessToken,
 
+    async oauthProviders(): Promise<{ google: boolean; apple: boolean }> {
+      try {
+        const response = await jsonRequest("auth/oauth/providers", { method: "GET" });
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        return { google: data.google === true, apple: data.apple === true };
+      } catch { return { google: false, apple: false }; }
+    },
+
+    async startOauth(input: { provider: "google" | "apple"; destination: string; clientChallenge: string }): Promise<string> {
+      const response = await jsonRequest("auth/oauth/start", { method: "POST", body: JSON.stringify(input) });
+      if (!response.ok) throw new Error("Não foi possível iniciar o login.");
+      const data = await response.json();
+      const url = new URL(data.authorizationUrl);
+      const expected = input.provider === "google" ? "https://accounts.google.com/o/oauth2/v2/auth" : "https://appleid.apple.com/auth/authorize";
+      if (`${url.origin}${url.pathname}` !== expected || url.username || url.password) throw new Error("Resposta de login inválida.");
+      return url.toString();
+    },
+
+    async exchangeOauth(code: string, codeVerifier: string): Promise<AuthUser> {
+      const response = await jsonRequest("auth/oauth/exchange", {
+        method: "POST", body: JSON.stringify({ code, codeVerifier, deviceName: "Receivy mobile" }),
+      });
+      if (!response.ok) throw new Error("Não foi possível concluir o login. Tente novamente.");
+      const session = await response.json() as AuthSessionResponse;
+      await saveSession(session);
+      return session.user;
+    },
+
     async requestEmailCode(input: RequestEmailCodeBody): Promise<void> {
       const response = await jsonRequest("auth/email/code", {
         method: "POST",

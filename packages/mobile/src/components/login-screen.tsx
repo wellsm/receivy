@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { router } from "expo-router";
+import { loginWithProvider } from "@/auth/oauth";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -24,6 +26,19 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [providers, setProviders] = useState({ google: false, apple: false });
+
+  useEffect(() => { void authClient.oauthProviders().then(setProviders); }, []);
+
+  async function socialLogin(provider: "google" | "apple") {
+    setBusy(true);
+    setError(null);
+    try {
+      if (await loginWithProvider(provider)) router.replace("/");
+    } catch {
+      setError("Não foi possível concluir o login. Tente novamente ou use seu e-mail.");
+    } finally { setBusy(false); }
+  }
 
   async function submit() {
     setBusy(true);
@@ -66,22 +81,24 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
             <View className="mt-8 gap-3">
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ disabled: true }}
-                disabled
+                accessibilityState={{ disabled: busy || !providers.google }}
+                disabled={busy || !providers.google}
+                onPress={() => void socialLogin("google")}
                 className="h-13 items-center justify-center rounded-2xl border border-outline bg-surface opacity-50"
               >
                 <Text className="font-bold text-ink">G  Continuar com Google</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ disabled: true }}
-                disabled
+                accessibilityState={{ disabled: busy || !providers.apple }}
+                disabled={busy || !providers.apple}
+                onPress={() => void socialLogin("apple")}
                 className="h-13 items-center justify-center rounded-2xl border border-outline bg-surface opacity-50"
               >
                 <Text className="font-bold text-ink">●  Continuar com Apple</Text>
               </Pressable>
               <Text className="text-center text-xs leading-5 text-muted">
-                Google e Apple serão liberados após a configuração dos provedores.
+                {(!providers.google || !providers.apple) ? "Algumas opções de login estão temporariamente indisponíveis." : "Entre com sua conta Google ou Apple."}
               </Text>
             </View>
 

@@ -14,5 +14,7 @@ export declare class ApiProvider implements Http.Provider {
     EMAIL_TRANSPORT: Environment.Variable<"EMAIL_TRANSPORT">;
     RESEND_API_KEY: Environment.Variable<"RESEND_API_KEY">;
     RESEND_FROM_EMAIL: Environment.Variable<"RESEND_FROM_EMAIL">;
+    OAUTH_PROVIDERS_CONFIG_B64: Environment.Variable<"OAUTH_PROVIDERS_CONFIG_B64">;
+    OAUTH_REDIRECT_ALLOW_LIST: Environment.Variable<"OAUTH_REDIRECT_ALLOW_LIST">;
   };
 }

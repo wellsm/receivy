@@ -2,6 +2,8 @@ import type { Client, Database, Index } from "@ez4/database";
 import type { PostgresEngine } from "@ez4/raw-pg/client";
 import type { AuthIdentitySchema } from "./schemas/auth-identity";
 import type { LoginCodeSchema } from "./schemas/login-code";
+import type { OauthAttemptSchema } from "./schemas/oauth-attempt";
+import type { OauthGrantSchema } from "./schemas/oauth-grant";
 import type { RefreshTokenSchema } from "./schemas/refresh-token";
 import type { SessionFamilySchema } from "./schemas/session-family";
 import type { UserSchema } from "./schemas/user";
@@ -30,6 +32,24 @@ export declare class Db extends Database.Service<PostgresEngine> {
       name: "login_codes";
       schema: LoginCodeSchema;
       indexes: { id: Index.Primary; email: Index.Unique };
+    }>,
+    Database.UseTable<{
+      name: "oauth_attempts";
+      schema: OauthAttemptSchema;
+      indexes: {
+        id: Index.Primary;
+        state_hash: Index.Unique;
+      };
+    }>,
+    Database.UseTable<{
+      name: "oauth_grants";
+      schema: OauthGrantSchema;
+      relations: { "user_id@user": "users:id" };
+      indexes: {
+        id: Index.Primary;
+        grant_hash: Index.Unique;
+        user_id: Index.Secondary;
+      };
     }>,
     Database.UseTable<{
       name: "session_families";

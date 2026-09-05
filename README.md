@@ -87,9 +87,13 @@ explícita, depois de reproduzir os problemas já observados nesse SDK.
 
 ## Escopo desta entrega
 
-Esta fundação inclui o núcleo e os endpoints EZ4 do login por código. A interface
-passwordless no BFF/web/mobile, provedores sociais, dados financeiros,
-comprovantes, Pix, recorrências e notificações entram nos próximos incrementos descritos em
+Estão implementados o login por e-mail/código na API, BFF/web e Expo, e a
+integração OAuth Google/Apple com validação OIDC e retorno vinculado ao cliente.
+Ativação e testes reais de Google/Apple dependem das credenciais e callbacks
+configurados conforme [configuração OAuth](docs/oauth-setup.md).
+
+O MVP ainda não está concluído: pessoas, dados financeiros, comprovantes, Pix,
+recorrências e notificações continuam nos próximos incrementos descritos em
 `docs/superpowers/specs/2026-09-04-receivy-mvp-design.md`.
 
 ## Verificação da fundação — 2026-09-04

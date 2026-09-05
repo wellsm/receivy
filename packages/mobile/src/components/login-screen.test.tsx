@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { LoginScreen } from "./login-screen";
 
+jest.mock("expo-router", () => ({ router: { replace: jest.fn() } }));
+jest.mock("@/auth/oauth", () => ({ loginWithProvider: jest.fn() }));
+
 describe("LoginScreen", () => {
   it("requests a code without rendering any password field", async () => {
     const requestEmailCode = jest.fn().mockResolvedValue(undefined);

@@ -9,6 +9,8 @@ const {
   EMAIL_TRANSPORT = "disabled",
   RESEND_API_KEY = "disabled",
   RESEND_FROM_EMAIL = "disabled",
+  OAUTH_PROVIDERS_CONFIG_B64 = "disabled",
+  OAUTH_REDIRECT_ALLOW_LIST = "http://localhost:3000/auth/oauth/callback,receivy://auth/callback",
 } = process.env;
 
 /** @type {import("@ez4/project").ProjectOptions} */
@@ -59,5 +61,7 @@ export default {
     EMAIL_TRANSPORT,
     RESEND_API_KEY,
     RESEND_FROM_EMAIL,
+    OAUTH_PROVIDERS_CONFIG_B64,
+    OAUTH_REDIRECT_ALLOW_LIST,
   },
 };

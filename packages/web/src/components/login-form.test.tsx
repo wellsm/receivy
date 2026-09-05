@@ -24,6 +24,7 @@ describe("LoginForm", () => {
 
   it("shows the same actionable error for any rejected code", async () => {
     const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ google: false, apple: false }), { status: 200 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         message: "Código inválido ou expirado. Peça um novo código e tente novamente.",

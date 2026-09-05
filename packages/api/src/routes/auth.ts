@@ -5,6 +5,11 @@ import type { emailConfirmHandler } from "../endpoints/auth/email-confirm";
 import type { logoutHandler } from "../endpoints/auth/logout";
 import type { meHandler } from "../endpoints/auth/me";
 import type { refreshHandler } from "../endpoints/auth/refresh";
+import type { appleCallbackHandler } from "../endpoints/auth/apple-callback";
+import type { googleCallbackHandler } from "../endpoints/auth/google-callback";
+import type { oauthExchangeHandler } from "../endpoints/auth/oauth-exchange";
+import type { oauthProvidersHandler } from "../endpoints/auth/oauth-providers";
+import type { oauthStartHandler } from "../endpoints/auth/oauth-start";
 
 export type AuthRoutes = [
   Http.UseRoute<{
@@ -16,6 +21,31 @@ export type AuthRoutes = [
     name: "confirmEmailCode";
     path: "POST /auth/email/confirm";
     handler: typeof emailConfirmHandler;
+  }>,
+  Http.UseRoute<{
+    name: "oauthProviders";
+    path: "GET /auth/oauth/providers";
+    handler: typeof oauthProvidersHandler;
+  }>,
+  Http.UseRoute<{
+    name: "oauthStart";
+    path: "POST /auth/oauth/start";
+    handler: typeof oauthStartHandler;
+  }>,
+  Http.UseRoute<{
+    name: "googleOauthCallback";
+    path: "GET /auth/google/callback";
+    handler: typeof googleCallbackHandler;
+  }>,
+  Http.UseRoute<{
+    name: "appleOauthCallback";
+    path: "POST /auth/apple/callback";
+    handler: typeof appleCallbackHandler;
+  }>,
+  Http.UseRoute<{
+    name: "oauthExchange";
+    path: "POST /auth/oauth/exchange";
+    handler: typeof oauthExchangeHandler;
   }>,
   Http.UseRoute<{
     name: "refreshSession";

@@ -1,0 +1,54 @@
+import type { Service } from "@ez4/common";
+import type { Http } from "@ez4/gateway";
+import type { String } from "@ez4/schema";
+import type { ApiProvider } from "../../provider";
+import { HttpNotFoundError, HttpUnauthorizedError } from "@ez4/gateway";
+import { completeOauth, OauthFlowError } from "../../auth/oauth-flow";
+import { createAuthRepository } from "../../repositories/auth-repository";
+import { appendOauthGrant, oauthDependencies } from "./oauth-shared";
+
+declare class AppleCallbackRequest implements Http.Request {
+  body: String.Max<16384>;
+}
+
+declare class AppleCallbackResponse implements Http.Response {
+  status: 302;
+  headers: { location: string };
+}
+
+export async function appleCallbackHandler(
+  request: AppleCallbackRequest,
+  context: Service.Context<ApiProvider>,
+): Promise<AppleCallbackResponse> {
+  const dependencies = oauthDependencies("apple", context);
+  if (!dependencies.client) {
+    throw new HttpNotFoundError();
+  }
+  try {
+    const form = new URLSearchParams(request.body);
+    const code = form.get("code");
+    const state = form.get("state");
+    if (!state) {
+      throw new HttpUnauthorizedError();
+    }
+    const result = await completeOauth({
+      code: code ?? undefined,
+      error: form.get("error") ?? undefined,
+      profile: form.get("user") ?? undefined,
+      provider: "apple",
+      state,
+    }, {
+      providerClient: dependencies.client,
+      repo: createAuthRepository(context.db),
+    });
+    return {
+      status: 302,
+      headers: { location: appendOauthGrant(result.destination, result.grant) },
+    };
+  } catch (error) {
+    if (error instanceof OauthFlowError) {
+      throw new HttpUnauthorizedError();
+    }
+    throw error;
+  }
+}

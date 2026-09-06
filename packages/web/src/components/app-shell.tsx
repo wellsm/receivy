@@ -17,6 +17,7 @@ const navigation = [
 
 type AppShellProps = {
   children: ReactNode;
+  activePath?: string;
 };
 
 function Brand() {
@@ -30,18 +31,18 @@ function Brand() {
   );
 }
 
-function Navigation({ mobile = false }: { mobile?: boolean }) {
+function Navigation({ mobile = false, activePath = "/" }: { mobile?: boolean; activePath?: string }) {
   return (
     <nav
       className={mobile ? "mobile-navigation" : "desktop-navigation"}
       aria-label={mobile ? "Navegação principal móvel" : "Navegação principal"}
     >
-      {navigation.map(({ href, label, icon: Icon }, index) => (
+      {navigation.map(({ href, label, icon: Icon }) => (
         <Link
-          className={index === 0 ? "navigation-link is-active" : "navigation-link"}
+          className={href === activePath ? "navigation-link is-active" : "navigation-link"}
           href={href}
           key={href}
-          aria-current={index === 0 ? "page" : undefined}
+          aria-current={href === activePath ? "page" : undefined}
         >
           <Icon aria-hidden="true" size={21} strokeWidth={1.8} />
           <span>{label}</span>
@@ -51,12 +52,12 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, activePath = "/" }: AppShellProps) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <Brand />
-        <Navigation />
+        <Navigation activePath={activePath} />
         <div className="sidebar-footnote">
           <span className="status-dot" aria-hidden="true" />
           Seus registros, sob seu controle.
@@ -75,7 +76,7 @@ export function AppShell({ children }: AppShellProps) {
           <span>Nova cobrança</span>
         </button>
 
-        <Navigation mobile />
+        <Navigation mobile activePath={activePath} />
       </div>
     </div>
   );

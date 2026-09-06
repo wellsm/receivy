@@ -30,5 +30,5 @@ export function SessionGate() {
     );
   }
 
-  return <HomeScreen />;
+  return <HomeScreen onOpenPeople={() => router.push("/people")} />;
 }

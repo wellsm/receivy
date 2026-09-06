@@ -44,7 +44,7 @@ function BalanceCard({ direction, label, helper, ...props }: BalanceCardProps) {
   );
 }
 
-export function HomeScreen() {
+export function HomeScreen({ onOpenPeople }: { onOpenPeople?: () => void }) {
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
       <ScrollView
@@ -117,7 +117,9 @@ export function HomeScreen() {
 
       <View className="absolute bottom-0 left-0 right-0 flex-row border-t border-outline/45 bg-surface px-1 pb-5 pt-2">
         {navigation.map(([icon, label], index) => (
-          <View
+          <Pressable
+            accessibilityRole="button"
+            onPress={label === "Contatos" ? onOpenPeople : undefined}
             className={`flex-1 items-center gap-1 rounded-xl py-2 ${index === 0 ? "bg-primary-soft/55" : ""}`}
             key={label}
           >
@@ -133,7 +135,7 @@ export function HomeScreen() {
             >
               {label}
             </Text>
-          </View>
+          </Pressable>
         ))}
       </View>
     </SafeAreaView>

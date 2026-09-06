@@ -4,6 +4,7 @@ import type { String } from "@ez4/schema";
 export interface UserSchema extends Database.Schema {
   id: String.UUID;
   email: String.Email;
+  verified_email?: String.Email;
   name?: String.Max<120>;
   avatar_url?: String.Max<512>;
   locale: "pt-BR";

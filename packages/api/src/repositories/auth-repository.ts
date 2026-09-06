@@ -13,6 +13,7 @@ import {
   verifyEmailCodeHash,
 } from "../auth/code";
 import { generateRefreshToken, hashRefreshToken } from "../auth/session";
+import { linkVerifiedPeople } from "../people/repository";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const CODE_COOLDOWN_MS = 60 * 1000;
@@ -534,13 +535,23 @@ export function createAuthRepository(
   return {
     replaceLoginCode: (input) => replaceLoginCode(db, input),
     consumeLoginCode: (input) => consumeLoginCode(db, input),
-    findOrCreateUserByEmail: (email) => findOrCreateUserByEmail(db, email),
+    findOrCreateUserByEmail: async (email) => {
+      const user = await findOrCreateUserByEmail(db, email);
+      await linkVerifiedPeople(db, user.id, email);
+      return user;
+    },
     issueSession: (userId, deviceName) => issueSession(db, userId, deviceName),
     rotateRefreshToken: (token) => rotateRefreshToken(db, token),
     revokeFamilyByRefreshToken: (token) => revokeFamilyByRefreshToken(db, token),
     createAttempt: (input) => createOauthAttempt(db, input),
     consumeAttempt: (input) => consumeOauthAttempt(db, input),
-    resolveUser: (input) => resolveOauthUser(db, input),
+    resolveUser: async (input) => {
+      const user = await resolveOauthUser(db, input);
+      if (input.identity.emailAuthoritative && user.email === input.identity.email) {
+        await linkVerifiedPeople(db, user.id, user.email);
+      }
+      return user;
+    },
     createGrant: (input) => createOauthGrant(db, input),
     consumeGrant: (grantHash, clientChallenge) => consumeOauthGrant(db, grantHash, clientChallenge),
   };

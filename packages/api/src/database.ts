@@ -7,11 +7,25 @@ import type { OauthGrantSchema } from "./schemas/oauth-grant";
 import type { RefreshTokenSchema } from "./schemas/refresh-token";
 import type { SessionFamilySchema } from "./schemas/session-family";
 import type { UserSchema } from "./schemas/user";
+import type { PersonSchema } from "./schemas/person";
+import type { PersonContactSchema } from "./schemas/person-contact";
 
 export declare class Db extends Database.Service<PostgresEngine> {
   client: Client<Db>;
 
   tables: [
+    Database.UseTable<{
+      name: "people";
+      schema: PersonSchema;
+      relations: { "owner_id@owner": "users:id"; "linked_user_id@linked_user": "users:id" };
+      indexes: { id: Index.Primary; "owner_id:active_email": Index.Unique; owner_id: Index.Secondary; linked_user_id: Index.Secondary };
+    }>,
+    Database.UseTable<{
+      name: "person_contacts";
+      schema: PersonContactSchema;
+      relations: { "person_id@person": "people:id" };
+      indexes: { id: Index.Primary; "person_id:type": Index.Unique; normalized_value: Index.Secondary };
+    }>,
     Database.UseTable<{
       name: "users";
       schema: UserSchema;

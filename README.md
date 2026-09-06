@@ -92,7 +92,15 @@ integração OAuth Google/Apple com validação OIDC e retorno vinculado ao clie
 Ativação e testes reais de Google/Apple dependem das credenciais e callbacks
 configurados conforme [configuração OAuth](docs/oauth-setup.md).
 
-O MVP ainda não está concluído: pessoas, dados financeiros, comprovantes, Pix,
+Contatos já podem ser cadastrados, editados, paginados e arquivados no web e Expo,
+com isolamento por proprietário, nome sem canais obrigatórios e vínculo por
+e-mail confirmado. Arquivar preserva os canais e libera o e-mail para reutilização.
+
+O pacote compartilhado também contém o planejamento de rateios e parcelas:
+fixo, igual e percentual, preservação exata dos centavos e vencimentos mensais.
+Esse núcleo ainda não está conectado à persistência ou às telas de cobrança.
+
+O MVP ainda não está concluído: dados financeiros, comprovantes, Pix,
 recorrências e notificações continuam nos próximos incrementos descritos em
 `docs/superpowers/specs/2026-09-04-receivy-mvp-design.md`.
 

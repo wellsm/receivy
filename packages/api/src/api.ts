@@ -2,6 +2,7 @@ import type { Http } from "@ez4/gateway";
 import type { NamingStyle } from "@ez4/schema";
 import type { HealthRoutes } from "./routes/health";
 import type { AuthRoutes } from "./routes/auth";
+import type { PeopleRoutes } from "./routes/people";
 
 /** Receivy HTTP API. */
 export declare class Api extends Http.Service {
@@ -13,7 +14,7 @@ export declare class Api extends Http.Service {
     };
   }>;
 
-  routes: [...HealthRoutes, ...AuthRoutes];
+  routes: [...HealthRoutes, ...AuthRoutes, ...PeopleRoutes];
 
   cors: Http.UseCors<{
     allowOrigins: ["http://localhost:3000"];

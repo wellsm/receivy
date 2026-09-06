@@ -1,5 +1,28 @@
 @import "tailwindcss";
 
+.people-page { max-width: 1160px; margin: 0 auto; }
+.people-page h1 { font-size: clamp(2rem, 4vw, 3.2rem); line-height: 1.12; letter-spacing: -.045em; color: var(--color-primary-strong); max-width: 760px; margin: 12px 0 20px; }
+.people-intro { max-width: 660px; line-height: 1.7; opacity: .75; }
+.people-layout { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 32px; margin-top: 40px; align-items: start; }
+.people-editor { padding: 24px; border: 1px solid var(--color-border); border-radius: 24px; background: white; }
+.people-page h2 { margin: 0 0 20px; font-size: 21px; font-weight: 700; color: var(--color-primary-strong); }
+.people-editor input { width: 100%; min-width: 0; min-height: 48px; border: 1px solid var(--color-border); border-radius: 12px; padding: 12px; background: var(--color-canvas); font: inherit; }
+.people-editor label span, .people-hint { font-size: 12px; font-weight: 400; opacity: .7; }
+.people-hint { line-height: 1.7; }
+.people-list-heading { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+.people-list-heading label { display: flex; gap: 8px; align-items: center; min-height: 48px; font-size: 13px; }
+.people-list { list-style: none; padding: 0; margin: 0; }
+.people-list li { display: flex; align-items: center; gap: 16px; padding: 22px 0; border-bottom: 1px solid var(--color-border); flex-wrap: wrap; }
+.person-avatar { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 16px; background: var(--color-primary-soft); color: var(--color-primary-strong); font-weight: 750; }
+.person-info { display: flex; flex: 1; min-width: 120px; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
+.person-info span { font-size: 13px; opacity: .7; }
+.person-actions { display: flex; gap: 6px; }
+.person-actions button { min-height: 44px; padding: 8px; font-size: 12px; color: var(--color-primary-strong); border-radius: 8px; cursor: pointer; }
+.people-page button:disabled { opacity: .5; cursor: wait; }
+.people-empty { padding: 40px 24px; border: 1px dashed var(--color-border); border-radius: 20px; line-height: 1.7; }
+.people-empty h3 { font-weight: 650; margin-top: 0; }
+@media (max-width: 1000px) { .people-layout { grid-template-columns: 1fr; } }
+
 :root {
   color-scheme: light;
   font-family: "Plus Jakarta Sans Variable", "Avenir Next", sans-serif;
@@ -328,6 +351,7 @@ a {
 
 .desktop-navigation {
   display: grid;
+  align-content: start;
   gap: 6px;
 }
 

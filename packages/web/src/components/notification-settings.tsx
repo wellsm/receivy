@@ -179,20 +179,21 @@ export function NotificationSettings() {
         Ative push pelo aplicativo móvel. Aqui você pode remover dispositivos
         registrados.
       </p>
-      {devices
-        .filter((device) => device.active)
-        .map((device) => (
-          <div key={device.id} className="action-row">
-            <span>{device.platform}</span>
-            <button
-              disabled={busy}
-              aria-label={`Remover ${device.platform}`}
-              onClick={() => void remove(device.id)}
-            >
-              Remover
-            </button>
-          </div>
-        ))}
+      {devices.map((device) => (
+        <div key={device.id} className="action-row">
+          <span>
+            {device.platform}
+            {!device.active && " (inativo)"}
+          </span>
+          <button
+            disabled={busy}
+            aria-label={`Remover ${device.platform}`}
+            onClick={() => void remove(device.id)}
+          >
+            Remover
+          </button>
+        </div>
+      ))}
       {error && (
         <>
           <p role="alert" className="login-error">

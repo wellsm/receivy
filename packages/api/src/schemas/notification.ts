@@ -25,6 +25,7 @@ export interface NotificationDeliverySchema extends Database.Schema {
   recipient_key: String.Max<300>;
   recipient_user_id?: String.UUID;
   device_id?: String.UUID;
+  device_token_hash?: String.Max<64>;
   channel: "email" | "push";
   template: "initial" | "reminder";
   state:

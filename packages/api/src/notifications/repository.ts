@@ -206,13 +206,19 @@ export async function removeDevice(
     const row = await tx.device_tokens.findOne({
       select: { user_id: true },
       where: { id },
-      lock: true,
     });
     if (!row) throw new HttpNotFoundError();
     if (row.user_id !== userId) throw new HttpForbiddenError();
+    const now = new Date().toISOString();
+    // User lock serializes owner changes; lock deliveries before the device, as the worker does.
+    // Accepted/in-flight notices retain their observation and uncertainty history.
+    await tx.notification_deliveries.updateMany({
+      where: { device_id: id, state: "pending" },
+      data: { state: "suppressed", reason: "device_removed", updated_at: now },
+    });
     await tx.device_tokens.updateOne({
       where: { id },
-      data: { active: false, updated_at: new Date().toISOString() },
+      data: { active: false, token: `removed:${id}`, updated_at: now },
     });
     await audit(tx, userId, id, "notifications.device_removed");
   });

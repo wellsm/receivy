@@ -150,34 +150,32 @@ export function NotificationSettings({
           Ativar push neste dispositivo
         </Text>
       </Pressable>
-      {devices
-        .filter((device) => device.active)
-        .map((device) => (
-          <View
-            key={device.id}
-            className="flex-row items-center justify-between"
+      {devices.map((device) => (
+        <View key={device.id} className="flex-row items-center justify-between">
+          <Text>
+            {device.platform}
+            {!device.active && " (inativo)"}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Remover ${device.platform}`}
+            disabled={busy}
+            onPress={() =>
+              void perform(async () => {
+                await client.remove(device.id);
+                setDevices((items) =>
+                  items.map((item) =>
+                    item.id === device.id ? { ...item, active: false } : item,
+                  ),
+                );
+              }, "Dispositivo removido.")
+            }
+            className="min-h-12 justify-center"
           >
-            <Text>{device.platform}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Remover ${device.platform}`}
-              disabled={busy}
-              onPress={() =>
-                void perform(async () => {
-                  await client.remove(device.id);
-                  setDevices((items) =>
-                    items.map((item) =>
-                      item.id === device.id ? { ...item, active: false } : item,
-                    ),
-                  );
-                }, "Dispositivo removido.")
-              }
-              className="min-h-12 justify-center"
-            >
-              <Text className="text-red-700">Remover</Text>
-            </Pressable>
-          </View>
-        ))}
+            <Text className="text-red-700">Remover</Text>
+          </Pressable>
+        </View>
+      ))}
       {message ? <Text accessibilityRole="alert">{message}</Text> : null}
     </View>
   );

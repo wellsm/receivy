@@ -51,7 +51,8 @@ provider outcomes. Disabled deliveries are not silently replayed on enabling
 transports; a new explicit reminder can be requested.
 
 Transient sends back off at 1, 2, 4, 8 minutes, at most five submissions. Provider
-credential/payload errors are definitive failures. Worker pages are bounded at
+submission credential/payload errors are definitive failures. Receipt-query errors
+are observation failures, not evidence that the original push failed. Worker pages are bounded at
 100 events per expansion (two expansions per run) and 100 delivery attempts.
 The one-minute UTC job has a 300-second execution timeout. Claim/acknowledgement
 transactions never contain provider calls. Expired email leases can retry with
@@ -71,8 +72,13 @@ worker. Rotation/revocation suppresses pending/retry messages using old metadata
 Expo does not offer equivalent submission idempotency. A lost submission response
 or expired sending lease becomes uncertain: no automatic resend or email
 fallback. Known tickets are polled after 15 minutes, every 15 minutes, within the
-same conservative 23-hour window. Polling never resubmits push. DeviceNotRegistered
-deactivates the token. Email fallback is possible only when **all** push delivery
+same conservative 23-hour window. Polling never resubmits push. Receipt-query
+HTTP 401/403 (and other non-retryable query errors or malformed receipt statuses)
+become `uncertain` with reason `receipt_observation_failed`, never failed or
+email-fallbacked. Transient query failures retain acceptance and retry observation.
+Only an explicit negative receipt establishes failure of the accepted submission.
+DeviceNotRegistered deactivates a registration only when its current token matches
+the attempted token's persisted fingerprint. Email fallback is possible only when **all** push delivery
 rows for that logical event definitively failed; accepted, pending, successful,
 disabled, suppressed, or uncertain siblings prevent it.
 
@@ -81,6 +87,25 @@ notice delivery. A valid charge can have a missed notice. Provider receipt does
 not prove that a person read it. A send already in flight cannot be recalled by
 a concurrent payment, preference change, or capability revocation; the public
 capability itself is still checked on access.
+
+### Device removal and rotation
+
+Explicit removal replaces the raw token with a unique non-deliverable tombstone,
+retains the inactive original-owned device row/ID/history, and suppresses its
+pending deliveries. The released token can be registered by another account on
+a separate row; active foreign tokens still conflict. Removal is idempotent and
+cannot affect a subsequent owner's registration. Legacy inactive rows may require
+repeat removal to release their token; both settings screens show inactive rows
+and retain the existing Remove control. The cost is retained inactive rows.
+
+Accepted/in-flight pushes cannot be recalled by removal; receipt observation and
+uncertainty remain intact. The worker persists `device_token_hash` before external
+submission and retains it through receipt polling. Old-token outcomes never
+deactivate a rotated token, and rotation during a transient in-flight submission
+suppresses its later retry rather than retargeting it. The field is optional for
+existing rows: legacy accepted tickets without a fingerprint are still observed,
+but cannot deactivate any current registration because their attempted token is
+unknown. No guessed fingerprint is backfilled from the current device token.
 
 Sources checked 2026-09-07: [Resend idempotency](https://resend.com/docs/dashboard/emails/idempotency-keys),
 [Expo submission and receipts](https://docs.expo.dev/push-notifications/sending-notifications/),

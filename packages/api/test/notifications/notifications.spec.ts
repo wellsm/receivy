@@ -1,6 +1,6 @@
 import { equal, ok, rejects } from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { HttpForbiddenError } from "@ez4/gateway";
+import { HttpConflictError, HttpForbiddenError } from "@ez4/gateway";
 import { cleanupUsers, createUser, db } from "../fixtures/financial";
 import { savePerson } from "../../src/people/repository";
 import { createExpense } from "../../src/expenses/repository";
@@ -20,6 +20,7 @@ import {
   listDeliveries,
 } from "../../src/notifications/repository";
 import type { NotificationTransport } from "../../src/notifications/transport";
+import { notificationTransport } from "../../src/notifications/transport";
 
 const OWNER = "b1111111-1111-4111-8111-111111111111";
 const DEBTOR = "b2222222-2222-4222-8222-222222222222";
@@ -33,6 +34,17 @@ let clock = start;
 let count = 0;
 let personId: string;
 const emails: { to: string; key: string; text: string }[] = [];
+const extraUsers: string[] = [];
+async function recipient() {
+  const id = crypto.randomUUID();
+  extraUsers.push(id);
+  await createUser(db, {
+    id,
+    email: `${id}@example.com`,
+    name: "Device fixture",
+  });
+  return id;
+}
 const transport: NotificationTransport = {
   email: async (input) => {
     emails.push(input);
@@ -81,7 +93,7 @@ describe("durable notification delivery", () => {
       name: "Other",
     });
   });
-  after(async () => cleanupUsers(db, [OWNER, DEBTOR, OTHER]));
+  after(async () => cleanupUsers(db, [OWNER, DEBTOR, OTHER, ...extraUsers]));
   it("consumes legacy minimal events once and never redirects old debt to edited contacts", async () => {
     const id = await charge();
     const original = `notify-${count}@example.com`;
@@ -622,6 +634,195 @@ describe("durable notification delivery", () => {
     ok(
       raw.every((row) => !row.render_inputs.includes("/pay/")),
       "no complete capability or rendered body may be stored",
+    );
+  });
+  it("keeps an accepted ticket uncertain after receipt HTTP 401 without submitting fallback email", async () => {
+    clock = start;
+    const userId = await recipient();
+    await registerDevice(db, userId, {
+      token: "ExpoPushToken[receipt-auth]",
+      installationId: "receipt-auth",
+      platform: "ios",
+    });
+    const id = await charge();
+    const email = `notify-${count}@example.com`;
+    await db.charges.updateOne({
+      where: { id },
+      data: { recipient_user: { id: userId } },
+    });
+    const submissions: string[] = [];
+    const sender = notificationTransport(
+      {
+        NOTIFICATION_PUSH_TRANSPORT: "expo",
+        NOTIFICATION_EMAIL_TRANSPORT: "resend",
+        RESEND_API_KEY: "fake-key",
+      },
+      async (url, init) => {
+        if (String(url).endsWith("/getReceipts"))
+          return new Response(null, { status: 401 });
+        if (String(url).endsWith("/send"))
+          return Response.json({ data: { status: "ok", id: "auth-ticket" } });
+        submissions.push(
+          ...(JSON.parse(String(init?.body)) as { to: string[] }).to,
+        );
+        return Response.json({ id: "fake-email" });
+      },
+    );
+    const execute = () =>
+      runNotifications(
+        db,
+        sender,
+        { ...config, from: "fixture@example.com" },
+        () => clock,
+      );
+    await execute();
+    const accepted = await listDeliveries(db, OWNER, id);
+    equal(accepted.length, 2);
+    ok(
+      accepted.every(
+        (row) => row.state === "accepted" && row.channel === "push",
+      ),
+    );
+    clock += 15 * 60_000;
+    await execute();
+    await execute();
+    equal(submissions.filter((to) => to === email).length, 0);
+    ok(
+      (await listDeliveries(db, OWNER, id)).every(
+        (row) => row.state === "uncertain" && row.channel === "push",
+      ),
+    );
+  });
+  it("releases an explicitly removed token to a new account without transferring history or queued notices", async () => {
+    clock = start;
+    const accountA = await recipient();
+    const accountB = await recipient();
+    const input = {
+      token: "ExpoPushToken[account-transfer]",
+      installationId: "same-installation",
+      platform: "ios" as const,
+    };
+    const oldDevice = await registerDevice(db, accountA, input);
+    await rejects(() => registerDevice(db, accountB, input), HttpConflictError);
+    const id = await charge();
+    await db.charges.updateOne({
+      where: { id },
+      data: { recipient_user: { id: accountA } },
+    });
+    await run({ ...transport, push: async () => ({ status: "transient" }) });
+    await removeDevice(db, accountA, oldDevice.id);
+    const newDevice = await registerDevice(db, accountB, input);
+    ok(newDevice.id !== oldDevice.id);
+    await removeDevice(db, accountA, oldDevice.id);
+    const current = await db.device_tokens.findOne({
+      select: { user_id: true, token: true, active: true },
+      where: { id: newDevice.id },
+    });
+    equal(current?.user_id, accountB);
+    equal(current?.token, input.token);
+    equal(current?.active, true);
+    const old = await db.device_tokens.findOne({
+      select: { user_id: true, active: true },
+      where: { id: oldDevice.id },
+    });
+    equal(old?.user_id, accountA);
+    equal(old?.active, false);
+    const rows = await listDeliveries(db, OWNER, id);
+    equal(rows.length, 2);
+    ok(rows.every((row) => row.state === "suppressed"));
+    equal(
+      await db.notification_deliveries.count({
+        where: { charge_id: id, device_id: oldDevice.id },
+      }),
+      2,
+    );
+    await rejects(() => registerDevice(db, accountA, input), HttpConflictError);
+    await rejects(
+      () => removeDevice(db, accountB, oldDevice.id),
+      HttpForbiddenError,
+    );
+  });
+  it("does not deactivate a rotated token when the old accepted ticket reports DeviceNotRegistered", async () => {
+    clock = start;
+    const userId = await recipient();
+    const input = {
+      token: "ExpoPushToken[old-registration]",
+      installationId: "receipt-rotation",
+      platform: "ios" as const,
+    };
+    const device = await registerDevice(db, userId, input);
+    const id = await charge();
+    await db.charges.updateOne({
+      where: { id },
+      data: { recipient_user: { id: userId } },
+    });
+    await run();
+    equal(
+      (await listDeliveries(db, OWNER, id)).filter(
+        (row) => row.state === "accepted",
+      ).length,
+      2,
+    );
+    const rotated = await registerDevice(db, userId, {
+      ...input,
+      token: "ExpoPushToken[new-registration]",
+    });
+    equal(rotated.id, device.id);
+    clock += 15 * 60_000;
+    await run({
+      ...transport,
+      receipt: async () => ({ status: "device_unregistered" }),
+    });
+    const current = await db.device_tokens.findOne({
+      select: { active: true, token: true },
+      where: { id: device.id },
+    });
+    equal(current?.token, "ExpoPushToken[new-registration]");
+    equal(current?.active, true);
+    ok(
+      (await listDeliveries(db, OWNER, id))
+        .filter((row) => row.channel === "push")
+        .every((row) => row.state === "failed"),
+    );
+  });
+  it("does not retarget a retry when registration rotates while its old submission is in flight", async () => {
+    clock = start;
+    const userId = await recipient();
+    const input = {
+      token: "ExpoPushToken[inflight-old]",
+      installationId: "inflight-rotation",
+      platform: "ios" as const,
+    };
+    await registerDevice(db, userId, input);
+    const id = await charge();
+    await db.charges.updateOne({
+      where: { id },
+      data: { recipient_user: { id: userId } },
+    });
+    const attempted: string[] = [];
+    const sender: NotificationTransport = {
+      ...transport,
+      push: async ({ token }) => {
+        attempted.push(token);
+        await registerDevice(db, userId, {
+          ...input,
+          token: "ExpoPushToken[inflight-new]",
+        });
+        return { status: "transient" };
+      },
+    };
+    await run(sender);
+    clock += 60_000;
+    await run(sender);
+    equal(
+      attempted.filter((token) => token === "ExpoPushToken[inflight-new]")
+        .length,
+      0,
+    );
+    ok(
+      (await listDeliveries(db, OWNER, id)).every(
+        (row) => row.state === "suppressed",
+      ),
     );
   });
 });

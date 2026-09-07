@@ -10,6 +10,7 @@ export type SendResult =
     };
 export type ReceiptResult = {
   status:
+    | "observation_failed"
     | "delivered"
     | "pending"
     | "transient"
@@ -141,7 +142,14 @@ export function notificationTransport(
           expoHeaders,
           { ids: [ticket] },
         );
-        if (!response.ok) return { status: httpFailure(response.status) };
+        // A failed query says nothing about delivery of the already accepted push.
+        if (!response.ok)
+          return {
+            status:
+              httpFailure(response.status) === "transient"
+                ? "transient"
+                : "observation_failed",
+          };
         const body = (await response.json()) as {
           data?: Record<
             string,
@@ -150,9 +158,10 @@ export function notificationTransport(
         };
         const receipt = body.data?.[ticket];
         if (!receipt) return { status: "pending" };
-        return receipt.status === "ok"
-          ? { status: "delivered" }
-          : { status: expoError(receipt.details?.error) };
+        if (receipt.status === "ok") return { status: "delivered" };
+        return receipt.status === "error"
+          ? { status: expoError(receipt.details?.error) }
+          : { status: "observation_failed" };
       } catch {
         return { status: "transient" };
       }

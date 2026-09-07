@@ -17,6 +17,7 @@ const SELECT = {
   recipient_key: true,
   recipient_user_id: true,
   device_id: true,
+  device_token_hash: true,
   channel: true,
   template: true,
   state: true,
@@ -162,6 +163,19 @@ export async function runNotifications(
         await fallback(tx, row.event_id, now);
         return;
       }
+      if (
+        !receipt &&
+        row.device_token_hash &&
+        device &&
+        digest(device.token) !== row.device_token_hash
+      ) {
+        await mark("suppressed", "device_changed");
+        return;
+      }
+      // Persist before submission; receipt observation must never overwrite this with a rotated token.
+      const tokenHash =
+        row.device_token_hash ??
+        (!receipt && device ? digest(device.token) : undefined);
       const rendered = renderNotice(inputs, row.template, config.secret);
       if (!receipt && digest(JSON.stringify(rendered)) !== row.body_hash) {
         await mark("suppressed", "render_configuration_changed");
@@ -180,6 +194,7 @@ export async function runNotifications(
           available_at: lease,
           attempts: row.attempts + (receipt ? 0 : 1),
           first_attempt_at: row.first_attempt_at ?? stamp,
+          ...(tokenHash ? { device_token_hash: tokenHash } : {}),
           updated_at: stamp,
         },
       });
@@ -246,6 +261,9 @@ export async function runNotifications(
       } else if (result.status === "delivered") {
         state = "delivered";
         reason = "push_service_receipt_ok";
+      } else if (result.status === "observation_failed") {
+        state = "uncertain";
+        reason = "receipt_observation_failed";
       } else if (result.status === "disabled") state = "disabled";
       else if (
         result.status === "permanent" ||
@@ -275,11 +293,22 @@ export async function runNotifications(
           updated_at: stamp,
         },
       });
-      if (result.status === "device_unregistered" && row.device_id)
-        await tx.device_tokens.updateOne({
+      if (
+        result.status === "device_unregistered" &&
+        row.device_id &&
+        row.device_token_hash
+      ) {
+        const current = await tx.device_tokens.findOne({
+          select: { token: true },
           where: { id: row.device_id },
-          data: { active: false, updated_at: stamp },
+          lock: true,
         });
+        if (current && digest(current.token) === row.device_token_hash)
+          await tx.device_tokens.updateOne({
+            where: { id: row.device_id },
+            data: { active: false, updated_at: stamp },
+          });
+      }
       if (state === "failed" && row.channel === "push")
         await fallback(tx, row.event_id, now);
     });

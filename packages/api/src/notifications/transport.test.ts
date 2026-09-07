@@ -8,6 +8,27 @@ const email = {
   text: "Body",
 };
 describe("notification provider boundaries", () => {
+  it.each([401, 403])(
+    "does not treat receipt-query HTTP %s as failed delivery",
+    async (status) => {
+      const sender = notificationTransport(
+        { NOTIFICATION_PUSH_TRANSPORT: "expo" },
+        async () => new Response(null, { status }),
+      );
+      expect(await sender.receipt("accepted-ticket")).toEqual({
+        status: "observation_failed",
+      });
+    },
+  );
+  it("does not treat a malformed receipt as a definitive negative receipt", async () => {
+    const sender = notificationTransport(
+      { NOTIFICATION_PUSH_TRANSPORT: "expo" },
+      async () => Response.json({ data: { ticket: { status: "unknown" } } }),
+    );
+    expect(await sender.receipt("ticket")).toEqual({
+      status: "observation_failed",
+    });
+  });
   it("keeps disabled explicit and sends stable Resend key/body, classifying failures", async () => {
     const request = vi.fn<typeof fetch>();
     const disabled = notificationTransport({}, request);

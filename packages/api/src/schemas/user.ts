@@ -13,4 +13,5 @@ export interface UserSchema extends Database.Schema {
   currency: "BRL";
   created_at: String.DateTime;
   updated_at: String.DateTime;
+  deleted_at?: String.DateTime;
 }

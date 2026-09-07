@@ -14,6 +14,7 @@ import {
 } from "../auth/code";
 import { generateRefreshToken, hashRefreshToken } from "../auth/session";
 import { linkVerifiedPeople } from "../people/repository";
+import { disableSessionDevices, revokeSession } from "../account/sessions";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const CODE_COOLDOWN_MS = 60 * 1000;
@@ -162,7 +163,7 @@ async function findOrCreateUserByEmail(db: DbClient, email: string): Promise<Aut
     country: true,
     currency: true,
   } as const;
-  const existing = await db.users.findOne({ select, where: { email } });
+  const existing = await db.users.findOne({ select, where: { email, deleted_at: { isNull: true } } });
 
   if (existing) {
     return toAuthUser(existing);
@@ -213,6 +214,7 @@ async function issueSession(
   const now = new Date();
 
   await db.transaction(async (tx) => {
+    if (!await tx.users.findOne({ select: { id: true }, where: { id: userId, deleted_at: { isNull: true } }, lock: true })) throw new Error("Account unavailable");
     await tx.session_families.insertOne({
       select: { id: true },
       data: {
@@ -326,7 +328,7 @@ async function resolveOauthUser(
     if (existingIdentity) {
       const existingUser = await tx.users.findOne({
         select,
-        where: { id: existingIdentity.user_id },
+        where: { id: existingIdentity.user_id, deleted_at: { isNull: true } },
       });
       if (!existingUser) {
         throw new Error("OAuth identity references a missing user");
@@ -336,7 +338,7 @@ async function resolveOauthUser(
 
     let account = await tx.users.findOne({
       select,
-      where: { email: input.identity.email },
+      where: { email: input.identity.email, deleted_at: { isNull: true } },
       lock: true,
     });
     // Google does not vouch for continued ownership of third-party email inboxes.
@@ -433,7 +435,7 @@ async function consumeOauthGrant(
         country: true,
         currency: true,
       },
-      where: { id: grant.user_id },
+      where: { id: grant.user_id, deleted_at: { isNull: true } },
     });
     return account ? toAuthUser(account) : null;
   });
@@ -444,7 +446,7 @@ async function rotateRefreshToken(
   clearToken: string,
 ): Promise<RotateRefreshTokenOutcome> {
   return db.transaction(async (tx): Promise<RotateRefreshTokenOutcome> => {
-    const token = await tx.refresh_tokens.findOne({
+    let token = await tx.refresh_tokens.findOne({
       select: {
         id: true,
         family_id: true,
@@ -452,12 +454,16 @@ async function rotateRefreshToken(
         consumed_at: true,
       },
       where: { token_hash: hashRefreshToken(clearToken) },
-      lock: true,
     });
 
     if (!token) {
       return { kind: "invalid" };
     }
+
+    // All account/session/device mutations serialize user -> family -> token.
+    // The first token read is only a hint; reread it under lock below.
+    const hint = await tx.session_families.findOne({ select: { user_id: true }, where: { id: token.family_id } });
+    if (!hint || !await tx.users.findOne({ select: { id: true }, where: { id: hint.user_id, deleted_at: { isNull: true } }, lock: true })) return { kind: "invalid" };
 
     const family = await tx.session_families.findOne({
       select: { id: true, user_id: true, revoked_at: true },
@@ -468,6 +474,8 @@ async function rotateRefreshToken(
     if (!family || family.revoked_at) {
       return { kind: "invalid" };
     }
+    token = await tx.refresh_tokens.findOne({ select: { id: true, family_id: true, expires_at: true, consumed_at: true }, where: { id: token.id }, lock: true });
+    if (!token) return { kind: "invalid" };
 
     if (token.consumed_at) {
       await tx.session_families.updateOne({
@@ -475,6 +483,7 @@ async function rotateRefreshToken(
         data: { revoked_at: new Date().toISOString() },
         where: { id: family.id },
       });
+      await disableSessionDevices(tx, family.user_id, family.id);
       return { kind: "replayed" };
     }
 
@@ -521,11 +530,8 @@ async function revokeFamilyByRefreshToken(db: DbClient, clearToken: string): Pro
   });
 
   if (token) {
-    await db.session_families.updateOne({
-      select: { id: true },
-      data: { revoked_at: new Date().toISOString() },
-      where: { id: token.family_id, revoked_at: { isNull: true } },
-    });
+    const family = await db.session_families.findOne({ select: { user_id: true }, where: { id: token.family_id } });
+    if (family) await revokeSession(db, family.user_id, token.family_id);
   }
 }
 
@@ -569,7 +575,7 @@ export async function findAuthUserById(db: DbClient, id: string): Promise<AuthUs
       country: true,
       currency: true,
     },
-    where: { id },
+    where: { id, deleted_at: { isNull: true } },
   });
   return row ? toAuthUser(row) : undefined;
 }

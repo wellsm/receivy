@@ -9,3 +9,4 @@ export * from "./domain/financial-form";
 export * from "./domain/recurrence";
 export * from "./domain/recurrence-draft";
 export * from "./domain/notifications";
+export * from "./domain/account";

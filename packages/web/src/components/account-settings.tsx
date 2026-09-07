@@ -1,0 +1,30 @@
+"use client";
+import { useEffect, useState } from "react";
+import type { AuthUser, AccountSession } from "@receivy/common";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED } from "@receivy/common";
+import { browserFetch } from "@/lib/auth/browser-fetch";
+
+export function AccountSettings({ onboarding = false, onComplete }: { onboarding?: boolean; onComplete?: () => void }) {
+  const [user, setUser] = useState<AuthUser | null>(null); const [sessions, setSessions] = useState<AccountSession[]>([]);
+  const [name, setName] = useState(""); const [timezone, setTimezone] = useState("America/Sao_Paulo");
+  const [confirmation, setConfirmation] = useState(""); const [notice, setNotice] = useState(""); const [busy, setBusy] = useState(false); const [ended, setEnded] = useState(false);
+  useEffect(() => { let active = true; void Promise.all([browserFetch("/api/auth/me").then(r => r.ok ? r.json() : Promise.reject()), onboarding ? Promise.resolve({ sessions: [] }) : browserFetch("/api/financial/account/sessions").then(r => r.ok ? r.json() : Promise.reject())]).then(([profile, page]) => { if (active) { setUser(profile.user); setName(profile.user.name ?? ""); setTimezone(onboarding ? Intl.DateTimeFormat().resolvedOptions().timeZone : profile.user.timezone); setSessions(page.sessions); } }, () => active && setNotice("Não foi possível carregar sua conta.")); return () => { active = false; }; }, [onboarding]);
+  async function save() { setBusy(true); try { const r = await browserFetch("/api/financial/account/profile", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, timezone, locale: "pt-BR", country: "BR" }) }); if (!r.ok) throw new Error(); setUser((await r.json()).user); setNotice("Perfil salvo."); onComplete?.(); } catch { setNotice("Não foi possível salvar. Confira seu nome e fuso horário."); } finally { setBusy(false); } }
+  async function revoke(item: AccountSession) { setBusy(true); try { const r = await browserFetch(`/api/financial/account/sessions/${item.id}`, { method: "DELETE" }); if (!r.ok) throw new Error(); setSessions(items => items.filter(x => x.id !== item.id)); if (item.current) { await fetch("/api/auth/logout", { method: "POST" }); setEnded(true); setNotice("Sessão encerrada."); } } catch { setNotice("Não foi possível encerrar a sessão."); } finally { setBusy(false); } }
+  async function exportData() { setBusy(true); try { const ticket = await browserFetch("/api/financial/account/export", { method: "POST" }); if (!ticket.ok) throw new Error(); const response = await browserFetch("/api/financial/account/export/download", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: (await ticket.json()).token }) }); if (!response.ok) throw new Error(); const data = await response.json(); const url = URL.createObjectURL(new Blob([data.json], { type: "application/json" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "receivy-dados.json"; anchor.click(); URL.revokeObjectURL(url); setNotice("Exportação baixada. Guarde o arquivo em local seguro."); } catch { setNotice("Não foi possível exportar. Tente novamente."); } finally { setBusy(false); } }
+  async function erase() { if (confirmation !== "EXCLUIR" || busy) return; setBusy(true); let confirmed = false; try { // No automatic retry/redirect: a 401 cannot certify that deletion committed.
+      const r = await fetch("/api/financial/account", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirmation }) }); confirmed = r.ok && (await r.json()).deleted === true;
+    } catch {} finally { try { await fetch("/api/auth/logout", { method: "POST" }); } catch {} setEnded(true); setBusy(false); setNotice(confirmed ? ACCOUNT_DELETED : ACCOUNT_DELETION_UNCONFIRMED); } }
+  return <section className="financial-page detail-section"><h2>{onboarding ? "Como podemos chamar você?" : "Sua conta"}</h2>
+    {notice && <p role="status">{notice}</p>}{ended ? <a href="/login">Voltar ao login</a> : user && <>
+      <form onSubmit={event => { event.preventDefault(); void save(); }} className="financial-form">
+        <label>Nome<input required maxLength={120} value={name} onChange={e => setName(e.target.value)} autoComplete="name" /></label>
+        {!onboarding && <><label>Idioma<select aria-label="Idioma" value="pt-BR" disabled><option>pt-BR</option></select></label><p>Português (Brasil) é o idioma disponível no MVP.</p><label>Fuso horário<input required maxLength={64} value={timezone} onChange={e => setTimezone(e.target.value)} /></label><label>País<select aria-label="País" value="BR" disabled><option>BR</option></select></label></>}
+        <button className="primary-button" disabled={busy || !name.trim()}>{onboarding ? "Continuar" : "Salvar perfil"}</button>
+      </form>{!onboarding && <><h3>Sessões e dispositivos</h3>{sessions.map(item => <div key={item.id}><p>{item.deviceName}{item.current ? " (esta sessão)" : ""} — último acesso {new Date(item.lastSeenAt).toLocaleString("pt-BR")}</p><button disabled={busy} onClick={() => void revoke(item)}>Encerrar {item.deviceName}</button></div>)}
+        <h3>Seus dados</h3><p>Exportação privada em JSON. A autorização temporária expira em cinco minutos e exige sua sessão ativa.</p><button disabled={busy} onClick={() => void exportData()}>Exportar dados</button>
+        <h3>Excluir conta</h3><p>Encerra sessões, revoga links e remove seus arquivos identificados. Registros compartilhados e comprovantes de outras pessoas podem ser preservados com referências anonimizadas. Avisos já enviados não podem ser recolhidos.</p>
+        <label>Digite EXCLUIR para confirmar<input value={confirmation} onChange={e => setConfirmation(e.target.value)} autoComplete="off" /></label><button disabled={busy || confirmation !== "EXCLUIR"} onClick={() => void erase()}>Excluir conta definitivamente</button>
+      </>}
+    </>}<p><a href="/terms">Termos de uso</a> · <a href="/privacy">Privacidade</a></p></section>;
+}

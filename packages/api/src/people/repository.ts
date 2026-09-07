@@ -7,7 +7,7 @@ const SELECT = { id: true, name: true, archived_at: true, created_at: true } as 
 const sqlNull = null as unknown as string | undefined;
 
 async function lockOwner(db: DbClient, ownerId: string) {
-  const owner = await db.users.findOne({ select: { id: true }, where: { id: ownerId }, lock: true });
+  const owner = await db.users.findOne({ select: { id: true }, where: { id: ownerId, deleted_at: { isNull: true } }, lock: true });
   if (!owner) throw new HttpUnauthorizedError();
 }
 
@@ -50,7 +50,7 @@ export async function savePerson(db: DbClient, ownerId: string, input: PersonInp
       if (duplicate && duplicate.id !== id) throw new HttpConflictError("Já existe um contato ativo com esse e-mail.");
     }
     const verifiedUser = input.email ? await tx.users.findOne({
-      select: { id: true }, where: { email: input.email, verified_email: input.email },
+      select: { id: true }, where: { email: input.email, verified_email: input.email, deleted_at: { isNull: true } },
     }) : undefined;
     const now = new Date().toISOString();
     const personId = id ?? crypto.randomUUID();
@@ -96,7 +96,7 @@ export async function archivePerson(db: DbClient, ownerId: string, id: string): 
 
 export async function linkVerifiedPeople(db: DbClient, userId: string, email: string): Promise<void> {
   await db.transaction(async tx => {
-    await tx.users.updateOne({ select: { id: true }, where: { id: userId, email }, data: { verified_email: email } });
+    if (!await tx.users.updateOne({ select: { id: true }, where: { id: userId, email, deleted_at: { isNull: true } }, data: { verified_email: email } })) return;
     await tx.people.updateMany({
       where: { active_email: email, linked_user_id: { isNull: true } },
       data: { linked_user: { id: userId }, updated_at: new Date().toISOString() },

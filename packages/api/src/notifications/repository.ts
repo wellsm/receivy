@@ -51,7 +51,7 @@ export async function savePreferences(
     if (
       !(await tx.users.findOne({
         select: { id: true },
-        where: { id: userId },
+        where: { id: userId, deleted_at: { isNull: true } },
         lock: true,
       }))
     )
@@ -115,6 +115,7 @@ export async function registerDevice(
   db: DbClient,
   userId: string,
   input: DeviceRegistration,
+  familyId?: string,
 ): Promise<NotificationDevice> {
   if (
     !/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/.test(
@@ -129,11 +130,12 @@ export async function registerDevice(
     if (
       !(await tx.users.findOne({
         select: { id: true },
-        where: { id: userId },
+        where: { id: userId, deleted_at: { isNull: true } },
         lock: true,
       }))
     )
       throw new HttpNotFoundError();
+    if (familyId && !await tx.session_families.findOne({ select: { id: true }, where: { id: familyId, user_id: userId, revoked_at: { isNull: true } } })) throw new HttpForbiddenError();
     const token = await tx.device_tokens.findOne({
       select: { id: true, user_id: true },
       where: { token: input.token },
@@ -165,6 +167,7 @@ export async function registerDevice(
         where: { id },
         data: {
           token: input.token,
+          session_family_id: familyId,
           platform: input.platform,
           active: true,
           updated_at: now,
@@ -177,6 +180,7 @@ export async function registerDevice(
           user: { id: userId },
           token: input.token,
           installation_id: input.installationId,
+          session_family_id: familyId,
           platform: input.platform,
           active: true,
           created_at: now,

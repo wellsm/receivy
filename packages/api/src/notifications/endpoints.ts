@@ -104,6 +104,7 @@ export async function registerDeviceHandler(
       context.db,
       request.identity.userId,
       request.body,
+      request.identity.familyId,
     ),
   };
 }

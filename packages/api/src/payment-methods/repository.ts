@@ -14,7 +14,7 @@ function dto(row: Row): PaymentMethod {
 }
 
 async function lockOwner(db: DbClient, ownerId: string) {
-  const owner = await db.users.findOne({ select: { id: true }, where: { id: ownerId }, lock: true });
+  const owner = await db.users.findOne({ select: { id: true }, where: { id: ownerId, deleted_at: { isNull: true } }, lock: true });
   if (!owner) throw new HttpUnauthorizedError();
 }
 

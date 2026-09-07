@@ -47,6 +47,7 @@ async function actorEmail(db: DbClient, actorId: string): Promise<string | undef
 }
 
 export async function findChargeForActor(db: DbClient, actorId: string, id: string, lock = false): Promise<{ row: ChargeRow; direction: "receivable" | "payable" }> {
+  if (!await db.users.findOne({ select: { id: true }, where: { id: actorId, deleted_at: { isNull: true } }, ...(lock ? { lock: true } : {}) })) throw new HttpForbiddenError();
   const row = await db.charges.findOne({ select: CHARGE_SELECT, where: { id }, ...(lock ? { lock: true } : {}) });
   if (!row) throw new HttpNotFoundError();
   if (row.creditor_id === actorId) return { row, direction: "receivable" };

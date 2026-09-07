@@ -7,6 +7,8 @@ import { authApiFetch } from "./auth/api";
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 const ID = "[A-Za-z0-9-]+";
 const ALLOWED_ROUTES: [string, RegExp][] = [
+  ["PATCH", /^account\/profile$/], ["GET", /^account\/sessions$/], ["DELETE", new RegExp(`^account/sessions/${ID}$`)],
+  ["DELETE", /^account$/], ["POST", /^account\/export(?:\/download)?$/],
   ["GET", /^notification-preferences$/], ["PATCH", /^notification-preferences$/], ["GET", /^devices$/],
   ["DELETE", new RegExp(`^devices/${ID}$`)], ["GET", new RegExp(`^charges/${ID}/deliveries$`)], ["POST", new RegExp(`^charges/${ID}/reminders$`)],
   ["GET", /^recurrences$/], ["POST", /^recurrences$/], ["GET", new RegExp(`^recurrences/${ID}(?:/preview)?$`)],

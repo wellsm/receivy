@@ -11,10 +11,12 @@ import type { TimelineRoutes } from "./routes/timeline";
 import type { ProofRoutes } from "./routes/proofs";
 import type { RecurrenceRoutes } from "./routes/recurrences";
 import type { NotificationRoutes } from "./routes/notifications";
+import type { AccountRoutes } from "./routes/account";
 
 /** Receivy HTTP API. */
 export declare class Api extends Http.Service {
   name: "Receivy API";
+  cache: Http.UseCache<{ authorizerTTL: 0 }>;
 
   defaults: Http.UseDefaults<{
     preferences: {
@@ -34,6 +36,7 @@ export declare class Api extends Http.Service {
     ...ProofRoutes,
     ...RecurrenceRoutes,
     ...NotificationRoutes,
+    ...AccountRoutes,
   ];
 
   cors: Http.UseCors<{

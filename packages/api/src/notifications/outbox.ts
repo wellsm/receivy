@@ -53,7 +53,7 @@ export async function expandOutbox(
       });
       if (!row || row.state !== "pending") return;
       const stamp = new Date(now).toISOString();
-      if (!charge) {
+      if (!charge || !await tx.users.findOne({ select: { id: true }, where: { id: charge.creditor_id, deleted_at: { isNull: true } } })) {
         await tx.outbox_events.updateOne({
           where: { id: row.id },
           data: { state: "failed", updated_at: stamp },
@@ -168,7 +168,7 @@ async function planDelivery(
   const user = charge.recipient_user_id
     ? await db.users.findOne({
         select: { id: true },
-        where: { id: charge.recipient_user_id },
+        where: { id: charge.recipient_user_id, deleted_at: { isNull: true } },
       })
     : charge.recipient_email_snapshot
       ? await db.users.findOne({
@@ -176,6 +176,7 @@ async function planDelivery(
           where: {
             email: charge.recipient_email_snapshot,
             verified_email: charge.recipient_email_snapshot,
+            deleted_at: { isNull: true },
           },
         })
       : undefined;

@@ -13,6 +13,7 @@ export interface DeviceTokenSchema extends Database.Schema {
   user_id: String.UUID;
   token: String.Max<300>;
   installation_id: String.Max<100>;
+  session_family_id?: String.UUID;
   platform: "ios" | "android";
   active: boolean;
   created_at: String.DateTime;

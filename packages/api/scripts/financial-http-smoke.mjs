@@ -6,6 +6,7 @@ const cwd = new URL("..", import.meta.url).pathname;
 const compose = ["compose", "-p", "receivy-financial-http-smoke", "-f", "docker-compose.http-smoke.yml"];
 const apiBase = "http://127.0.0.1:47365/http-smoke-receivy-api";
 const jwtSecret = "http-smoke-jwt-secret";
+const familyId = "61111111-1111-4111-8111-111111111111";
 let server;
 let serverOutput = "";
 
@@ -14,11 +15,11 @@ function run(command, args) {
   if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed\n${result.stdout}\n${result.stderr}`);
 }
 
-function accessToken(userId) {
+function accessToken(userId, sessionFamilyId = familyId) {
   const now = Math.floor(Date.now() / 1000);
   const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
   const header = encode({ alg: "HS256", typ: "JWT" });
-  const payload = encode({ aud: "receivy-clients", exp: now + 900, iat: now, iss: "receivy-api", sid: randomUUID(), sub: userId });
+  const payload = encode({ aud: "receivy-clients", exp: now + 900, iat: now, iss: "receivy-api", sid: sessionFamilyId, sub: userId });
   const signature = createHmac("sha256", jwtSecret).update(`${header}.${payload}`).digest("base64url");
   return `${header}.${payload}.${signature}`;
 }
@@ -69,6 +70,9 @@ try {
   assert.deepEqual(health.body, { status: "ok", service: "receivy-api" });
   assert.equal((await request("payment-methods", { method: "GET" })).status, 401);
 
+  // Persist a real family: test tokens get exactly the production revocation check.
+  run("docker", [...compose, "exec", "-T", "postgres", "psql", "-U", "receivy", "-d", "receivy", "-v", "ON_ERROR_STOP=1", "-c",
+    `INSERT INTO users (id,email,name,locale,timezone,country,currency,created_at,updated_at) VALUES ('11111111-1111-4111-8111-111111111111','recurrence-http@example.invalid','HTTP fixture','pt-BR','America/Sao_Paulo','BR','BRL',now(),now()); INSERT INTO session_families (id,user_id,created_at,last_seen_at) VALUES ('${familyId}','11111111-1111-4111-8111-111111111111',now(),now())`]);
   const authorization = `Bearer ${accessToken("11111111-1111-4111-8111-111111111111")}`;
   const malformed = await request("payment-methods", {
     method: "POST",
@@ -86,8 +90,6 @@ try {
   assert.equal((await request("public/charges/not-a-capability")).status, 404);
   // Disposable container-only fixture. Business behavior stays in DatabaseTester specs;
   // this assertion covers EZ4's real generated request/response serialization.
-  run("docker", [...compose, "exec", "-T", "postgres", "psql", "-U", "receivy", "-d", "receivy", "-v", "ON_ERROR_STOP=1", "-c",
-    "INSERT INTO users (id,email,name,locale,timezone,country,currency,created_at,updated_at) VALUES ('11111111-1111-4111-8111-111111111111','recurrence-http@example.invalid','HTTP fixture','pt-BR','America/Sao_Paulo','BR','BRL',now(),now())"]);
   const headers = { authorization, "content-type": "application/json" };
   const preferences = { emailEnabled: false, pushEnabled: true, reminderOffsets: [-3, 0, 2] };
   assert.equal((await request("notification-preferences")).status, 401);
@@ -104,7 +106,10 @@ try {
   assert.equal(person.status, 201);
   const expense = await request("expenses", { method: "POST", headers: { ...headers, "idempotency-key": randomUUID() }, body: JSON.stringify({ totalCents: 1234, installmentCount: 1, firstDueDate: "2027-01-01", split: { mode: "fixed", parts: [{ kind: "person", personId: person.body.id, amountCents: 1234 }] } }) });
   assert.equal(expense.status, 201); const chargeId = expense.body.charges[0].id;
-  const foreignHeaders = { ...headers, authorization: `Bearer ${accessToken("22222222-2222-4222-8222-222222222222")}` };
+  const foreignFamilyId = "62222222-2222-4222-8222-222222222222";
+  run("docker", [...compose, "exec", "-T", "postgres", "psql", "-U", "receivy", "-d", "receivy", "-v", "ON_ERROR_STOP=1", "-c",
+    `INSERT INTO users (id,email,name,locale,timezone,country,currency,created_at,updated_at) VALUES ('22222222-2222-4222-8222-222222222222','foreign-http@example.invalid','Foreign fixture','pt-BR','America/Sao_Paulo','BR','BRL',now(),now()); INSERT INTO session_families (id,user_id,created_at,last_seen_at) VALUES ('${foreignFamilyId}','22222222-2222-4222-8222-222222222222',now(),now())`]);
+  const foreignHeaders = { ...headers, authorization: `Bearer ${accessToken("22222222-2222-4222-8222-222222222222", foreignFamilyId)}` };
   assert.equal((await request(`charges/${chargeId}/reminders`, { method: "POST", headers: foreignHeaders })).status, 403);
   const reminders = await Promise.all([request(`charges/${chargeId}/reminders`, { method: "POST", headers }), request(`charges/${chargeId}/reminders`, { method: "POST", headers })]);
   assert.deepEqual(reminders.map(result => result.status).sort(), [202, 429]);
@@ -144,7 +149,18 @@ try {
     assert.equal(listed.status, 200);
     assert.deepEqual(listed.body.recurrences.find(rule => rule.id === variant.body.id).split, split);
   }
-  process.stdout.write("financial HTTP transport smoke: PASS\n");
+  const profile = { name: "HTTP account", locale: "pt-BR", timezone: "America/Manaus", country: "BR" };
+  const savedProfile = await request("account/profile", { method: "PATCH", headers, body: JSON.stringify(profile) });
+  assert.equal(savedProfile.status, 200); assert.equal(savedProfile.body.user.timezone, "America/Manaus");
+  const sessions = await request("account/sessions", { headers });
+  assert.equal(sessions.status, 200); assert.equal(sessions.body.sessions[0].current, true);
+  const ticket = await request("account/export", { method: "POST", headers }); assert.equal(ticket.status, 200);
+  const exported = await request("account/export/download", { method: "POST", headers, body: JSON.stringify({ token: ticket.body.token }) });
+  assert.equal(exported.status, 200); assert.equal(exported.body.filename, "receivy-dados.json"); assert.equal(JSON.parse(exported.body.json).profile.name, "HTTP account");
+  assert.equal((await request(`account/sessions/${familyId}`, { method: "DELETE", headers })).status, 204);
+  assert.equal((await request("auth/me", { headers })).status, 401, "already-issued access rejected immediately after real HTTP revocation");
+  assert.equal((await request("account/export/download", { method: "POST", headers, body: JSON.stringify({ token: ticket.body.token }) })).status, 401);
+  process.stdout.write("financial/account HTTP transport smoke: PASS\n");
 } catch (error) {
   process.stderr.write(serverOutput);
   throw error;

@@ -15,7 +15,7 @@ type RuleRow = { id: string; owner_id: string; description: string; total_cents:
 
 // All recurrence mutations follow expense lock order: owner → rule → people → Pix.
 async function lockOwner(db: DbClient, ownerId: string) {
-  if (!await db.users.findOne({ select: { id: true }, where: { id: ownerId }, lock: true })) throw new HttpUnauthorizedError();
+  if (!await db.users.findOne({ select: { id: true }, where: { id: ownerId, deleted_at: { isNull: true } }, lock: true })) throw new HttpUnauthorizedError();
 }
 async function ruleRow(db: DbClient, ownerId: string, id: string, lock = false) {
   const row = await db.recurrences.findOne({ select: SELECT, where: { id, owner_id: ownerId }, lock });

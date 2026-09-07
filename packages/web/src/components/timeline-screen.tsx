@@ -2,7 +2,7 @@
 
 import { calendarDate, formatMoney, type ChargeSummary, type Direction, type TimelineItem, type TimelinePage } from "@receivy/common";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
 
@@ -49,7 +49,9 @@ export function TimelineScreen() {
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const generation = useRef(0);
   const load = useCallback(async (nextFilter = filter, cursor?: string) => {
+    const requestGeneration = cursor ? generation.current : ++generation.current;
     setLoading(true); setError("");
     const query = new URLSearchParams(dateQuery(nextFilter));
     if (cursor) query.set("cursor", cursor);
@@ -57,14 +59,15 @@ export function TimelineScreen() {
       const response = await browserFetch(`/api/financial/timeline${query.size ? `?${query}` : ""}`);
       if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível carregar sua timeline."));
       const page = await response.json() as TimelinePage;
+      if (requestGeneration !== generation.current) return;
       setData(previous => cursor && previous ? { ...page, items: [...previous.items, ...page.items] } : page);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível carregar sua timeline."); }
-    finally { setLoading(false); }
+    } catch (reason) { if (requestGeneration === generation.current) setError(reason instanceof Error ? reason.message : "Não foi possível carregar sua timeline."); }
+    finally { if (requestGeneration === generation.current) setLoading(false); }
   }, [filter]);
-  useEffect(() => { void browserFetch("/api/financial/timeline").then(async response => {
+  useEffect(() => { const requestGeneration = ++generation.current; void browserFetch("/api/financial/timeline").then(async response => {
     if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível carregar sua timeline."));
     return response.json() as Promise<TimelinePage>;
-  }).then(setData).catch(reason => setError(reason instanceof Error ? reason.message : "Não foi possível carregar sua timeline.")).finally(() => setLoading(false)); }, []);
+  }).then(page => { if (requestGeneration === generation.current) setData(page); }).catch(reason => { if (requestGeneration === generation.current) setError(reason instanceof Error ? reason.message : "Não foi possível carregar sua timeline."); }).finally(() => { if (requestGeneration === generation.current) setLoading(false); }); }, []);
 
   const groups = new Map<string, TimelineItem[]>();
   for (const item of data?.items ?? []) groups.set(itemDate(item), [...(groups.get(itemDate(item)) ?? []), item]);

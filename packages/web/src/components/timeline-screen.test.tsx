@@ -1,4 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { TimelineScreen } from "./timeline-screen";
@@ -7,6 +8,9 @@ vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 describe("TimelineScreen", () => {
+  const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { amountCents: 0, currency: "BRL" }, overdue: { amountCents: 0, currency: "BRL" }, pending: { amountCents: 0, currency: "BRL" }, proofsToReview: 0 } as const;
+  const charge = (id: string, description: string) => ({ kind: "charge" as const, direction: "payable" as const, charge: { id, description, amount: { amountCents: 100, currency: "BRL" as const }, dueDate: "2026-09-10", state: "pending" as const, source: "expense" as const, installment: 1, installmentCount: 1 } });
+  const deferred = () => { let resolve!: (response: Response) => void; const promise = new Promise<Response>(done => { resolve = done; }); return { promise, resolve }; };
   it("renders persisted totals and explicit charge directions", async () => {
     vi.mocked(browserFetch).mockResolvedValue(Response.json({
       summary: {
@@ -30,5 +34,39 @@ describe("TimelineScreen", () => {
     vi.mocked(browserFetch).mockResolvedValue(Response.json({ message: "O total financeiro deve estar entre limites seguros." }, { status: 422 }));
     render(<TimelineScreen />);
     expect(await screen.findByRole("alert")).toHaveTextContent("O total financeiro deve estar entre limites seguros.");
+  });
+
+  it("keeps the newest filter when overlapping requests resolve in reverse order", async () => {
+    const receivable = deferred(); const payable = deferred();
+    vi.mocked(browserFetch).mockImplementation(async path => {
+      if (path === "/api/financial/timeline") return Response.json({ summary, items: [], nextCursor: null });
+      if (path === "/api/financial/timeline?direction=receivable") return receivable.promise;
+      return payable.promise;
+    });
+    render(<TimelineScreen />); const user = userEvent.setup();
+    await screen.findByText("Sua timeline começa aqui");
+    await user.click(screen.getByRole("button", { name: "A receber" }));
+    await user.click(screen.getByRole("button", { name: "A pagar" }));
+    payable.resolve(Response.json({ summary, items: [charge("new", "Resposta nova")], nextCursor: null }));
+    expect(await screen.findByText("Resposta nova")).toBeInTheDocument();
+    await act(async () => { receivable.resolve(Response.json({ summary, items: [charge("old", "Resposta antiga")], nextCursor: null })); await Promise.resolve(); });
+    expect(screen.queryByText("Resposta antiga")).not.toBeInTheDocument();
+  });
+
+  it("does not append pagination from an obsolete filter generation", async () => {
+    const oldPage = deferred(); const newFilter = deferred();
+    vi.mocked(browserFetch).mockImplementation(async path => {
+      if (path === "/api/financial/timeline") return Response.json({ summary, items: [charge("base", "Página inicial")], nextCursor: "old-cursor" });
+      if (path === "/api/financial/timeline?cursor=old-cursor") return oldPage.promise;
+      return newFilter.promise;
+    });
+    render(<TimelineScreen />); const user = userEvent.setup();
+    await screen.findByText("Página inicial");
+    await user.click(screen.getByRole("button", { name: "Carregar mais" }));
+    await user.click(screen.getByRole("button", { name: "A pagar" }));
+    newFilter.resolve(Response.json({ summary, items: [charge("filtered", "Filtro atual")], nextCursor: null }));
+    expect(await screen.findByText("Filtro atual")).toBeInTheDocument();
+    await act(async () => { oldPage.resolve(Response.json({ summary, items: [charge("stale-page", "Página obsoleta")], nextCursor: null })); await Promise.resolve(); });
+    expect(screen.queryByText("Página obsoleta")).not.toBeInTheDocument();
   });
 });

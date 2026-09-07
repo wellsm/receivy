@@ -1,4 +1,4 @@
-import { createFinancialClient } from "./client";
+import { createFinancialClient, FinancialRequestError } from "./client";
 
 describe("native financial client", () => {
   it("keeps the caller idempotency key on expense requests", async () => {
@@ -21,6 +21,6 @@ describe("native financial client", () => {
   it("preserves a typed API message for financial overflow", async () => {
     const authenticatedFetch = jest.fn().mockResolvedValue(Response.json({ message: "O total financeiro ultrapassa o limite exato." }, { status: 422 }));
     const client = createFinancialClient({ authenticatedFetch });
-    await expect(client.timeline()).rejects.toThrow("O total financeiro ultrapassa o limite exato.");
+    await expect(client.timeline()).rejects.toMatchObject<Partial<FinancialRequestError>>({ message: "O total financeiro ultrapassa o limite exato.", status: 422 });
   });
 });

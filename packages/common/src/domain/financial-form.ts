@@ -15,6 +15,21 @@ export function parseBRLCents(input: string): number {
   return Number(cents);
 }
 
+const PERCENTAGE_INPUT = /^(\d{1,3})(?:[,.](\d{1,2}))?$/;
+
+export function parsePercentageBasisPoints(input: string): number {
+  const match = PERCENTAGE_INPUT.exec(input);
+  if (!match) {
+    throw new RangeError("Informe um percentual entre 0 e 100, com até duas casas decimais.");
+  }
+
+  const basisPoints = Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
+  if (basisPoints > 10_000) {
+    throw new RangeError("Informe um percentual entre 0 e 100, com até duas casas decimais.");
+  }
+  return basisPoints;
+}
+
 export function calendarDate(date = new Date(), timeZone?: string): string {
   if (!timeZone) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");

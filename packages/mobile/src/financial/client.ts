@@ -3,12 +3,16 @@ import { authClient } from "@/auth/client";
 
 type Options = { authenticatedFetch: (path: string, init?: RequestInit) => Promise<Response>; publicWebBaseUrl?: string };
 
+export class FinancialRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); this.name = "FinancialRequestError"; }
+}
+
 async function message(response: Response, fallback: string) { try { const body = await response.json() as { message?: unknown }; return typeof body.message === "string" ? body.message : fallback; } catch { return fallback; } }
 
 export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: Options) {
   async function request<T>(path: string, init?: RequestInit, fallback = "Não foi possível acessar seus registros financeiros."): Promise<T> {
     const response = await authenticatedFetch(path, init);
-    if (!response.ok) throw new Error(await message(response, fallback));
+    if (!response.ok) throw new FinancialRequestError(await message(response, fallback), response.status);
     return response.status === 204 ? undefined as T : response.json() as Promise<T>;
   }
   return {

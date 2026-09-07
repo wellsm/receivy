@@ -59,12 +59,68 @@ public web origin or invents a production domain.
   production build exit 0; Expo 15/15, lint/types exit 0, Expo export exit 0.
 - Root visual QA inspected real rendered pages at 390/768/1440. Confirmed no document
   overflow, corrected the 390 summary collision, verified local 06/09 date rather
-  than UTC 07/09, hid the create FAB on the draft route, and distinguished ledger
-  installments. Production public smoke confirmed no-store/nosniff/no-referrer and
+  than UTC 07/09, and hid the create FAB on the draft route. Production public smoke
+  confirmed no-store/nosniff/no-referrer and
   matching nonces on all ten scripts. After the last production rebuild, a real AX
   click immediately displayed `Chave Pix copiada.`; the IAB clipboard reader still
   observed its own empty clipboard surface, so content-level clipboard inspection
   remains a tool limitation rather than claimed proof.
+- The final ledger due-date/installment/state copy and the final removal of global
+  overdue from the receivable card were covered by code/tests but were not reopened
+  in a later visual screenshot. A `127.0.0.1` dev-only debtor attempt was invalidated
+  by Next cross-origin HMR/font blocking and is not presented as production evidence.
+
+## Review fix round 1
+
+All eight independent-review findings were reproduced and addressed without changing
+API semantics:
+
+- Uncertain expense attempts now freeze both the submitted DTO and idempotency key,
+  lock every editable control, and only expose exact replay. Typed 4xx/422 rejection
+  unlocks the draft and does not create a retry impasse.
+- Both people pickers retain `nextCursor`, load subsequent pages, preserve selected
+  contacts, and search the accumulated pages locally.
+- Percentages use one strict integer basis-point parser: comma and dot decimals with
+  at most two places are supported; signs, exponent notation, excess precision, and
+  values above 100 are rejected rather than rounded.
+- Native review renders every literal installment amount, including residual cents.
+- Native timeline now exposes Today/Week filters, state/installment markers, cursor
+  loading, and generation guards. Web and native discard reversed stale filters and
+  obsolete pagination responses.
+- Native Pix mutation failure preserves the draft. Mutation success followed by a
+  refresh failure clears the now-saved draft but reports that the displayed list may
+  be stale instead of claiming it was updated.
+- Paid and cancelled payable details retain historical Pix data without instructing
+  another transfer and show explicit terminal guidance.
+
+### Fix-round RED / GREEN evidence
+
+- `pnpm --filter @receivy/common test -- financial-form.test.ts`: RED 12 failures
+  because the strict parser did not exist; GREEN 54/54 package tests.
+- `pnpm --filter @receivy/web test -- charge-create-screen.test.tsx`: RED 3 targeted
+  failures (mutable uncertain retry, missing people pagination, comma percentage);
+  GREEN with the expanded web suite. The definitive-rejection regression also proves
+  the draft is editable after a confirmed 422.
+- `pnpm --filter @receivy/mobile test -- charge-create-screen.test.tsx`: RED for
+  missing exact retry/pagination/installment output, then an additional RED proving
+  installment controls were still editable; GREEN 5/5 focused creation regressions.
+- `pnpm --filter @receivy/web test -- timeline-screen.test.tsx`: deterministic
+  reverse-resolution RED 2/4, then GREEN 4/4 timeline tests.
+- `pnpm --filter @receivy/mobile test -- home-screen.test.tsx`: RED 2/3 for missing
+  state/paging/date UI and stale overwrite; GREEN 4/4 including obsolete pagination.
+- `pnpm --filter @receivy/mobile test -- pix-settings-screen.test.tsx`: RED 2/2 for
+  lost failed draft and false refresh success; GREEN 2/2.
+- Web/native charge-detail terminal suites were RED 2/2 each, then GREEN (web 2/2,
+  native 3/3 including the existing pending debtor path).
+- Final self-review added a RED assertion showing the web review panel's primary
+  submit still bypassed exact replay while uncertain; disabling it made web 50/50,
+  lint, types, and the production build pass again.
+
+### Final verification after review fixes
+
+- `pnpm verify` completed successfully: workspace contract; lint 4/4; types 4/4;
+  common 54/54, API 55/55, web 50/50, native 27/27 (186 tests total); builds 4/4.
+  The final SDK check acknowledged the existing Expo 56 Hermes warning as required.
 
 ## Self-review and known boundaries
 

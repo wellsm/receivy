@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarDate, parseBRLCents } from "./financial-form";
+import { calendarDate, parseBRLCents, parsePercentageBasisPoints } from "./financial-form";
 
 describe("parseBRLCents", () => {
   it.each([
@@ -29,4 +29,22 @@ describe("calendarDate", () => {
   it("uses the requested civil timezone instead of UTC date truncation", () => {
     expect(calendarDate(new Date("2026-09-07T01:00:00Z"), "America/Sao_Paulo")).toBe("2026-09-06");
   });
+});
+
+describe("parsePercentageBasisPoints", () => {
+  it.each([
+    ["0", 0],
+    ["33,33", 3_333],
+    ["66.67", 6_667],
+    ["100", 10_000],
+  ])("parses the explicit percentage %s without rounding", (input, expected) => {
+    expect(parsePercentageBasisPoints(input)).toBe(expected);
+  });
+
+  it.each(["33,333", "66.667", "1e2", "+10", "-0,004", "100,01", "", " 33,33 "])(
+    "rejects ambiguous or out-of-range percentage %s",
+    input => {
+      expect(() => parsePercentageBasisPoints(input)).toThrow("percentual");
+    },
+  );
 });

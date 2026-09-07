@@ -26,6 +26,16 @@ describe("recurrences on native PostgreSQL", () => {
       split: { mode: "equal", parts: [{ kind: "person", personId: person.id }, { kind: "owner" }] } };
   });
   after(async () => cleanupUsers(db, [OWNER, OTHER]));
+  it("returns the complete recurrence DTO backed by persisted safe-integer cents", async () => {
+    const rule = await createRecurrence(db, OWNER, "http-contract", { ...input, totalCents: 10001 }, date("2026-01-01"));
+    equal((await db.recurrences.findOne({ select: { total_cents: true }, where: { id: rule.id } }))?.total_cents, 10001);
+    const response = await getRecurrence(db, OWNER, rule.id);
+    equal(response.totalCents, 10001);
+    equal(response.frequency, "monthly"); equal(response.day, 31);
+    equal(response.timezone, input.timezone); deepEqual(response.split, input.split);
+    equal(response.paymentMethodId, input.paymentMethodId);
+    await transitionRecurrence(db, OWNER, rule.id, "ended");
+  });
   it("binds create retries to body, enforces owner access and rejects newly backdated starts", async () => {
     const rule = await createRecurrence(db, OWNER, "crud", input, date("2026-01-01"));
     equal((await createRecurrence(db, OWNER, "crud", input, date("2026-03-01"))).id, rule.id);
@@ -89,6 +99,65 @@ describe("recurrences on native PostgreSQL", () => {
     equal(await db.charges.count({ where: { source_id: invalid.id } }), 0);
     equal((await db.recurrences.findOne({ select: { processed_through: true }, where: { id: invalid.id } }))?.processed_through, "2025-12-31");
     await transitionRecurrence(db, OWNER, invalid.id, "ended"); await transitionRecurrence(db, OWNER, valid.id, "ended");
+  });
+  it("does not overwrite newer financial progress when an older failure marker resumes", async () => {
+    const person = await savePerson(db, OWNER, { name: "Corrigido durante retry" });
+    const rule = await createRecurrence(db, OWNER, "interleaved-failure", { ...input, day: 15,
+      split: { mode: "equal", parts: [{ kind: "person", personId: person.id }] } }, date("2026-01-01"));
+    await archivePerson(db, OWNER, person.id);
+    let release!: () => void; let reached!: () => void; let transactions = 0;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const markerReached = new Promise<void>(resolve => { reached = resolve; });
+    // Pause only the older invocation between financial rollback and marker lock.
+    // Both invocations still execute every transaction against real PostgreSQL.
+    const olderDb = new Proxy(db, { get(target, key) {
+      if (key === "transaction") return async (operation: Parameters<typeof db.transaction>[0]) => {
+        if (++transactions === 2) { reached(); await gate; }
+        return target.transaction(operation);
+      };
+      return Reflect.get(target, key);
+    } });
+    const older = materializeRecurrences(olderDb, date("2026-01-15"));
+    await markerReached;
+    try {
+      await editRecurrence(db, OWNER, rule.id, { ...input, day: 15 }, date("2026-01-01"));
+      equal((await materializeRecurrences(db, date("2026-01-16"))).materialized, 1);
+    } finally { release(); }
+    deepEqual((await older).failures, [rule.id]);
+    const row = await db.recurrences.findOne({ select: { processed_through: true, last_attempted_at: true }, where: { id: rule.id } });
+    equal(row?.processed_through, "2026-01-15"); equal(row?.last_attempted_at, date("2026-01-16").toISOString());
+    equal(await db.recurrence_occurrences.count({ where: { recurrence_id: rule.id } }), 1);
+    await transitionRecurrence(db, OWNER, rule.id, "ended");
+  });
+  it("caps failed due attempts globally and rotates fairly to healthy backlog on the next run", async () => {
+    const person = await savePerson(db, OWNER, { name: "Indisponível em lote" });
+    const invalidIds: string[] = [];
+    for (let index = 0; index < 101; index++) {
+      const rule = await createRecurrence(db, OWNER, `failed-budget-${index}`, { ...input, day: 15,
+        split: { mode: "equal", parts: [{ kind: "person", personId: person.id }] } }, date("2026-01-01"));
+      invalidIds.push(rule.id);
+    }
+    const healthy = await createRecurrence(db, OWNER, "healthy-budget", { ...input, day: 15 }, date("2026-01-01"));
+    // Deterministic ordering: all 101 never-attempted rules precede healthy work.
+    await db.recurrences.updateOne({ where: { id: healthy.id }, data: { last_attempted_at: date("2026-01-01").toISOString() } });
+    await archivePerson(db, OWNER, person.id);
+    const first = await materializeRecurrences(db, date("2026-02-15"));
+    equal(first.materialized, 0); equal(first.failures.length, 100);
+    ok(first.failures.length <= 100, "rolled-back due attempts consume the global 100-attempt budget");
+    ok(first.failures.length + first.materialized <= 100);
+    const second = await materializeRecurrences(db, date("2026-02-16"));
+    ok(second.failures.length + second.materialized <= 100);
+    ok(await db.recurrence_occurrences.count({ where: { recurrence_id: healthy.id } }) > 0, "healthy work progresses across runs despite more than 100 failing rules");
+    const attemptedId = first.failures[0]!;
+    await db.recurrences.updateOne({ where: { id: attemptedId }, data: { last_attempted_at: date("2026-03-01").toISOString() } });
+    for (const id of invalidIds) {
+      equal((await db.recurrences.findOne({ select: { processed_through: true }, where: { id } }))?.processed_through, "2025-12-31");
+      if (id !== attemptedId) await transitionRecurrence(db, OWNER, id, "ended");
+    }
+    await transitionRecurrence(db, OWNER, healthy.id, "ended");
+    await materializeRecurrences(db, date("2026-02-17"));
+    equal((await db.recurrences.findOne({ select: { last_attempted_at: true }, where: { id: attemptedId } }))?.last_attempted_at, date("2026-03-01").toISOString(), "late older failure marking must preserve newer metadata");
+    await transitionRecurrence(db, OWNER, attemptedId, "ended");
   });
   it("skips paused historical debt but catches up continuously active outages in bounded batches", async () => {
     const paused = await createRecurrence(db, OWNER, "paused", { ...input, reminders: [] }, date("2026-01-01"));

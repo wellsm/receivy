@@ -84,6 +84,39 @@ try {
   });
   assert.equal(invalidPix.status, 400);
   assert.equal((await request("public/charges/not-a-capability")).status, 404);
+  // Disposable container-only fixture. Business behavior stays in DatabaseTester specs;
+  // this assertion covers EZ4's real generated request/response serialization.
+  run("docker", [...compose, "exec", "-T", "postgres", "psql", "-U", "receivy", "-d", "receivy", "-v", "ON_ERROR_STOP=1", "-c",
+    "INSERT INTO users (id,email,name,locale,timezone,country,currency,created_at,updated_at) VALUES ('11111111-1111-4111-8111-111111111111','recurrence-http@example.invalid','HTTP fixture','pt-BR','America/Sao_Paulo','BR','BRL',now(),now())"]);
+  const headers = { authorization, "content-type": "application/json" };
+  const person = await request("people", { method: "POST", headers, body: JSON.stringify({ name: "Ana HTTP" }) });
+  assert.equal(person.status, 201);
+  const recurrence = { description: "HTTP mensal", totalCents: 10001, frequency: "monthly", day: 31,
+    timezone: "America/Sao_Paulo", split: { mode: "equal", parts: [{ kind: "person", personId: person.body.id }, { kind: "owner" }] },
+    reminders: [{ offsetDays: -5, channel: "auto", enabled: true }, { offsetDays: 0, channel: "auto", enabled: false }] };
+  const created = await request("recurrences", { method: "POST", headers: { ...headers, "idempotency-key": randomUUID() }, body: JSON.stringify(recurrence) });
+  assert.equal(created.status, 201);
+  const read = await request(`recurrences/${created.body.id}`, { headers });
+  assert.equal(read.status, 200);
+  for (const result of [created.body, read.body]) {
+    for (const key of Object.keys(recurrence)) assert.deepEqual(result[key], recurrence[key], `recurrence HTTP field ${key}`);
+    assert.equal(typeof result.startDate, "string");
+    assert.equal(result.state, "active");
+    assert.equal(result.previews[0].amount.amountCents, 5001);
+  }
+  for (const split of [
+    { mode: "percentage", parts: [{ kind: "person", personId: person.body.id, basisPoints: 5000 }, { kind: "owner", basisPoints: 5000 }] },
+    { mode: "fixed", parts: [{ kind: "person", personId: person.body.id, amountCents: 5001 }] },
+  ]) {
+    const variant = await request("recurrences", { method: "POST", headers: { ...headers, "idempotency-key": randomUUID() }, body: JSON.stringify({ ...recurrence, split }) });
+    assert.equal(variant.status, 201); assert.deepEqual(variant.body.split, split);
+    const detail = await request(`recurrences/${variant.body.id}`, { headers });
+    assert.equal(detail.status, 200); assert.deepEqual(detail.body.split, split);
+    assert.equal(detail.body.totalCents, 10001);
+    const listed = await request("recurrences", { headers });
+    assert.equal(listed.status, 200);
+    assert.deepEqual(listed.body.recurrences.find(rule => rule.id === variant.body.id).split, split);
+  }
   process.stdout.write("financial HTTP transport smoke: PASS\n");
 } catch (error) {
   process.stderr.write(serverOutput);

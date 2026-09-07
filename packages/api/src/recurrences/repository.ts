@@ -7,7 +7,7 @@ import type { DbClient } from "../database";
 import { prepareChargeMaterialization, persistChargePlan } from "../expenses/repository";
 
 const SELECT = { id: true, owner_id: true, description: true, total_cents: true, frequency: true, day: true, month: true,
-  start_date: true, end_date: true, timezone: true, payment_method_id: true, state: true, processed_through: true,
+  start_date: true, end_date: true, timezone: true, payment_method_id: true, state: true, processed_through: true, last_attempted_at: true,
   idempotency_key: true, request_hash: true, created_at: true, updated_at: true } as const;
 type RuleRow = { id: string; owner_id: string; description: string; total_cents: number; frequency: "monthly" | "yearly";
   day: number; month?: number; start_date: string; end_date?: string; timezone: string; payment_method_id?: string;
@@ -144,10 +144,14 @@ export async function transitionRecurrence(db: DbClient, ownerId: string, id: st
   });
 }
 export async function materializeRecurrences(db: DbClient, now = new Date()): Promise<{ materialized: number; failures: string[] }> {
-  const candidates = (await db.recurrences.findMany({ select: { id: true, owner_id: true }, where: { state: "active" }, order: { processed_through: Order.Asc, id: Order.Asc } })).records;
+  const candidates = (await db.recurrences.findMany({ select: { id: true, owner_id: true, last_attempted_at: true }, where: { state: "active" }, order: { id: Order.Asc } })).records;
+  candidates.sort((a, b) => (a.last_attempted_at ?? "").localeCompare(b.last_attempted_at ?? "") || a.id.localeCompare(b.id));
+  const queue = [...candidates];
+  const instant = now.toISOString();
   let materialized = 0; let evaluated = 0; const failures: string[] = [];
-  for (const candidate of candidates) {
-    if (evaluated >= 100) break;
+  while (queue.length && evaluated < 100) {
+    const candidate = queue.shift()!;
+    let attempted = false;
     try {
       const result = await db.transaction(async tx => {
         await lockOwner(tx, candidate.owner_id); const row = await ruleRow(tx, candidate.owner_id, candidate.id, true);
@@ -155,9 +159,11 @@ export async function materializeRecurrences(db: DbClient, now = new Date()): Pr
         const input = await ruleInput(tx, row); const today = calendarDate(now, row.timezone);
         const offset = input.reminders.filter(r => r.enabled).map(r => r.offsetDays);
         const latest = addCalendarDays(today, -(offset.length ? Math.min(...offset) : 0));
-        const dates = recurrenceDates(input, addCalendarDays(row.processed_through, 1), latest, 100 - evaluated);
+        const dates = recurrenceDates(input, addCalendarDays(row.processed_through, 1), latest, 1);
         let created = 0;
         for (const dueDate of dates) {
+          // Count before work: rollback must not restore the invocation budget.
+          attempted = true; evaluated++;
           const existing = await tx.recurrence_occurrences.findOne({ select: { id: true }, where: { recurrence_id: row.id, occurrence_date: dueDate } });
           if (!existing) {
             const context = await prepareChargeMaterialization(tx, row.owner_id, input.split.parts.flatMap(p => p.kind === "person" ? [p.personId] : []), input.paymentMethodId);
@@ -174,15 +180,29 @@ export async function materializeRecurrences(db: DbClient, now = new Date()): Pr
               state: "pending", attempts: 0, available_at: instant, created_at: instant, updated_at: instant } });
             created++;
           }
-          await tx.recurrences.updateOne({ where: { id: row.id }, data: { processed_through: dueDate } });
+          await tx.recurrences.updateOne({ where: { id: row.id }, data: { processed_through: dueDate,
+            last_attempted_at: row.last_attempted_at && row.last_attempted_at > instant ? row.last_attempted_at : instant } });
         }
         return { created, evaluated: dates.length };
       });
-      materialized += result.created; evaluated += result.evaluated;
+      materialized += result.created;
+      if (result.evaluated) queue.push(candidate);
     } catch (error) {
       // A stale archived recipient/Pix must not starve unrelated rules; retain its cursor.
       if (!(error instanceof HttpNotFoundError)) throw error;
       failures.push(candidate.id);
+      if (attempted) {
+        // Financial work rolled back; separately record only operational fairness.
+        // Re-lock and compare against current data so an older concurrent run
+        // cannot regress a newer attempt timestamp or overwrite financial progress.
+        await db.transaction(async tx => {
+          await lockOwner(tx, candidate.owner_id);
+          const row = await ruleRow(tx, candidate.owner_id, candidate.id, true);
+          if (!row.last_attempted_at || row.last_attempted_at < instant) {
+            await tx.recurrences.updateOne({ where: { id: row.id }, data: { last_attempted_at: instant } });
+          }
+        });
+      }
     }
   }
   return { materialized, failures };

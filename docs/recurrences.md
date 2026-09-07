@@ -18,6 +18,12 @@ IANA salvo na regra, inicialmente carregado do perfil nos clientes.
   o cursor persistido mantém o atraso para as próximas execuções. Cada execução
   examina no máximo 100 ocorrências, globalmente, e continua na próxima hora.
   Esse limite não é um prazo de retenção: backlog ativo antigo é preservado.
+  Tentativas que falham também consomem o limite de 100. A execução visita uma
+  ocorrência por regra por rodada; regras nunca tentadas ou menos recentemente
+  tentadas têm prioridade. Uma regra que falha não é repetida nessa execução.
+  `last_attempted_at` é metadado operacional opcional, compatível com regras
+  anteriores; falhas o atualizam sem avançar o cursor financeiro. Sob locks,
+  uma execução antiga nunca regride a data de tentativa de outra mais recente.
 - Uma edição pode antecipar um vencimento que ainda não foi materializado.
   Por isso um cursor que avançou no futuro por lembrete é recuado até ontem;
   ocorrências já materializadas continuam excluídas pela chave única.
@@ -81,11 +87,14 @@ rascunho. Nenhum componente UI é compartilhado entre web e nativo.
 pnpm --filter @receivy/common test
 pnpm --filter @receivy/api check-types:test
 pnpm --filter @receivy/api test:integration
+pnpm --filter @receivy/api test:http-smoke
 pnpm --filter @receivy/web test
 pnpm --filter @receivy/mobile test
 ```
 
 Os testes de banco usam `DatabaseTester`, `node:test/assert`, fixtures UUID e o
 banco dedicado `receivy_tests`; incluem invocação do handler horário real.
+O smoke HTTP complementar cria/remove um banco tmpfs isolado e verifica a
+serialização real EZ4 de criação/leitura, sem substituir os testes de negócio.
 Exportar Expo web não é teste de dispositivo iOS/Android. Screenshots/QA de
 navegador, dispositivos físicos e cloud devem ser verificados separadamente.

@@ -2,7 +2,8 @@ export type SplitParty = { kind: "owner" } | { kind: "person"; personId: string 
 
 export type ExpenseSplit =
   | { mode: "equal"; parts: SplitParty[] }
-  | { mode: "percentage"; parts: (SplitParty & { basisPoints: number })[] }
+  // Keep schema-visible unions explicit: EZ4 cannot extract object/union intersections.
+  | { mode: "percentage"; parts: ({ kind: "owner"; basisPoints: number } | { kind: "person"; personId: string; basisPoints: number })[] }
   | { mode: "fixed"; parts: ({ kind: "person"; personId: string; amountCents: number })[] };
 
 export type ResolvedAllocation = SplitParty & {

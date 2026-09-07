@@ -1,3 +1,5 @@
+import type { ExpenseSplit } from "./split";
+
 export type Money = {
   amountCents: number;
   currency: "BRL";
@@ -55,7 +57,12 @@ export type RecurrenceInput = {
   startDate?: string; endDate?: string; timezone: string; paymentMethodId?: string;
   split: import("./split").ExpenseSplit; reminders?: RecurrenceReminder[];
 };
-export type RecurrenceDetail = Omit<RecurrenceInput, "description" | "startDate" | "reminders"> & {
+// Explicit fields are required by EZ4 0.52's response-schema extraction:
+// mapped Omit/intersections type-check but silently omit inherited HTTP fields.
+export type RecurrenceDetail = {
+  totalCents: number; frequency: RecurrenceFrequency; day: number; month?: number;
+  endDate?: string; timezone: string; paymentMethodId?: string;
+  split: ExpenseSplit;
   id: string; description: string; startDate: string; reminders: RecurrenceReminder[];
   state: "active" | "paused" | "ended"; createdAt: string; updatedAt: string;
   nextMaterialization: string | null; previews: RecurrencePreview[];

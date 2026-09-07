@@ -6,7 +6,7 @@ export interface RecurrenceSchema extends Database.Schema {
   frequency: "monthly" | "yearly"; day: number; month?: number; start_date: String.Date; end_date?: String.Date;
   timezone: String.Max<100>; payment_method_id?: String.UUID; state: "active" | "paused" | "ended";
   processed_through: String.Date; idempotency_key: String.Max<200>; request_hash: String.Max<64>;
-  created_at: String.DateTime; updated_at: String.DateTime;
+  created_at: String.DateTime; updated_at: String.DateTime; last_attempted_at?: String.DateTime;
 }
 export interface RecurrenceAllocationSchema extends Database.Schema {
   id: String.UUID; recurrence_id: String.UUID; person_id?: String.UUID; kind: "owner" | "person";

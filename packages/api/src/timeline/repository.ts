@@ -1,8 +1,8 @@
 import { Order } from "@ez4/database";
+import { HttpNotFoundError, HttpUnprocessableEntityError } from "@ez4/gateway";
 import type { ChargeState, Direction, PersonLedger, TimelinePage } from "@receivy/common";
 import type { DbClient } from "../database";
 import { CHARGE_SELECT, chargeDto, type ChargeRow } from "../charges/repository";
-import { HttpNotFoundError } from "@ez4/gateway";
 
 export type TimelineFilters = {
   cursor?: string;
@@ -13,7 +13,22 @@ export type TimelineFilters = {
   to?: string;
 };
 
-function money(amountCents: number) { return { amountCents, currency: "BRL" as const }; }
+const MAX_SAFE_CENTS = BigInt(Number.MAX_SAFE_INTEGER);
+const OVERFLOW_MESSAGE = "O total financeiro deve estar entre -9007199254740991 e 9007199254740991 centavos.";
+
+function money(amountCents: bigint | number) {
+  const exact = typeof amountCents === "bigint"
+    ? amountCents
+    : Number.isSafeInteger(amountCents) ? BigInt(amountCents) : MAX_SAFE_CENTS + 1n;
+  if (exact < -MAX_SAFE_CENTS || exact > MAX_SAFE_CENTS) {
+    throw new HttpUnprocessableEntityError(OVERFLOW_MESSAGE);
+  }
+  return { amountCents: Number(exact), currency: "BRL" as const };
+}
+
+function sum(rows: ChargeRow[]): bigint {
+  return rows.reduce((total, row) => total + BigInt(row.amount_cents), 0n);
+}
 
 async function actor(db: DbClient, userId: string) {
   const user = await db.users.findOne({ select: { verified_email: true, timezone: true }, where: { id: userId } });
@@ -69,7 +84,6 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
   const allQuery = await db.charges.findMany({ select: CHARGE_SELECT, where: visibleWhere(userId, user.verified_email, filters, false, today) });
   const all = allQuery.records;
   const active = all.filter(row => row.state === "pending");
-  const sum = (rows: ChargeRow[]) => rows.reduce((total, row) => total + row.amount_cents, 0);
   const next = pageQuery.records.length > 50 ? page.at(-1) : undefined;
   return {
     items: page.map(row => ({ kind: "charge", direction: directionFor(row, userId), charge: {
@@ -104,8 +118,8 @@ export async function getPersonLedger(db: DbClient, userId: string, personId: st
   const result = await db.charges.findMany({ select: CHARGE_SELECT, where: pageWhere, order: { id: Order.Asc }, take: 51 });
   const page = result.records.slice(0, 50);
   const all = await db.charges.findMany({ select: CHARGE_SELECT, where: baseWhere });
-  const receivable = all.records.filter(row => row.creditor_id === userId && row.state === "pending").reduce((sum, row) => sum + row.amount_cents, 0);
-  const payable = all.records.filter(row => row.creditor_id !== userId && row.state === "pending").reduce((sum, row) => sum + row.amount_cents, 0);
+  const receivable = sum(all.records.filter(row => row.creditor_id === userId && row.state === "pending"));
+  const payable = sum(all.records.filter(row => row.creditor_id !== userId && row.state === "pending"));
   return { personId, balance: money(receivable - payable), receivable: money(receivable), payable: money(payable),
     charges: await Promise.all(page.map(row => chargeDto(db, row, directionFor(row, userId)))),
     nextCursor: result.records.length > 50 ? page.at(-1)!.id : null };

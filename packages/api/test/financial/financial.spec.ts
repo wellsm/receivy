@@ -1,6 +1,6 @@
 import { deepEqual, equal, notEqual, ok, rejects } from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from "@ez4/gateway";
+import { HttpConflictError, HttpForbiddenError, HttpNotFoundError, HttpUnprocessableEntityError } from "@ez4/gateway";
 import { archivePerson, savePerson } from "../../src/people/repository";
 import { archivePaymentMethod, listPaymentMethods, makeDefaultPaymentMethod, savePaymentMethod } from "../../src/payment-methods/repository";
 import { createExpense, getExpense } from "../../src/expenses/repository";
@@ -12,7 +12,12 @@ import { cleanupUsers, createUser, db } from "../fixtures/financial";
 const OWNER = "11111111-1111-4111-8111-111111111111";
 const DEBTOR = "22222222-2222-4222-8222-222222222222";
 const STRANGER = "33333333-3333-4333-8333-333333333333";
+const TIMELINE_OVERFLOW_OWNER = "44444444-4444-4444-8444-444444444444";
+const LEDGER_OVERFLOW_OWNER = "55555555-5555-4555-8555-555555555555";
+const LEDGER_NEGATIVE_VIEWER = "66666666-6666-4666-8666-666666666666";
+const LEDGER_NEGATIVE_COUNTERPART = "77777777-7777-4777-8777-777777777777";
 const SECRET = "native-ez4-test-public-link-secret";
+const OVERFLOW_MESSAGE = "O total financeiro deve estar entre -9007199254740991 e 9007199254740991 centavos.";
 
 describe("financial repositories on PostgreSQL", () => {
   before(async () => {
@@ -22,7 +27,8 @@ describe("financial repositories on PostgreSQL", () => {
     await createUser(db, { id: STRANGER, email: "stranger@example.com", name: "Terceira Pessoa" });
   });
 
-  after(async () => cleanupUsers(db, [OWNER, DEBTOR, STRANGER]));
+  after(async () => cleanupUsers(db, [OWNER, DEBTOR, STRANGER, TIMELINE_OVERFLOW_OWNER, LEDGER_OVERFLOW_OWNER,
+    LEDGER_NEGATIVE_VIEWER, LEDGER_NEGATIVE_COUNTERPART]));
 
   it("keeps payment methods owner-scoped and returns post-update default state", async () => {
     const first = await savePaymentMethod(db, OWNER, { pixKeyType: "cpf", pixKey: "529.982.247-25", label: "Principal" });
@@ -141,5 +147,67 @@ describe("financial repositories on PostgreSQL", () => {
     const emptyPage = await getPersonLedger(db, OWNER, person.id, "ffffffff-ffff-4fff-bfff-ffffffffffff");
     equal(emptyPage.charges.length, 0);
     equal(emptyPage.balance.amountCents, 3_000, "ledger totals must not change with its cursor");
+  });
+
+  it("rejects timeline summaries whose exact aggregate exceeds safe integer cents", async () => {
+    await createUser(db, { id: TIMELINE_OVERFLOW_OWNER, email: "timeline-overflow@example.com", name: "Timeline Overflow" });
+    const person = await savePerson(db, TIMELINE_OVERFLOW_OWNER, { name: "Timeline debtor" });
+    const first = await createExpense(db, TIMELINE_OVERFLOW_OWNER, "timeline-overflow-max", {
+      totalCents: Number.MAX_SAFE_INTEGER, installmentCount: 1, firstDueDate: "2027-01-01",
+      split: { mode: "fixed", parts: [{ kind: "person", personId: person.id, amountCents: Number.MAX_SAFE_INTEGER }] },
+    });
+    await createExpense(db, TIMELINE_OVERFLOW_OWNER, "timeline-overflow-two", {
+      totalCents: 2, installmentCount: 1, firstDueDate: "2027-01-02",
+      split: { mode: "fixed", parts: [{ kind: "person", personId: person.id, amountCents: 2 }] },
+    });
+
+    equal((await getCharge(db, TIMELINE_OVERFLOW_OWNER, first.charges[0]!.id)).amount.amountCents, 9_007_199_254_740_991);
+    await rejects(() => getTimeline(db, TIMELINE_OVERFLOW_OWNER, {}), error => {
+      ok(error instanceof HttpUnprocessableEntityError);
+      equal(error.message, OVERFLOW_MESSAGE);
+      return true;
+    });
+  });
+
+  it("rejects a positive ledger balance outside safe integer cents", async () => {
+    await createUser(db, { id: LEDGER_OVERFLOW_OWNER, email: "ledger-overflow@example.com", name: "Ledger Overflow" });
+    const person = await savePerson(db, LEDGER_OVERFLOW_OWNER, { name: "Ledger debtor" });
+    await createExpense(db, LEDGER_OVERFLOW_OWNER, "ledger-overflow-max", {
+      totalCents: Number.MAX_SAFE_INTEGER, installmentCount: 1, firstDueDate: "2027-02-01",
+      split: { mode: "fixed", parts: [{ kind: "person", personId: person.id, amountCents: Number.MAX_SAFE_INTEGER }] },
+    });
+    await createExpense(db, LEDGER_OVERFLOW_OWNER, "ledger-overflow-two", {
+      totalCents: 2, installmentCount: 1, firstDueDate: "2027-02-02",
+      split: { mode: "fixed", parts: [{ kind: "person", personId: person.id, amountCents: 2 }] },
+    });
+
+    await rejects(() => getPersonLedger(db, LEDGER_OVERFLOW_OWNER, person.id), error => {
+      ok(error instanceof HttpUnprocessableEntityError);
+      equal(error.message, OVERFLOW_MESSAGE);
+      return true;
+    });
+  });
+
+  it("rejects a negative ledger balance outside safe integer cents", async () => {
+    await createUser(db, { id: LEDGER_NEGATIVE_VIEWER, email: "negative-viewer@example.com", name: "Negative Viewer" });
+    await createUser(db, { id: LEDGER_NEGATIVE_COUNTERPART, email: "negative-counterpart@example.com", name: "Negative Counterpart" });
+    const counterpart = await savePerson(db, LEDGER_NEGATIVE_VIEWER,
+      { name: "Counterpart", email: "negative-counterpart@example.com" });
+    const viewer = await savePerson(db, LEDGER_NEGATIVE_COUNTERPART,
+      { name: "Viewer", email: "negative-viewer@example.com" });
+    await createExpense(db, LEDGER_NEGATIVE_COUNTERPART, "ledger-negative-max", {
+      totalCents: Number.MAX_SAFE_INTEGER, installmentCount: 1, firstDueDate: "2027-03-01",
+      split: { mode: "fixed", parts: [{ kind: "person", personId: viewer.id, amountCents: Number.MAX_SAFE_INTEGER }] },
+    });
+    await createExpense(db, LEDGER_NEGATIVE_COUNTERPART, "ledger-negative-two", {
+      totalCents: 2, installmentCount: 1, firstDueDate: "2027-03-02",
+      split: { mode: "fixed", parts: [{ kind: "person", personId: viewer.id, amountCents: 2 }] },
+    });
+
+    await rejects(() => getPersonLedger(db, LEDGER_NEGATIVE_VIEWER, counterpart.id), error => {
+      ok(error instanceof HttpUnprocessableEntityError);
+      equal(error.message, OVERFLOW_MESSAGE);
+      return true;
+    });
   });
 });

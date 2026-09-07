@@ -1,13 +1,14 @@
 import type { Service } from "@ez4/common";
 import type { Http } from "@ez4/gateway";
 import type { ApiProvider } from "../../provider";
-import { decodeOauthProviderConfig } from "../../auth/oauth-provider";
+import { appleConfigurationAvailable, decodeOauthProviderConfig } from "../../auth/oauth-provider";
+import { appleKeyAvailable } from "../../auth/apple-credentials";
 
 declare class OauthProvidersRequest implements Http.Request {}
 
 declare class OauthProvidersResponse implements Http.Response {
   status: 200;
-  body: { apple: boolean; google: boolean };
+  body: { apple: boolean; appleNative: boolean; google: boolean };
 }
 
 export async function oauthProvidersHandler(
@@ -19,6 +20,6 @@ export async function oauthProvidersHandler(
   );
   return {
     status: 200,
-    body: { apple: !!config.apple, google: !!config.google },
+    body: { apple: appleConfigurationAvailable(config.apple) && appleKeyAvailable(context.variables.APPLE_CREDENTIAL_ENCRYPTION_KEY_B64), appleNative: !!config.apple?.nativeClientId && appleConfigurationAvailable(config.apple) && appleKeyAvailable(context.variables.APPLE_CREDENTIAL_ENCRYPTION_KEY_B64), google: !!config.google },
   };
 }

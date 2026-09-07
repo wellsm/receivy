@@ -85,13 +85,26 @@ export function createAuthClient({
   return {
     getAccessToken: () => accessToken,
 
-    async oauthProviders(): Promise<{ google: boolean; apple: boolean }> {
+    async oauthProviders(): Promise<{ google: boolean; apple: boolean; appleNative: boolean }> {
       try {
         const response = await jsonRequest("auth/oauth/providers", { method: "GET" });
         if (!response.ok) throw new Error();
         const data = await response.json();
-        return { google: data.google === true, apple: data.apple === true };
-      } catch { return { google: false, apple: false }; }
+        return { google: data.google === true, apple: data.apple === true, appleNative: data.appleNative === true };
+      } catch { return { google: false, apple: false, appleNative: false }; }
+    },
+
+    async startNativeApple(clientChallenge: string): Promise<{ state: string; nonce: string }> {
+      const response = await jsonRequest("auth/apple/native/start", { method: "POST", body: JSON.stringify({ clientChallenge }) });
+      if (!response.ok) throw new Error("Login Apple indisponível.");
+      const result = await response.json();
+      if (![result.state, result.nonce].every(value => typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value))) throw new Error("Retorno Apple inválido.");
+      return result;
+    },
+    async exchangeNativeApple(input: { state: string; authorizationCode: string; codeVerifier: string; profile?: string }): Promise<AuthUser> {
+      const response = await jsonRequest("auth/apple/native/exchange", { method: "POST", body: JSON.stringify({ ...input, deviceName: "Receivy iOS" }) });
+      if (!response.ok) throw new Error("Não foi possível concluir o login Apple. Tente novamente mais tarde.");
+      const session = await response.json() as AuthSessionResponse; await saveSession(session); return session.user;
     },
 
     async startOauth(input: { provider: "google" | "apple"; destination: string; clientChallenge: string }): Promise<string> {

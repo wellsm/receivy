@@ -2,20 +2,23 @@ import type { Service } from "@ez4/common";
 import type { ApiProvider } from "../../provider";
 import { createOauthProviderClient, decodeOauthProviderConfig } from "../../auth/oauth-provider";
 import type { OauthProvider } from "../../auth/oauth";
+import { appleKeyAvailable, bindAppleCredential, journalAppleCredential } from "../../auth/apple-credentials";
 
 export function oauthDependencies(
   provider: OauthProvider,
   context: Service.Context<ApiProvider>,
+  native = false,
 ) {
   const config = decodeOauthProviderConfig(
     context.variables.OAUTH_PROVIDERS_CONFIG_B64,
   );
+  const key = context.variables.APPLE_CREDENTIAL_ENCRYPTION_KEY_B64;
   return {
     allowList: context.variables.OAUTH_REDIRECT_ALLOW_LIST
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean),
-    client: createOauthProviderClient(provider, config),
+    client: createOauthProviderClient(provider, config, fetch, appleKeyAvailable(key) ? { retain: (clientId, token) => journalAppleCredential(context.db, key, clientId, token), bind: (id, subject) => bindAppleCredential(context.db, key, id, subject) } : undefined, native),
     config,
   };
 }

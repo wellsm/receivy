@@ -10,8 +10,11 @@ import type { googleCallbackHandler } from "../endpoints/auth/google-callback";
 import type { oauthExchangeHandler } from "../endpoints/auth/oauth-exchange";
 import type { oauthProvidersHandler } from "../endpoints/auth/oauth-providers";
 import type { oauthStartHandler } from "../endpoints/auth/oauth-start";
+import type { nativeAppleStartHandler, nativeAppleExchangeHandler } from "../endpoints/auth/apple-native";
 
 export type AuthRoutes = [
+  Http.UseRoute<{ name: "nativeAppleStart"; path: "POST /auth/apple/native/start"; handler: typeof nativeAppleStartHandler }>,
+  Http.UseRoute<{ name: "nativeAppleExchange"; path: "POST /auth/apple/native/exchange"; handler: typeof nativeAppleExchangeHandler }>,
   Http.UseRoute<{
     name: "requestEmailCode";
     path: "POST /auth/email/code";

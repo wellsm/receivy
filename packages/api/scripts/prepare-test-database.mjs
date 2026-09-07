@@ -22,6 +22,10 @@ if (!connection.host || !connection.user || connection.password === undefined ||
   throw new Error("The explicit EZ4_TEST_PG_* connection is incomplete.");
 }
 
+if (!["127.0.0.1", "::1", "localhost"].includes(connection.host)) {
+  throw new Error("Refusing a non-loopback host for the dedicated test database.");
+}
+
 const pool = createPool(connection);
 
 try {

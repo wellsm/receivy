@@ -3,8 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import { ChargeCreateScreen } from "./charge-create-screen";
 import { FinancialRequestError } from "@/financial/client";
 
-const ana = { id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01" };
-const zelia = { id: "person-51", name: "Zélia", email: "zelia@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01" };
+const ana = { id: "person-1", name: "Ana", hasAccount: false, email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01" };
+const zelia = { id: "person-51", name: "Zélia", hasAccount: false, email: "zelia@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01" };
 
 function client(createExpense = jest.fn()) {
   return { paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }), createExpense };

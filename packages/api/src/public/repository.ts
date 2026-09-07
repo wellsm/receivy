@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { HttpForbiddenError, HttpNotFoundError } from "@ez4/gateway";
+import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from "@ez4/gateway";
 import type { PublicChargeView, PublicLink } from "@receivy/common";
 import type { DbClient } from "../database";
 import { CHARGE_SELECT, findChargeForActor } from "../charges/repository";
@@ -16,12 +16,29 @@ function response(row: { public_id: string; token_version: number; expires_at: s
 }
 
 export async function createOrRotatePublicLink(db: DbClient, creditorId: string, chargeId: string, secret: string,
-  rotate = false, nowSeconds = Math.floor(Date.now() / 1000)): Promise<PublicLink> {
+  rotate = false, nowSeconds = Math.floor(Date.now() / 1000), paymentMethodId?: string): Promise<PublicLink> {
   assertPublicLinkSecretConfigured(secret);
   return db.transaction(async tx => {
     const { row, direction } = await findChargeForActor(tx, creditorId, chargeId, true);
     if (direction !== "receivable") throw new HttpForbiddenError();
+    if (row.state !== "pending") throw new HttpConflictError("Charge is closed.");
     const existing = await tx.public_links.findOne({ select: LINK_SELECT, where: { charge_id: row.id }, lock: true });
+    if (!row.pix_key_snapshot || !row.pix_key_type_snapshot) {
+      if (existing || !paymentMethodId) throw new HttpConflictError("Pix required before first publication.");
+      const method = await tx.payment_methods.findOne({ select: { pix_key: true, pix_key_type: true, label: true }, where: { id: paymentMethodId, owner_id: creditorId, archived_at: { isNull: true } }, lock: true });
+      if (!method) throw new HttpNotFoundError();
+      const stamp = new Date(nowSeconds * 1000).toISOString();
+      await tx.charges.updateOne({ where: { id: row.id }, data: { pix_key_snapshot: method.pix_key, pix_key_type_snapshot: method.pix_key_type, pix_label_snapshot: method.label, updated_at: stamp } });
+      await tx.activity_events.insertOne({ data: { id: crypto.randomUUID(), actor_user: { id: creditorId }, subject_user: { id: creditorId }, type: "charge.pix_published", aggregate_type: "charge", aggregate_id: row.id, payload: "{}", created_at: stamp } });
+      const { records: [initial] } = await tx.outbox_events.findMany({ select: { id: true, payload: true }, where: { aggregate_id: row.id, type: "charge.created", state: "delivered" }, take: 1 });
+      if (initial && await tx.notification_deliveries.count({ where: { event_id: initial.id, reason: "pix_required", attempts: 0 } })) {
+        await tx.outbox_events.updateOne({ where: { id: initial.id }, data: { state: "pending", available_at: stamp, updated_at: stamp, payload: JSON.stringify({ ...JSON.parse(initial.payload), notificationResumed: true }) } });
+      }
+    } else if (paymentMethodId) {
+      const method = await tx.payment_methods.findOne({ select: { pix_key: true, pix_key_type: true }, where: { id: paymentMethodId, owner_id: creditorId, archived_at: { isNull: true } } });
+      if (!method) throw new HttpNotFoundError();
+      if (method.pix_key !== row.pix_key_snapshot || method.pix_key_type !== row.pix_key_type_snapshot) throw new HttpConflictError("Published Pix snapshot is immutable.");
+    }
     if (existing && !rotate && !existing.revoked_at && new Date(existing.expires_at).getTime() / 1000 > nowSeconds) {
       return response(existing, secret);
     }

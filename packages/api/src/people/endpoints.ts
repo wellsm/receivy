@@ -5,11 +5,11 @@ import { HttpBadRequestError } from "@ez4/gateway";
 import { normalizePerson, type Person, type PersonInput, type PeoplePage } from "@receivy/common";
 import type { ApiProvider } from "../provider";
 import type { SessionIdentity } from "../authorizers/session";
-import { archivePerson, listPeople, savePerson } from "./repository";
+import { archivePerson, getPerson, listPeople, savePerson } from "./repository";
 
 declare class ListRequest implements Http.Request {
   identity: SessionIdentity;
-  query: { cursor?: String.UUID; archived?: boolean };
+  query: { cursor?: String.UUID; archived?: boolean; search?: String.Max<254> };
 }
 declare class ListResponse implements Http.Response { status: 200; body: PeoplePage }
 
@@ -37,7 +37,7 @@ function parse(input: PersonInput): PersonInput {
 }
 
 export async function listPeopleHandler(request: ListRequest, context: Service.Context<ApiProvider>): Promise<ListResponse> {
-  return { status: 200, body: await listPeople(context.db, request.identity.userId, request.query.cursor, request.query.archived) };
+  return { status: 200, body: await listPeople(context.db, request.identity.userId, request.query.cursor, request.query.archived, request.query.search) };
 }
 export async function createPersonHandler(request: CreateRequest, context: Service.Context<ApiProvider>): Promise<CreateResponse> {
   return { status: 201, body: await savePerson(context.db, request.identity.userId, parse(request.body)) };
@@ -48,4 +48,7 @@ export async function updatePersonHandler(request: UpdateRequest, context: Servi
 export async function archivePersonHandler(request: ArchiveRequest, context: Service.Context<ApiProvider>): Promise<ArchiveResponse> {
   await archivePerson(context.db, request.identity.userId, request.parameters.id);
   return { status: 204 };
+}
+export async function getPersonHandler(request: ArchiveRequest, context: Service.Context<ApiProvider>): Promise<UpdateResponse> {
+  return { status: 200, body: await getPerson(context.db, request.identity.userId, request.parameters.id) };
 }

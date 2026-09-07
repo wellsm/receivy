@@ -4,13 +4,14 @@ import { Apple, ArrowRight, KeyRound, Mail } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { isProviderAuthorizationUrl } from "@/lib/auth/oauth";
+import { apiErrorMessage } from "@receivy/common";
 
 type LoginFormProps = { nextPath: string; oauthError?: boolean };
 
 async function responseMessage(response: Response, fallback: string): Promise<string> {
   try {
-    const body = (await response.json()) as { message?: string };
-    return body.message ?? fallback;
+    const body = (await response.json()) as { code?: unknown };
+    return apiErrorMessage(body.code, fallback);
   } catch {
     return fallback;
   }

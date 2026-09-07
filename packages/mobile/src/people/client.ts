@@ -8,8 +8,8 @@ async function request(path: string, init: RequestInit = {}) {
   return response;
 }
 export const peopleClient = {
-  async list(archived = false, cursor?: string): Promise<PeoplePage> {
-    const params = new URLSearchParams({ archived: String(archived), ...(cursor ? { cursor } : {}) });
+  async list(archived = false, cursor?: string, search?: string): Promise<PeoplePage> {
+    const params = new URLSearchParams({ archived: String(archived), ...(cursor ? { cursor } : {}), ...(search ? { search } : {}) });
     return (await request(`people?${params}`)).json();
   },
   async save(input: PersonInput, id?: string): Promise<Person> {

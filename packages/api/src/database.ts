@@ -1,6 +1,7 @@
 import type { Client, Database, Index } from "@ez4/database";
 import type { PostgresEngine } from "@ez4/raw-pg/client";
 import type { AuthIdentitySchema } from "./schemas/auth-identity";
+import type { AppleCredentialSchema } from "./schemas/apple-credential";
 import type { LoginCodeSchema } from "./schemas/login-code";
 import type { OauthAttemptSchema } from "./schemas/oauth-attempt";
 import type { OauthGrantSchema } from "./schemas/oauth-grant";
@@ -26,6 +27,9 @@ export declare class Db extends Database.Service<PostgresEngine> {
   client: Client<Db>;
 
   tables: [
+    Database.UseTable<{ name: "apple_credentials"; schema: AppleCredentialSchema;
+      relations: { "user_id@user": "users:id" };
+      indexes: { id: Index.Primary; user_id: Index.Secondary; fingerprint: Index.Secondary; "state:available_at": Index.Secondary } }>,
     Database.UseTable<{ name: "storage_deletions"; schema: StorageDeletionSchema;
       indexes: { id: Index.Primary; object_key: Index.Unique; charge_id: Index.Secondary; "state:available_at": Index.Secondary } }>,
     Database.UseTable<{ name: "storage_cleanup_cursors"; schema: StorageCleanupCursorSchema; indexes: { id: Index.Primary } }>,

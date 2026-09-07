@@ -3,18 +3,20 @@ import type { DbClient } from "../database";
 import { disableSessionDevices } from "./sessions";
 import { enqueueStorageDeletion } from "../proofs/cleanup";
 import { lockAccountReferences } from "./locking";
+import { detachAppleCredentials, type ProviderRevocation } from "../auth/apple-credentials";
 
 // EZ4 scalar nullable boundary: relation objects cannot express SQL NULL.
 const sqlNull = null as unknown as undefined;
 
-export async function eraseAccount(db: DbClient, userId: string, confirmation: string): Promise<{ deleted: boolean }> {
+export async function eraseAccount(db: DbClient, userId: string, confirmation: string): Promise<{ deleted: boolean; providerRevocation: ProviderRevocation }> {
   if (confirmation !== "EXCLUIR") throw new HttpBadRequestError("Confirme digitando EXCLUIR.");
   return db.transaction(async tx => {
     await lockAccountReferences(tx, "erase");
     const user = await tx.users.findOne({ select: { id: true, email: true, deleted_at: true }, where: { id: userId }, lock: true });
     if (!user) throw new HttpUnauthorizedError();
-    if (user.deleted_at) return { deleted: true };
+    if (user.deleted_at) return { deleted: true, providerRevocation: "unknown" as const };
     const stamp = Date.now(); const now = new Date(stamp).toISOString();
+    const providerRevocation = await detachAppleCredentials(tx, userId, now);
     await tx.session_families.updateMany({ where: { user_id: userId }, data: { revoked_at: now, device_name: sqlNull } });
     const families = await tx.session_families.findMany({ select: { id: true }, where: { user_id: userId } });
     if (families.records.length) await tx.refresh_tokens.deleteMany({ where: { family_id: { isIn: families.records.map(x => x.id) } } });
@@ -81,6 +83,6 @@ export async function eraseAccount(db: DbClient, userId: string, confirmation: s
     await tx.outbox_events.updateMany({ where: { OR: [{ recipient_user_id: userId }, { recipient_email: user.email }, { aggregate_id: { isIn: [userId, ...rules.records.map(x => x.id)] } }] }, data: { state: "failed", ...{ recipient_user_id: sqlNull }, recipient_email: sqlNull, payload: "{}", updated_at: now } });
     await tx.users.updateOne({ where: { id: userId }, data: { email: `${userId}@deleted.invalid`, verified_email: sqlNull, name: "Conta excluída", avatar_url: sqlNull, timezone: "UTC", deleted_at: now, updated_at: now } });
     await tx.activity_events.insertOne({ data: { id: crypto.randomUUID(), type: "account.deleted", aggregate_type: "account", aggregate_id: userId, payload: "{}", created_at: now } });
-    return { deleted: true };
+    return { deleted: true, providerRevocation };
   });
 }

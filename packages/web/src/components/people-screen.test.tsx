@@ -8,6 +8,13 @@ vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 describe("PeopleScreen", () => {
+  it("searches the server agenda and displays account linkage", async () => {
+    vi.mocked(browserFetch).mockImplementation(async path => Response.json({ people: String(path).includes("search=Ana") ? [{ id: "ana", name: "Ana", hasAccount: true, email: null, phone: null, archivedAt: null, createdAt: "2026-09-01" }] : [], nextCursor: null }));
+    render(<PeopleScreen />);
+    await userEvent.setup().type(screen.getByLabelText("Buscar contatos"), "Ana");
+    expect(await screen.findByText("Com conta")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Histórico.*Ana/ })).toHaveAttribute("href", "/people/ana");
+  });
   it("creates a normalized contact and reloads the persisted list", async () => {
     const person = { id: "person", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-05T00:00:00Z" };
     vi.mocked(browserFetch).mockResolvedValueOnce(Response.json({ people: [], nextCursor: null }))

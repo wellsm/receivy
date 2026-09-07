@@ -4,8 +4,9 @@ import type { String } from "@ez4/schema";
 import type { AuthSessionResponse } from "@receivy/common";
 import type { ApiProvider } from "../../provider";
 import { HttpUnauthorizedError } from "@ez4/gateway";
-import { AuthFlowError, confirmEmailCode } from "../../auth/email-login";
-import { createAuthRepository } from "../../repositories/auth-repository";
+import { AuthFlowError } from "../../auth/email-login";
+import { confirmEmailAtomically } from "../../auth/atomic";
+import { enforceQuota, trustedClientIp } from "../../security/throttle";
 
 declare class EmailConfirmRequest implements Http.Request {
   body: {
@@ -24,11 +25,11 @@ export async function emailConfirmHandler(
   request: EmailConfirmRequest,
   context: Service.Context<ApiProvider>,
 ): Promise<EmailConfirmResponse> {
+  await enforceQuota(context.db, `otp-confirm-ip:${trustedClientIp(request)}`, 60);
   try {
-    const body = await confirmEmailCode(request.body, {
+    const body = await confirmEmailAtomically(context.db, request.body, {
       accessTokenSecret: context.variables.AUTH_JWT_SECRET,
       codeHashKey: context.variables.LOGIN_CODE_HASH_KEY,
-      repo: createAuthRepository(context.db),
     });
     return { status: 200, body };
   } catch (error) {

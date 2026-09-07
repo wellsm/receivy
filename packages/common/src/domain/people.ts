@@ -4,6 +4,7 @@ export type PersonInput = { name: string; email?: string; phone?: string };
 export type Person = {
   id: string; name: string; email: string | null; phone: string | null;
   archivedAt: string | null; createdAt: string;
+  hasAccount: boolean;
 };
 export type PeoplePage = { people: Person[]; nextCursor: string | null };
 

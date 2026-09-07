@@ -22,6 +22,8 @@ type VerifyOidcIdTokenInput = {
 };
 
 export type OidcIdentity = {
+  /** Internal journal reference only; never a clear provider credential. */
+  appleCredentialId?: string;
   email: string;
   emailAuthoritative?: boolean;
   name?: string;

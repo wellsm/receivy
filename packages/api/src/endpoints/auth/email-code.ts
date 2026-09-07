@@ -5,6 +5,7 @@ import type { ApiProvider } from "../../provider";
 import { requestEmailCode } from "../../auth/email-login";
 import { createEmailTransport } from "../../email/transport";
 import { createAuthRepository } from "../../repositories/auth-repository";
+import { allowEmailCode } from "../../security/throttle";
 
 declare class EmailCodeRequest implements Http.Request {
   body: { email: String.Email };
@@ -19,6 +20,7 @@ export async function emailCodeHandler(
   context: Service.Context<ApiProvider>,
 ): Promise<EmailCodeResponse> {
   const { variables } = context;
+  if (!await allowEmailCode(context.db, request.body.email, variables.LOGIN_CODE_HASH_KEY, request)) return { status: 204 };
   const transport = variables.EMAIL_TRANSPORT === "resend"
     ? createEmailTransport({
         mode: "resend",

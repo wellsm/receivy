@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED } from "@receivy/common";
 import { AccountSettings } from "./account-settings";
 const user = { id: "user", email: "fixture@example.com", name: "Ana", avatarUrl: null, locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -15,7 +16,7 @@ it.each([200, 401])("requires destructive confirmation and never claims deletion
   expect(button).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Digite EXCLUIR para confirmar"), { target: { value: "EXCLUIR" } });
   fireEvent.click(button);
-  expect(await screen.findByText(status === 200 ? "Conta excluída. A remoção de arquivos será concluída em segundo plano." : "Sessão encerrada; não foi possível confirmar a exclusão.")).toBeInTheDocument();
+  expect(await screen.findByText(status === 200 ? ACCOUNT_DELETED : ACCOUNT_DELETION_UNCONFIRMED)).toBeInTheDocument();
   expect(requests).toEqual(["/api/financial/account"]);
 });
 it.each(["reject", "non-ok"])("keeps logout unconfirmed and retryable when DELETE is offline and logout is %s", async logoutFailure => {
@@ -50,11 +51,11 @@ it("preserves confirmed deletion while retrying failed browser sign-out", async 
   render(<AccountSettings />);
   fireEvent.change(await screen.findByLabelText("Digite EXCLUIR para confirmar"), { target: { value: "EXCLUIR" } });
   fireEvent.click(screen.getByRole("button", { name: "Excluir conta definitivamente" }));
-  expect(await screen.findByText("Conta excluída. A remoção de arquivos será concluída em segundo plano. Não foi possível encerrar a sessão deste navegador. Tente novamente.")).toBeInTheDocument();
+  expect(await screen.findByText(ACCOUNT_DELETED + " Não foi possível encerrar a sessão deste navegador. Tente novamente.")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Excluir conta definitivamente" })).not.toBeInTheDocument();
   logoutWorks = true;
   fireEvent.click(screen.getByRole("button", { name: "Tentar encerrar a sessão novamente" }));
-  expect(await screen.findByText("Conta excluída. A remoção de arquivos será concluída em segundo plano.")).toBeInTheDocument();
+  expect(await screen.findByText(ACCOUNT_DELETED)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Tentar encerrar a sessão novamente" })).not.toBeInTheDocument();
 });
 

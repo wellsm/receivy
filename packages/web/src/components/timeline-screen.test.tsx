@@ -30,10 +30,12 @@ describe("TimelineScreen", () => {
     expect(screen.getByRole("link", { name: /Abrir cobrança Aluguel/ })).toHaveAttribute("href", "/charges/charge-1");
   });
 
-  it("shows the API financial overflow message without replacing it", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ message: "O total financeiro deve estar entre limites seguros." }, { status: 422 }));
+  it("maps the API error code to client copy and never displays backend text", async () => {
+    vi.mocked(browserFetch).mockResolvedValue(Response.json({ code: "INVALID_REQUEST", message: "O total financeiro deve estar entre limites seguros." }, { status: 422 }));
     render(<TimelineScreen />);
-    expect(await screen.findByRole("alert")).toHaveTextContent("O total financeiro deve estar entre limites seguros.");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Confira os dados informados.");
+    expect(alert).not.toHaveTextContent("O total financeiro");
   });
 
   it("keeps the newest filter when overlapping requests resolve in reverse order", async () => {
@@ -73,13 +75,13 @@ describe("TimelineScreen", () => {
   it("invalidates the old cursor when switching filters fails", async () => {
     vi.mocked(browserFetch).mockImplementation(async path => {
       if (path === "/api/financial/timeline") return Response.json({ summary, items: [charge("a", "Item do filtro A")], nextCursor: "cursor-a" });
-      if (path === "/api/financial/timeline?direction=payable") return Response.json({ message: "Filtro indisponível." }, { status: 503 });
+      if (path === "/api/financial/timeline?direction=payable") return Response.json({ code: "INTERNAL_ERROR", message: "Filtro indisponível." }, { status: 503 });
       return Response.json({ summary, items: [charge("mixed", "Item misturado")], nextCursor: null });
     });
     render(<TimelineScreen />); const user = userEvent.setup();
     await screen.findByText("Item do filtro A");
     await user.click(screen.getByRole("button", { name: "A pagar" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Filtro indisponível.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Serviço temporariamente indisponível. Tente novamente.");
     expect(screen.queryByRole("button", { name: "Carregar mais" })).not.toBeInTheDocument();
     expect(screen.queryByText("Item do filtro A")).not.toBeInTheDocument();
     expect(screen.queryByText("Item misturado")).not.toBeInTheDocument();

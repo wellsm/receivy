@@ -125,7 +125,7 @@ it("creates an exact recurring split and freezes retry payload after a lost resp
     if (init.method === "POST") {
       posts.push(init);
       return posts.length === 1
-        ? Response.json({ message: "Resposta perdida" }, { status: 503 })
+        ? Response.json({ code: "INTERNAL_ERROR", message: "Resposta perdida" }, { status: 503 })
         : Response.json({
             id: "r1",
             ...JSON.parse(String(init.body)),
@@ -148,7 +148,7 @@ it("creates an exact recurring split and freezes retry payload after a lost resp
   expect(screen.getByText(/50,01/)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Salvar recorrência" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Resposta perdida",
+    "Serviço temporariamente indisponível. Tente novamente.",
   );
   expect(screen.getByLabelText("Descrição")).toBeDisabled();
   await user.click(
@@ -242,7 +242,7 @@ it("retains an editable draft after a definitive rejection and round-trips annua
     if (init?.method === "PATCH") {
       saved = JSON.parse(String(init.body));
       return Response.json(
-        { message: "Contato indisponível" },
+        { code: "NOT_FOUND", message: "Contato indisponível" },
         { status: 404 },
       );
     }
@@ -259,7 +259,7 @@ it("retains an editable draft after a definitive rejection and round-trips annua
   await user.click(screen.getByRole("button", { name: "Revisar recorrência" }));
   await user.click(screen.getByRole("button", { name: "Salvar recorrência" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Contato indisponível",
+    "Este registro não está disponível.",
   );
   expect(screen.getByLabelText("Descrição")).toBeEnabled();
   expect(saved).toMatchObject({

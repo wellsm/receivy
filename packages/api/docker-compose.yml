@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: receivy
       POSTGRES_DB: receivy
     ports:
-      - "55434:5432"
+      - "127.0.0.1:55434:5432"
     volumes:
       - receivy_pg_data:/var/lib/postgresql/data
     healthcheck:

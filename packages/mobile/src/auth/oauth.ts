@@ -1,5 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
+import * as AppleAuthentication from "expo-apple-authentication";
+import { Platform } from "react-native";
 import { authClient } from "./client";
 
 const redirectUri = "receivy://auth/callback";
@@ -15,6 +17,16 @@ export async function loginWithProvider(provider: "google" | "apple"): Promise<b
       encoding: Crypto.CryptoEncoding.BASE64,
     });
     const clientChallenge = digest.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    if (provider === "apple" && Platform.OS === "ios") {
+      if (!await AppleAuthentication.isAvailableAsync()) throw new Error("Login Apple indisponível neste dispositivo.");
+      const challenge = await authClient.startNativeApple(clientChallenge);
+      let credential: AppleAuthentication.AppleAuthenticationCredential;
+      try { credential = await AppleAuthentication.signInAsync({ nonce: challenge.nonce, state: challenge.state, requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL] }); }
+      catch (error) { if (error && typeof error === "object" && "code" in error && error.code === "ERR_REQUEST_CANCELED") return false; throw error; }
+      if (credential.state !== challenge.state || !credential.authorizationCode) throw new Error("Retorno Apple inválido.");
+      await authClient.exchangeNativeApple({ state: challenge.state, authorizationCode: credential.authorizationCode, codeVerifier: verifier, ...(credential.fullName ? { profile: JSON.stringify({ name: { firstName: credential.fullName.givenName, lastName: credential.fullName.familyName } }) } : {}) });
+      return true;
+    }
     const authorizationUrl = await authClient.startOauth({ provider, destination: redirectUri, clientChallenge });
     const result = await WebBrowser.openAuthSessionAsync(authorizationUrl, redirectUri);
     if (result.type !== "success") return false;

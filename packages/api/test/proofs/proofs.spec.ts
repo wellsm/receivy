@@ -3,6 +3,7 @@ import { after, before, describe, it } from "node:test";
 import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from "@ez4/gateway";
 import { BucketTester } from "@ez4/local-storage/test";
 import { savePerson } from "../../src/people/repository";
+import { savePaymentMethod } from "../../src/payment-methods/repository";
 import { createExpense } from "../../src/expenses/repository";
 import { cancelCharge, recordManualPayment } from "../../src/charges/repository";
 import { createOrRotatePublicLink, revokePublicLink } from "../../src/public/repository";
@@ -47,6 +48,7 @@ describe("private proof transactions on PostgreSQL", () => {
   before(async () => {
     const [row] = await db.rawQuery("SELECT current_database() AS name"); equal(row?.["name"], "receivy_tests");
     await createUser(db, { id: OWNER, email: "proof-owner@example.com", name: "Proof Owner" });
+    await savePaymentMethod(db, OWNER, { pixKeyType: "email", pixKey: "proof-owner@example.com" });
     await createUser(db, { id: DEBTOR, email: "proof-debtor@example.com", name: "Proof Debtor" });
     await createUser(db, { id: OTHER, email: "proof-other@example.com", name: "Other" });
   });
@@ -149,16 +151,22 @@ describe("private proof transactions on PostgreSQL", () => {
     await throttleProof(db, "quota-native-proof", now + 600_001);
     await db.proof_throttles.deleteMany({});
   });
-  it("does not let invalid anonymous capabilities consume legitimate upload quota", async () => {
+  it("counts invalid anonymous capabilities against the guessing client's IP only", async () => {
+    // Task 7 contract: quota is consumed before capability lookup so token guessing cannot
+    // bypass it, but the trusted source IP scopes that cost to the guessing client alone.
     const context = { db, variables: { PUBLIC_LINK_HMAC_SECRET: SECRET } } as Parameters<typeof publicUploadProofHandler>[1];
-    for (let attempt = 0; attempt < 125; attempt++) {
-      await rejects(() => publicUploadProofHandler({ parameters: { token: `invalid-${attempt}` }, body: input }, context), HttpNotFoundError);
-      await rejects(() => publicFinalizeProofHandler({ parameters: { token: `invalid-${attempt}`, intentId: "11111111-1111-4111-8111-111111111111" } }, context), HttpNotFoundError);
+    const guesser = "203.0.113.7";
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const upload = { sourceIp: guesser, parameters: { token: `invalid-${attempt}` }, body: input };
+      const finalize = { sourceIp: guesser, parameters: { token: `invalid-${attempt}`, intentId: "11111111-1111-4111-8111-111111111111" } };
+      await rejects(() => publicUploadProofHandler(upload, context), HttpNotFoundError);
+      await rejects(() => publicFinalizeProofHandler(finalize, context), HttpNotFoundError);
     }
-    equal(await db.proof_throttles.count({}), 0, "invalid capabilities must not create legitimate quota rows");
+    const exhausted = { sourceIp: guesser, parameters: { token: "invalid-final" }, body: input };
+    await rejects(() => publicUploadProofHandler(exhausted, context), error => (error as { status: number }).status === 429);
     const id = await charge(); const link = await createOrRotatePublicLink(db, OWNER, id, SECRET);
-    await throttleProof(db, link.token);
-    equal(await db.proof_throttles.count({}), 2);
+    await throttleProof(db, link.token, Date.now(), "198.51.100.5");
+    await throttleProof(db, link.token, Date.now(), "unknown-client");
     await db.proof_throttles.deleteMany({});
   });
 });

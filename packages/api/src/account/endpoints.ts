@@ -13,7 +13,7 @@ declare class DownloadRequest implements Http.Request { identity: SessionIdentit
 declare class ProfileResponse implements Http.Response { status: 200; body: { user: AuthUser } }
 declare class SessionsResponse implements Http.Response { status: 200; body: { sessions: { id: string; deviceName: string; createdAt: string; lastSeenAt: string; current: boolean }[] } }
 declare class EmptyResponse implements Http.Response { status: 204 }
-declare class DeleteResponse implements Http.Response { status: 200; body: { deleted: boolean } }
+declare class DeleteResponse implements Http.Response { status: 200; body: { deleted: boolean; providerRevocation: "not_required" | "pending" | "manual_action_required" | "unknown" } }
 declare class TicketResponse implements Http.Response { status: 200; body: { token: string; expiresAt: string } }
 declare class DownloadResponse implements Http.Response { status: 200; headers: { "cache-control": string }; body: { filename: string; json: string } }
 export async function profileHandler(request: ProfileRequest, context: Service.Context<ApiProvider>): Promise<ProfileResponse> { return { status: 200, body: { user: await updateProfile(context.db, request.identity.userId, request.body) } }; }

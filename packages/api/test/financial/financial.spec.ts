@@ -115,6 +115,21 @@ describe("financial repositories on PostgreSQL", () => {
     equal(await db.outbox_events.count({ where: { aggregate_id: chargeId, type: "charge.created" } }), 1);
   });
 
+  it("returns one persisted result for simultaneous identical expense idempotency keys", async () => {
+    const person = await savePerson(db, OWNER, { name: "Idempotent race" });
+    const input = { totalCents: 101, installmentCount: 2, firstDueDate: "2026-11-01",
+      split: { mode: "fixed" as const, parts: [{ kind: "person" as const, personId: person.id, amountCents: 101 }] } };
+    const [first, second] = await Promise.all([createExpense(db, OWNER, "same-key-race", input), createExpense(db, OWNER, "same-key-race", input)]);
+    deepEqual(first, second);
+    equal(await db.expenses.count({ where: { id: first.id } }), 1);
+    equal(await db.expense_allocations.count({ where: { expense_id: first.id } }), 2);
+    equal(await db.charges.count({ where: { source_id: first.id } }), 2);
+    for (const charge of first.charges) {
+      equal(await db.outbox_events.count({ where: { aggregate_id: charge.id, type: "charge.created" } }), 1);
+      equal(await db.activity_events.count({ where: { aggregate_id: charge.id, type: "charge.created" } }), 1);
+    }
+  });
+
   it("expires, rotates and revokes versioned public capabilities without leaking private fields", async () => {
     const person = await savePerson(db, OWNER, { name: "Público", email: "public@example.com" });
     const expense = await createExpense(db, OWNER, "public-capability", { totalCents: 2_500, installmentCount: 1,

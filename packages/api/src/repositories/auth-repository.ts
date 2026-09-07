@@ -15,6 +15,7 @@ import {
 import { generateRefreshToken, hashRefreshToken } from "../auth/session";
 import { linkVerifiedPeople } from "../people/repository";
 import { disableSessionDevices, revokeSession } from "../account/sessions";
+import { lockAccountReferences } from "../account/locking";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const CODE_COOLDOWN_MS = 60 * 1000;
@@ -56,6 +57,9 @@ async function replaceLoginCode(
   input: { code: string; codeHashKey: string; email: string },
 ): Promise<{ accepted: boolean }> {
   return db.transaction(async (tx): Promise<{ accepted: boolean }> => {
+    await lockAccountReferences(tx, "write");
+    // No row exists on the first request: serialize by keyed email before SELECT/INSERT.
+    await tx.rawQuery("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))", { key: createEmailCodeHash({ code: "otp-request-lock", normalizedEmail: input.email, secret: input.codeHashKey }) });
     const previous = await tx.login_codes.findOne({
       select: LOGIN_CODE_SELECT,
       where: { email: input.email },

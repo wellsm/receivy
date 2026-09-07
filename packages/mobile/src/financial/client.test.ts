@@ -18,9 +18,9 @@ describe("native financial client", () => {
     expect(() => client.publicChargeUrl("token")).toThrow("EXPO_PUBLIC_WEB_URL");
   });
 
-  it("preserves a typed API message for financial overflow", async () => {
-    const authenticatedFetch = jest.fn().mockResolvedValue(Response.json({ message: "O total financeiro ultrapassa o limite exato." }, { status: 422 }));
+  it("translates the stable code without displaying arbitrary backend text", async () => {
+    const authenticatedFetch = jest.fn().mockResolvedValue(Response.json({ code: "INVALID_REQUEST", message: "private SQL parameter" }, { status: 400 }));
     const client = createFinancialClient({ authenticatedFetch });
-    await expect(client.timeline()).rejects.toMatchObject<Partial<FinancialRequestError>>({ message: "O total financeiro ultrapassa o limite exato.", status: 422 });
+    await expect(client.timeline()).rejects.toMatchObject<Partial<FinancialRequestError>>({ message: "Confira os dados informados.", status: 400 });
   });
 });

@@ -24,6 +24,7 @@ export function expenseRequestFingerprint(input: ExpenseRequestInput): string {
     firstDueDate: normalized.firstDueDate,
     split: normalized.split,
     paymentMethodId: normalized.paymentMethodId ?? null,
-  });
+  }, (_key, value: unknown) => value && typeof value === "object" && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right))) : value);
   return createHash("sha256").update(canonical).digest("base64url");
 }

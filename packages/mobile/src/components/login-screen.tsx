@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
 import { loginWithProvider } from "@/auth/oauth";
+import * as AppleAuthentication from "expo-apple-authentication";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -27,8 +28,9 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [providers, setProviders] = useState({ google: false, apple: false });
+  const [nativeAppleAvailable, setNativeAppleAvailable] = useState(false);
 
-  useEffect(() => { void authClient.oauthProviders().then(setProviders); }, []);
+  useEffect(() => { void authClient.oauthProviders().then(result => setProviders({ google: result.google, apple: Platform.OS === "ios" ? result.appleNative : result.apple })); if (Platform.OS === "ios") void AppleAuthentication.isAvailableAsync().then(setNativeAppleAvailable).catch(() => setNativeAppleAvailable(false)); }, []);
 
   async function socialLogin(provider: "google" | "apple") {
     setBusy(true);
@@ -88,15 +90,13 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
               >
                 <Text className="font-bold text-ink">G  Continuar com Google</Text>
               </Pressable>
-              <Pressable
+              {Platform.OS === "ios" && nativeAppleAvailable && providers.apple ? <View pointerEvents={busy ? "none" : "auto"}><AppleAuthentication.AppleAuthenticationButton buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE} buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK} cornerRadius={16} style={{ height: 52, width: "100%" }} onPress={() => { if (!busy) void socialLogin("apple"); }} /></View> : <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ disabled: busy || !providers.apple }}
-                disabled={busy || !providers.apple}
+                accessibilityState={{ disabled: busy || !providers.apple || Platform.OS === "ios" }}
+                disabled={busy || !providers.apple || Platform.OS === "ios"}
                 onPress={() => void socialLogin("apple")}
                 className="h-13 items-center justify-center rounded-2xl border border-outline bg-surface opacity-50"
-              >
-                <Text className="font-bold text-ink">●  Continuar com Apple</Text>
-              </Pressable>
+              ><Text className="font-bold text-ink">Continuar com Apple</Text></Pressable>}
               <Text className="text-center text-xs leading-5 text-muted">
                 {(!providers.google || !providers.apple) ? "Algumas opções de login estão temporariamente indisponíveis." : "Entre com sua conta Google ou Apple."}
               </Text>

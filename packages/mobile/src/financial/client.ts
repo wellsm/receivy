@@ -1,5 +1,6 @@
 import type { ChargeDetail, ExpenseDetail, ExpenseInput, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage, ProofDetail, ProofUploadIntent, ProofUploadInput, RecurrenceInput, RecurrenceDetail, RecurrencesPage } from "@receivy/common";
 import { authClient } from "@/auth/client";
+import { apiErrorMessage } from "@receivy/common";
 
 type Options = { authenticatedFetch: (path: string, init?: RequestInit) => Promise<Response>; publicWebBaseUrl?: string };
 
@@ -7,7 +8,7 @@ export class FinancialRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); this.name = "FinancialRequestError"; }
 }
 
-async function message(response: Response, fallback: string) { try { const body = await response.json() as { message?: unknown }; return typeof body.message === "string" ? body.message : fallback; } catch { return fallback; } }
+async function message(response: Response, fallback: string) { try { const body = await response.json() as { code?: unknown }; return apiErrorMessage(body.code, fallback); } catch { return fallback; } }
 
 export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: Options) {
   async function request<T>(path: string, init?: RequestInit, fallback = "Não foi possível acessar seus registros financeiros."): Promise<T> {
@@ -35,7 +36,7 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     downloadProof(id: string, proofId: string) { return request<{ url: string; expiresIn: number }>(`charges/${id}/proofs/${proofId}/download`, { method: "POST" }); },
     cancel(id: string) { return request<ChargeDetail>(`charges/${id}/cancel`, { method: "POST" }); },
     pay(id: string, method: "pix" | "cash" | "transfer" | "other" = "pix") { return request<ChargeDetail>(`charges/${id}/payments`, { method: "POST", body: JSON.stringify({ method }) }); },
-    publicLink(id: string, rotate = false) { return request<PublicLink>(`charges/${id}/public-link${rotate ? "/rotate" : ""}`, { method: "POST" }); },
+    publicLink(id: string, rotate = false, paymentMethodId?: string) { return request<PublicLink>(`charges/${id}/public-link${rotate ? "/rotate" : ""}`, { method: "POST", ...(paymentMethodId ? { body: JSON.stringify({ paymentMethodId }) } : {}) }); },
     revokePublicLink(id: string) { return request<void>(`charges/${id}/public-link`, { method: "DELETE" }); },
     ledger(id: string, cursor?: string) { return request<PersonLedger>(`people/${id}/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`); },
     publicChargeUrl(token: string) {

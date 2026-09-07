@@ -12,6 +12,7 @@ import type { ProofRoutes } from "./routes/proofs";
 import type { RecurrenceRoutes } from "./routes/recurrences";
 import type { NotificationRoutes } from "./routes/notifications";
 import type { AccountRoutes } from "./routes/account";
+import type { requestListener } from "./security/listener";
 
 /** Receivy HTTP API. */
 export declare class Api extends Http.Service {
@@ -19,6 +20,7 @@ export declare class Api extends Http.Service {
   cache: Http.UseCache<{ authorizerTTL: 0 }>;
 
   defaults: Http.UseDefaults<{
+    listener: typeof requestListener;
     preferences: {
       namingStyle: NamingStyle.CamelCase;
     };

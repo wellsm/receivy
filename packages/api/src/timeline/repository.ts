@@ -2,6 +2,7 @@ import { Order } from "@ez4/database";
 import { HttpNotFoundError, HttpUnprocessableEntityError } from "@ez4/gateway";
 import type { ChargeState, Direction, PersonLedger, TimelinePage, TimelineItem } from "@receivy/common";
 import type { DbClient } from "../database";
+import { getPerson } from "../people/repository";
 import { CHARGE_SELECT, chargeDto, type ChargeRow } from "../charges/repository";
 import { listRecurrences } from "../recurrences/repository";
 
@@ -141,7 +142,7 @@ export async function getPersonLedger(db: DbClient, userId: string, personId: st
   const all = await db.charges.findMany({ select: CHARGE_SELECT, where: baseWhere });
   const receivable = sum(all.records.filter(row => row.creditor_id === userId && row.state === "pending"));
   const payable = sum(all.records.filter(row => row.creditor_id !== userId && row.state === "pending"));
-  return { personId, balance: money(receivable - payable), receivable: money(receivable), payable: money(payable),
+  return { personId, person: await getPerson(db, userId, personId), balance: money(receivable - payable), receivable: money(receivable), payable: money(payable),
     charges: await Promise.all(page.map(row => chargeDto(db, row, directionFor(row, userId)))),
     nextCursor: result.records.length > 50 ? page.at(-1)!.id : null };
 }

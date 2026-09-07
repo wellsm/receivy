@@ -27,7 +27,7 @@ function accessToken(userId, sessionFamilyId = familyId) {
 async function request(path, options = {}) {
   const response = await fetch(`${apiBase}/${path}`, options);
   const text = await response.text();
-  return { status: response.status, body: text ? JSON.parse(text) : undefined };
+  return { status: response.status, headers: response.headers, body: text ? JSON.parse(text) : undefined };
 }
 
 async function waitForApi() {
@@ -74,6 +74,11 @@ try {
   run("docker", [...compose, "exec", "-T", "postgres", "psql", "-U", "receivy", "-d", "receivy", "-v", "ON_ERROR_STOP=1", "-c",
     `INSERT INTO users (id,email,name,locale,timezone,country,currency,created_at,updated_at) VALUES ('11111111-1111-4111-8111-111111111111','recurrence-http@example.invalid','HTTP fixture','pt-BR','America/Sao_Paulo','BR','BRL',now(),now()); INSERT INTO session_families (id,user_id,created_at,last_seen_at) VALUES ('${familyId}','11111111-1111-4111-8111-111111111111',now(),now())`]);
   const authorization = `Bearer ${accessToken("11111111-1111-4111-8111-111111111111")}`;
+  const invalidJson = await request("people", { method: "POST", headers: { authorization, "content-type": "application/json", "x-trace-id": "fixture-secret-trace" }, body: '{"name":"fixture-secret-name","email":"fixture-secret@example.invalid",' });
+  assert.equal(invalidJson.status, 400);
+  assert.equal(invalidJson.body.code, "INVALID_REQUEST");
+  assert.match(invalidJson.body.correlationId, /^[a-f0-9-]{36}$/);
+  assert.equal(invalidJson.headers.get("x-trace-id"), invalidJson.body.correlationId);
   const malformed = await request("payment-methods", {
     method: "POST",
     headers: { authorization, "content-type": "application/json" },
@@ -87,6 +92,8 @@ try {
     body: JSON.stringify({ pixKeyType: "cpf", pixKey: "123" }),
   });
   assert.equal(invalidPix.status, 400);
+  assert.equal(invalidPix.body.code, "INVALID_REQUEST");
+  assert.equal((await request("people", { method: "POST", headers: { authorization, "content-type": "application/json" }, body: JSON.stringify({ name: "Fixture", ownerId: familyId }) })).status, 400);
   assert.equal((await request("public/charges/not-a-capability")).status, 404);
   // Disposable container-only fixture. Business behavior stays in DatabaseTester specs;
   // this assertion covers EZ4's real generated request/response serialization.
@@ -106,6 +113,11 @@ try {
   assert.equal(person.status, 201);
   const expense = await request("expenses", { method: "POST", headers: { ...headers, "idempotency-key": randomUUID() }, body: JSON.stringify({ totalCents: 1234, installmentCount: 1, firstDueDate: "2027-01-01", split: { mode: "fixed", parts: [{ kind: "person", personId: person.body.id, amountCents: 1234 }] } }) });
   assert.equal(expense.status, 201); const chargeId = expense.body.charges[0].id;
+  const unavailableStorage = await request(`charges/${chargeId}/proofs/uploads`, { method: "POST", headers,
+    body: JSON.stringify({ filename: "fixture-secret-file.pdf", mime: "application/pdf", size: 100 }) });
+  assert.equal(unavailableStorage.status, 500);
+  assert.equal(unavailableStorage.body.code, "INTERNAL_ERROR");
+  assert.match(unavailableStorage.body.correlationId, /^[a-f0-9-]{36}$/);
   const foreignFamilyId = "62222222-2222-4222-8222-222222222222";
   run("docker", [...compose, "exec", "-T", "postgres", "psql", "-U", "receivy", "-d", "receivy", "-v", "ON_ERROR_STOP=1", "-c",
     `INSERT INTO users (id,email,name,locale,timezone,country,currency,created_at,updated_at) VALUES ('22222222-2222-4222-8222-222222222222','foreign-http@example.invalid','Foreign fixture','pt-BR','America/Sao_Paulo','BR','BRL',now(),now()); INSERT INTO session_families (id,user_id,created_at,last_seen_at) VALUES ('${foreignFamilyId}','22222222-2222-4222-8222-222222222222',now(),now())`]);
@@ -160,6 +172,7 @@ try {
   assert.equal((await request(`account/sessions/${familyId}`, { method: "DELETE", headers })).status, 204);
   assert.equal((await request("auth/me", { headers })).status, 401, "already-issued access rejected immediately after real HTTP revocation");
   assert.equal((await request("account/export/download", { method: "POST", headers, body: JSON.stringify({ token: ticket.body.token }) })).status, 401);
+  assert.doesNotMatch(serverOutput, /fixture-secret-name|fixture-secret@example|fixture-secret-trace|fixture-secret-file|not-a-capability/);
   process.stdout.write("financial/account HTTP transport smoke: PASS\n");
 } catch (error) {
   process.stderr.write(serverOutput);

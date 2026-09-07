@@ -11,6 +11,7 @@ FROM base AS builder
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY vendor ./vendor
+COPY patches ./patches
 COPY packages/api/package.json ./packages/api/package.json
 COPY packages/common/package.json ./packages/common/package.json
 COPY packages/mobile/package.json ./packages/mobile/package.json

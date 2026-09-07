@@ -9,6 +9,7 @@ const GRANT_TTL_MS = 2 * 60 * 1000;
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 
 export type OauthAttemptValues = ReturnType<typeof createOauthAttempt>;
+export type OauthGrantCommit = { identity: OidcIdentity; provider: OauthProvider; clientChallenge: string; grantHash: string; expiresAt: Date };
 
 export interface OauthProviderClient {
   authorizationUrl(input: OauthAttemptValues): string;
@@ -83,7 +84,7 @@ export async function beginOauth(
   if (!dependencies.providerClient) {
     throw new OauthFlowError("PROVIDER_DISABLED");
   }
-  if (!isAllowedOauthRedirect(input.destination, dependencies.allowList)) {
+  if (input.destination.startsWith("native:") || !isAllowedOauthRedirect(input.destination, dependencies.allowList)) {
     throw new OauthFlowError("INVALID_REDIRECT");
   }
   if (!/^[A-Za-z0-9_-]{43}$/.test(input.clientChallenge)) {
@@ -114,13 +115,14 @@ export async function completeOauth(
     now?: () => Date;
     providerClient: OauthProviderClient;
     repo: OauthFlowRepository;
+    commitGrant?: (input: OauthGrantCommit) => Promise<void>;
   },
 ): Promise<{ destination: string; grant: string | null }> {
   const attempt = await dependencies.repo.consumeAttempt({
     provider: input.provider,
     stateHash: hashOauthValue(input.state),
   });
-  if (!attempt) {
+  if (!attempt || attempt.destination.startsWith("native:")) {
     throw new OauthFlowError("INVALID_STATE");
   }
 
@@ -133,6 +135,13 @@ export async function completeOauth(
       profile: input.profile,
     });
   } catch { return failure; }
+  const grant = (dependencies.generateGrant ?? (() => randomBytes(32).toString("base64url")))();
+  const now = (dependencies.now ?? (() => new Date()))();
+  if (dependencies.commitGrant) {
+    try { await dependencies.commitGrant({ identity, provider: input.provider, clientChallenge: attempt.clientChallenge, grantHash: hashOauthValue(grant), expiresAt: new Date(now.getTime() + GRANT_TTL_MS) }); }
+    catch (error) { if (error instanceof OauthFlowError) return failure; throw error; }
+    return { destination: attempt.destination, grant };
+  }
   let user: AuthUser;
   try {
     user = await dependencies.repo.resolveUser({ provider: input.provider, identity });
@@ -140,8 +149,6 @@ export async function completeOauth(
     if (error instanceof OauthFlowError) return failure;
     throw error;
   }
-  const grant = (dependencies.generateGrant ?? (() => randomBytes(32).toString("base64url")))();
-  const now = (dependencies.now ?? (() => new Date()))();
   await dependencies.repo.createGrant({
     clientChallenge: attempt.clientChallenge,
     grantHash: hashOauthValue(grant),

@@ -73,7 +73,7 @@ export async function expandOutbox(
           return;
         }
       }
-      if (row.type === "charge.created")
+      if (row.type === "charge.created" && !JSON.parse(row.payload).notificationResumed)
         await scheduleReminders(
           tx,
           charge,
@@ -203,7 +203,8 @@ async function planDelivery(
     },
     where: { charge_id: charge.id },
   });
-  if (!link && charge.state === "pending") {
+  const hasPix = !!charge.pix_key_snapshot && !!charge.pix_key_type_snapshot;
+  if (!link && charge.state === "pending" && hasPix) {
     link = await db.public_links.insertOne({
       select: {
         public_id: true,
@@ -235,11 +236,11 @@ async function planDelivery(
     from: config.from ?? "disabled",
   };
   const valid =
-    charge.state === "pending" &&
+    charge.state === "pending" && hasPix &&
     link &&
     !link.revoked_at &&
     Date.parse(link.expires_at) > now;
-  const reason = !valid
+  const reason = charge.state === "pending" && !hasPix ? "pix_required" : !valid
     ? "charge_or_capability_inactive"
     : !devices.length && (!inputs.email || !preferences.emailEnabled)
       ? "no_enabled_channel"
@@ -259,8 +260,8 @@ async function planDelivery(
       ];
   for (const recipient of recipients) {
     const key = digest(`${eventId}/${recipient.channel}/${recipient.key}`);
-    await db.notification_deliveries.insertOne({
-      data: {
+    const existing = await db.notification_deliveries.findOne({ select: { id: true, reason: true, attempts: true }, where: { idempotency_key: key } });
+    const data = {
         id: crypto.randomUUID(),
         event_id: eventId,
         charge_id: charge.id,
@@ -269,8 +270,8 @@ async function planDelivery(
         device_id: recipient.deviceId,
         channel: recipient.channel,
         template,
-        state: reason ? "suppressed" : "pending",
-        reason,
+        state: reason ? "suppressed" as const : "pending" as const,
+        reason: reason ?? (null as unknown as undefined),
         render_inputs: JSON.stringify(inputs),
         body_hash: valid
           ? digest(
@@ -282,7 +283,10 @@ async function planDelivery(
         available_at: stamp,
         created_at: stamp,
         updated_at: stamp,
-      },
-    });
+      };
+    if (existing?.reason === "pix_required" && existing.attempts === 0) {
+      const { id: _id, created_at: _created, ...updated } = data;
+      await db.notification_deliveries.updateOne({ where: { id: existing.id }, data: updated });
+    } else if (!existing) await db.notification_deliveries.insertOne({ data });
   }
 }

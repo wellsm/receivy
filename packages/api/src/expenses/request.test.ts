@@ -20,4 +20,12 @@ describe("expense requests", () => {
     expect(a).toBe(same);
     expect(a).not.toBe(changed);
   });
+
+  it("ignores nested object property order but preserves allocation order", () => {
+    const a = { ...input, split: { mode: "fixed" as const, parts: [{ kind: "person" as const, personId: "person", amountCents: 100 }] } };
+    const reordered = { ...input, split: { parts: [{ amountCents: 100, personId: "person", kind: "person" as const }], mode: "fixed" as const } };
+    expect(expenseRequestFingerprint(a)).toBe(expenseRequestFingerprint(reordered));
+    const equal = { ...input, split: { mode: "equal" as const, parts: [...input.split.parts].reverse() } };
+    expect(expenseRequestFingerprint(input)).not.toBe(expenseRequestFingerprint(equal));
+  });
 });

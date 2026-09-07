@@ -33,6 +33,11 @@ function repository(overrides: Partial<AuthRepository> = {}): AuthRepository {
 }
 
 describe("passwordless email login", () => {
+  it("does not reveal delivery failure in the public code-request outcome", async () => {
+    await expect(requestEmailCode({ email: "undeliverable@example.com" }, {
+      codeHashKey: "test-key", repo: repository(), transport: { sendLoginCode: async () => { throw new Error("undeliverable address"); } },
+    })).resolves.toBeUndefined();
+  });
   it("normalizes the address, replaces older codes and delivers only accepted codes", async () => {
     const repo = repository();
     const transport: EmailTransport = { sendLoginCode: vi.fn().mockResolvedValue(undefined) };

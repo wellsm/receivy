@@ -8,6 +8,7 @@ import { resolvePublicCharge } from "../public/repository";
 import { configuredProofStorage } from "./configured-storage";
 import { createUploadIntent, finalizeProof, listProofs, reviewProof, downloadProof, publicProofStatus } from "./repository";
 import { throttleProof } from "./throttle";
+import { throttlePublicRead, trustedClientIp } from "../security/throttle";
 
 declare class UploadRequest implements Http.Request { identity: SessionIdentity; parameters: { id: String.UUID }; body: { filename: String.Size<1, 200>; mime: "image/jpeg" | "image/png" | "application/pdf"; size: number } }
 declare class FinalizeRequest implements Http.Request { identity: SessionIdentity; parameters: { id: String.UUID; intentId: String.UUID } }
@@ -23,15 +24,16 @@ declare class DownloadResponse implements Http.Response { status: 200; body: { u
 declare class PublicFinalizeResponse implements Http.Response { status: 200; body: { state: "pending" } }
 declare class PublicStatusResponse implements Http.Response { status: 200; body: { state: "pending" | "accepted" | "rejected"; reason: string | null; closureReason: "paid" | "cancelled" | null } }
 export async function publicProofStatusHandler(request: PublicFinalizeRequest, context: Service.Context<ApiProvider>): Promise<PublicStatusResponse> {
+  await throttlePublicRead(context.db, request.parameters.token, request);
   return { status: 200, body: await publicProofStatus(context.db, request.parameters.token, context.variables.PUBLIC_LINK_HMAC_SECRET, request.parameters.intentId) };
 }
 
 export async function uploadProofHandler(request: UploadRequest, context: Service.Context<ApiProvider>): Promise<UploadResponse> {
-  await throttleProof(context.db, `user:${request.identity.userId}`);
+  await throttleProof(context.db, `user:${request.identity.userId}`, Date.now(), trustedClientIp(request));
   return { status: 200, body: await createUploadIntent(context.db, configuredProofStorage(context.variables), request.parameters.id, { userId: request.identity.userId }, request.body) };
 }
 export async function finalizeProofHandler(request: FinalizeRequest, context: Service.Context<ApiProvider>): Promise<ProofResponse> {
-  await throttleProof(context.db, `user:${request.identity.userId}`);
+  await throttleProof(context.db, `user:${request.identity.userId}`, Date.now(), trustedClientIp(request));
   return { status: 200, body: await finalizeProof(context.db, configuredProofStorage(context.variables), request.parameters.id, { userId: request.identity.userId }, request.parameters.intentId) };
 }
 export async function listProofsHandler(request: ListRequest, context: Service.Context<ApiProvider>): Promise<ProofsResponse> {
@@ -45,14 +47,14 @@ export async function downloadProofHandler(request: ProofRequest, context: Servi
 }
 export async function publicUploadProofHandler(request: PublicUploadRequest, context: Service.Context<ApiProvider>): Promise<UploadResponse> {
   const secret = context.variables.PUBLIC_LINK_HMAC_SECRET;
+  await throttleProof(context.db, request.parameters.token, Date.now(), trustedClientIp(request));
   const charge = await resolvePublicCharge(context.db, request.parameters.token, secret);
-  await throttleProof(context.db, request.parameters.token);
   return { status: 200, body: await createUploadIntent(context.db, configuredProofStorage(context.variables), charge.id, { token: request.parameters.token, secret }, request.body) };
 }
 export async function publicFinalizeProofHandler(request: PublicFinalizeRequest, context: Service.Context<ApiProvider>): Promise<PublicFinalizeResponse> {
   const secret = context.variables.PUBLIC_LINK_HMAC_SECRET;
+  await throttleProof(context.db, request.parameters.token, Date.now(), trustedClientIp(request));
   const charge = await resolvePublicCharge(context.db, request.parameters.token, secret);
-  await throttleProof(context.db, request.parameters.token);
   await finalizeProof(context.db, configuredProofStorage(context.variables), charge.id, { token: request.parameters.token, secret }, request.parameters.intentId);
   return { status: 200, body: { state: "pending" } };
 }

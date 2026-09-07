@@ -37,6 +37,7 @@ describe("account lifecycle on dedicated PostgreSQL", () => {
     const [database] = await db.rawQuery("SELECT current_database() AS name");
     equal(database?.["name"], "receivy_tests");
     await createUser(db, { id: owner, email: "account-owner@example.com", name: "Account Owner" });
+    await savePaymentMethod(db, owner, { pixKeyType: "email", pixKey: "account-owner@example.com" });
     await createUser(db, { id: debtor, email: "account-debtor@example.com", name: "Account Debtor" });
   });
   after(async () => {
@@ -120,8 +121,11 @@ describe("account lifecycle on dedicated PostgreSQL", () => {
     await db.payments.updateOne({ where: { charge_id: chargeId }, data: { proof: { id: ownedProofId } } });
     const current = await session(debtor);
     equal((await getCharge(db, debtor, chargeId)).direction, "payable");
-    deepEqual(await Promise.all([eraseAccount(db, debtor, "EXCLUIR"), eraseAccount(db, debtor, "EXCLUIR")]), [{ deleted: true }, { deleted: true }]);
-    deepEqual(await eraseAccount(db, debtor, "EXCLUIR"), { deleted: true });
+    const concurrent = await Promise.all([eraseAccount(db, debtor, "EXCLUIR"), eraseAccount(db, debtor, "EXCLUIR")]);
+    deepEqual(concurrent.map(result => result.deleted), [true, true]);
+    // Exactly one erasure performs the work (no Apple identity => not_required); the loser observes an already-deleted row.
+    deepEqual(concurrent.map(result => result.providerRevocation).sort(), ["not_required", "unknown"]);
+    deepEqual(await eraseAccount(db, debtor, "EXCLUIR"), { deleted: true, providerRevocation: "unknown" });
     await rejects(() => authorize(current.access), HttpUnauthorizedError);
     const injectedFamily = crypto.randomUUID();
     await db.session_families.insertOne({ data: { id: injectedFamily, user: { id: debtor }, created_at: new Date().toISOString(), last_seen_at: new Date().toISOString() } });

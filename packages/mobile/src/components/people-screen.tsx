@@ -10,6 +10,7 @@ export function PeopleScreen({ onBack, onOpenLedger, client = peopleClient }: Pr
   const [people, setPeople] = useState<Person[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [archived, setArchived] = useState(false);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Person | null>(null);
@@ -22,13 +23,13 @@ export function PeopleScreen({ onBack, onOpenLedger, client = peopleClient }: Pr
   const scroll = useRef<ScrollView>(null);
   const load = useCallback((after?: string) => {
     const current = ++version.current;
-    return client.list(archived, after).then(result => {
+    return client.list(archived, after, search).then(result => {
       if (version.current !== current) return;
       setPeople(previous => after ? [...previous, ...result.people] : result.people);
       setCursor(result.nextCursor); setError("");
     }).catch(reason => { if (version.current === current) setError((reason as Error).message); })
       .finally(() => { if (version.current === current) setLoading(false); });
-  }, [archived, client]);
+  }, [archived, client, search]);
   const invalidate = useCallback(() => { version.current++; }, []);
   useEffect(() => { void load(); return invalidate; }, [load, invalidate]);
 
@@ -78,11 +79,12 @@ export function PeopleScreen({ onBack, onOpenLedger, client = peopleClient }: Pr
         </View>
         {error ? <Text accessibilityRole="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{error}</Text> : null}
         {notice ? <Text accessibilityRole="alert" className="mb-4 text-primary">{notice}</Text> : null}
+        <Text className="font-semibold text-ink">Buscar contatos</Text><TextInput accessibilityLabel="Buscar contatos" maxLength={254} value={search} onChangeText={value => { setLoading(true); setPeople([]); setCursor(null); setSearch(value); }} className="my-3 min-h-12 rounded-xl border border-outline px-3 text-ink" />
         <View className="flex-row items-center justify-between"><Text className="text-xl font-bold text-primary-strong">Contatos</Text><View className="flex-row items-center gap-2"><Text className="text-sm text-muted">Arquivados</Text><Switch accessibilityLabel="Ver arquivados" disabled={busy || loading} value={archived} onValueChange={value => { setLoading(true); setPeople([]); setCursor(null); setArchived(value); reset(); }} /></View></View>
         {loading && <ActivityIndicator accessibilityLabel="Carregando contatos" className="my-4" />}
         {!loading && !error && !people.length && <Text className="py-8 text-base leading-6 text-muted">{archived ? "Nenhum contato arquivado." : "Sua agenda começa com uma pessoa. Preencha o formulário acima."}</Text>}
         {people.map(person => <View key={person.id} className="gap-2 border-b border-outline py-5">
-          <Text className="text-lg font-bold text-ink">{person.name}</Text><Text className="text-sm text-muted">{person.email ?? "Sem e-mail"}</Text>{person.phone && <Text className="text-sm text-muted">{person.phone}</Text>}
+          <Text className="text-lg font-bold text-ink">{person.name}</Text><Text className="text-sm text-muted">{person.hasAccount ? "Com conta" : "Sem conta"}</Text><Text className="text-sm text-muted">{person.email ?? "Sem e-mail"}</Text>{person.phone && <Text className="text-sm text-muted">{person.phone}</Text>}
           <Pressable accessibilityRole="button" accessibilityLabel={`Ver histórico de ${person.name}`} onPress={() => onOpenLedger?.(person.id)} className="min-h-12 justify-center"><Text className="font-semibold text-primary">Ver saldo e histórico</Text></Pressable>
           {!person.archivedAt && <View className="flex-row gap-4">
             <Pressable accessibilityRole="button" accessibilityLabel={`Editar ${person.name}`} disabled={busy} className="min-h-12 justify-center" onPress={() => { setEditing(person); setName(person.name); setEmail(person.email ?? ""); setPhone(person.phone ?? ""); scroll.current?.scrollTo({ y: 0, animated: true }); }}><Text className="font-semibold text-primary">Editar</Text></Pressable>

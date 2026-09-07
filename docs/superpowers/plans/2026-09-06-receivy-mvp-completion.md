@@ -15,6 +15,10 @@ and calculation increment. Do not move or reset the user's checkout.
 - Public capability tokens are HMAC-signed with 90-day expiry and version rotation;
   public responses contain no email, phone, internal IDs or other debts.
 - All required capabilities must be wired to clients, not merely scaffolded.
+- API integration tests follow the user-requested FreightHero convention:
+  test/**/*.spec.ts, node:test/assert, DatabaseTester via ez4 test --local, typed
+  fixture lifecycle and dedicated testOptions database; service testers for side
+  effects. Custom shell/psql/HTTP scripts are not the primary regression suite.
 - Full verification plus local HTTP/Postgres authorization/concurrency tests;
   record credential/device-dependent checks honestly as external acceptance gates.
 
@@ -39,10 +43,11 @@ version, 90-day expiry and strict minimal read; require configured secret, no
 hardcoded production fallback. Timeline: pagination and filters direction/status/
 source/from/to, account-relative totals; no demo amounts. Include person ledger.
 
-Write focused tests first; add a repeatable disposable local PostgreSQL/API proof
+Write focused tests first; add repeatable native EZ4 DatabaseTester specs
 of idempotency, snapshots, cross-account rejection, debtor access, manual payment
 concurrency and link expiry/rotation. Keep files domain-focused. Commit only task
-files. No web/mobile changes here. Emit contracts/routes summary for task 2.
+files. Keep HTTP transport smoke small and supplementary. No web/mobile changes
+here. Emit contracts/routes summary for task 2.
 
 ### Task 2: Financial clients
 
@@ -52,7 +57,9 @@ tokens and responsive visual language, touch targets and accessible errors. Use
 tests first. Forms support existing equal/fixed/percentage rules and installments,
 owner portion, optional description, first due date and Pix selection. Show preview
 before persist, retain idempotency key on uncertain retry, navigate to persisted
-detail. Offer creator payment/cancel/share/link rotation, debtor read-only finance
+detail. Preserve exact cents in display too: fix the existing formatMoney division
+rounding at safe-integer boundaries with a regression test and reject unsafe money
+inputs. Offer creator payment/cancel/share/link rotation, debtor read-only finance
 and Pix copy. Public page displays minimum read with no-store/no-referrer and
 restricted CSP. All browser authenticated requests use BFF; native uses auth client.
 Remove demo finance and inert navigation/actions where live alternatives exist.
@@ -92,6 +99,12 @@ Expo transport with explicit disabled local defaults; wire preference/device UI
 and user-triggered manual reminders with server rate limits. Test deduplication,
 backoff and failure without rolling back charges.
 
+Integrate bounded durable storage cleanup/reconciliation for expired intents and
+unreferenced final proof objects, using Task3's key/metadata contract and a grace
+period that cannot delete in-flight or committed proofs. Coordinate with Task6
+account-file deletion retries. Best-effort rollback deletion alone is not durable
+cleanup. Retained proof objects must never inherit temporary bucket-wide expiry.
+
 ### Task 6: Account lifecycle and legal UI
 
 Implement onboarding name, profile locale/timezone, session listing/revocation,
@@ -113,3 +126,5 @@ timeline linkage, recurring creation, export/deletion. Verify Docker web build/r
 and native development build where locally available. Do not deploy or provision
 paid services. Document exact configuration and credentials still needed for
 external provider/S3/email/push/EAS acceptance; never mark untested gates passed.
+Migrate earlier auth/people repository proof scripts into the same DatabaseTester
+suite where equivalent coverage is not yet present; preserve pure unit tests.

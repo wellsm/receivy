@@ -5,6 +5,7 @@ import type {
   NotificationPreferences,
 } from "@receivy/common";
 import { authClient } from "@/auth/client";
+import { apiErrorMessage } from "@receivy/common";
 export function createNotificationClient(
   authenticatedFetch: (path: string, init?: RequestInit) => Promise<Response>,
 ) {
@@ -13,8 +14,8 @@ export function createNotificationClient(
     if (!response.ok) {
       let message = "Não foi possível acessar notificações.";
       try {
-        const body = (await response.json()) as { message?: string };
-        message = body.message ?? message;
+        const body = (await response.json()) as { code?: unknown };
+        message = apiErrorMessage(body.code, message);
       } catch {}
       throw new Error(message);
     }

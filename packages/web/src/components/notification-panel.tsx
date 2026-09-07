@@ -74,7 +74,7 @@ export function NotificationPanel({
         <p key={item.id}>
           {item.channel} ·{" "}
           {item.template === "initial" ? "Aviso inicial" : "Lembrete"} ·{" "}
-          {labels[item.state]} · tentativas: {item.attempts}
+          {item.reason === "pix_required" ? "Aguardando escolha do Pix para publicação" : labels[item.state]} · tentativas: {item.attempts}
         </p>
       ))}
       {message && <p role="status">{message}</p>}

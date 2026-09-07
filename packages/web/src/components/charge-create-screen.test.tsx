@@ -15,7 +15,7 @@ describe("ChargeCreateScreen", () => {
       if (path === "/api/people?archived=false") return Response.json({ people: [{ id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01" }], nextCursor: null });
       if (path === "/api/financial/payment-methods") return Response.json({ paymentMethods: [] });
       posts.push(init);
-      if (posts.length === 1) return Response.json({ message: "A resposta da criação não chegou. Tente novamente." }, { status: 503 });
+      if (posts.length === 1) return Response.json({ code: "INTERNAL_ERROR", message: "A resposta da criação não chegou. Tente novamente." }, { status: 503 });
       return Response.json({ id: "expense-1", charges: [{ id: "charge-1" }] }, { status: 201 });
     });
     const navigate = vi.fn();
@@ -27,7 +27,7 @@ describe("ChargeCreateScreen", () => {
     await user.click(screen.getByRole("button", { name: "Revisar cobrança" }));
     expect((await screen.findAllByText((_, element) => element?.textContent === "R$ 50,00")).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: "Criar cobrança" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("A resposta da criação não chegou");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Serviço temporariamente indisponível. Tente novamente.");
     expect(screen.getByLabelText("Descrição")).toHaveValue("Mercado");
     const retry = screen.getByRole("button", { name: "Tentar criar novamente" });
     expect(screen.getByLabelText("Descrição")).toBeDisabled();
@@ -82,14 +82,14 @@ describe("ChargeCreateScreen", () => {
     vi.mocked(browserFetch).mockImplementation(async path => {
       if (path.startsWith("/api/people")) return Response.json({ people: [{ id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01" }], nextCursor: null });
       if (path === "/api/financial/payment-methods") return Response.json({ paymentMethods: [] });
-      return Response.json({ message: "Contato arquivado." }, { status: 422 });
+      return Response.json({ code: "INVALID_REQUEST", message: "Contato arquivado." }, { status: 422 });
     });
     render(<ChargeCreateScreen />); const user = userEvent.setup();
     await user.click(await screen.findByRole("checkbox", { name: /Ana/ }));
     await user.type(screen.getByLabelText("Valor total"), "10,00");
     await user.click(screen.getByRole("button", { name: "Revisar cobrança" }));
     await user.click(screen.getByRole("button", { name: "Criar cobrança" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Contato arquivado.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Confira os dados informados.");
     expect(screen.getByLabelText("Descrição")).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Tentar criar novamente" })).not.toBeInTheDocument();
   });
@@ -100,7 +100,7 @@ describe("ChargeCreateScreen", () => {
       if (path.startsWith("/api/people")) return Response.json({ people: [{ id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01" }], nextCursor: null });
       if (path === "/api/financial/payment-methods") return Response.json({ paymentMethods: [] });
       posts.push(init);
-      if (posts.length === 1) return Response.json({ message: "Resposta perdida." }, { status: 503 });
+      if (posts.length === 1) return Response.json({ code: "INTERNAL_ERROR", message: "Resposta perdida." }, { status: 503 });
       if (posts.length === 2) return replay.promise;
       return Response.json({ id: "expense-1", charges: [{ id: "charge-1" }] }, { status: 201 });
     });
@@ -112,8 +112,8 @@ describe("ChargeCreateScreen", () => {
     await user.click(screen.getByRole("button", { name: "Criar cobrança" }));
     await user.click(await screen.findByRole("button", { name: "Tentar criar novamente" }));
     expect(screen.getByLabelText("Descrição")).toBeDisabled();
-    await act(async () => { replay.resolve(Response.json({ message: "Reautentique ou aguarde." }, { status })); await Promise.resolve(); });
-    expect(await screen.findByRole("alert")).toHaveTextContent("Reautentique ou aguarde.");
+    await act(async () => { replay.resolve(Response.json({ code: status === 401 ? "UNAUTHENTICATED" : "RATE_LIMITED", message: "Reautentique ou aguarde." }, { status })); await Promise.resolve(); });
+    expect(await screen.findByRole("alert")).toHaveTextContent(status === 401 ? "Sua sessão expirou. Entre novamente." : "Muitas tentativas. Aguarde alguns minutos e tente novamente.");
     expect(screen.getByLabelText("Descrição")).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Tentar criar novamente" }));
     expect(navigate).toHaveBeenCalledWith("/charges/charge-1");

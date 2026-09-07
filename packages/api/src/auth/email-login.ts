@@ -64,7 +64,8 @@ export async function requestEmailCode(
   const result = await repo.replaceLoginCode({ code, codeHashKey, email });
 
   if (result.accepted) {
-    await transport.sendLoginCode({ code, email });
+    try { await transport.sendLoginCode({ code, email }); }
+    catch { console.warn({ event: "login_email_delivery_failed" }); }
   }
 }
 

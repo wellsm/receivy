@@ -78,17 +78,18 @@ server; native-device QA needs an explicitly approved reachable private adapter.
   under this lock before committing. Expire the stale intent under that lock,
   then release it before bounded deletion; never delete on missing/failed DB
   reads. Grace age must exceed the upload intent's five-minute lifetime plus
-  clock skew. This durable charge/intent/proof mapping makes conservative
-  reconciliation possible, but that worker and its race tests are **not yet
-  implemented**. No claim of durable cleanup is made by this task.
-- EZ4 0.52 discards trusted gateway `sourceIp` from handler input. The approved
-  interim limiter persists a per-capability/user quota (12 mutation requests per
-  10 minutes) plus shared unknown-client quota (120 per 10 minutes). Spoofed
-  forwarded headers cannot change these identities. **This is not per-IP proof**;
-  real trusted-edge IP extraction/rate limiting remains a production gate.
-  Only validated public capabilities consume legitimate mutation quota. Invalid
-  capabilities cannot exhaust that shared budget. No separate malformed-request
-  limiter is delivered here; invalid-request edge enforcement remains Task 7.
+  clock skew. That worker (`reconcileProofStorage` / `drainStorageDeletions` in
+  `src/proofs/cleanup.ts`) and its race tests (`test/proofs/cleanup.spec.ts`) were
+  delivered in Task 5; see "Durable proof cleanup" in `docs/notifications.md`.
+- Stock EZ4 0.52 discards trusted gateway `sourceIp`; the pinned vendor patches
+  (`docs/ez4-vendor-patches.md`) restore it for both the AWS and local gateways,
+  and `trustedClientIp` only accepts that provider field (never forwarded headers).
+  `throttleProof` persists a per-IP quota (120 mutation requests per 10 minutes)
+  plus a per-capability/user quota (12 per 10 minutes). Requests without a valid
+  provider IP share one conservative `unknown-client` bucket. Quota is consumed
+  **before** capability lookup so token guessing cannot bypass it; the per-IP scope
+  keeps that cost on the guessing client. Public reads use a separate, larger
+  per-IP/per-token quota (`throttlePublicRead`).
 - Public framework/access logs and provider malformed-body error logging need
   the separate Task 7 logging hardening. Application proof code never logs tokens,
   signed URLs, file names or file contents. Do not use real data before that gate.

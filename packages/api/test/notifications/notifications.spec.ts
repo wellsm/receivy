@@ -3,6 +3,7 @@ import { after, before, describe, it } from "node:test";
 import { HttpConflictError, HttpForbiddenError } from "@ez4/gateway";
 import { cleanupUsers, createUser, db } from "../fixtures/financial";
 import { savePerson } from "../../src/people/repository";
+import { savePaymentMethod } from "../../src/payment-methods/repository";
 import { createExpense } from "../../src/expenses/repository";
 import { cancelCharge } from "../../src/charges/repository";
 import {
@@ -82,6 +83,7 @@ describe("durable notification delivery", () => {
       email: "notify-owner@example.com",
       name: "Owner",
     });
+    await savePaymentMethod(db, OWNER, { pixKeyType: "email", pixKey: "notify-owner@example.com" });
     await createUser(db, {
       id: DEBTOR,
       email: "notify-debtor@example.com",

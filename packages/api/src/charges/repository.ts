@@ -35,6 +35,7 @@ export async function chargeDto(db: DbClient, row: ChargeRow, direction: "receiv
     dueDate: row.due_date, state: row.state, source: row.source, installment: row.installment,
     installmentCount: row.installment_count, direction,
     recipient: { name: row.recipient_name_snapshot, email: row.recipient_email_snapshot ?? null },
+    sharingState: row.state !== "pending" ? "closed" : row.pix_key_snapshot && row.pix_key_type_snapshot ? "ready" : await db.public_links.count({ where: { charge_id: row.id } }) ? "legacy_without_pix" : "pix_required",
     pix: row.pix_key_type_snapshot && row.pix_key_snapshot ? { keyType: row.pix_key_type_snapshot,
       key: row.pix_key_snapshot, label: row.pix_label_snapshot ?? "Pix" } : null,
     payment: await paymentFor(db, row.id), cancelledAt: row.cancelled_at ?? null, paidAt: row.paid_at ?? null,

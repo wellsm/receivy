@@ -5,6 +5,7 @@ import type { ApiProvider } from "../../provider";
 import { HttpNotFoundError, HttpUnauthorizedError } from "@ez4/gateway";
 import { completeOauth, OauthFlowError } from "../../auth/oauth-flow";
 import { createAuthRepository } from "../../repositories/auth-repository";
+import { commitOauthIdentity } from "../../auth/oauth-commit";
 import { appendOauthGrant, oauthDependencies } from "./oauth-shared";
 
 declare class AppleCallbackRequest implements Http.Request {
@@ -40,6 +41,7 @@ export async function appleCallbackHandler(
     }, {
       providerClient: dependencies.client,
       repo: createAuthRepository(context.db),
+      commitGrant: input => commitOauthIdentity(context.db, input),
     });
     return {
       status: 302,

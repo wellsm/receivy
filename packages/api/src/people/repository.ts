@@ -4,7 +4,7 @@ import type { Person, PersonInput, PeoplePage } from "@receivy/common";
 import type { DbClient } from "../database";
 import { lockAccountReferences } from "../account/locking";
 
-const SELECT = { id: true, name: true, archived_at: true, created_at: true } as const;
+const SELECT = { id: true, name: true, linked_user_id: true, archived_at: true, created_at: true } as const;
 const sqlNull = null as unknown as string | undefined;
 
 async function lockOwner(db: DbClient, ownerId: string) {
@@ -13,23 +13,41 @@ async function lockOwner(db: DbClient, ownerId: string) {
   if (!owner) throw new HttpUnauthorizedError();
 }
 
-async function details(db: DbClient, rows: { id: string; name: string; archived_at?: string; created_at: string }[]): Promise<Person[]> {
+async function details(db: DbClient, rows: { id: string; name: string; linked_user_id?: string; archived_at?: string; created_at: string }[]): Promise<Person[]> {
   if (!rows.length) return [];
   const { records } = await db.person_contacts.findMany({
     select: { person_id: true, type: true, value: true },
     where: { person_id: { isIn: rows.map(row => row.id) } },
   });
   return rows.map(row => ({
-    id: row.id, name: row.name, archivedAt: row.archived_at ?? null, createdAt: row.created_at,
+    id: row.id, name: row.name, hasAccount: !!row.linked_user_id, archivedAt: row.archived_at ?? null, createdAt: row.created_at,
     email: records.find(contact => contact.person_id === row.id && contact.type === "email")?.value ?? null,
     phone: records.find(contact => contact.person_id === row.id && contact.type === "phone")?.value ?? null,
   }));
 }
 
-export async function listPeople(db: DbClient, ownerId: string, cursor?: string, archived = false): Promise<PeoplePage> {
+export async function getPerson(db: DbClient, ownerId: string, id: string): Promise<Person> {
+  const row = await db.people.findOne({ select: SELECT, where: { id, owner_id: ownerId } });
+  if (!row) throw new HttpNotFoundError();
+  return (await details(db, [row]))[0]!;
+}
+
+export async function listPeople(db: DbClient, ownerId: string, cursor?: string, archived = false, search = ""): Promise<PeoplePage> {
+  const query = search.normalize("NFC").trim().toLocaleLowerCase("pt-BR").slice(0, 254);
+  let matchingIds: string[] | undefined;
+  if (query) {
+    const rows = await db.rawQuery(`SELECT p.id FROM people p WHERE p.owner_id = :ownerId::uuid
+      AND (p.archived_at IS NOT NULL) = :archived::boolean
+      AND (:cursor::uuid IS NULL OR p.id > :cursor::uuid)
+      AND (position(:query in lower(p.name)) > 0 OR EXISTS
+        (SELECT 1 FROM person_contacts c WHERE c.person_id = p.id AND position(:query in lower(c.value)) > 0))
+      ORDER BY p.id LIMIT 51`, { ownerId, archived, cursor: cursor ?? null, query });
+    matchingIds = rows.map(row => String(row["id"]));
+    if (!matchingIds.length) return { people: [], nextCursor: null };
+  }
   const { records } = await db.people.findMany({
     select: SELECT,
-    where: { owner_id: ownerId, archived_at: { isNull: !archived }, ...(cursor ? { id: { gt: cursor } } : {}) },
+    where: { owner_id: ownerId, archived_at: { isNull: !archived }, ...(matchingIds ? { id: { isIn: matchingIds } } : cursor ? { id: { gt: cursor } } : {}) },
     order: { id: Order.Asc }, take: 51,
   });
   const page = records.slice(0, 50);
@@ -81,7 +99,7 @@ export async function savePerson(db: DbClient, ownerId: string, input: PersonInp
           data: { id: crypto.randomUUID(), person: { id: personId }, type, value, normalized_value: value, created_at: now, updated_at: now } });
       }
     }
-    return { id: row.id, name: row.name, email: input.email ?? null, phone: input.phone ?? null, archivedAt: null, createdAt: row.created_at };
+    return { id: row.id, name: row.name, hasAccount: !!verifiedUser, email: input.email ?? null, phone: input.phone ?? null, archivedAt: null, createdAt: row.created_at };
   });
 }
 

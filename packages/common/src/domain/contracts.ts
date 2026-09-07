@@ -1,4 +1,5 @@
 import type { ExpenseSplit } from "./split";
+import type { Person } from "./people";
 
 export type Money = {
   amountCents: number;
@@ -146,6 +147,7 @@ export type ChargeDetail = ChargeSummary & {
   direction: Direction;
   recipient: ChargeRecipientSnapshot;
   pix: PixSnapshot | null;
+  sharingState: "ready" | "pix_required" | "legacy_without_pix" | "closed";
   payment: PaymentRecord | null;
   cancelledAt: string | null;
   paidAt: string | null;
@@ -192,6 +194,7 @@ export type TimelinePage = {
 
 export type PersonLedger = {
   personId: string;
+  person: Person;
   balance: Money;
   receivable: Money;
   payable: Money;

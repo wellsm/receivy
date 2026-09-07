@@ -32,6 +32,8 @@ const DEDICATED_BFF = [
   "GET people", "POST people", "GET people/{p}", "PATCH people/{p}", "POST people/{p}/archive",
   "GET public/charges/{p}", "POST public/charges/{p}/proofs/uploads",
   "POST public/charges/{p}/proofs/uploads/{p}/finalize", "GET public/charges/{p}/proofs/uploads/{p}",
+  // Provider callbacks land on the web domain and are bridged to the API (lib/auth/provider-callback.ts).
+  "GET auth/google/callback", "POST auth/apple/callback",
 ];
 // API operations the browser intentionally never calls.
 const WEB_EXCLUSIONS: Record<string, string> = {
@@ -39,8 +41,6 @@ const WEB_EXCLUSIONS: Record<string, string> = {
   "POST devices": "push registration is native-only",
   "POST auth/apple/native/start": "native Sign in with Apple only",
   "POST auth/apple/native/exchange": "native Sign in with Apple only",
-  "GET auth/google/callback": "provider redirect handled by the API itself",
-  "POST auth/apple/callback": "provider form post handled by the API itself",
 };
 // Authenticated paths the native app deliberately does not call yet.
 const NATIVE_DEFERRED: Record<string, string> = {

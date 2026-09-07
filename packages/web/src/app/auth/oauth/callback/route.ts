@@ -4,9 +4,10 @@ import { NextResponse } from "next/server";
 import { authApiFetch } from "@/lib/auth/api";
 import { ACCESS_COOKIE, ACCESS_MAX_AGE, REFRESH_COOKIE, REFRESH_MAX_AGE, authCookieOptions } from "@/lib/auth/cookies";
 import { OAUTH_COOKIE } from "@/lib/auth/oauth";
+import { appUrl } from "@/lib/app-url";
 
 export async function GET(request: Request) {
-  const response = NextResponse.redirect(new URL("/login?error=oauth", request.url), 303);
+  const response = NextResponse.redirect(appUrl(request, "/login?error=oauth"), 303);
   response.cookies.set(OAUTH_COOKIE, "", authCookieOptions(0));
   response.headers.set("Cache-Control", "no-store");
   response.headers.set("Referrer-Policy", "no-referrer");
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
     const session = await upstream.json() as AuthSessionResponse;
     response.cookies.set(ACCESS_COOKIE, session.accessToken, authCookieOptions(ACCESS_MAX_AGE));
     response.cookies.set(REFRESH_COOKIE, session.refreshToken, authCookieOptions(REFRESH_MAX_AGE));
-    response.headers.set("Location", new URL("/", request.url).toString());
+    response.headers.set("Location", appUrl(request, "/").toString());
     return response;
   } catch { return response; }
 }

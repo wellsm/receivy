@@ -4,6 +4,7 @@ import { authApiFetch } from "@/lib/auth/api";
 import { authCookieOptions } from "@/lib/auth/cookies";
 import { hasTrustedOrigin } from "@/lib/auth/origin";
 import { isProviderAuthorizationUrl, OAUTH_COOKIE } from "@/lib/auth/oauth";
+import { appUrl } from "@/lib/app-url";
 
 export async function POST(request: Request) {
   if (!hasTrustedOrigin(request)) return new NextResponse(null, { status: 403 });
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     const result = await authApiFetch("auth/oauth/start", {
       method: "POST",
       body: JSON.stringify({ provider,
-        destination: new URL("/auth/oauth/callback", request.url).toString(),
+        destination: appUrl(request, "/auth/oauth/callback").toString(),
         clientChallenge: createHash("sha256").update(verifier).digest("base64url"),
       }),
     });

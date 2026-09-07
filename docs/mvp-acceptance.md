@@ -47,11 +47,11 @@ ambiente local ignorado ou no gerenciador de segredos do ambiente de execução.
 | --- | --- | --- |
 | Xcode | 26.6 instalado em 2026-09-07 (SDK 56 exige 26.4+); runtimes iOS 26.3/26.5 | Build e smoke iOS executados no simulador; dispositivo físico pendente |
 | Android | SDK 34/36, NDK 27, JDK 17, emulador arm64 (AVD clonado `Receivy_QA` com 12G) | Build Gradle e smoke executados no emulador; dispositivo físico pendente |
-| Google/Apple | Providers de exemplo desativados | Fluxo real depende dos clients e callbacks próprios |
-| Domínio HTTPS | Não definido no projeto | Callback Apple web e links de produção não ativados |
+| Google/Apple | Providers desativados; callbacks agora entram pelo web (`/api/auth/{google,apple}/callback`) e são repassados à API | Cadastrar `https://receivy.wellsm.dev/api/auth/<provedor>/callback` nos consoles e gerar `OAUTH_PROVIDERS_CONFIG_B64` |
+| Domínio HTTPS | Dev definido em 2026-09-07: `receivy.wellsm.dev` (DNS na Cloudflare); produção no domínio real | Web dev ainda não publicado; `docs/environments.md` lista a ordem de ativação |
 | S3/Neon/AWS | Nenhum ambiente de produção provisionado por esta tarefa | Não executar deploy como parte da implementação |
 | IP original no EZ4 | Patches pinados (`docs/ez4-vendor-patches.md`) restauram `sourceIp` nos gateways AWS e local | Quotas por IP ativas em testes locais; comportamento no API Gateway real ainda não observado em produção |
-| Resend | Transporte local de exemplo desativado | Entrega real depende de domínio e remetente verificados |
+| Resend | Domínio de envio de dev definido: `receivy.wellsm.dev` (DKIM/SPF/DMARC pendentes na Cloudflare) | Entrega real depende da verificação do domínio e da chave restrita; passos em `docs/environments.md` |
 | Expo/EAS | Projeto e identificadores de publicação ainda não configurados | Push real e builds distribuíveis exigem configuração |
 
 Requisito do Xcode: [Expo SDK 56](https://expo.dev/changelog/sdk-56).

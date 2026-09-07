@@ -41,8 +41,10 @@ export declare class Api extends Http.Service {
     ...AccountRoutes,
   ];
 
+  // Browsers reach the API only through the Next BFF; this list matters for tooling and
+  // must include the web origin of each published stage (see docs/environments.md).
   cors: Http.UseCors<{
-    allowOrigins: ["http://localhost:3000"];
+    allowOrigins: ["http://localhost:3000", "https://receivy.wellsm.dev"];
     allowMethods: ["GET", "POST", "PATCH", "DELETE"];
     allowHeaders: ["content-type", "authorization", "idempotency-key"];
     allowCredentials: true;

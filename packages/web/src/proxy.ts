@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { ACCESS_COOKIE, REFRESH_COOKIE, safeNextPath } from "@/lib/auth/cookies";
 import { proofUploadOrigin } from "@/lib/proof-origin";
+import { appUrl } from "@/lib/app-url";
 
 export function proxy(request: NextRequest) {
   const hasSession = Boolean(
@@ -22,13 +23,13 @@ export function proxy(request: NextRequest) {
 
   if (pathname === "/login") {
     if (hasSession) {
-      return NextResponse.redirect(new URL("/", request.url));
+      return NextResponse.redirect(appUrl(request, "/"));
     }
     return NextResponse.next();
   }
 
   if (!hasSession) {
-    const login = new URL("/login", request.url);
+    const login = appUrl(request, "/login");
     login.searchParams.set(
       "next",
       safeNextPath(`${pathname}${request.nextUrl.search}`),

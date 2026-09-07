@@ -27,6 +27,13 @@ export type ProofSummary = {
   createdAt: string;
 };
 
+export type ProofDetail = ProofSummary & {
+  originalName: string; mime: "image/jpeg" | "image/png" | "application/pdf"; size: number;
+  reason: string | null; closureReason: "paid" | "cancelled" | null; reviewedAt: string | null;
+};
+export type ProofUploadInput = { filename: string; mime: "image/jpeg" | "image/png" | "application/pdf"; size: number };
+export type ProofUploadIntent = { id: string; uploadUrl: string; expiresAt: string };
+
 export type PaymentSummary = {
   id: string;
   chargeId: string;

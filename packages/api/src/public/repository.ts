@@ -56,6 +56,20 @@ export async function revokePublicLink(db: DbClient, creditorId: string, chargeI
 
 export async function getPublicCharge(db: DbClient, token: string, secret: string,
   nowSeconds = Math.floor(Date.now() / 1000)): Promise<PublicChargeView> {
+  const charge = await resolvePublicCharge(db, token, secret, nowSeconds);
+  const user = await db.users.findOne({ select: { name: true }, where: { id: charge.creditor_id } });
+  const firstName = user?.name?.trim().split(/\s+/)[0] || "Pessoa";
+  return {
+    creditorFirstName: firstName, description: charge.description,
+    amount: { amountCents: charge.amount_cents, currency: charge.currency }, dueDate: charge.due_date, state: charge.state,
+    pix: charge.pix_key_type_snapshot && charge.pix_key_snapshot ? { keyType: charge.pix_key_type_snapshot,
+      key: charge.pix_key_snapshot, label: charge.pix_label_snapshot ?? "Pix" } : null,
+    uploadsEnabled: charge.state === "pending" && !(await db.payment_proofs.count({ where: { charge_id: charge.id, state: "pending" } })),
+  };
+}
+
+export async function resolvePublicCharge(db: DbClient, token: string, secret: string,
+  nowSeconds = Math.floor(Date.now() / 1000)) {
   assertPublicLinkSecretConfigured(secret);
   const publicId = token.split(".")[0];
   if (!publicId) throw new HttpNotFoundError();
@@ -68,13 +82,5 @@ export async function getPublicCharge(db: DbClient, token: string, secret: strin
   if (capability.expiresAtSeconds !== storedExpiry || storedExpiry <= nowSeconds) throw new HttpNotFoundError();
   const charge = await db.charges.findOne({ select: CHARGE_SELECT, where: { id: link.charge_id } });
   if (!charge) throw new HttpNotFoundError();
-  const user = await db.users.findOne({ select: { name: true }, where: { id: charge.creditor_id } });
-  const firstName = user?.name?.trim().split(/\s+/)[0] || "Pessoa";
-  return {
-    creditorFirstName: firstName, description: charge.description,
-    amount: { amountCents: charge.amount_cents, currency: charge.currency }, dueDate: charge.due_date, state: charge.state,
-    pix: charge.pix_key_type_snapshot && charge.pix_key_snapshot ? { keyType: charge.pix_key_type_snapshot,
-      key: charge.pix_key_snapshot, label: charge.pix_label_snapshot ?? "Pix" } : null,
-    uploadsEnabled: charge.state === "pending",
-  };
+  return charge;
 }

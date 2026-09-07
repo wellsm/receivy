@@ -8,6 +8,7 @@ import type { ExpenseRoutes } from "./routes/expenses";
 import type { ChargeRoutes } from "./routes/charges";
 import type { PublicRoutes } from "./routes/public";
 import type { TimelineRoutes } from "./routes/timeline";
+import type { ProofRoutes } from "./routes/proofs";
 
 /** Receivy HTTP API. */
 export declare class Api extends Http.Service {
@@ -28,6 +29,7 @@ export declare class Api extends Http.Service {
     ...ChargeRoutes,
     ...PublicRoutes,
     ...TimelineRoutes,
+    ...ProofRoutes,
   ];
 
   cors: Http.UseCors<{

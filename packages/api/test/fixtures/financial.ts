@@ -22,6 +22,8 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
   if (chargeIds.length) {
     await client.public_links.deleteMany({ where: { charge_id: { isIn: chargeIds } } });
     await client.payments.deleteMany({ where: { charge_id: { isIn: chargeIds } } });
+    await client.payment_proofs.deleteMany({ where: { charge_id: { isIn: chargeIds } } });
+    await client.upload_intents.deleteMany({ where: { charge_id: { isIn: chargeIds } } });
     await client.activity_events.deleteMany({ where: { aggregate_id: { isIn: chargeIds } } });
     await client.outbox_events.deleteMany({ where: { aggregate_id: { isIn: chargeIds } } });
     await client.charges.deleteMany({ where: { id: { isIn: chargeIds } } });

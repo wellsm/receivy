@@ -17,11 +17,23 @@ import type { PaymentSchema } from "./schemas/payment";
 import type { PublicLinkSchema } from "./schemas/public-link";
 import type { ActivityEventSchema } from "./schemas/activity-event";
 import type { OutboxEventSchema } from "./schemas/outbox-event";
+import type { PaymentProofSchema, UploadIntentSchema, ProofThrottleSchema } from "./schemas/payment-proof";
 
 export declare class Db extends Database.Service<PostgresEngine> {
   client: Client<Db>;
 
   tables: [
+    Database.UseTable<{
+      name: "payment_proofs"; schema: PaymentProofSchema;
+      relations: { "charge_id@charge": "charges:id"; "sender_user_id@sender_user": "users:id"; "reviewer_id@reviewer": "users:id" };
+      indexes: { id: Index.Primary; charge_id: Index.Secondary; object_key: Index.Unique };
+    }>,
+    Database.UseTable<{
+      name: "upload_intents"; schema: UploadIntentSchema;
+      relations: { "charge_id@charge": "charges:id"; "sender_user_id@sender_user": "users:id" };
+      indexes: { id: Index.Primary; charge_id: Index.Secondary; object_key: Index.Unique };
+    }>,
+    Database.UseTable<{ name: "proof_throttles"; schema: ProofThrottleSchema; indexes: { id: Index.Primary } }>,
     Database.UseTable<{
       name: "payment_methods";
       schema: PaymentMethodSchema;
@@ -56,7 +68,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
     Database.UseTable<{
       name: "payments";
       schema: PaymentSchema;
-      relations: { "charge_id@charge": "charges:id"; "registered_by_id@registered_by": "users:id" };
+      relations: { "charge_id@charge": "charges:id"; "registered_by_id@registered_by": "users:id"; "proof_id@proof": "payment_proofs:id" };
       indexes: { id: Index.Primary; charge_id: Index.Unique; registered_by_id: Index.Secondary };
     }>,
     Database.UseTable<{

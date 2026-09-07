@@ -26,6 +26,8 @@
     "deploy:prd": "tsc -p tsconfig.json --noEmit && APP_STAGE=prd ez4 deploy -e prd.env"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1127.0",
+    "@aws-sdk/s3-request-presigner": "^3.1127.0",
     "@ez4/common": "0.52.0",
     "@ez4/database": "0.52.0",
     "@ez4/gateway": "0.52.0",
@@ -33,12 +35,15 @@
     "@ez4/project": "0.52.0",
     "@ez4/raw-pg": "0.52.0",
     "@ez4/schema": "0.52.0",
+    "@ez4/storage": "0.52.0",
     "@receivy/common": "workspace:*"
   },
   "devDependencies": {
+    "@ez4/aws-bucket": "0.52.0",
     "@ez4/aws-gateway": "0.52.0",
     "@ez4/local-database": "0.52.0",
     "@ez4/local-gateway": "0.52.0",
+    "@ez4/local-storage": "0.52.0",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

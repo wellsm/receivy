@@ -1,14 +1,22 @@
 import type { Environment } from "@ez4/common";
 import type { Http } from "@ez4/gateway";
 import type { Db } from "./database";
+import type { ProofFiles } from "./storage";
 
 export declare class ApiProvider implements Http.Provider {
   services: {
     db: Environment.Service<Db>;
+    proofFiles: Environment.Service<ProofFiles>;
     variables: Environment.ServiceVariables;
   };
 
   variables: {
+    APP_STAGE: Environment.Variable<"APP_STAGE">;
+    PROOF_STORAGE_MODE: Environment.VariableOrValue<"PROOF_STORAGE_MODE", "disabled">;
+    PROOF_S3_BUCKET: Environment.VariableOrValue<"PROOF_S3_BUCKET", "disabled">;
+    PROOF_LOCAL_DIRECTORY: Environment.VariableOrValue<"PROOF_LOCAL_DIRECTORY", "disabled">;
+    PROOF_LOCAL_BASE_URL: Environment.VariableOrValue<"PROOF_LOCAL_BASE_URL", "disabled">;
+    PROOF_LOCAL_SECRET: Environment.VariableOrValue<"PROOF_LOCAL_SECRET", "disabled">;
     AUTH_JWT_SECRET: Environment.Variable<"AUTH_JWT_SECRET">;
     LOGIN_CODE_HASH_KEY: Environment.Variable<"LOGIN_CODE_HASH_KEY">;
     EMAIL_TRANSPORT: Environment.Variable<"EMAIL_TRANSPORT">;

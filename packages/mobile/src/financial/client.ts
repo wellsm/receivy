@@ -1,4 +1,4 @@
-import type { ChargeDetail, ExpenseDetail, ExpenseInput, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage } from "@receivy/common";
+import type { ChargeDetail, ExpenseDetail, ExpenseInput, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage, ProofDetail, ProofUploadIntent, ProofUploadInput } from "@receivy/common";
 import { authClient } from "@/auth/client";
 
 type Options = { authenticatedFetch: (path: string, init?: RequestInit) => Promise<Response>; publicWebBaseUrl?: string };
@@ -23,6 +23,11 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     archivePaymentMethod(id: string) { return request<void>(`payment-methods/${id}/archive`, { method: "POST" }); },
     createExpense(input: ExpenseInput, idempotencyKey: string) { return request<ExpenseDetail>("expenses", { method: "POST", headers: { "idempotency-key": idempotencyKey }, body: JSON.stringify(input) }, "Não foi possível criar a cobrança."); },
     charge(id: string) { return request<ChargeDetail>(`charges/${id}`); },
+    proofs(id: string) { return request<{ proofs: ProofDetail[] }>(`charges/${id}/proofs`); },
+    uploadIntent(id: string, input: ProofUploadInput) { return request<ProofUploadIntent>(`charges/${id}/proofs/uploads`, { method: "POST", body: JSON.stringify(input) }); },
+    finalizeProof(id: string, intentId: string) { return request<ProofDetail>(`charges/${id}/proofs/uploads/${intentId}/finalize`, { method: "POST" }); },
+    reviewProof(id: string, proofId: string, decision: "accepted" | "rejected", reason?: string) { return request<ProofDetail>(`charges/${id}/proofs/${proofId}/review`, { method: "POST", body: JSON.stringify({ decision, reason }) }); },
+    downloadProof(id: string, proofId: string) { return request<{ url: string; expiresIn: number }>(`charges/${id}/proofs/${proofId}/download`, { method: "POST" }); },
     cancel(id: string) { return request<ChargeDetail>(`charges/${id}/cancel`, { method: "POST" }); },
     pay(id: string, method: "pix" | "cash" | "transfer" | "other" = "pix") { return request<ChargeDetail>(`charges/${id}/payments`, { method: "POST", body: JSON.stringify({ method }) }); },
     publicLink(id: string, rotate = false) { return request<PublicLink>(`charges/${id}/public-link${rotate ? "/rotate" : ""}`, { method: "POST" }); },

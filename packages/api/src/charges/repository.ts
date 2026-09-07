@@ -1,6 +1,7 @@
 import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from "@ez4/gateway";
 import type { ChargeDetail, PaymentRecord } from "@receivy/common";
 import type { DbClient } from "../database";
+import { closeProofs } from "../proofs/events";
 
 export const CHARGE_SELECT = {
   id: true, creditor_id: true, debtor_person_id: true, recipient_user_id: true, recipient_name_snapshot: true,
@@ -77,6 +78,7 @@ export async function cancelCharge(db: DbClient, creditorId: string, id: string)
     if (row.state === "cancelled") return chargeDto(tx, row, direction);
     if (row.state !== "pending") throw new HttpConflictError("A cobrança já foi encerrada.");
     const now = new Date().toISOString();
+    await closeProofs(tx, row, creditorId, "cancelled", now);
     const changed = await tx.charges.updateOne({ select: { id: true }, where: { id },
       data: { state: "cancelled", cancelled_at: now, updated_at: now } });
     if (!changed) throw new HttpNotFoundError();
@@ -95,6 +97,7 @@ export async function recordManualPayment(db: DbClient, creditorId: string, id: 
     if (row.state !== "pending") throw new HttpConflictError("A cobrança já foi encerrada.");
     const now = new Date().toISOString();
     const paidAt = input.paidAt ?? now;
+    await closeProofs(tx, row, creditorId, "paid", now);
     await tx.payments.insertOne({ select: { id: true }, data: { id: crypto.randomUUID(), charge: { id: row.id },
       amount_cents: row.amount_cents, currency: row.currency, method: input.method, registered_by: { id: creditorId },
       paid_at: paidAt, created_at: now } });

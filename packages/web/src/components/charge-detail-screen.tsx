@@ -4,6 +4,7 @@ import { formatMoney, type ChargeDetail, type PublicLink } from "@receivy/common
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
+import { ProofPanel } from "./proof-panel";
 
 export function ChargeDetailScreen({ id }: { id: string }) {
   const [charge, setCharge] = useState<ChargeDetail | null>(null); const [publicUrl, setPublicUrl] = useState("");
@@ -24,6 +25,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
     {charge.pix && <section className="detail-section"><h2>Pagamento por Pix</h2><p>{charge.state === "pending" ? "Confira o nome do destinatário no seu banco antes de transferir." : "Chave Pix registrada no histórico desta cobrança."}</p><div className="copy-field"><code>{charge.pix.key}</code><button type="button" onClick={() => void copy(charge.pix!.key, "Chave Pix copiada.")}>Copiar chave Pix</button></div></section>}
     {creditor && charge.state === "pending" && <section className="detail-section"><h2>Ações da cobrança</h2><div className="action-row"><button disabled={busy} className="primary-button" onClick={() => { if (window.confirm("Marcar como paga? Isso registra um pagamento integral e encerra a cobrança.")) void mutate("payments", { method: "pix" }); }}>Marcar como paga</button><button disabled={busy} className="danger-button" onClick={() => { if (window.confirm("Cancelar esta cobrança? Ela não poderá mais receber pagamento e continuará no histórico.")) void mutate("cancel"); }}>Cancelar cobrança</button></div><div className="action-row"><button disabled={busy} className="secondary-button" onClick={() => void link("public-link")}>Criar link</button>{publicUrl && <><button disabled={busy} className="secondary-button" onClick={() => void share()}>Compartilhar</button><button disabled={busy} className="secondary-button" onClick={() => void link("public-link/rotate")}>Trocar link</button></>}</div>{publicUrl && <div className="copy-field"><code>{publicUrl}</code><button onClick={() => void copy(publicUrl, "Link copiado.")}>Copiar link</button></div>}</section>}
     {!creditor && <section className="detail-section"><h2>{charge.state === "pending" ? "Como pagar" : "Situação da cobrança"}</h2><p>{charge.state === "pending" ? "Esta cobrança é somente leitura. Faça o Pix com a chave exibida e confirme os dados no seu banco." : charge.state === "paid" ? "Esta cobrança já foi paga. Nenhuma nova transferência é necessária." : "Esta cobrança foi cancelada e não deve ser paga."}</p></section>}
+    <ProofPanel base={`/api/financial/charges/${id}/proofs`} state={charge.state} creditor={creditor} onChanged={() => void load()} />
     {error && <p role="alert" className="login-error">{error}</p>}{notice && <p role="status" className="success-notice">{notice}</p>}
   </section>;
 }

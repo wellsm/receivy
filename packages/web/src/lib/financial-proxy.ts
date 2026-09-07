@@ -12,6 +12,9 @@ const ALLOWED_ROUTES: [string, RegExp][] = [
   ["POST", new RegExp(`^payment-methods/${ID}/(?:default|archive)$`)],
   ["GET", new RegExp(`^charges/${ID}$`)], ["POST", new RegExp(`^charges/${ID}/(?:cancel|payments|public-link|public-link/rotate)$`)],
   ["DELETE", new RegExp(`^charges/${ID}/public-link$`)], ["GET", new RegExp(`^people/${ID}/ledger$`)],
+  ["GET", new RegExp(`^charges/${ID}/proofs$`)], ["POST", new RegExp(`^charges/${ID}/proofs/uploads$`)],
+  ["POST", new RegExp(`^charges/${ID}/proofs/uploads/${ID}/finalize$`)],
+  ["POST", new RegExp(`^charges/${ID}/proofs/${ID}/(?:review|download)$`)],
 ];
 
 export function isAllowedFinancialRoute(method: string, path: string): boolean {

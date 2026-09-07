@@ -1,6 +1,6 @@
 import { Order } from "@ez4/database";
 import { HttpNotFoundError, HttpUnprocessableEntityError } from "@ez4/gateway";
-import type { ChargeState, Direction, PersonLedger, TimelinePage } from "@receivy/common";
+import type { ChargeState, Direction, PersonLedger, TimelinePage, TimelineItem } from "@receivy/common";
 import type { DbClient } from "../database";
 import { CHARGE_SELECT, chargeDto, type ChargeRow } from "../charges/repository";
 
@@ -85,17 +85,31 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
   const all = allQuery.records;
   const active = all.filter(row => row.state === "pending");
   const next = pageQuery.records.length > 50 ? page.at(-1) : undefined;
+  // Group financial history with its charge page, preserving charge-cursor pagination.
+  const history: TimelineItem[] = [];
+  for (const row of page) {
+    const direction = directionFor(row, userId);
+    const proofs = await db.payment_proofs.findMany({ select: { id: true, state: true, created_at: true },
+      where: { charge_id: row.id, ...(direction === "payable" ? { sender_user_id: userId } : {}) } });
+    for (const proof of proofs.records) history.push({ kind: "proof", direction,
+      proof: { id: proof.id, chargeId: row.id, state: proof.state, createdAt: proof.created_at } });
+    const payments = await db.payments.findMany({ select: { id: true, amount_cents: true, paid_at: true }, where: { charge_id: row.id } });
+    for (const payment of payments.records) history.push({ kind: "payment", direction,
+      payment: { id: payment.id, chargeId: row.id, amount: money(payment.amount_cents), paidAt: payment.paid_at } });
+  }
+  const receivableIds = active.filter(row => row.creditor_id === userId).map(row => row.id);
+  const proofsToReview = receivableIds.length ? await db.payment_proofs.count({ where: { charge_id: { isIn: receivableIds }, state: "pending" } }) : 0;
   return {
-    items: page.map(row => ({ kind: "charge", direction: directionFor(row, userId), charge: {
+    items: [...page.map((row): TimelineItem => ({ kind: "charge", direction: directionFor(row, userId), charge: {
       id: row.id, description: row.description, amount: money(row.amount_cents), dueDate: row.due_date, state: row.state,
       source: row.source, installment: row.installment, installmentCount: row.installment_count,
-    } })),
+    } })), ...history],
     summary: {
       receivable: money(sum(active.filter(row => row.creditor_id === userId))),
       payable: money(sum(active.filter(row => row.creditor_id !== userId))),
       overdue: money(sum(active.filter(row => row.state === "pending" && row.due_date < today))),
       pending: money(sum(active.filter(row => row.state === "pending"))),
-      proofsToReview: 0,
+      proofsToReview,
     },
     nextCursor: next ? Buffer.from(JSON.stringify({ dueDate: next.due_date, id: next.id })).toString("base64url") : null,
   };

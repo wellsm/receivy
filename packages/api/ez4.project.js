@@ -79,5 +79,10 @@ export default {
     OAUTH_PROVIDERS_CONFIG_B64,
     OAUTH_REDIRECT_ALLOW_LIST,
     PUBLIC_LINK_HMAC_SECRET,
+    PROOF_STORAGE_MODE: process.env.PROOF_STORAGE_MODE ?? "disabled",
+    PROOF_S3_BUCKET: process.env.PROOF_S3_BUCKET ?? "disabled",
+    PROOF_LOCAL_DIRECTORY: process.env.PROOF_LOCAL_DIRECTORY ?? "disabled",
+    PROOF_LOCAL_BASE_URL: process.env.PROOF_LOCAL_BASE_URL ?? "disabled",
+    PROOF_LOCAL_SECRET: process.env.PROOF_LOCAL_SECRET ?? "disabled",
   },
 };

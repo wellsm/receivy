@@ -52,6 +52,7 @@ export async function notificationJobHandler(
       publicOrigin: env.PUBLIC_WEB_ORIGIN,
       secret: env.PUBLIC_LINK_HMAC_SECRET,
       from: env.RESEND_FROM_EMAIL,
+      pushAvailable: env.NOTIFICATION_PUSH_TRANSPORT === "expo",
     },
   );
   console.info("Notification worker", result); // Counts/status only; never provider payload or recipients.

@@ -11,7 +11,11 @@ There are no automatic proof-review/payment-status notices in this MVP.
 Recipients come from the charge's immutable recipient user/email snapshots,
 never a contact's current email. A subsequently verified account matching the
 snapshot can receive push. Active devices are selected first (up to 10 per
-notice); otherwise an enabled email snapshot is used. Without either, a
+notice), only when the configured push transport is enabled; otherwise an enabled
+email snapshot is used. Explicitly disabled push routes new notices to email
+upfront rather than creating disabled push siblings. Existing disabled push rows
+are not reinterpreted or replayed. With both transports disabled, new delivery
+rows remain observably disabled and no provider call occurs. Without either, a
 suppressed/manual-only delivery remains visible. Recipient email/push preferences
 are rechecked before sending.
 

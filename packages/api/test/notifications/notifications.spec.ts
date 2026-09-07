@@ -450,6 +450,108 @@ describe("durable notification delivery", () => {
       ),
     );
   });
+  it("routes new notices to configured email when push is disabled without replaying historical disabled push", async (test) => {
+    clock = start;
+    test.mock.method(Date, "now", () => clock);
+    await registerDevice(db, DEBTOR, {
+      token: "ExpoPushToken[configured-disabled-push]",
+      platform: "ios",
+      installationId: "configured-disabled-push",
+    });
+    const historicalId = await charge();
+    const historicalEmail = `notify-${count}@example.com`;
+    await db.charges.updateOne({
+      where: { id: historicalId },
+      data: { recipient_user: { id: DEBTOR } },
+    });
+    await run({
+      email: async () => ({ status: "disabled" }),
+      push: async () => ({ status: "disabled" }),
+      receipt: async () => ({ status: "disabled" }),
+    });
+    ok(
+      (await listDeliveries(db, OWNER, historicalId)).every(
+        (row) => row.channel === "push" && row.state === "disabled",
+      ),
+    );
+
+    const id = await charge();
+    const email = `notify-${count}@example.com`;
+    await db.charges.updateOne({
+      where: { id },
+      data: { recipient_user: { id: DEBTOR } },
+    });
+    const submittedTo: string[] = [];
+    test.mock.method(
+      globalThis,
+      "fetch",
+      async (url: string | URL | Request, init?: RequestInit) => {
+        equal(
+          String(url),
+          "https://api.resend.com/emails",
+          "disabled Expo must not be called",
+        );
+        const body = JSON.parse(String(init?.body)) as { to: string[] };
+        submittedTo.push(...body.to);
+        return Response.json({ id: "configured-email-fixture" });
+      },
+    );
+    const context: Parameters<typeof notificationJobHandler>[1] = {
+      db,
+      variables: {
+        NOTIFICATION_EMAIL_TRANSPORT: "resend",
+        NOTIFICATION_PUSH_TRANSPORT: "disabled",
+        EXPO_ACCESS_TOKEN: "disabled",
+        RESEND_API_KEY: "fictitious-native-key",
+        RESEND_FROM_EMAIL: "fixture@example.invalid",
+        PUBLIC_WEB_ORIGIN: config.publicOrigin,
+        PUBLIC_LINK_HMAC_SECRET: config.secret,
+      },
+    };
+    await notificationJobHandler(
+      { requestId: "native-email-with-disabled-push", event: null },
+      context,
+    );
+    equal(
+      submittedTo.filter((to) => to === email).length,
+      2,
+      "initial and -3 reminder use enabled email",
+    );
+    ok(
+      (await listDeliveries(db, OWNER, id)).every(
+        (row) => row.channel === "email" && row.state === "accepted",
+      ),
+    );
+    equal(submittedTo.filter((to) => to === historicalEmail).length, 0);
+    ok(
+      (await listDeliveries(db, OWNER, historicalId)).every(
+        (row) => row.channel === "push" && row.state === "disabled",
+      ),
+    );
+
+    const disabledId = await charge();
+    const disabledEmail = `notify-${count}@example.com`;
+    await db.charges.updateOne({
+      where: { id: disabledId },
+      data: { recipient_user: { id: DEBTOR } },
+    });
+    await notificationJobHandler(
+      { requestId: "native-both-providers-disabled", event: null },
+      {
+        ...context,
+        variables: {
+          ...context.variables,
+          NOTIFICATION_EMAIL_TRANSPORT: "disabled",
+        },
+      },
+    );
+    equal(submittedTo.filter((to) => to === disabledEmail).length, 0);
+    ok(
+      (await listDeliveries(db, OWNER, disabledId)).every(
+        (row) => row.state === "disabled",
+      ),
+    );
+  });
   it("snapshots expense reminder defaults at charge creation, not at delayed worker execution", async () => {
     clock = start;
     await savePreferences(db, OWNER, {

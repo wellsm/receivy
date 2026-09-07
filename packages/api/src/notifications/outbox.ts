@@ -10,6 +10,7 @@ export interface NotificationConfig {
   publicOrigin: string;
   secret: string;
   from?: string;
+  pushAvailable?: boolean;
 }
 export const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -182,7 +183,7 @@ async function planDelivery(
     ? await getPreferences(db, user.id)
     : { emailEnabled: true, pushEnabled: false };
   const devices =
-    user && preferences.pushEnabled
+    user && preferences.pushEnabled && config.pushAvailable !== false
       ? (
           await db.device_tokens.findMany({
             select: { id: true },

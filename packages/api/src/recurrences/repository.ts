@@ -4,6 +4,7 @@ import { HttpConflictError, HttpNotFoundError, HttpUnauthorizedError } from "@ez
 import { addCalendarDays, calendarDate, materializationDate, normalizeRecurrenceInput, planExpenseCharges, recurrenceDates,
   type ExpenseSplit, type RecurrenceDetail, type RecurrenceInput, type RecurrencePreview } from "@receivy/common";
 import type { DbClient } from "../database";
+import { lockAccountReferences } from "../account/locking";
 import { prepareChargeMaterialization, persistChargePlan } from "../expenses/repository";
 
 const SELECT = { id: true, owner_id: true, description: true, total_cents: true, frequency: true, day: true, month: true,
@@ -15,6 +16,7 @@ type RuleRow = { id: string; owner_id: string; description: string; total_cents:
 
 // All recurrence mutations follow expense lock order: owner → rule → people → Pix.
 async function lockOwner(db: DbClient, ownerId: string) {
+  await lockAccountReferences(db, "write");
   if (!await db.users.findOne({ select: { id: true }, where: { id: ownerId, deleted_at: { isNull: true } }, lock: true })) throw new HttpUnauthorizedError();
 }
 async function ruleRow(db: DbClient, ownerId: string, id: string, lock = false) {

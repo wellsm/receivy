@@ -2,6 +2,7 @@ import { HttpBadRequestError, HttpUnauthorizedError } from "@ez4/gateway";
 import type { DbClient } from "../database";
 import { disableSessionDevices } from "./sessions";
 import { enqueueStorageDeletion } from "../proofs/cleanup";
+import { lockAccountReferences } from "./locking";
 
 // EZ4 scalar nullable boundary: relation objects cannot express SQL NULL.
 const sqlNull = null as unknown as undefined;
@@ -9,6 +10,7 @@ const sqlNull = null as unknown as undefined;
 export async function eraseAccount(db: DbClient, userId: string, confirmation: string): Promise<{ deleted: boolean }> {
   if (confirmation !== "EXCLUIR") throw new HttpBadRequestError("Confirme digitando EXCLUIR.");
   return db.transaction(async tx => {
+    await lockAccountReferences(tx, "erase");
     const user = await tx.users.findOne({ select: { id: true, email: true, deleted_at: true }, where: { id: userId }, lock: true });
     if (!user) throw new HttpUnauthorizedError();
     if (user.deleted_at) return { deleted: true };

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { HttpConflictError, HttpForbiddenError, HttpNotFoundError, HttpUnprocessableEntityError } from "@ez4/gateway";
 import type { ProofDetail, ProofUploadInput, ProofUploadIntent } from "@receivy/common";
 import type { DbClient } from "../database";
+import { lockAccountReferences } from "../account/locking";
 import { CHARGE_SELECT, findChargeForActor, type ChargeRow } from "../charges/repository";
 import { resolvePublicCharge } from "../public/repository";
 import { proofEvent } from "./events";
@@ -19,6 +20,7 @@ const INTENT = { id: true, charge_id: true, sender_user_id: true, actor_hash: tr
 
 async function authorize(db: DbClient, id: string, actor: ProofActor, lock = false): Promise<ChargeRow> {
   if ("userId" in actor) return (await findChargeForActor(db, actor.userId, id, lock)).row;
+  if (lock) await lockAccountReferences(db, "write");
   const row = await db.charges.findOne({ select: CHARGE_SELECT, where: { id }, ...(lock ? { lock: true } : {}) });
   if (!row || (await resolvePublicCharge(db, actor.token, actor.secret)).id !== id) throw new HttpNotFoundError();
   return row;

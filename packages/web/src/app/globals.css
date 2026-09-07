@@ -957,5 +957,14 @@ a {
 .settings-layout { grid-template-columns: minmax(0, 360px) minmax(0, 1fr); }.creation-form.compact { align-self: start; }.method-list { display: grid; gap: 12px; }.method-list article { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 18px; flex-wrap: wrap; }.method-list article > div:first-child { display: grid; gap: 7px; }
 .public-charge { min-height: 100vh; padding: 28px 18px 60px; background: var(--color-canvas); }.public-brand { max-width: 660px; margin: 0 auto 28px; color: var(--color-primary-strong); font-size: 22px; font-weight: 800; }.public-charge > section { display: grid; max-width: 660px; gap: 18px; padding: clamp(24px, 6vw, 48px); margin: 0 auto; border: 1px solid var(--color-border); border-radius: 28px 28px 10px; background: white; }.public-charge h1 { margin: 0; color: var(--color-primary-strong); font-size: clamp(2rem, 8vw, 3.4rem); line-height: 1.04; letter-spacing: -.05em; }.public-charge p { margin: 0; line-height: 1.65; color: var(--color-text-muted); }.public-charge dl { margin: 0; }.public-charge dt { font-size: 12px; color: var(--color-text-muted); }.public-charge dd { margin: 6px 0 0; font-weight: 700; }.public-pix, .public-guidance { padding: 18px; border-radius: 16px; background: var(--color-surface-muted); }.public-pix h2 { margin-top: 0; font-size: 18px; }.public-pix code { display: block; margin-bottom: 12px; overflow-wrap: anywhere; }
 .person-actions a { display: inline-flex; min-height: 44px; align-items: center; padding: 8px; color: var(--color-primary-strong); font-size: 12px; }
+.account-settings { min-width: 0; gap: 24px; }
+.account-settings .creation-form label { display: grid; min-width: 0; gap: 8px; }
+.account-settings > .creation-form, .account-settings > .detail-section { min-width: 0; padding: clamp(16px, 4vw, 24px); }
+.account-settings h3 { margin: 0; }
+.account-settings button { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.account-session { display: grid; min-width: 0; gap: 12px; padding-top: 16px; border-top: 1px solid var(--color-border); }
+.account-session p { overflow-wrap: anywhere; }
+.account-settings .account-danger { border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border)); }
+.account-danger h3 { color: var(--color-danger); }
 @media (min-width: 840px) { .creation-layout { grid-template-columns: minmax(0, 1.45fr) minmax(300px, .8fr); }.detail-ledger { grid-template-columns: repeat(2, 1fr); }.detail-ledger.three { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 700px) { .settings-layout { grid-template-columns: 1fr; }.timeline-entry { grid-template-columns: 1fr; }.timeline-entry .money, .entry-link { justify-self: start; }.review-panel { position: static; }.detail-ledger.three { grid-template-columns: 1fr; } }

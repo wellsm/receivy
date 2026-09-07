@@ -2,6 +2,7 @@ import { Order } from "@ez4/database";
 import { HttpConflictError, HttpNotFoundError, HttpUnauthorizedError } from "@ez4/gateway";
 import { planExpenseCharges, type ExpenseDetail, type ExpenseInput, type ExpensePlan, type PaymentMethod } from "@receivy/common";
 import type { DbClient } from "../database";
+import { lockAccountReferences } from "../account/locking";
 import { CHARGE_SELECT, chargeDto, type ChargeRow } from "../charges/repository";
 import { expenseRequestFingerprint, normalizeExpenseInput } from "./request";
 import { getPreferences } from "../notifications/repository";
@@ -18,6 +19,7 @@ export type ChargeMaterializationContext = {
 };
 
 async function lockOwner(db: DbClient, ownerId: string) {
+  await lockAccountReferences(db, "write");
   const owner = await db.users.findOne({ select: { id: true }, where: { id: ownerId, deleted_at: { isNull: true } }, lock: true });
   if (!owner) throw new HttpUnauthorizedError();
 }

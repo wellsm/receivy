@@ -1,6 +1,7 @@
 import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from "@ez4/gateway";
 import type { ChargeDetail, PaymentRecord } from "@receivy/common";
 import type { DbClient } from "../database";
+import { lockAccountReferences } from "../account/locking";
 import { closeProofs } from "../proofs/events";
 
 export const CHARGE_SELECT = {
@@ -47,6 +48,7 @@ async function actorEmail(db: DbClient, actorId: string): Promise<string | undef
 }
 
 export async function findChargeForActor(db: DbClient, actorId: string, id: string, lock = false): Promise<{ row: ChargeRow; direction: "receivable" | "payable" }> {
+  if (lock) await lockAccountReferences(db, "write");
   if (!await db.users.findOne({ select: { id: true }, where: { id: actorId, deleted_at: { isNull: true } }, ...(lock ? { lock: true } : {}) })) throw new HttpForbiddenError();
   const row = await db.charges.findOne({ select: CHARGE_SELECT, where: { id }, ...(lock ? { lock: true } : {}) });
   if (!row) throw new HttpNotFoundError();

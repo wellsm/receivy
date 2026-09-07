@@ -2,11 +2,13 @@ import { Order } from "@ez4/database";
 import { HttpConflictError, HttpNotFoundError, HttpUnauthorizedError } from "@ez4/gateway";
 import type { Person, PersonInput, PeoplePage } from "@receivy/common";
 import type { DbClient } from "../database";
+import { lockAccountReferences } from "../account/locking";
 
 const SELECT = { id: true, name: true, archived_at: true, created_at: true } as const;
 const sqlNull = null as unknown as string | undefined;
 
 async function lockOwner(db: DbClient, ownerId: string) {
+  await lockAccountReferences(db, "write");
   const owner = await db.users.findOne({ select: { id: true }, where: { id: ownerId, deleted_at: { isNull: true } }, lock: true });
   if (!owner) throw new HttpUnauthorizedError();
 }
@@ -96,6 +98,7 @@ export async function archivePerson(db: DbClient, ownerId: string, id: string): 
 
 export async function linkVerifiedPeople(db: DbClient, userId: string, email: string): Promise<void> {
   await db.transaction(async tx => {
+    await lockAccountReferences(tx, "write");
     if (!await tx.users.updateOne({ select: { id: true }, where: { id: userId, email, deleted_at: { isNull: true } }, data: { verified_email: email } })) return;
     await tx.people.updateMany({
       where: { active_email: email, linked_user_id: { isNull: true } },

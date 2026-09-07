@@ -45,8 +45,29 @@ owned recurrence generation, removes owned login artifacts/preferences/Pix metho
 scrubs affected notification render inputs/recipient routing, prevents outbox retries,
 and erases user identity. A retry at the repository boundary is idempotent under the
 user lock. Already-revoked HTTP credentials get normal 401, not an auth exception.
-Clients clear local auth and show a neutral unconfirmed message unless an actual
-successful deletion response is received. A 401 is never evidence of deletion.
+Clients attempt to clear local auth and show a neutral unconfirmed message unless an
+actual successful deletion response is received. A 401 is never evidence of deletion.
+The web separately confirms its logout HTTP response before claiming the browser
+session ended. Rejected/non-success logout requests keep an explicit retry action;
+confirmed account deletion is not undone or downgraded by a failed cookie-clear request.
+
+Cross-account reference writers acquire a shared transaction-scoped PostgreSQL
+advisory barrier before any row or implicit FK locks; erasure acquires it exclusively
+before locking the user or scanning references. The stable two-int key is
+`(0x52454356, 1)` (RECV/account references). No shared-to-exclusive upgrade is allowed.
+Ordinary writers still run concurrently; infrequent erasure briefly stalls these
+writers globally and serializes erasures. No external I/O occurs under this barrier.
+Commit and rollback both release it automatically.
+
+Participating transaction entries are expense creation; person save/archive and
+verified-email linking; recurrence create/edit/state changes, each materialization
+and failed-attempt fairness update; locked charge authorization for cancellation,
+manual payment/reminder, public-link changes and authenticated proof mutations; and
+anonymous proof authorization before its charge lock. Verified-email linking begins
+its own outer transaction after the email/OAuth user-resolution transaction completes,
+before updating the user or any person. Session/device-only and own Pix/profile writes
+retain their existing user-first protocol; notification workers retain charge-first
+ordering and do not insert cross-account user references.
 
 - Preserve counterparties' amounts, charge states, payment dates and methods. Do not
   transfer ownership to another live account or delete their financial history.

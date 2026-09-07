@@ -184,3 +184,98 @@ were not edited or included in the task commit.
 - Full native device builds/credential-dependent OAuth/provider sends/deployed AWS
   cache policy were not claimed tested. Task7's known provider/logging/network and
   SDK56 external gates remain unchanged; this task adds no production configuration.
+
+## Review fix round 1 (base 645817d)
+
+Addressed both Important findings and the controller's 390x844 layout finding only.
+
+- Erasure/materialization: added a narrow parameterized transaction-scoped shared/
+  exclusive PostgreSQL advisory barrier. Shared writers enter before all row/FK locks;
+  erasure enters exclusively before its user lock/reference scan. This avoids the
+  user -> person versus person -> implicit recipient-user FK cycle and prevents late
+  materialization from escaping erasure. The stable key is `(0x52454356, 1)`.
+- Participating entries: expenses.createExpense; people.savePerson/archivePerson/
+  linkVerifiedPeople; recurrence create/edit/transition/materialization/fairness update;
+  findChargeForActor(lock=true), covering cancel/manual payment/manual reminder/public
+  link and authenticated proof mutations; anonymous proof authorize(lock=true).
+  Inspected auth-repository wrappers: email and OAuth resolution finish their own
+  transactions before linkVerifiedPeople begins its outer transaction and takes the
+  barrier, ahead of its user update. No pre-held family/user lock or mode upgrade.
+- Approved cost: ordinary shared writers coexist, but infrequent erasure serializes
+  all erasures and briefly stalls participating writers globally. No external I/O is
+  inside the barrier; transaction commit/rollback releases locks. Existing own-user
+  session/Pix/profile and charge-first worker protocols remain unchanged.
+- Web deletion and logout are separate facts: a failed DELETE plus failed logout
+  reports neither confirmed, keeps deletion available and exposes logout retry.
+  Rejected and non-ok logout responses both remain unconfirmed. Successful deletion
+  remains confirmed even when browser-cookie clearing needs retry. Current-session
+  revocation also distinguishes server revocation from failed browser sign-out.
+- Reformatted AccountSettings into readable TSX. Replaced undefined financial-form
+  with existing creation-form; reused primary/secondary/danger buttons and detail
+  sections. Scoped grid labels/gaps, wrapping sessions and destructive border/heading
+  prevent collapsed labels and uncontrolled widths. Existing control/button rules
+  provide 48px minimum height. Name-only onboarding shares these web styles; no native
+  UI sharing or new design system. Fixed pt-BR/BR and editable name/timezone unchanged.
+
+### Round 1 RED/GREEN evidence
+
+All pnpm commands used context-mode JavaScript spawnSync with cwd repository root,
+the same Node24/pnpm11.5.3 environment as the original report. No dependency changes.
+
+1. `pnpm --filter @receivy/api exec ez4 test -e test.env.example --local --reset -- test/account/account-concurrency.spec.ts`
+   - Behavioral RED: exit1, tests2/pass1/fail1. Materialization-first yielded actual
+     PostgreSQL `deadlock detected` (~1128ms); erasure-first passed (~1101ms).
+   - GREEN after barrier: exit0, tests2/pass2/fail0. Materialization-first135ms and
+     erasure-first41ms. Test pauses an actual DatabaseTester transaction at its row
+     lock, observes pg_blocking_pids from that same held connection, releases it, and
+     checks both outcomes. Creator-first preserves third-party1234/pending while
+     clearing recipient ID/email; erasure-first rejects the archived contact and
+     persists zero late charges. No mocked SQL result or probabilistic timing race.
+   - Earlier fixture setup corrections (not behavioral RED): native pool has two
+     connections, so observer must use the held transaction; EZ4 rawQuery uses named
+     `:parameter` placeholders rather than PostgreSQL `$n` input syntax.
+2. `pnpm --filter @receivy/web exec vitest run src/components/account-settings.test.tsx`
+   - RED: exit1, tests4/pass2/fail2. Both rejected and503 logout paths lacked the
+     unconfirmed status/retry. Existing successful deletion and401 assertions passed.
+   - GREEN: exit0, tests4/pass4; expanded edge/regression checks then tests7/pass7.
+     Additional checks preserve confirmed deletion during cookie-clear retry, distinguish
+     current-session revoke from failed logout, and retain name-only/device-timezone
+     onboarding. These cover amended behavior, not CSS-class presence assertions.
+3. `pnpm --filter @receivy/api check-types:test`
+   - Initially exit2: scheduling proxy's union of users/people generic methods was
+     not callable. Forwarded original arguments with Reflect.apply, retaining real
+     typed DbClient/fixture lifecycle; only instrumentation inspects common lock/id.
+   - Final exit0.
+4. `pnpm --filter @receivy/api test:integration`
+   - Final exit0, tests55/pass55/fail0. Dedicated receivy_tests only, including full
+     existing account/financial/recurrence/proof/notification native coverage and the
+     two new deterministic interleavings. Normal receivy DB was not reset.
+5. `pnpm --filter @receivy/api test` -> exit0, files17/tests65 passed.
+6. `pnpm --filter @receivy/web test` -> exit0, files20/tests93 passed.
+7. `pnpm --filter @receivy/web check-types` -> exit0.
+8. `pnpm --filter @receivy/web exec eslint src/components/account-settings.tsx src/components/account-settings.test.tsx` -> exit0.
+
+Before/after styling evidence: controller's actual390x844 pre-fix screenshot showed
+joined labels/values and bare actions; source used financial-form with no matching
+CSS definition. After source uses existing bordered48px controls/actions and scoped
+grid gaps, while seven component behavior checks pass. Controller owns the post-fix
+responsive browser screenshot; this report does not claim an unperformed visual pass.
+
+### Round 1 files, self-review and cleanup
+
+Changed account/{locking,deletion}.ts; {charges,expenses,people,proofs,recurrences}/
+repository.ts; test/account/account-concurrency.spec.ts; web globals.css and
+account-settings{,.test}.tsx; docs/account-lifecycle.md; this report.
+
+Self-review traced every barrier caller to transaction entry before row locks,
+including implicit activity/outbox user FKs from charge/proof writers. No helper
+upgrades a shared lock, no arbitrary SQL is accepted, no external send/storage work
+moved into a transaction, and no root-owned document or production setting changed.
+Final native and web checks above cover the amended code; no additional full-workspace
+build was needed for this bounded fix. Throughput cost and browser/device/provider
+acceptance limitations remain explicit rather than claiming production validation.
+
+No long-lived process/container was started by this fix round. Controller reported
+its QA API/Next processes stopped and verified disposable55435 container removed
+before these edits. This round did not run Next/build or touch .next. Native DatabaseTester
+used the existing dedicated receivy_tests database on55434; no55435 service was started.

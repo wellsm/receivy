@@ -11,7 +11,13 @@ const {
   RESEND_FROM_EMAIL = "disabled",
   OAUTH_PROVIDERS_CONFIG_B64 = "disabled",
   OAUTH_REDIRECT_ALLOW_LIST = "http://localhost:3000/auth/oauth/callback,receivy://auth/callback",
+  PUBLIC_LINK_HMAC_SECRET,
+  EZ4_TEST_PG_HOST = "127.0.0.1",
+  EZ4_TEST_PG_PORT = "55434",
+  EZ4_TEST_PG_USER = "receivy",
+  EZ4_TEST_PG_PASSWORD = "receivy",
 } = process.env;
+const testStage = APP_STAGE === "test";
 
 /** @type {import("@ez4/project").ProjectOptions} */
 export default {
@@ -24,10 +30,10 @@ export default {
     remote: true,
   },
   serveOptions: {
-    localPort: 3735,
+    localPort: Number(process.env.API_LOCAL_PORT ?? 3735),
   },
   localOptions: {
-    db: EZ4_RAW_PG_DB_URL
+    db: !testStage && EZ4_RAW_PG_DB_URL
       ? { connectionString: EZ4_RAW_PG_DB_URL }
       : {
           user: "receivy",
@@ -36,6 +42,15 @@ export default {
           port: 55434,
           database: "receivy",
         },
+  },
+  testOptions: {
+    db: {
+      host: EZ4_TEST_PG_HOST,
+      port: Number(EZ4_TEST_PG_PORT),
+      user: EZ4_TEST_PG_USER,
+      password: EZ4_TEST_PG_PASSWORD,
+      database: "receivy_tests",
+    },
   },
   defaultOptions: {
     runtime: RuntimeType.Node24,
@@ -63,5 +78,6 @@ export default {
     RESEND_FROM_EMAIL,
     OAUTH_PROVIDERS_CONFIG_B64,
     OAUTH_REDIRECT_ALLOW_LIST,
+    PUBLIC_LINK_HMAC_SECRET,
   },
 };

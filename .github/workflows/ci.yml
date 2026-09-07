@@ -12,6 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: receivy
+          POSTGRES_PASSWORD: receivy
+          POSTGRES_DB: receivy
+        ports:
+          - 55434:5432
+        options: >-
+          --health-cmd "pg_isready -U receivy -d receivy"
+          --health-interval 1s
+          --health-timeout 2s
+          --health-retries 30
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +58,12 @@ jobs:
 
       - name: Verify workspace
         run: pnpm verify
+
+      - name: Verify financial PostgreSQL integration
+        run: pnpm --filter @receivy/api check-types:test && pnpm --filter @receivy/api test:integration
+
+      - name: Smoke-test financial HTTP transport
+        run: pnpm --filter @receivy/api test:http-smoke
 
       - name: Build web container
         run: docker build -f packages/web/Dockerfile -t receivy-web:ci .

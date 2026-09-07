@@ -9,11 +9,74 @@ import type { SessionFamilySchema } from "./schemas/session-family";
 import type { UserSchema } from "./schemas/user";
 import type { PersonSchema } from "./schemas/person";
 import type { PersonContactSchema } from "./schemas/person-contact";
+import type { PaymentMethodSchema } from "./schemas/payment-method";
+import type { ExpenseSchema } from "./schemas/expense";
+import type { ExpenseAllocationSchema } from "./schemas/expense-allocation";
+import type { ChargeSchema } from "./schemas/charge";
+import type { PaymentSchema } from "./schemas/payment";
+import type { PublicLinkSchema } from "./schemas/public-link";
+import type { ActivityEventSchema } from "./schemas/activity-event";
+import type { OutboxEventSchema } from "./schemas/outbox-event";
 
 export declare class Db extends Database.Service<PostgresEngine> {
   client: Client<Db>;
 
   tables: [
+    Database.UseTable<{
+      name: "payment_methods";
+      schema: PaymentMethodSchema;
+      relations: { "owner_id@owner": "users:id" };
+      indexes: { id: Index.Primary; "owner_id:pix_key_type:pix_key": Index.Unique; owner_id: Index.Secondary };
+    }>,
+    Database.UseTable<{
+      name: "expenses";
+      schema: ExpenseSchema;
+      relations: { "owner_id@owner": "users:id"; "payment_method_id@payment_method": "payment_methods:id" };
+      indexes: { id: Index.Primary; "owner_id:idempotency_key": Index.Unique; owner_id: Index.Secondary };
+    }>,
+    Database.UseTable<{
+      name: "expense_allocations";
+      schema: ExpenseAllocationSchema;
+      relations: { "expense_id@expense": "expenses:id"; "person_id@person": "people:id" };
+      indexes: { id: Index.Primary; "expense_id:allocation_order": Index.Unique; expense_id: Index.Secondary; person_id: Index.Secondary };
+    }>,
+    Database.UseTable<{
+      name: "charges";
+      schema: ChargeSchema;
+      relations: { "creditor_id@creditor": "users:id"; "debtor_person_id@debtor_person": "people:id"; "recipient_user_id@recipient_user": "users:id" };
+      indexes: {
+        id: Index.Primary;
+        creditor_id: Index.Secondary;
+        recipient_user_id: Index.Secondary;
+        recipient_email_snapshot: Index.Secondary;
+        debtor_person_id: Index.Secondary;
+        source_id: Index.Secondary;
+      };
+    }>,
+    Database.UseTable<{
+      name: "payments";
+      schema: PaymentSchema;
+      relations: { "charge_id@charge": "charges:id"; "registered_by_id@registered_by": "users:id" };
+      indexes: { id: Index.Primary; charge_id: Index.Unique; registered_by_id: Index.Secondary };
+    }>,
+    Database.UseTable<{
+      name: "public_links";
+      schema: PublicLinkSchema;
+      relations: { "charge_id@charge": "charges:id" };
+      indexes: { id: Index.Primary; public_id: Index.Unique; charge_id: Index.Unique };
+    }>,
+    Database.UseTable<{
+      name: "activity_events";
+      schema: ActivityEventSchema;
+      relations: { "actor_user_id@actor_user": "users:id"; "subject_user_id@subject_user": "users:id" };
+      indexes: { id: Index.Primary; subject_user_id: Index.Secondary; aggregate_id: Index.Secondary };
+    }>,
+    Database.UseTable<{
+      name: "outbox_events";
+      schema: OutboxEventSchema;
+      relations: { "recipient_user_id@recipient_user": "users:id" };
+      indexes: { id: Index.Primary; aggregate_id: Index.Secondary; "state:available_at": Index.Secondary };
+    }>,
     Database.UseTable<{
       name: "people";
       schema: PersonSchema;

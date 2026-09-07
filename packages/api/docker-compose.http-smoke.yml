@@ -1,0 +1,18 @@
+name: receivy-financial-http-smoke
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: receivy
+      POSTGRES_PASSWORD: receivy
+      POSTGRES_DB: receivy
+    ports:
+      - "55435:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U receivy -d receivy"]
+      interval: 1s
+      timeout: 2s
+      retries: 30

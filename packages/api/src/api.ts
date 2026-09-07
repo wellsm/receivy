@@ -3,6 +3,11 @@ import type { NamingStyle } from "@ez4/schema";
 import type { HealthRoutes } from "./routes/health";
 import type { AuthRoutes } from "./routes/auth";
 import type { PeopleRoutes } from "./routes/people";
+import type { PaymentMethodRoutes } from "./routes/payment-methods";
+import type { ExpenseRoutes } from "./routes/expenses";
+import type { ChargeRoutes } from "./routes/charges";
+import type { PublicRoutes } from "./routes/public";
+import type { TimelineRoutes } from "./routes/timeline";
 
 /** Receivy HTTP API. */
 export declare class Api extends Http.Service {
@@ -14,7 +19,16 @@ export declare class Api extends Http.Service {
     };
   }>;
 
-  routes: [...HealthRoutes, ...AuthRoutes, ...PeopleRoutes];
+  routes: [
+    ...HealthRoutes,
+    ...AuthRoutes,
+    ...PeopleRoutes,
+    ...PaymentMethodRoutes,
+    ...ExpenseRoutes,
+    ...ChargeRoutes,
+    ...PublicRoutes,
+    ...TimelineRoutes,
+  ];
 
   cors: Http.UseCors<{
     allowOrigins: ["http://localhost:3000"];

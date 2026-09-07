@@ -1,9 +1,30 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ProofPanel } from "./proof-panel";
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: (...args: unknown[]) => fetch(...args as Parameters<typeof fetch>) }));
 beforeEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
+it("keeps a selected replacement through repeated polls of the previous rejected proof", async () => {
+  vi.useFakeTimers();
+  sessionStorage.setItem("receivy-proof-intent", "rejected-intent");
+  let uploaded: BodyInit | null | undefined;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (url === "https://upload.test/replacement") { uploaded = init?.body; return new Response(null, { status: 204 }); }
+    if (String(url).endsWith("/finalize")) return Response.json({ state: "pending" });
+    if (init?.method === "POST") return Response.json({ id: "replacement", uploadUrl: "https://upload.test/replacement", expiresAt: new Date(Date.now() + 300_000).toISOString() });
+    return Response.json({ state: "rejected", reason: "Ilegível", closureReason: null });
+  });
+  await act(async () => { render(<ProofPanel base="/api/public-proof/token" state="pending" publicView />); });
+  expect(screen.getByText(/Comprovante rejeitado/)).toBeTruthy();
+  const replacement = new File(["%PDF-1.7\nreplacement"], "replacement.pdf", { type: "application/pdf" });
+  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [replacement] } });
+  expect(screen.getByRole("button", { name: "Enviar comprovante" })).toBeEnabled();
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(screen.getByRole("button", { name: "Enviar comprovante" })).toBeEnabled();
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" })); });
+  expect(uploaded).toBe(replacement);
+  expect(screen.getByText("Comprovante enviado para revisão.")).toBeTruthy();
+});
 it("uploads the selected bytes then finalizes and shows pending review", async () => {
   const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ id: "intent", uploadUrl: "https://upload.test/file", expiresAt: "2027-01-01" }))
     .mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(Response.json({ state: "pending" }));

@@ -27,15 +27,20 @@ export function ProofPanel({ base, state, creditor = false, publicView = false, 
   const [publicStatus, setPublicStatus] = useState<PublicProofStatus | null>(null);
   const [recoveryId, setRecoveryId] = useState<string | null>(null);
   const confirmedIntent = useRef<string | null>(null);
+  const activeUpload = useRef<string | null>(null);
   const request = publicView ? fetch : browserFetch;
   const showPublicStatus = useCallback((status: PublicProofStatus, id: string) => {
     confirmedIntent.current = id;
-    setPublicStatus(status); setSent(status.state === "pending"); setIntent(null); setFile(null); setError("");
+    setPublicStatus(status); setSent(status.state === "pending"); setError("");
+    if (activeUpload.current === id) {
+      activeUpload.current = null; setIntent(null); setFile(null);
+    }
   }, []);
   useEffect(() => {
     if (!intent) return;
     const timer = setTimeout(() => {
       if (confirmedIntent.current === intent.id) return;
+      activeUpload.current = null;
       setIntent(null); setFile(null); setSelectionVersion(version => version + 1);
       setError("O envio expirou. Selecione o arquivo novamente ou escolha outro.");
     }, Math.max(0, Date.parse(intent.expiresAt) - Date.now()));
@@ -64,6 +69,7 @@ export function ProofPanel({ base, state, creditor = false, publicView = false, 
     try {
       if (!["image/jpeg", "image/png", "application/pdf"].includes(file.type) || file.size <= 0 || file.size > 10 * 1024 * 1024) throw new Error("Selecione JPG, PNG ou PDF de até 10 MB.");
       const active = intent && Date.parse(intent.expiresAt) > Date.now() ? intent : await json(`${base}/uploads`, { filename: file.name, mime: file.type, size: file.size }) as ProofUploadIntent;
+      activeUpload.current = active.id;
       setIntent(active);
       if (publicView) {
         // Persist only the opaque handle before the request can commit, never the capability or signed URL.
@@ -74,12 +80,13 @@ export function ProofPanel({ base, state, creditor = false, publicView = false, 
       finalizing = active;
       const finalized = await json(`${base}/uploads/${active.id}/finalize`);
       if (publicView) showPublicStatus({ state: "pending", reason: null, closureReason: null }, active.id);
-      setSent(true); setIntent(null); setFile(null); setError("");
+      activeUpload.current = null; setSent(true); setIntent(null); setFile(null); setError("");
       if (!publicView) setProofs(previous => [...previous, finalized as ProofDetail]);
       onChanged?.();
     } catch (failure) {
       if (publicView && finalizing && confirmedIntent.current === finalizing.id) return;
       if (failure instanceof ProofRequestError && failure.status === 422) {
+        activeUpload.current = null;
         setIntent(null); setFile(null); setSelectionVersion(version => version + 1);
         if (publicView && finalizing) {
           if (storedIntent() === finalizing.id) { try { sessionStorage.removeItem("receivy-proof-intent"); } catch { /* State still clears in memory. */ } }

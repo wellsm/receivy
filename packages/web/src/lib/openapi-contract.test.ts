@@ -1,0 +1,137 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { ALLOWED_ROUTES, isAllowedFinancialRoute } from "./financial-proxy";
+
+// docs/openapi.json is generated from EZ4 reflection (pnpm --filter @receivy/api openapi:check
+// keeps it fresh). This test confronts it with the two client surfaces: the browser BFF
+// allowlist and the string literals the Expo clients send to authenticatedFetch/jsonRequest.
+const repo = join(__dirname, "../../../..");
+const openapi = JSON.parse(readFileSync(join(repo, "docs/openapi.json"), "utf8")) as {
+  paths: Record<string, Record<string, unknown>>;
+};
+const normalize = (path: string) => path.replace(/^\//, "").replace(/\{[^}]+\}/g, "{p}");
+const operations = new Set<string>();
+const paths = new Set<string>();
+for (const [path, methods] of Object.entries(openapi.paths)) {
+  paths.add(normalize(path));
+  for (const method of Object.keys(methods)) operations.add(`${method.toUpperCase()} ${normalize(path)}`);
+}
+const UUID = "11111111-1111-4111-8111-111111111111";
+const concrete = (template: string) => template.replace(/\{p\}/g, UUID);
+/** A client template covers an API path when segments align and every `{p}` stands for one segment. */
+const covers = (template: string, path: string) => {
+  const a = template.split("/"), b = path.split("/");
+  return a.length === b.length && a.every((segment, i) => segment === "{p}" || segment === b[i]);
+};
+
+// Reached through dedicated Next routes instead of the financial proxy.
+const DEDICATED_BFF = [
+  "POST auth/email/code", "POST auth/email/confirm", "POST auth/logout", "GET auth/me",
+  "GET auth/oauth/providers", "POST auth/oauth/start", "POST auth/oauth/exchange", "POST auth/refresh",
+  "GET people", "POST people", "GET people/{p}", "PATCH people/{p}", "POST people/{p}/archive",
+  "GET public/charges/{p}", "POST public/charges/{p}/proofs/uploads",
+  "POST public/charges/{p}/proofs/uploads/{p}/finalize", "GET public/charges/{p}/proofs/uploads/{p}",
+];
+// API operations the browser intentionally never calls.
+const WEB_EXCLUSIONS: Record<string, string> = {
+  "GET health": "infrastructure probe, proxied by /api/health",
+  "POST devices": "push registration is native-only",
+  "POST auth/apple/native/start": "native Sign in with Apple only",
+  "POST auth/apple/native/exchange": "native Sign in with Apple only",
+  "GET auth/google/callback": "provider redirect handled by the API itself",
+  "POST auth/apple/callback": "provider form post handled by the API itself",
+};
+// Authenticated paths the native app deliberately does not call yet.
+const NATIVE_DEFERRED: Record<string, string> = {
+  "expenses/{p}": "native opens charges, never the parent expense",
+  "recurrences/{p}/preview": "native reads previews from the recurrence detail payload",
+};
+
+describe("OpenAPI × BFF", () => {
+  it("proxies or dedicates a route for every API operation the browser needs", () => {
+    const missing = [...operations].filter(operation => {
+      if (DEDICATED_BFF.includes(operation) || operation in WEB_EXCLUSIONS) return false;
+      const [method, template] = operation.split(" ") as [string, string];
+      return !isAllowedFinancialRoute(method, concrete(template));
+    });
+    expect(missing).toEqual([]);
+  });
+  it("lists only real API operations in the dedicated routes and exclusions", () => {
+    for (const operation of [...DEDICATED_BFF, ...Object.keys(WEB_EXCLUSIONS)]) expect(operations, operation).toContain(operation);
+  });
+  it("has no allowlist entry that matches nothing in the API (dead or drifted route)", () => {
+    const dead = ALLOWED_ROUTES.filter(([method, pattern]) =>
+      ![...operations].some(operation => {
+        const [opMethod, template] = operation.split(" ") as [string, string];
+        return opMethod === method && pattern.test(concrete(template));
+      }));
+    expect(dead.map(([method, pattern]) => `${method} ${pattern.source}`)).toEqual([]);
+  });
+});
+
+/** Extract every string/template literal that looks like an API path; template
+ * expressions become `{p}`, and string literals inside an expression (e.g.
+ * `${rotate ? "/rotate" : ""}`) expand into one candidate per alternative. */
+function extractPathTemplates(source: string): Set<string> {
+  const prefixes = /^(recurrences|timeline|payment-methods|expenses|charges|people|account|auth|notification-preferences|devices|public)\b/;
+  const found = new Set<string>();
+  const finish = (candidate: string) => {
+    const template = candidate.split("?")[0]!.trim().replace(/(?<!\/)\{p\}$/, "");
+    if (prefixes.test(template) && /^[a-z0-9/{}\-]+$/.test(template)) found.add(template);
+  };
+  for (const match of source.matchAll(/"([a-z][a-z0-9/?=&${}\-]*)"/g)) finish(match[1]!);
+  for (let i = source.indexOf("`"); i >= 0; i = source.indexOf("`", i + 1)) {
+    // Walk to the matching backtick, tracking ${ } depth and nested templates.
+    let depth = 0, j = i + 1;
+    const parts: string[][] = [[]];
+    let text = "", expr = "";
+    for (; j < source.length; j++) {
+      const ch = source[j]!;
+      if (depth === 0) {
+        if (ch === "`") break;
+        if (ch === "$" && source[j + 1] === "{") { depth = 1; j++; parts[parts.length - 1]!.push(text); text = ""; expr = ""; continue; }
+        text += ch;
+      } else {
+        if (ch === "{") depth++;
+        else if (ch === "}") { depth--; if (depth === 0) { const literals = [...expr.matchAll(/"([^"]*)"/g)].map(m => m[1]!); parts.push(["{p}", ...literals]); parts.push([]); continue; } }
+        expr += ch;
+      }
+    }
+    if (depth !== 0 || j >= source.length) continue;
+    parts[parts.length - 1]!.push(text);
+    // parts alternates [textChunk], [alternatives...], [textChunk] ...
+    let candidates = [""];
+    for (const chunk of parts) {
+      const options = chunk.length ? chunk : [""];
+      candidates = candidates.flatMap(prefix => options.map(option => prefix + option));
+    }
+    for (const candidate of candidates) finish(candidate);
+    i = j;
+  }
+  return found;
+}
+
+describe("OpenAPI × Expo client", () => {
+  const clientDir = join(repo, "packages/mobile/src");
+  const files = ["financial/client.ts", "people/client.ts", "account/client.ts", "notifications/client.ts", "auth/client.ts"];
+  const templates = new Set<string>();
+  for (const file of files) for (const template of extractPathTemplates(readFileSync(join(clientDir, file), "utf8"))) templates.add(template);
+
+  it("parses a meaningful set of client paths", () => {
+    expect(templates.size).toBeGreaterThanOrEqual(28);
+    expect(templates).toContain("charges/{p}/public-link/rotate");
+    expect(templates).toContain("timeline");
+  });
+  it("only sends paths that exist in the API contract", () => {
+    const unknown = [...templates].filter(template => ![...paths].some(path => covers(template, path)));
+    expect(unknown).toEqual([]);
+  });
+  it("covers every authenticated API path (client parity), except documented deferrals", () => {
+    const uncovered = [...paths].filter(path =>
+      !path.startsWith("auth/") && !path.startsWith("public/") && path !== "health" && !(path in NATIVE_DEFERRED)
+      && ![...templates].some(template => covers(template, path)));
+    expect(uncovered).toEqual([]);
+    for (const path of Object.keys(NATIVE_DEFERRED)) expect(paths, path).toContain(path);
+  });
+});

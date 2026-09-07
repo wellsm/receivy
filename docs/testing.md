@@ -141,5 +141,19 @@ AVD acusar `INSTALL_FAILED_INSUFFICIENT_STORAGE`, use outro AVD com
 `launchApp` do Maestro abre só o launcher do dev client. Não use `hideKeyboard`:
 no Android ele envia Back e fecha o app na tela raiz.
 
+## Contrato e acessibilidade no web
+
+`packages/web/src/lib/openapi-contract.test.ts` confronta `docs/openapi.json` com a
+allowlist do BFF (`ALLOWED_ROUTES`, exportada só para isso) e com os literais de
+caminho dos clientes Expo. Ao adicionar uma rota na API: regenere a OpenAPI, inclua
+a rota na allowlist ou em `DEDICATED_BFF`/`WEB_EXCLUSIONS`, e chame-a no cliente
+nativo ou registre o adiamento em `NATIVE_DEFERRED`. O teste falha em qualquer
+deriva entre as três superfícies.
+
+`packages/web/src/a11y.test.tsx` roda axe-core sobre as telas principais em jsdom
+e exercita teclado; `packages/common/src/design/tokens.test.ts` calcula contraste
+WCAG dos tokens. Lacunas conhecidas ficam em `it.fails` com o motivo, e passam a
+falhar quando o token for corrigido, obrigando a promoção para `it`.
+
 Nenhum teste envia e-mail/push real nem acessa contas de produção. Segredos e
 arquivos de ambiente dos projetos de referência não fazem parte das fixtures.

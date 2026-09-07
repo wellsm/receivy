@@ -74,7 +74,7 @@ a {
 }
 
 :focus-visible {
-  outline: 3px solid var(--color-accent);
+  outline: 3px solid var(--color-primary); /* accent scored 1.7:1 on canvas; WCAG 2.4.11 needs 3:1 */
   outline-offset: 3px;
 }
 

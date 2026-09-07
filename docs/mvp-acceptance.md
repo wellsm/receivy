@@ -31,9 +31,9 @@ Uma caixa vazia não deve ser tratada como entrega concluída.
 - [x] Matriz HTTP/Postgres com credor, devedor, terceiro e capacidade pública (78 cenários nativos + smoke HTTP).
 - [x] Specs de integração EZ4 com DatabaseTester, fixtures tipadas e banco exclusivo
   de testes, seguindo o padrão solicitado do FreightHero; smoke HTTP complementar.
-- [ ] Web: 390/768/1440 px, teclado, foco, contraste e sem overflow horizontal (larguras inspecionadas por incremento; teclado/foco/contraste sem auditoria dedicada).
+- [x] Web: 390/768/1440 px, teclado, foco, contraste e sem overflow horizontal (larguras inspecionadas por incremento; axe + teclado + contraste dos tokens automatizados em 2026-09-07; duas lacunas de contraste não-textual documentadas abaixo).
 - [x] Docker: build da imagem e health após inicialização com configuração local (2026-09-07; health reporta API indisponível sem backend, por design).
-- [ ] OpenAPI confrontada com BFF e cliente Expo (gerada e conferida contra a reflexão EZ4; confronto com allowlist do BFF/cliente Expo não automatizado).
+- [x] OpenAPI confrontada com BFF e cliente Expo (`packages/web/src/lib/openapi-contract.test.ts`, 2026-09-07).
 - [x] Smoke em development build Android (2026-09-07, emulador Pixel 8 / API 34; upload por seletor e push não exercitados).
 - [x] Smoke em development build iOS (2026-09-07, simulador iPhone 17 Pro; upload por seletor de arquivos e push não exercitados).
 - [ ] EAS de ambas as plataformas com identificadores e credenciais do proprietário.
@@ -285,3 +285,27 @@ envia Back no Android e fecha o app na tela raiz; a variável inline
 `EXPO_PUBLIC_*` não sobrepôs `.env.local`, resolvido com `adb reverse` das
 portas 3735/3000/3736/8081. Emulador, Metro, API, web e storage local foram
 encerrados ao final.
+
+## Contrato OpenAPI × clientes e acessibilidade web — 2026-09-07
+
+`openapi-contract.test.ts` lê `docs/openapi.json` (reflexão EZ4, conferida por
+`openapi:check`) e prova três coisas: toda operação da API que o navegador precisa
+passa pela allowlist do proxy financeiro ou por uma rota dedicada do BFF (seis
+exclusões nomeadas: health, registro push, Apple nativo e callbacks de provedor);
+nenhuma entrada da allowlist aponta para operação inexistente; e cada literal de
+caminho dos clientes Expo (extraído do código-fonte, com expansão de templates
+como `public-link${rotate ? "/rotate" : ""}`) existe na API, com paridade inversa
+salvo `expenses/{id}` e `recurrences/{id}/preview`, deferidos no nativo e listados
+no teste. Tudo passou em 2026-09-07.
+
+`a11y.test.tsx` roda axe-core 4.13 em jsdom sobre login, timeline, contatos,
+conta e nova cobrança (regras `region` e `color-contrast` desligadas: fragmentos
+sem landmark e sem layout), verifica que Tab alcança e-mail e envio no login e
+que a checkbox de contato responde a Espaço. Zero violações. O contraste vem dos
+tokens em `packages/common/src/design/tokens.test.ts`: dez pares de texto ≥ 4,5:1
+e o anel de foco ≥ 3:1 depois de trocar `accent` por `primary` no `:focus-visible`
+(`accent` marcava 1,7:1). Duas lacunas ficam registradas como `it.fails`, para
+decisão de marca: a borda de inputs `#BFC9C3` marca ~1,6:1 contra canvas/surface
+(WCAG 1.4.11 pede 3:1) e `accent` não serve como indicador não-textual. As
+larguras 390/768/1440 e o overflow seguem com inspeção manual por incremento; não
+há teste de layout em jsdom.

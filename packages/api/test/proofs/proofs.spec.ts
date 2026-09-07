@@ -1,12 +1,14 @@
 import { equal, ok, rejects } from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from "@ez4/gateway";
+import { BucketTester } from "@ez4/local-storage/test";
 import { savePerson } from "../../src/people/repository";
 import { createExpense } from "../../src/expenses/repository";
 import { cancelCharge, recordManualPayment } from "../../src/charges/repository";
 import { createOrRotatePublicLink, revokePublicLink } from "../../src/public/repository";
 import { createUploadIntent, finalizeProof, listProofs, reviewProof, downloadProof, publicProofStatus } from "../../src/proofs/repository";
 import { throttleProof } from "../../src/proofs/throttle";
+import { publicUploadProofHandler, publicFinalizeProofHandler } from "../../src/proofs/endpoints";
 import type { ProofStorage } from "../../src/proofs/storage";
 import { getTimeline } from "../../src/timeline/repository";
 import { cleanupUsers, createUser, db } from "../fixtures/financial";
@@ -15,13 +17,16 @@ const OWNER = "a1111111-1111-4111-8111-111111111111";
 const DEBTOR = "a2222222-2222-4222-8222-222222222222";
 const OTHER = "a3333333-3333-4333-8333-333333333333";
 const SECRET = "proof-native-test-secret-with-enough-entropy";
-const objects = new Map<string, Buffer>();
+// Native service-test boundary. The real local client shares .ez4/proof-files
+// across stages, so isolate bytes with EZ4's typed tester, not a hand-written store.
+// Signed HTTP and offline S3 semantics have separate tests; this is domain proof.
+const bucket = BucketTester.getClientMock("ProofFiles", { keys: {} });
 const storage: ProofStorage = {
-  uploadUrl: async key => `https://storage.test/${key}`,
-  read: async key => { const value = objects.get(key); if (!value) throw new Error("missing"); return Buffer.from(value); },
-  write: async (key, bytes) => { objects.set(key, Buffer.from(bytes)); },
-  delete: async key => { objects.delete(key); },
-  downloadUrl: async key => `https://storage.test/${key}?attachment=1`,
+  uploadUrl: (key, mime) => bucket.getWriteUrl(key, { expiresIn: 300, contentType: mime }),
+  read: key => bucket.read(key),
+  write: (key, bytes, mime) => bucket.write(key, bytes, { contentType: mime }),
+  delete: key => bucket.delete(key),
+  downloadUrl: key => bucket.getReadUrl(key, { expiresIn: 60 }),
 };
 const actor = { userId: DEBTOR };
 const input = { filename: "proof.pdf", mime: "application/pdf" as const, size: 14 };
@@ -35,7 +40,7 @@ async function charge() {
 }
 async function upload(id: string) {
   const intent = await createUploadIntent(db, storage, id, actor, input);
-  objects.set(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("%PDF-1.7\nproof"));
+  await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("%PDF-1.7\nproof"));
   return { intent, proof: await finalizeProof(db, storage, id, actor, intent.id) };
 }
 describe("private proof transactions on PostgreSQL", () => {
@@ -51,8 +56,8 @@ describe("private proof transactions on PostgreSQL", () => {
     await rejects(() => createUploadIntent(db, storage, id, actor, input), HttpConflictError);
     await rejects(() => finalizeProof(db, storage, id, actor, intent.id), HttpConflictError);
     const row = await db.payment_proofs.findOne({ select: { object_key: true, sha256: true }, where: { id: proof.id } }); ok(row);
-    objects.set(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("evil replacement"));
-    equal(objects.get(row.object_key)?.toString(), "%PDF-1.7\nproof");
+    await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("evil replacement"));
+    equal((await bucket.read(row.object_key)).toString(), "%PDF-1.7\nproof");
     equal(row.sha256.length, 64);
     await rejects(() => listProofs(db, id, OTHER), HttpForbiddenError);
     await rejects(() => reviewProof(db, id, DEBTOR, proof.id, { decision: "accepted" }), HttpForbiddenError);
@@ -93,12 +98,15 @@ describe("private proof transactions on PostgreSQL", () => {
   });
   it("rejects invalid bytes without creating a proof, and checks state again after storage I/O", async () => {
     const id = await charge(); const intent = await createUploadIntent(db, storage, id, actor, input);
-    objects.set(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("<html>bad</html>"));
+    await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("<html>bad</html>"));
     await rejects(() => finalizeProof(db, storage, id, actor, intent.id));
     equal(await db.payment_proofs.count({ where: { charge_id: id } }), 0);
-    objects.set(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("%PDF-1.7\nproof"));
+    equal(await db.upload_intents.count({ where: { charge_id: id, state: "pending" } }), 0,
+      "a definitively invalid file must release its intent so the user can replace it");
+    const replacement = await createUploadIntent(db, storage, id, actor, input);
+    await bucket.write(new URL(replacement.uploadUrl).pathname.slice(1), Buffer.from("%PDF-1.7\nproof"));
     const racing: ProofStorage = { ...storage, async write(key, bytes, mime) { await storage.write(key, bytes, mime); await cancelCharge(db, OWNER, id); } };
-    await rejects(() => finalizeProof(db, racing, id, actor, intent.id), HttpConflictError);
+    await rejects(() => finalizeProof(db, racing, id, actor, replacement.id), HttpConflictError);
     equal(await db.payment_proofs.count({ where: { charge_id: id } }), 0);
     equal(await db.upload_intents.count({ where: { charge_id: id, state: "pending" } }), 0);
   });
@@ -106,7 +114,7 @@ describe("private proof transactions on PostgreSQL", () => {
     const id = await charge(); const link = await createOrRotatePublicLink(db, OWNER, id, SECRET);
     const publicActor = { token: link.token, secret: SECRET };
     const intent = await createUploadIntent(db, storage, id, publicActor, input);
-    objects.set(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("%PDF-1.7\nproof"));
+    await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("%PDF-1.7\nproof"));
     const proof = await finalizeProof(db, storage, id, publicActor, intent.id);
     equal((await listProofs(db, id, DEBTOR)).length, 0);
     await rejects(() => downloadProof(db, storage, id, DEBTOR, proof.id), HttpNotFoundError);
@@ -114,6 +122,15 @@ describe("private proof transactions on PostgreSQL", () => {
     equal(Object.keys(status).sort().join(","), "closureReason,reason,state");
     await reviewProof(db, id, OWNER, proof.id, { decision: "rejected", reason: "Confira a data" });
     equal((await publicProofStatus(db, link.token, SECRET, intent.id)).reason, "Confira a data");
+  });
+  it("retains an upload intent after a transient storage failure so the same upload can finalize", async () => {
+    const id = await charge(); const intent = await createUploadIntent(db, storage, id, actor, input);
+    const unavailable: ProofStorage = { ...storage, read: async () => { throw new Error("temporary storage outage"); } };
+    await rejects(() => finalizeProof(db, unavailable, id, actor, intent.id), /temporary storage outage/);
+    equal(await db.upload_intents.count({ where: { id: intent.id, state: "pending" } }), 1);
+    equal(await db.payment_proofs.count({ where: { charge_id: id } }), 0);
+    await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from("%PDF-1.7\nproof"));
+    equal((await finalizeProof(db, storage, id, actor, intent.id)).state, "pending");
   });
   it("serializes proof acceptance with manual payment and never produces two payments", async () => {
     const id = await charge(); const { proof } = await upload(id);
@@ -130,6 +147,18 @@ describe("private proof transactions on PostgreSQL", () => {
     for (let attempt = 13; attempt < 120; attempt++) await throttleProof(db, `quota-${attempt}`, now);
     await rejects(() => throttleProof(db, "quota-another", now), error => (error as { status: number }).status === 429);
     await throttleProof(db, "quota-native-proof", now + 600_001);
+    await db.proof_throttles.deleteMany({});
+  });
+  it("does not let invalid anonymous capabilities consume legitimate upload quota", async () => {
+    const context = { db, variables: { PUBLIC_LINK_HMAC_SECRET: SECRET } } as Parameters<typeof publicUploadProofHandler>[1];
+    for (let attempt = 0; attempt < 125; attempt++) {
+      await rejects(() => publicUploadProofHandler({ parameters: { token: `invalid-${attempt}` }, body: input }, context), HttpNotFoundError);
+      await rejects(() => publicFinalizeProofHandler({ parameters: { token: `invalid-${attempt}`, intentId: "11111111-1111-4111-8111-111111111111" } }, context), HttpNotFoundError);
+    }
+    equal(await db.proof_throttles.count({}), 0, "invalid capabilities must not create legitimate quota rows");
+    const id = await charge(); const link = await createOrRotatePublicLink(db, OWNER, id, SECRET);
+    await throttleProof(db, link.token);
+    equal(await db.proof_throttles.count({}), 2);
     await db.proof_throttles.deleteMany({});
   });
 });

@@ -44,15 +44,15 @@ export async function downloadProofHandler(request: ProofRequest, context: Servi
   return { status: 200, body: await downloadProof(context.db, configuredProofStorage(context.variables), request.parameters.id, request.identity.userId, request.parameters.proofId) };
 }
 export async function publicUploadProofHandler(request: PublicUploadRequest, context: Service.Context<ApiProvider>): Promise<UploadResponse> {
-  await throttleProof(context.db, request.parameters.token);
   const secret = context.variables.PUBLIC_LINK_HMAC_SECRET;
   const charge = await resolvePublicCharge(context.db, request.parameters.token, secret);
+  await throttleProof(context.db, request.parameters.token);
   return { status: 200, body: await createUploadIntent(context.db, configuredProofStorage(context.variables), charge.id, { token: request.parameters.token, secret }, request.body) };
 }
 export async function publicFinalizeProofHandler(request: PublicFinalizeRequest, context: Service.Context<ApiProvider>): Promise<PublicFinalizeResponse> {
-  await throttleProof(context.db, request.parameters.token);
   const secret = context.variables.PUBLIC_LINK_HMAC_SECRET;
   const charge = await resolvePublicCharge(context.db, request.parameters.token, secret);
+  await throttleProof(context.db, request.parameters.token);
   await finalizeProof(context.db, configuredProofStorage(context.variables), charge.id, { token: request.parameters.token, secret }, request.parameters.intentId);
   return { status: 200, body: { state: "pending" } };
 }

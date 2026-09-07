@@ -8,6 +8,12 @@ state under the financial charge lock. An upload URL is never a final proof URL.
 Download links are authenticated, last 60 seconds, and force an attachment name.
 Public capabilities cannot list/download proofs; an uploader may recover only
 the state/reason of their own intent, with the same still-valid capability.
+The web client saves only the opaque recovery handle before upload/finalization.
+An ambiguous finalize response is reconciled against that status, including on
+reload or explicit verification; an observed committed proof is not called a
+failed upload. Definitively invalid bytes expire the owned intent so a new file
+can be selected; transient storage errors retain the intent for retry. Expiry
+also unlocks the web picker without requiring a reload.
 
 Manual payment/cancellation atomically rejects an outstanding proof with
 `closure_reason=paid|cancelled` and an explicit system reason. Files and audit are
@@ -80,6 +86,9 @@ server; native-device QA needs an explicitly approved reachable private adapter.
   10 minutes) plus shared unknown-client quota (120 per 10 minutes). Spoofed
   forwarded headers cannot change these identities. **This is not per-IP proof**;
   real trusted-edge IP extraction/rate limiting remains a production gate.
+  Only validated public capabilities consume legitimate mutation quota. Invalid
+  capabilities cannot exhaust that shared budget. No separate malformed-request
+  limiter is delivered here; invalid-request edge enforcement remains Task 7.
 - Public framework/access logs and provider malformed-body error logging need
   the separate Task 7 logging hardening. Application proof code never logs tokens,
   signed URLs, file names or file contents. Do not use real data before that gate.

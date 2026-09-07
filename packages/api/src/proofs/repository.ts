@@ -56,8 +56,22 @@ export async function finalizeProof(db: DbClient, storage: ProofStorage, id: str
   const intent = await db.upload_intents.findOne({ select: INTENT, where: { id: intentId, charge_id: id, actor_hash: actorHash(actor) } });
   if (!intent) throw new HttpNotFoundError();
   if (intent.state !== "pending" || Date.parse(intent.expires_at) <= Date.now()) throw new HttpConflictError("O envio expirou ou já foi finalizado.");
-  const bytes = await storage.read(intent.object_key); const validated = validateProof(bytes, intent.mime);
-  if (validated.size !== intent.size) throw new HttpUnprocessableEntityError("O tamanho do arquivo não corresponde ao envio autorizado.");
+  let bytes: Buffer; let validated: ReturnType<typeof validateProof>;
+  try {
+    bytes = await storage.read(intent.object_key); validated = validateProof(bytes, intent.mime);
+    if (validated.size !== intent.size) throw new HttpUnprocessableEntityError("O tamanho do arquivo não corresponde ao envio autorizado.");
+  } catch (failure) {
+    if (failure instanceof HttpUnprocessableEntityError) {
+      // A definitive file failure releases only this actor's still-pending intent.
+      // Network/storage errors retain it for safe retries; concurrent committed proofs stay intact.
+      await db.transaction(async tx => {
+        await authorize(tx, id, actor, true);
+        await tx.upload_intents.updateMany({ where: { id: intentId, charge_id: id, actor_hash: actorHash(actor), state: "pending" }, data: { state: "expired" } });
+      });
+      await storage.delete(intent.object_key).catch(() => undefined);
+    }
+    throw failure;
+  }
   const proofId = crypto.randomUUID(); const finalKey = `proofs/${id}/${proofId}`;
   // Write exactly the bounded, validated bytes. Never copy a still-uploadable source object.
   await storage.write(finalKey, bytes, validated.mime);

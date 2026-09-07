@@ -1,0 +1,22 @@
+# Numeric keyboards have no dismiss key on iOS: never call hideKeyboard here.
+appId: dev.receivy.local
+---
+- tapOn: "000000"
+- inputText: ${CODE}
+- tapOn: "Entrar"
+- runFlow:
+    when:
+      visible: "Como podemos chamar você?"
+    commands:
+      - tapOn:
+          point: "50%,19%"
+      - inputText: "QA iOS"
+      - tapOn: "Continuar"
+      - runFlow:
+          when:
+            visible: "Como podemos chamar você?"
+          commands:
+            - tapOn: "Continuar"
+- extendedWaitUntil:
+    visible: "Sua visão de hoje"
+    timeout: 20000

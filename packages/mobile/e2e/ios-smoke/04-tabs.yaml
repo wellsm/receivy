@@ -1,0 +1,26 @@
+appId: dev.receivy.local
+---
+- tapOn: "Ajustes"
+- extendedWaitUntil:
+    visible: "Sua conta"
+    timeout: 15000
+- assertVisible: "Sessões e dispositivos"
+- assertVisible: "Exportar dados"
+- assertVisible: "Excluir conta"
+- tapOn: "Chaves Pix"
+- extendedWaitUntil:
+    visible: "Suas chaves Pix"
+    timeout: 15000
+- assertVisible: ${EMAIL}
+- tapOn: "← Timeline"
+- extendedWaitUntil:
+    visible: "Recorrências"
+    timeout: 15000
+- tapOn: "Recorrências"
+- extendedWaitUntil:
+    visible: "Nova recorrência"
+    timeout: 15000
+- tapOn: "Timeline"
+- extendedWaitUntil:
+    visible: "Sua visão de hoje"
+    timeout: 15000

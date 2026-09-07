@@ -1,0 +1,28 @@
+# Local development-build smoke (iOS Simulator). Prerequisites: Metro on 8081,
+# API on 3735 with a fully reset local schema, web on 3000. Run:
+#   maestro test -e EMAIL=qa-ios@example.invalid e2e/ios-smoke/01-login.yaml
+#   node --env-file=local.env scripts/local-login-code.mjs qa-ios@example.invalid   (in packages/api)
+#   maestro test -e CODE=123456 e2e/ios-smoke/02-code.yaml
+appId: dev.receivy.local
+---
+- launchApp
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible: "Reload"
+    commands:
+      - tapOn:
+          point: "90%,48%"
+- extendedWaitUntil:
+    visible: "Seu e-mail"
+    timeout: 15000
+- tapOn: "voce@exemplo.com"
+- inputText: ${EMAIL}
+- tapOn: "Receber código"
+- extendedWaitUntil:
+    visible: "Código de 6 dígitos"
+    timeout: 15000

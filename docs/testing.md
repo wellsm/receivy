@@ -101,5 +101,36 @@ por um ambiente compartilhado ou de produção para executar esses comandos.
 `pnpm --filter @receivy/api test:http-smoke` é complementar: usa outro container
 descartável, na porta 55435, e encerra esse ambiente ao terminar.
 
+## Smoke iOS em development build
+
+O smoke nativo usa [Maestro](https://maestro.mobile.dev) contra o simulador,
+sem exigir permissão de acessibilidade do terminal. Fluxos em
+`packages/mobile/e2e/ios-smoke/*.yaml`, na ordem numérica. Pré-requisitos:
+
+1. `packages/api/local.env` com todas as variáveis de `local.env.example` mais o
+   bloco `PROOF_*` de `proof-local.env.example` (modo local explícito).
+2. Banco local com o schema completo. `ez4 serve --local` não cria tabelas novas
+   em um banco existente; na primeira execução após novos módulos rode uma vez
+   `node --env-file=local.env ./node_modules/@ez4/project/bin/cli.mjs serve -e local.env --local --reset`
+   (apaga o banco descartável `receivy` da porta 55434, nunca outro).
+3. `packages/web/.env.local` com `EZ4_API_URL` e `PROOF_UPLOAD_ORIGIN`; API, web e
+   `scripts/local-proof-storage.ts` em execução.
+4. `packages/mobile/.env.local` copiado do exemplo e
+   `RECEIVY_LOCAL_NATIVE=1 npx expo run:ios` para o build de desenvolvimento.
+
+Com `EMAIL_TRANSPORT=disabled` nenhum código é impresso. Para o e-mail fictício,
+`node --env-file=local.env scripts/local-login-code.mjs <e-mail>` recupera o
+código vigente pelo HMAC do `LOGIN_CODE_HASH_KEY` local; o script recusa qualquer
+`APP_STAGE` diferente de `local` ou banco fora do loopback.
+
+Lições registradas em 2026-09-07: o watcher do Metro iniciado por `expo run:ios`
+perdeu edições em `packages/common` e `packages/mobile`; após mudar código,
+reinicie com `expo start --dev-client --clear`. Componentes de terceiros não
+recebem `className` do uniwind sem `withUniwind`; importe `SafeAreaView` de
+`@/components/safe-area-view` (regra de lint). O Hermes não implementa
+`Intl.NumberFormat#formatToParts`; `formatMoney` tem fallback testado. Upload de
+comprovante pelo seletor de arquivos e push real não foram exercitados no
+simulador.
+
 Nenhum teste envia e-mail/push real nem acessa contas de produção. Segredos e
 arquivos de ambiente dos projetos de referência não fazem parte das fixtures.

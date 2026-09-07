@@ -1,7 +1,7 @@
 import { formatMoney, type PersonLedger } from "@receivy/common";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from "@/components/safe-area-view";
 import { PersonDetails } from "./person-details";
 import { financialClient, type FinancialClient } from "@/financial/client";
 export function PersonLedgerScreen({ id, client = financialClient, onBack, onOpenCharge, onNewCharge }: { id: string; client?: Pick<FinancialClient, "ledger">; onBack?: () => void; onOpenCharge?: (id: string) => void; onNewCharge?: () => void }) {

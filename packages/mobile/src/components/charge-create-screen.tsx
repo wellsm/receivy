@@ -2,7 +2,7 @@ import { calendarDate, formatMoney, parseBRLCents, parsePercentageBasisPoints, r
 import * as Crypto from "expo-crypto";
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from "@/components/safe-area-view";
 import { FinancialRequestError, financialClient, type FinancialClient } from "@/financial/client";
 import { peopleClient } from "@/people/client";
 

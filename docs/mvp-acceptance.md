@@ -35,7 +35,7 @@ Uma caixa vazia não deve ser tratada como entrega concluída.
 - [x] Docker: build da imagem e health após inicialização com configuração local (2026-09-07; health reporta API indisponível sem backend, por design).
 - [ ] OpenAPI confrontada com BFF e cliente Expo (gerada e conferida contra a reflexão EZ4; confronto com allowlist do BFF/cliente Expo não automatizado).
 - [ ] Smoke em development build Android.
-- [ ] Smoke em development build iOS.
+- [x] Smoke em development build iOS (2026-09-07, simulador iPhone 17 Pro; upload por seletor de arquivos e push não exercitados).
 - [ ] EAS de ambas as plataformas com identificadores e credenciais do proprietário.
 
 ## Dependências externas conhecidas
@@ -45,7 +45,7 @@ ambiente local ignorado ou no gerenciador de segredos do ambiente de execução.
 
 | Dependência | Estado observado em 2026-09-06 | Efeito |
 | --- | --- | --- |
-| Xcode | 26.2 instalado; SDK 56 exige 26.4+ | Smoke/build iOS pendente de atualização pelo proprietário |
+| Xcode | 26.6 instalado em 2026-09-07 (SDK 56 exige 26.4+); runtimes iOS 26.3/26.5 | Build e smoke iOS executados no simulador; dispositivo físico pendente |
 | Android | SDK/adb/emulator encontrados no host | Build e device smoke ainda a executar |
 | Google/Apple | Providers de exemplo desativados | Fluxo real depende dos clients e callbacks próprios |
 | Domínio HTTPS | Não definido no projeto | Callback Apple web e links de produção não ativados |
@@ -240,3 +240,28 @@ de quota de comprovantes agora exige que palpites inválidos consumam somente o
 bucket do IP que os fez, e a exclusão concorrente compara `providerRevocation`
 como conjunto. Abertos: dispositivos iOS/Android, EAS, provedores reais, auditoria
 de teclado/foco/contraste e confronto automatizado OpenAPI × BFF/Expo.
+
+## Smoke iOS — evidência local de 2026-09-07
+
+Primeiro build nativo do projeto: Xcode 26.6, `expo run:ios` com
+`RECEIVY_LOCAL_NATIVE=1` (bundle `dev.receivy.local`), simulador iPhone 17 Pro /
+iOS 26.5, automação com Maestro (`packages/mobile/e2e/ios-smoke`). Percurso aprovado:
+código por e-mail (recuperado localmente pelo HMAC), onboarding de nome, timeline
+vazia, criação de contato, cobrança de R$ 100,00 dividida em partes iguais com
+detalhe em R$ 50,00, cadastro de chave Pix inline, publicação do link, retorno à
+timeline com totais atualizados, telas de Ajustes (perfil, sessões, exportação,
+exclusão), Chaves Pix e Recorrências.
+
+O smoke encontrou e corrigiu dois defeitos exclusivos do nativo, invisíveis nos
+testes Jest e no export web: (1) o `SafeAreaView` do safe-area-context ignorava
+`className` do uniwind, deixando todas as telas em branco; agora há wrapper com
+`withUniwind`, teste e regra de lint; (2) o Hermes não tem
+`Intl.NumberFormat#formatToParts`, quebrando `formatMoney` na Home; o fallback
+tem seis casos de regressão. Também foi preciso completar `local.env` (variáveis
+de OAuth, link público e comprovantes) e resetar o schema do banco local, que só
+tinha as tabelas de autenticação/contatos; os 500 dos jobs desapareceram após o
+reset. Serviços e simulador descartáveis foram encerrados; o banco local foi
+salvo antes do reset e continha apenas um usuário de QA.
+
+Não exercitado no simulador: upload de comprovante pelo seletor de arquivos,
+push real, Apple/Google reais, dispositivo físico e EAS.

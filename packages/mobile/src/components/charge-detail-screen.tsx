@@ -2,7 +2,7 @@ import { formatMoney, type ChargeDetail } from "@receivy/common";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from "@/components/safe-area-view";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { ProofPanel, type ProofClient } from "./proof-panel";
 import { FirstSharePix } from "./first-share-pix";

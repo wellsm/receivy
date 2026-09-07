@@ -31,6 +31,11 @@ pnpm --filter @receivy/api db:up
 pnpm dev
 ```
 
+`ez4 serve --local` não cria tabelas novas em um banco `receivy` já existente.
+Se o banco local for anterior a um módulo novo, rode uma vez
+`node --env-file=local.env ./node_modules/@ez4/project/bin/cli.mjs serve -e local.env --local --reset`
+em `packages/api`; isso apaga apenas o banco descartável da porta 55434.
+
 Em outro terminal, inicie o app mobile:
 
 ```bash

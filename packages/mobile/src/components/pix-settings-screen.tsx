@@ -1,7 +1,7 @@
 import type { PaymentMethod, PaymentMethodInput, PixKeyType } from "@receivy/common";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from "@/components/safe-area-view";
 import { financialClient, type FinancialClient } from "@/financial/client";
 
 export function PixSettingsScreen({ client = financialClient, onBack }: { client?: Pick<FinancialClient, "paymentMethods" | "savePaymentMethod" | "defaultPaymentMethod" | "archivePaymentMethod">; onBack?: () => void }) {

@@ -1,7 +1,7 @@
 import { calendarDate, formatMoney, type TimelinePage } from "@receivy/common";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from "@/components/safe-area-view";
 import { financialClient, type FinancialClient } from "@/financial/client";
 
 const filters = [["Todos", ""], ["A receber", "direction=receivable"], ["A pagar", "direction=payable"], ["Hoje", "today"], ["Esta semana", "week"], ["Pendentes", "status=pending"], ["Recorrências", "source=recurrence"]] as const;

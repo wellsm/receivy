@@ -1,0 +1,85 @@
+# Contact -> charge -> inline Pix -> public link -> timeline totals.
+# Text taps on labels: RN exposes the label Text and the input accessibilityLabel
+# with the same string, so inputs are addressed by index 1 or by their placeholder.
+appId: dev.receivy.local
+---
+- tapOn: "Contatos"
+- extendedWaitUntil:
+    visible: "Quem faz parte das suas contas?"
+    timeout: 15000
+- tapOn:
+    text: "Nome"
+    index: 1
+- inputText: "Ana QA"
+- tapOn: "E-mail do contato"
+- inputText: "ana-qa@example.invalid"
+- tapOn: "Quem faz parte das suas contas?"
+- tapOn: "Salvar contato"
+- extendedWaitUntil:
+    visible: "Contato salvo."
+    timeout: 15000
+- tapOn: "← Timeline"
+- extendedWaitUntil:
+    visible: "Nova cobrança"
+    timeout: 15000
+- tapOn: "Nova cobrança"
+- extendedWaitUntil:
+    visible: "Divida com clareza antes de cobrar."
+    timeout: 15000
+- tapOn: "Ana QA"
+- tapOn:
+    text: "Valor total"
+    index: 1
+- inputText: "100,00"
+- tapOn: "Divida com clareza antes de cobrar."
+- tapOn: "Descrição"
+- inputText: "Mercado QA"
+- tapOn: "Divida com clareza antes de cobrar."
+- scrollUntilVisible:
+    element:
+      text: "Revisar cobrança"
+    direction: DOWN
+- tapOn: "Revisar cobrança"
+- scrollUntilVisible:
+    element:
+      text: "Criar cobrança"
+    direction: DOWN
+- tapOn: "Criar cobrança"
+- extendedWaitUntil:
+    visible: "Pix antes de compartilhar"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Nova chave Pix"
+    direction: DOWN
+- tapOn: "Nova chave Pix"
+- inputText: ${EMAIL}
+- tapOn: "Cadastrar uma chave Pix"
+- scrollUntilVisible:
+    element:
+      text: "Salvar nova chave"
+    direction: DOWN
+- tapOn: "Salvar nova chave"
+- extendedWaitUntil:
+    visible: "Publicar com este Pix"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: "Publicar com este Pix"
+    direction: UP
+- tapOn: "Publicar com este Pix"
+- extendedWaitUntil:
+    visible: "Compartilhar cobrança"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Voltar para timeline"
+    direction: UP
+- tapOn: "Voltar para timeline"
+- extendedWaitUntil:
+    visible: "R$ 50,00 pendentes no total"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Abrir cobrança Mercado QA"
+    direction: DOWN

@@ -101,11 +101,12 @@ por um ambiente compartilhado ou de produção para executar esses comandos.
 `pnpm --filter @receivy/api test:http-smoke` é complementar: usa outro container
 descartável, na porta 55435, e encerra esse ambiente ao terminar.
 
-## Smoke iOS em development build
+## Smoke nativo em development build (iOS e Android)
 
-O smoke nativo usa [Maestro](https://maestro.mobile.dev) contra o simulador,
-sem exigir permissão de acessibilidade do terminal. Fluxos em
-`packages/mobile/e2e/ios-smoke/*.yaml`, na ordem numérica. Pré-requisitos:
+O smoke nativo usa [Maestro](https://maestro.mobile.dev) contra simulador ou
+emulador, sem exigir permissão de acessibilidade do terminal. Fluxos em
+`packages/mobile/e2e/smoke/*.yaml`, na ordem numérica, iguais para as duas
+plataformas. Pré-requisitos:
 
 1. `packages/api/local.env` com todas as variáveis de `local.env.example` mais o
    bloco `PROOF_*` de `proof-local.env.example` (modo local explícito).
@@ -128,9 +129,17 @@ perdeu edições em `packages/common` e `packages/mobile`; após mudar código,
 reinicie com `expo start --dev-client --clear`. Componentes de terceiros não
 recebem `className` do uniwind sem `withUniwind`; importe `SafeAreaView` de
 `@/components/safe-area-view` (regra de lint). O Hermes não implementa
-`Intl.NumberFormat#formatToParts`; `formatMoney` tem fallback testado. Upload de
-comprovante pelo seletor de arquivos e push real não foram exercitados no
-simulador.
+`Intl.NumberFormat#formatToParts` no iOS e, no Android, rejeita `bigint` nesse
+método; `formatMoney` só entrega `Number` ao Intl e tem fallback testado. Upload
+de comprovante pelo seletor de arquivos e push real não foram exercitados.
+
+Android: `RECEIVY_LOCAL_NATIVE=1 npx expo run:android` gera o APK de debug; se o
+AVD acusar `INSTALL_FAILED_INSUFFICIENT_STORAGE`, use outro AVD com
+`disk.dataPartition.size` maior em vez de apagar apps do existente. Faça
+`adb reverse` das portas 8081/3735/3000/3736 e abra o dev client com
+`receivy://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8081`; o
+`launchApp` do Maestro abre só o launcher do dev client. Não use `hideKeyboard`:
+no Android ele envia Back e fecha o app na tela raiz.
 
 Nenhum teste envia e-mail/push real nem acessa contas de produção. Segredos e
 arquivos de ambiente dos projetos de referência não fazem parte das fixtures.

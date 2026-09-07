@@ -23,9 +23,12 @@ export function formatMoney(money: Money, locale = "pt-BR"): string {
   const cents = BigInt(money.amountCents);
   const absolute = cents < 0n ? -cents : cents;
   const units = absolute / 100n;
-  const signedUnits: bigint | number = cents < 0n
-    ? units === 0n ? -0 : -units
-    : units;
+  // Integer units fit a Number exactly (at most ~9e13). Hermes on Android
+  // throws "Cannot convert BigInt to number" when formatToParts receives a
+  // bigint, so both paths format a Number; -0 keeps the sign for |x| < R$ 1.
+  const signedUnits = cents < 0n
+    ? units === 0n ? -0 : -Number(units)
+    : Number(units);
   const fraction = (absolute % 100n).toString().padStart(2, "0");
 
   if (typeof formatter.formatToParts === "function") {

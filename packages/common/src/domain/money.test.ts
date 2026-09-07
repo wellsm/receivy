@@ -53,4 +53,21 @@ describe("money", () => {
       expect(formatMoney({ amountCents, currency: "BRL" }, "pt-BR")).toBe(expected);
     });
   });
+  it("never hands a bigint to Intl (Hermes on Android rejects it)", () => {
+    const prototype = Intl.NumberFormat.prototype;
+    const original = prototype.formatToParts;
+    const received: unknown[] = [];
+    prototype.formatToParts = function (this: Intl.NumberFormat, value?: number | bigint) {
+      received.push(value);
+      return original.call(this, value as number);
+    } as typeof original;
+    try {
+      expect(formatMoney({ amountCents: -1, currency: "BRL" }, "pt-BR")).toBe("-R$ 0,01");
+      expect(formatMoney(makeMoney(Number.MAX_SAFE_INTEGER), "pt-BR")).toBe("R$ 90.071.992.547.409,91");
+    } finally {
+      prototype.formatToParts = original;
+    }
+    expect(received.every(value => typeof value === "number")).toBe(true);
+    expect(Object.is(received[0], -0)).toBe(true);
+  });
 });

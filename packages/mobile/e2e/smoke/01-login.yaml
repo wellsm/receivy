@@ -1,0 +1,39 @@
+# Development-build smoke (iOS Simulator and Android Emulator). Prerequisites:
+# Metro on 8081, API on 3735 with a fully reset local schema, web on 3000.
+# Android: `adb reverse tcp:8081 tcp:8081`, `tcp:3735`, `tcp:3000`, `tcp:3736`
+# so the 127.0.0.1 addresses in .env.local reach the host; open the dev client
+# with the Metro URL instead of Maestro's launchApp. Run:
+#   maestro test -e EMAIL=qa@example.invalid e2e/smoke/01-login.yaml
+#   node --env-file=local.env scripts/local-login-code.mjs qa@example.invalid   (packages/api)
+#   maestro test -e CODE=123456 e2e/smoke/02-code.yaml
+# Never use hideKeyboard: iOS numeric keyboards have no dismiss key and on
+# Android it sends Back, which exits the app from the root screen. Tap a
+# neutral text instead (keyboardShouldPersistTaps="handled" dismisses it).
+appId: dev.receivy.local
+---
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible: "Close"
+    commands:
+      - tapOn: "Close"
+- runFlow:
+    when:
+      visible: "Reload"
+    commands:
+      - tapOn:
+          point: "90%,48%"
+- extendedWaitUntil:
+    visible: "Seu e-mail"
+    timeout: 15000
+- tapOn: "voce@exemplo.com"
+- inputText: ${EMAIL}
+- tapOn: "Entre no Receivy"
+- tapOn: "Receber código"
+- extendedWaitUntil:
+    visible: "Código de 6 dígitos"
+    timeout: 15000

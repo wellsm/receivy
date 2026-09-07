@@ -1,0 +1,24 @@
+appId: dev.receivy.local
+---
+- tapOn: "000000"
+- inputText: ${CODE}
+- tapOn: "Confira seu e-mail"
+- tapOn: "Entrar"
+- extendedWaitUntil:
+    visible: "Como podemos chamar você?"
+    timeout: 20000
+- tapOn:
+    text: "Nome"
+    index: 1
+- inputText: "QA Smoke"
+- tapOn: "Como podemos chamar você?"
+- tapOn: "Continuar"
+- runFlow:
+    when:
+      visible: "Como podemos chamar você?"
+    commands:
+      - tapOn: "Continuar"
+- extendedWaitUntil:
+    visible: "Sua visão de hoje"
+    timeout: 20000
+- assertVisible: "Sua timeline começa aqui"

@@ -1,6 +1,6 @@
 # Contact -> charge -> inline Pix -> public link -> timeline totals.
-# Text taps on labels: RN exposes the label Text and the input accessibilityLabel
-# with the same string, so inputs are addressed by index 1 or by their placeholder.
+# Labels and inputs share the same string, so inputs are addressed by index 1
+# or by placeholder. Android opens the native share sheet on publish.
 appId: dev.receivy.local
 ---
 - tapOn: "Contatos"
@@ -68,6 +68,11 @@ appId: dev.receivy.local
       text: "Publicar com este Pix"
     direction: UP
 - tapOn: "Publicar com este Pix"
+- runFlow:
+    when:
+      visible: "Sharing link"
+    commands:
+      - pressKey: Back
 - extendedWaitUntil:
     visible: "Compartilhar cobrança"
     timeout: 20000
@@ -77,8 +82,9 @@ appId: dev.receivy.local
     direction: UP
 - tapOn: "Voltar para timeline"
 - extendedWaitUntil:
-    visible: "R$ 50,00 pendentes no total"
+    visible: "R$ 50,00"
     timeout: 20000
+- assertVisible: "R$ 50,00 pendentes no total"
 - scrollUntilVisible:
     element:
       text: "Abrir cobrança Mercado QA"

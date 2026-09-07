@@ -34,7 +34,7 @@ Uma caixa vazia não deve ser tratada como entrega concluída.
 - [ ] Web: 390/768/1440 px, teclado, foco, contraste e sem overflow horizontal (larguras inspecionadas por incremento; teclado/foco/contraste sem auditoria dedicada).
 - [x] Docker: build da imagem e health após inicialização com configuração local (2026-09-07; health reporta API indisponível sem backend, por design).
 - [ ] OpenAPI confrontada com BFF e cliente Expo (gerada e conferida contra a reflexão EZ4; confronto com allowlist do BFF/cliente Expo não automatizado).
-- [ ] Smoke em development build Android.
+- [x] Smoke em development build Android (2026-09-07, emulador Pixel 8 / API 34; upload por seletor e push não exercitados).
 - [x] Smoke em development build iOS (2026-09-07, simulador iPhone 17 Pro; upload por seletor de arquivos e push não exercitados).
 - [ ] EAS de ambas as plataformas com identificadores e credenciais do proprietário.
 
@@ -46,7 +46,7 @@ ambiente local ignorado ou no gerenciador de segredos do ambiente de execução.
 | Dependência | Estado observado em 2026-09-06 | Efeito |
 | --- | --- | --- |
 | Xcode | 26.6 instalado em 2026-09-07 (SDK 56 exige 26.4+); runtimes iOS 26.3/26.5 | Build e smoke iOS executados no simulador; dispositivo físico pendente |
-| Android | SDK/adb/emulator encontrados no host | Build e device smoke ainda a executar |
+| Android | SDK 34/36, NDK 27, JDK 17, emulador arm64 (AVD clonado `Receivy_QA` com 12G) | Build Gradle e smoke executados no emulador; dispositivo físico pendente |
 | Google/Apple | Providers de exemplo desativados | Fluxo real depende dos clients e callbacks próprios |
 | Domínio HTTPS | Não definido no projeto | Callback Apple web e links de produção não ativados |
 | S3/Neon/AWS | Nenhum ambiente de produção provisionado por esta tarefa | Não executar deploy como parte da implementação |
@@ -245,7 +245,7 @@ de teclado/foco/contraste e confronto automatizado OpenAPI × BFF/Expo.
 
 Primeiro build nativo do projeto: Xcode 26.6, `expo run:ios` com
 `RECEIVY_LOCAL_NATIVE=1` (bundle `dev.receivy.local`), simulador iPhone 17 Pro /
-iOS 26.5, automação com Maestro (`packages/mobile/e2e/ios-smoke`). Percurso aprovado:
+iOS 26.5, automação com Maestro (`packages/mobile/e2e/smoke`). Percurso aprovado:
 código por e-mail (recuperado localmente pelo HMAC), onboarding de nome, timeline
 vazia, criação de contato, cobrança de R$ 100,00 dividida em partes iguais com
 detalhe em R$ 50,00, cadastro de chave Pix inline, publicação do link, retorno à
@@ -265,3 +265,23 @@ salvo antes do reset e continha apenas um usuário de QA.
 
 Não exercitado no simulador: upload de comprovante pelo seletor de arquivos,
 push real, Apple/Google reais, dispositivo físico e EAS.
+
+## Smoke Android — evidência local de 2026-09-07
+
+`expo run:android` (Gradle, 3m59s) instalou o APK de debug em um clone do AVD
+Pixel 8 (API 34, arm64) criado só para QA porque o AVD original tinha 94% da
+partição `/data` ocupada por outros apps; o clone `Receivy_QA` usa 12G e não
+tocou nos dados do original. O mesmo percurso do iOS foi aprovado com os
+fluxos de `packages/mobile/e2e/smoke`: login por código, onboarding, timeline
+vazia, contato, cobrança R$ 100,00 → R$ 50,00, chave Pix inline, publicação
+(o Android abriu o share sheet nativo com `http://localhost:3000/pay/<token>`),
+totais na timeline, Ajustes, Chaves Pix e Recorrências.
+
+Terceiro defeito nativo encontrado: o Hermes do Android implementa
+`formatToParts`, mas lança "Cannot convert BigInt to number" ao receber
+`bigint`; `formatMoney` agora só entrega `Number` ao Intl (exato até ~9e13),
+com teste que intercepta o argumento. Aprendizados de automação: `hideKeyboard`
+envia Back no Android e fecha o app na tela raiz; a variável inline
+`EXPO_PUBLIC_*` não sobrepôs `.env.local`, resolvido com `adb reverse` das
+portas 3735/3000/3736/8081. Emulador, Metro, API, web e storage local foram
+encerrados ao final.

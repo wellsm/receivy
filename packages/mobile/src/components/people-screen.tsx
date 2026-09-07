@@ -4,9 +4,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { normalizePerson, type Person } from "@receivy/common";
 import { peopleClient } from "@/people/client";
 
-type Props = { onBack: () => void; client?: typeof peopleClient };
+type Props = { onBack: () => void; onOpenLedger?: (id: string) => void; client?: typeof peopleClient };
 
-export function PeopleScreen({ onBack, client = peopleClient }: Props) {
+export function PeopleScreen({ onBack, onOpenLedger, client = peopleClient }: Props) {
   const [people, setPeople] = useState<Person[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [archived, setArchived] = useState(false);
@@ -83,6 +83,7 @@ export function PeopleScreen({ onBack, client = peopleClient }: Props) {
         {!loading && !error && !people.length && <Text className="py-8 text-base leading-6 text-muted">{archived ? "Nenhum contato arquivado." : "Sua agenda começa com uma pessoa. Preencha o formulário acima."}</Text>}
         {people.map(person => <View key={person.id} className="gap-2 border-b border-outline py-5">
           <Text className="text-lg font-bold text-ink">{person.name}</Text><Text className="text-sm text-muted">{person.email ?? "Sem e-mail"}</Text>{person.phone && <Text className="text-sm text-muted">{person.phone}</Text>}
+          <Pressable accessibilityRole="button" accessibilityLabel={`Ver histórico de ${person.name}`} onPress={() => onOpenLedger?.(person.id)} className="min-h-12 justify-center"><Text className="font-semibold text-primary">Ver saldo e histórico</Text></Pressable>
           {!person.archivedAt && <View className="flex-row gap-4">
             <Pressable accessibilityRole="button" accessibilityLabel={`Editar ${person.name}`} disabled={busy} className="min-h-12 justify-center" onPress={() => { setEditing(person); setName(person.name); setEmail(person.email ?? ""); setPhone(person.phone ?? ""); scroll.current?.scrollTo({ y: 0, animated: true }); }}><Text className="font-semibold text-primary">Editar</Text></Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel={`Arquivar ${person.name}`} disabled={busy} onPress={() => archive(person)} className="min-h-12 justify-center"><Text className="text-muted">Arquivar</Text></Pressable>

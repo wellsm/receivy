@@ -18,6 +18,7 @@ const navigation = [
 type AppShellProps = {
   children: ReactNode;
   activePath?: string;
+  hideCreateAction?: boolean;
 };
 
 function Brand() {
@@ -52,7 +53,7 @@ function Navigation({ mobile = false, activePath = "/" }: { mobile?: boolean; ac
   );
 }
 
-export function AppShell({ children, activePath = "/" }: AppShellProps) {
+export function AppShell({ children, activePath = "/", hideCreateAction = false }: AppShellProps) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -71,10 +72,10 @@ export function AppShell({ children, activePath = "/" }: AppShellProps) {
 
         <main className="main-content">{children}</main>
 
-        <button className="floating-action" type="button" aria-label="Nova cobrança">
+        {!hideCreateAction && <Link className="floating-action" href="/charges/new" aria-label="Nova cobrança">
           <Plus aria-hidden="true" size={23} />
           <span>Nova cobrança</span>
-        </button>
+        </Link>}
 
         <Navigation mobile activePath={activePath} />
       </div>

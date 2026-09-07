@@ -20,7 +20,7 @@ describe("AppShell", () => {
     }
 
     expect(
-      screen.getByRole("button", { name: "Nova cobrança" }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: "Nova cobrança" }),
+    ).toHaveAttribute("href", "/charges/new");
   });
 });

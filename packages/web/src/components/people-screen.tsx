@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { normalizePerson, type Person, type PeoplePage } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
+import Link from "next/link";
 
 export function PeopleScreen() {
   const [people, setPeople] = useState<Person[]>([]);
@@ -89,7 +90,7 @@ export function PeopleScreen() {
         <ul className="people-list">{people.map(person => <li key={person.id}>
           <span className="person-avatar" aria-hidden="true">{person.name.slice(0, 1).toLocaleUpperCase("pt-BR")}</span>
           <div className="person-info"><strong>{person.name}</strong><span>{person.email ?? "Sem e-mail"}</span>{person.phone && <span>{person.phone}</span>}</div>
-          {!person.archivedAt && <div className="person-actions"><button disabled={busy} onClick={() => { setEditing(person); setName(person.name); setEmail(person.email ?? ""); setPhone(person.phone ?? ""); nameInput.current?.focus(); }}>Editar<span className="visually-hidden"> {person.name}</span></button><button disabled={busy} onClick={() => void archive(person)}>Arquivar<span className="visually-hidden"> {person.name}</span></button></div>}
+          <div className="person-actions"><Link href={`/people/${person.id}`}>Histórico<span className="visually-hidden"> de {person.name}</span></Link>{!person.archivedAt && <><button disabled={busy} onClick={() => { setEditing(person); setName(person.name); setEmail(person.email ?? ""); setPhone(person.phone ?? ""); nameInput.current?.focus(); }}>Editar<span className="visually-hidden"> {person.name}</span></button><button disabled={busy} onClick={() => void archive(person)}>Arquivar<span className="visually-hidden"> {person.name}</span></button></>}</div>
         </li>)}</ul>
         {cursor && <button className="login-text-button" disabled={loading || busy} onClick={() => reload(cursor)}>Carregar mais contatos</button>}
       </div>

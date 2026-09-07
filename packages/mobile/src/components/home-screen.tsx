@@ -1,143 +1,23 @@
-import { designTokens } from "@receivy/common";
-import {
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-  type ViewProps,
-} from "react-native";
+import { formatMoney, type TimelinePage } from "@receivy/common";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { financialClient, type FinancialClient } from "@/financial/client";
 
-const navigation = [
-  ["≡", "Timeline"],
-  ["↻", "Recorrências"],
-  ["◉", "Contatos"],
-  ["⚙", "Ajustes"],
-] as const;
-
-type BalanceCardProps = ViewProps & {
-  direction: "in" | "out";
-  label: string;
-  helper: string;
-};
-
-function BalanceCard({ direction, label, helper, ...props }: BalanceCardProps) {
-  const incoming = direction === "in";
-
-  return (
-    <View
-      {...props}
-      className={`gap-2 px-6 py-6 ${incoming ? "bg-primary-soft/35" : "bg-surface"}`}
-    >
-      <View className="flex-row items-center gap-3">
-        <Text className="text-xl text-primary">{incoming ? "↙" : "↗"}</Text>
-        <Text className="text-sm font-bold text-ink">{label}</Text>
-      </View>
-      <Text
-        className="pl-9 text-3xl font-extrabold tracking-tight text-ink"
-        style={{ fontVariant: [designTokens.typography.numericVariant] }}
-      >
-        R$ 0,00
-      </Text>
-      <Text className="pl-9 text-xs leading-5 text-muted">{helper}</Text>
-    </View>
-  );
-}
-
-export function HomeScreen({ onOpenPeople }: { onOpenPeople?: () => void }) {
-  return (
-    <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 136 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View className="px-5 pb-8 pt-4">
-          <View className="mb-10 flex-row items-center gap-2">
-            <View className="h-11 w-11 items-center justify-center rounded-xl bg-primary">
-              <Text className="text-xl font-extrabold text-white">R</Text>
-            </View>
-            <Text className="text-xl font-extrabold tracking-tight text-primary-strong">
-              Receivy
-            </Text>
-          </View>
-
-          <Text className="mb-3 text-xs font-bold uppercase tracking-widest text-primary">
-            Sua visão de hoje
-          </Text>
-          <Text className="text-4xl font-extrabold leading-10 tracking-tight text-primary-strong">
-            O que entra. O que sai. No mesmo lugar.
-          </Text>
-          <Text className="mt-4 text-base leading-6 text-muted">
-            Cobranças criadas por você e valores vinculados ao seu e-mail aparecem
-            juntos, sempre com a direção identificada.
-          </Text>
-
-          <View className="mt-8 overflow-hidden rounded-3xl border border-outline/60 bg-surface">
-            <BalanceCard
-              direction="in"
-              label="A receber"
-              helper="Nenhuma cobrança pendente"
-            />
-            <View className="h-px bg-outline/45" />
-            <BalanceCard
-              direction="out"
-              label="A pagar"
-              helper="Nenhum valor vinculado"
-            />
-          </View>
-
-          <View className="mt-10 flex-row gap-5">
-            <View className="items-center">
-              <View className="h-3 w-3 rounded-full border-2 border-canvas bg-primary" />
-              <View className="w-px flex-1 bg-outline" />
-            </View>
-            <View className="flex-1 pb-10">
-              <Text className="mb-5 text-3xl text-primary">▦</Text>
-              <Text className="text-sm font-bold text-primary">Timeline</Text>
-              <Text className="mt-2 text-3xl font-semibold leading-9 tracking-tight text-primary-strong">
-                Sua timeline começa aqui
-              </Text>
-              <Text className="mt-3 text-sm leading-6 text-muted">
-                Crie uma cobrança ou entre com o e-mail em que recebeu uma. Os
-                próximos vencimentos serão organizados por data.
-              </Text>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-
-      <Pressable
-        accessibilityLabel="Nova cobrança"
-        accessibilityRole="button"
-        className="absolute bottom-24 right-5 h-14 w-14 items-center justify-center rounded-2xl bg-primary"
-      >
-        <Text className="text-3xl font-light text-white">+</Text>
-      </Pressable>
-
-      <View className="absolute bottom-0 left-0 right-0 flex-row border-t border-outline/45 bg-surface px-1 pb-5 pt-2">
-        {navigation.map(([icon, label], index) => (
-          <Pressable
-            accessibilityRole="button"
-            onPress={label === "Contatos" ? onOpenPeople : undefined}
-            className={`flex-1 items-center gap-1 rounded-xl py-2 ${index === 0 ? "bg-primary-soft/55" : ""}`}
-            key={label}
-          >
-            <Text className={index === 0 ? "text-lg text-primary" : "text-lg text-muted"}>
-              {icon}
-            </Text>
-            <Text
-              className={
-                index === 0
-                  ? "text-[10px] font-bold text-primary"
-                  : "text-[10px] font-semibold text-muted"
-              }
-            >
-              {label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </SafeAreaView>
-  );
+export function HomeScreen({ client = financialClient, onOpenPeople, onOpenCharge, onCreateCharge, onOpenSettings }: { client?: Pick<FinancialClient, "timeline">; onOpenPeople?: () => void; onOpenCharge?: (id: string) => void; onCreateCharge?: () => void; onOpenSettings?: () => void }) {
+  const [data, setData] = useState<TimelinePage | null>(null); const [error, setError] = useState(""); const [loading, setLoading] = useState(true); const [filter, setFilter] = useState("");
+  const load = useCallback(async (query = filter) => { setLoading(true); setError(""); try { setData(await client.timeline(query)); } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível carregar sua timeline."); } finally { setLoading(false); } }, [client, filter]);
+  useEffect(() => { void client.timeline().then(setData).catch(reason => setError(reason instanceof Error ? reason.message : "Não foi possível carregar sua timeline.")).finally(() => setLoading(false)); }, [client]);
+  return <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}><ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 144 }} showsVerticalScrollIndicator={false}><View className="px-5 pb-8 pt-4">
+    <View className="mb-8 flex-row items-center gap-2"><View className="h-11 w-11 items-center justify-center rounded-xl bg-primary"><Text className="text-xl font-extrabold text-white">R</Text></View><Text className="text-xl font-extrabold text-primary-strong">Receivy</Text></View>
+    <Text className="mb-3 text-sm font-bold text-primary">Sua visão de hoje</Text><Text className="text-4xl font-extrabold leading-10 tracking-tight text-primary-strong">O que entra. O que sai. No mesmo lugar.</Text><Text className="mt-4 text-base leading-6 text-muted">Cada valor mostra claramente se você recebe ou paga.</Text>
+    <View className="mt-8 overflow-hidden rounded-3xl border border-outline/60 bg-surface"><View className="gap-2 bg-primary-soft/35 px-6 py-6"><Text className="text-sm font-bold text-ink">↙ A receber</Text><Text className="text-3xl font-extrabold text-ink">{data ? formatMoney(data.summary.receivable) : "—"}</Text><Text className="text-xs text-muted">Valores que outras pessoas devem a você</Text></View><View className="h-px bg-outline/45" /><View className="gap-2 px-6 py-6"><Text className="text-sm font-bold text-ink">↗ A pagar</Text><Text className="text-3xl font-extrabold text-ink">{data ? formatMoney(data.summary.payable) : "—"}</Text><Text className="text-xs text-muted">Valores vinculados à sua conta</Text></View></View>{data && <View className="mt-3 flex-row flex-wrap gap-3"><Text className="text-sm text-muted"><Text className="font-bold text-ink">{formatMoney(data.summary.pending)}</Text> pendentes no total</Text><Text className="text-sm text-muted"><Text className="font-bold text-ink">{formatMoney(data.summary.overdue)}</Text> em atraso</Text></View>}
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5 mt-6" contentContainerClassName="gap-2 px-5">{[["Todos", ""], ["A receber", "direction=receivable"], ["A pagar", "direction=payable"], ["Pendentes", "status=pending"], ["Recorrências", "source=recurrence"]].map(([label, value]) => <Pressable key={label} accessibilityRole="button" onPress={() => { setFilter(value); void load(value); }} className={`min-h-12 justify-center rounded-full border px-4 ${filter === value ? "border-primary bg-primary-soft" : "border-outline bg-surface"}`}><Text className="font-semibold text-primary-strong">{label}</Text></Pressable>)}</ScrollView>
+    {loading && <ActivityIndicator accessibilityLabel="Carregando timeline" className="my-8" color="#0B513D" />}{error ? <View className="my-6 gap-2 rounded-xl bg-red-50 p-4"><Text accessibilityRole="alert" className="text-red-700">{error}</Text><Pressable accessibilityRole="button" onPress={() => void load()} className="min-h-12 justify-center"><Text className="font-bold text-red-700">Tentar novamente</Text></Pressable></View> : null}
+    {!loading && !error && data?.items.length === 0 && <View className="mt-9 flex-row gap-5"><View className="items-center"><View className="h-3 w-3 rounded-full bg-primary" /><View className="w-px flex-1 bg-outline" /></View><View className="flex-1 pb-10"><Text className="text-sm font-bold text-primary">Timeline</Text><Text className="mt-2 text-3xl font-semibold text-primary-strong">Sua timeline começa aqui</Text><Text className="mt-3 text-sm leading-6 text-muted">Crie uma cobrança ou entre com o e-mail em que recebeu uma.</Text></View></View>}
+    <View className="mt-8 gap-3">{data?.items.map((item, index) => item.kind === "charge" ? <Pressable key={item.charge.id} accessibilityRole="button" accessibilityLabel={`Abrir cobrança ${item.charge.description}`} onPress={() => onOpenCharge?.(item.charge.id)} className="min-h-24 gap-2 rounded-2xl border border-outline bg-surface p-4"><View className="flex-row justify-between gap-3"><Text className={`rounded-full px-2 py-1 text-xs font-bold ${item.direction === "receivable" ? "bg-primary-soft text-primary-strong" : "bg-violet-100 text-violet-900"}`}>{item.direction === "receivable" ? "A receber" : "A pagar"}</Text><Text className="font-extrabold text-ink">{formatMoney(item.charge.amount)}</Text></View><Text className="text-lg font-bold text-ink">{item.charge.description}</Text><Text className="text-sm text-muted">Vence em {new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${item.charge.dueDate}T00:00:00Z`))}</Text></Pressable> : <View key={`${item.kind}-${index}`} className="rounded-2xl border border-outline bg-surface p-4"><Text className="font-bold text-ink">{item.kind === "payment" ? "Pagamento registrado" : item.kind === "proof" ? "Comprovante" : item.preview.description}</Text></View>)}</View>
+  </View></ScrollView>
+  <Pressable accessibilityLabel="Nova cobrança" accessibilityRole="button" onPress={onCreateCharge} className="absolute bottom-24 right-5 h-14 w-14 items-center justify-center rounded-2xl bg-primary"><Text className="text-3xl text-white">+</Text></Pressable>
+  <View className="absolute bottom-0 left-0 right-0 flex-row border-t border-outline/45 bg-surface px-1 pb-5 pt-2">{[["≡", "Timeline"], ["↻", "Recorrências"], ["◉", "Contatos"], ["⚙", "Ajustes"]].map(([icon, label], index) => <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={label === "Contatos" ? onOpenPeople : label === "Ajustes" ? onOpenSettings : undefined} className={`flex-1 items-center gap-1 rounded-xl py-2 ${index === 0 ? "bg-primary-soft/55" : ""}`} key={label}><Text className="text-lg text-primary">{icon}</Text><Text className="text-[10px] font-bold text-primary">{label}</Text></Pressable>)}</View>
+  </SafeAreaView>;
 }

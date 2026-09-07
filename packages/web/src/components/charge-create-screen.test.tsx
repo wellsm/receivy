@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
@@ -8,6 +8,7 @@ vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 describe("ChargeCreateScreen", () => {
+  const deferred = <T,>() => { let reject!: (reason: unknown) => void; let resolve!: (value: T) => void; const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; }); return { promise, reject, resolve }; };
   it("freezes the submitted body and idempotency key across an uncertain retry", async () => {
     const posts: RequestInit[] = [];
     vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
@@ -91,5 +92,33 @@ describe("ChargeCreateScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Contato arquivado.");
     expect(screen.getByLabelText("Descrição")).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Tentar criar novamente" })).not.toBeInTheDocument();
+  });
+
+  it.each([401, 429])("retains an uncertain attempt through replay status %s", async status => {
+    const replay = deferred<Response>(); const posts: RequestInit[] = [];
+    vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
+      if (path.startsWith("/api/people")) return Response.json({ people: [{ id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01" }], nextCursor: null });
+      if (path === "/api/financial/payment-methods") return Response.json({ paymentMethods: [] });
+      posts.push(init);
+      if (posts.length === 1) return Response.json({ message: "Resposta perdida." }, { status: 503 });
+      if (posts.length === 2) return replay.promise;
+      return Response.json({ id: "expense-1", charges: [{ id: "charge-1" }] }, { status: 201 });
+    });
+    const navigate = vi.fn(); render(<ChargeCreateScreen navigate={navigate} />); const user = userEvent.setup();
+    await user.click(await screen.findByRole("checkbox", { name: /Ana/ }));
+    await user.type(screen.getByLabelText("Valor total"), "10,00");
+    await user.type(screen.getByLabelText("Descrição"), "Original");
+    await user.click(screen.getByRole("button", { name: "Revisar cobrança" }));
+    await user.click(screen.getByRole("button", { name: "Criar cobrança" }));
+    await user.click(await screen.findByRole("button", { name: "Tentar criar novamente" }));
+    expect(screen.getByLabelText("Descrição")).toBeDisabled();
+    await act(async () => { replay.resolve(Response.json({ message: "Reautentique ou aguarde." }, { status })); await Promise.resolve(); });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reautentique ou aguarde.");
+    expect(screen.getByLabelText("Descrição")).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Tentar criar novamente" }));
+    expect(navigate).toHaveBeenCalledWith("/charges/charge-1");
+    expect(posts).toHaveLength(3);
+    expect(posts[2]?.body).toBe(posts[0]?.body);
+    expect((posts[2]?.headers as Record<string, string>)["idempotency-key"]).toBe((posts[0]?.headers as Record<string, string>)["idempotency-key"]);
   });
 });

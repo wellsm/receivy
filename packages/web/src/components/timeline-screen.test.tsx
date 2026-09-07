@@ -69,4 +69,22 @@ describe("TimelineScreen", () => {
     await act(async () => { oldPage.resolve(Response.json({ summary, items: [charge("stale-page", "Página obsoleta")], nextCursor: null })); await Promise.resolve(); });
     expect(screen.queryByText("Página obsoleta")).not.toBeInTheDocument();
   });
+
+  it("invalidates the old cursor when switching filters fails", async () => {
+    vi.mocked(browserFetch).mockImplementation(async path => {
+      if (path === "/api/financial/timeline") return Response.json({ summary, items: [charge("a", "Item do filtro A")], nextCursor: "cursor-a" });
+      if (path === "/api/financial/timeline?direction=payable") return Response.json({ message: "Filtro indisponível." }, { status: 503 });
+      return Response.json({ summary, items: [charge("mixed", "Item misturado")], nextCursor: null });
+    });
+    render(<TimelineScreen />); const user = userEvent.setup();
+    await screen.findByText("Item do filtro A");
+    await user.click(screen.getByRole("button", { name: "A pagar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Filtro indisponível.");
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Item do filtro A")).not.toBeInTheDocument();
+    expect(screen.queryByText("Item misturado")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sua timeline começa aqui")).not.toBeInTheDocument();
+    expect(screen.getAllByText("—")).toHaveLength(2);
+    expect(browserFetch).toHaveBeenCalledTimes(2);
+  });
 });

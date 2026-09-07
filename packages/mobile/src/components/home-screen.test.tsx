@@ -61,4 +61,18 @@ describe("HomeScreen", () => {
     await act(async () => { oldPage.resolve({ summary, items: [item("stale", "Página obsoleta", "pending")], nextCursor: null }); await Promise.resolve(); });
     expect(screen.queryByText("Página obsoleta")).toBeNull();
   });
+
+  it("invalidates the old cursor when a filter switch fails", async () => {
+    const timeline = jest.fn().mockResolvedValueOnce({ summary, items: [item("a", "Item do filtro A", "pending")], nextCursor: "cursor-a" }).mockRejectedValueOnce(new Error("Filtro indisponível.")).mockResolvedValueOnce({ summary, items: [item("mixed", "Item misturado", "pending")], nextCursor: null });
+    await render(<HomeScreen client={{ timeline }} />);
+    await screen.findByText("Item do filtro A");
+    await fireEvent.press(screen.getByRole("button", { name: "A pagar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Filtro indisponível.");
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).toBeNull();
+    expect(screen.queryByText("Item do filtro A")).toBeNull();
+    expect(screen.queryByText("Item misturado")).toBeNull();
+    expect(screen.queryByText("Sua timeline começa aqui")).toBeNull();
+    expect(screen.getAllByText("—")).toHaveLength(2);
+    expect(timeline).toHaveBeenCalledTimes(2);
+  });
 });

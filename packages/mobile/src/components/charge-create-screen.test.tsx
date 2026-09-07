@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
 import { ChargeCreateScreen } from "./charge-create-screen";
 import { FinancialRequestError } from "@/financial/client";
@@ -77,5 +77,27 @@ describe("ChargeCreateScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("Percentual de Minha parte"), "66,67");
     await fireEvent.press(screen.getByRole("button", { name: "Revisar cobrança" }));
     expect(await screen.findByText("Revisão exata")).toBeOnTheScreen();
+  });
+
+  it.each([401, 429])("retains an uncertain attempt through replay status %s", async status => {
+    let rejectReplay!: (reason: unknown) => void;
+    const replay = new Promise<never>((_, reject) => { rejectReplay = reject; });
+    const createExpense = jest.fn().mockRejectedValueOnce(new Error("Resposta perdida.")).mockImplementationOnce(() => replay).mockResolvedValueOnce({ charges: [{ id: "charge-1" }] });
+    const onCreated = jest.fn();
+    await render(<ChargeCreateScreen client={client(createExpense)} people={{ list: jest.fn().mockResolvedValue({ people: [ana], nextCursor: null }) }} onCreated={onCreated} />);
+    await fireEvent.press(await screen.findByRole("checkbox", { name: "Ana" }));
+    await fireEvent.changeText(screen.getByLabelText("Valor total"), "10,00");
+    await fireEvent.changeText(screen.getByLabelText("Descrição"), "Original");
+    await fireEvent.press(screen.getByRole("button", { name: "Revisar cobrança" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Criar cobrança" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Tentar criar novamente" }));
+    expect(screen.getByLabelText("Descrição")).toBeDisabled();
+    await act(async () => { rejectReplay(new FinancialRequestError("Reautentique ou aguarde.", status)); await Promise.resolve(); });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reautentique ou aguarde.");
+    expect(screen.getByLabelText("Descrição")).toBeDisabled();
+    await fireEvent.press(screen.getByRole("button", { name: "Tentar criar novamente" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("charge-1"));
+    expect(createExpense).toHaveBeenCalledTimes(3);
+    expect(createExpense.mock.calls[2]).toEqual(createExpense.mock.calls[0]);
   });
 });

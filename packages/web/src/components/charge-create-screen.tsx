@@ -6,7 +6,7 @@ import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
 
 function freshKey() { return globalThis.crypto.randomUUID(); }
-type SubmittedAttempt = { input: ExpenseInput; idempotencyKey: string };
+type SubmittedAttempt = { input: ExpenseInput; idempotencyKey: string; hadUncertainOutcome: boolean };
 
 export function ChargeCreateScreen({ navigate }: { navigate?: (path: string) => void }) {
   const [people, setPeople] = useState<Person[]>([]); const [peopleCursor, setPeopleCursor] = useState<string | null>(null); const [peopleQuery, setPeopleQuery] = useState(""); const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -31,20 +31,20 @@ export function ChargeCreateScreen({ navigate }: { navigate?: (path: string) => 
   function startReview() { setError(""); if (!selected.length) return setError("Selecione ao menos um contato."); if (!plan) return setError(mode === "percentage" ? "Confira os percentuais: a soma deve ser 100%." : "Confira o valor e o rateio informados."); setReviewing(true); }
   async function create(retry?: SubmittedAttempt) {
     if (!retry && !plan) return;
-    const attempt = retry ?? { input: { description: description.trim() || undefined, totalCents: plan!.totalCents, installmentCount: Number(installments), firstDueDate: dueDate, split: plan!.split, paymentMethodId: methodId || undefined }, idempotencyKey: freshKey() };
+    const attempt = retry ?? { input: { description: description.trim() || undefined, totalCents: plan!.totalCents, installmentCount: Number(installments), firstDueDate: dueDate, split: plan!.split, paymentMethodId: methodId || undefined }, idempotencyKey: freshKey(), hadUncertainOutcome: false };
     if (!retry) setSubmittedAttempt(attempt);
-    setBusy(true); setError(""); setUncertain(false); let resultUncertain = true;
+    setBusy(true); setError(""); if (!retry) setUncertain(false); let resultUncertain = true;
     try {
       const response = await browserFetch("/api/financial/expenses", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": attempt.idempotencyKey }, body: JSON.stringify(attempt.input) });
       if (!response.ok) { resultUncertain = response.status >= 500; throw new Error(await responseMessage(response, "Não foi possível criar a cobrança.")); }
       const detail = await response.json() as { charges: { id: string }[] }; const id = detail.charges[0]?.id;
-      if (!id) throw new Error("A cobrança foi criada, mas o detalhe não foi retornado."); (navigate ?? (path => window.location.assign(path)))(`/charges/${id}`);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível criar a cobrança."); setUncertain(resultUncertain); if (!resultUncertain) setSubmittedAttempt(null); }
+      if (!id) throw new Error("A cobrança foi criada, mas o detalhe não foi retornado."); setSubmittedAttempt(null); setUncertain(false); (navigate ?? (path => window.location.assign(path)))(`/charges/${id}`);
+    } catch (reason) { const mustPreserveAttempt = attempt.hadUncertainOutcome || resultUncertain; setError(reason instanceof Error ? reason.message : "Não foi possível criar a cobrança."); setUncertain(mustPreserveAttempt); setSubmittedAttempt(mustPreserveAttempt ? { ...attempt, hadUncertainOutcome: true } : null); }
     finally { setBusy(false); }
   }
   async function loadMorePeople() { if (!peopleCursor) return; setError(""); try { const response = await browserFetch(`/api/people?archived=false&cursor=${encodeURIComponent(peopleCursor)}`); if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível carregar contatos.")); const page = await response.json() as PeoplePage; setPeople(current => [...current, ...page.people.filter(person => !current.some(item => item.id === person.id))]); setPeopleCursor(page.nextCursor); } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível carregar contatos."); } }
   const visiblePeople = people.filter(person => person.name.toLocaleLowerCase("pt-BR").includes(peopleQuery.toLocaleLowerCase("pt-BR")) || person.email?.toLocaleLowerCase("pt-BR").includes(peopleQuery.toLocaleLowerCase("pt-BR")));
-  const locked = uncertain && Boolean(submittedAttempt);
+  const locked = Boolean(submittedAttempt);
   return <section className="financial-page"><header><p className="date-line">Nova cobrança</p><h1>Divida com clareza antes de cobrar.</h1><p>Seu rascunho permanece aqui se a rede falhar.</p></header>
     <div className="creation-layout"><form className="creation-form" onSubmit={event => { event.preventDefault(); startReview(); }}>
       <fieldset disabled={locked}><legend>1. Pessoas</legend><label htmlFor="people-search">Buscar contato</label><input id="people-search" value={peopleQuery} onChange={event => setPeopleQuery(event.target.value)} /><div className="person-picker">{visiblePeople.map(person => <label key={person.id}><input type="checkbox" checked={selected.includes(person.id)} onChange={event => setSelected(old => event.target.checked ? [...old, person.id] : old.filter(id => id !== person.id))} /><span className="person-avatar">{person.name[0]}</span>{person.name}</label>)}</div>{peopleCursor && <button className="secondary-button" type="button" onClick={() => void loadMorePeople()}>Carregar mais contatos</button>}<label className="owner-toggle"><input type="checkbox" checked={includeOwner} onChange={event => setIncludeOwner(event.target.checked)} /> Incluir minha parte</label></fieldset>

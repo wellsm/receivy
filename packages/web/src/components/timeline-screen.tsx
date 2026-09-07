@@ -52,7 +52,7 @@ export function TimelineScreen() {
   const generation = useRef(0);
   const load = useCallback(async (nextFilter = filter, cursor?: string) => {
     const requestGeneration = cursor ? generation.current : ++generation.current;
-    setLoading(true); setError("");
+    setLoading(true); setError(""); if (!cursor) setData(null);
     const query = new URLSearchParams(dateQuery(nextFilter));
     if (cursor) query.set("cursor", cursor);
     try {

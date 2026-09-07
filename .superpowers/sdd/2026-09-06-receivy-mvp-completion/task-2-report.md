@@ -76,8 +76,8 @@ All eight independent-review findings were reproduced and addressed without chan
 API semantics:
 
 - Uncertain expense attempts now freeze both the submitted DTO and idempotency key,
-  lock every editable control, and only expose exact replay. Typed 4xx/422 rejection
-  unlocks the draft and does not create a retry impasse.
+  lock every editable control, and only expose exact replay. An initial typed 4xx/422
+  rejection unlocks the draft and does not create a retry impasse.
 - Both people pickers retain `nextCursor`, load subsequent pages, preserve selected
   contacts, and search the accumulated pages locally.
 - Percentages use one strict integer basis-point parser: comma and dot decimals with
@@ -121,6 +121,33 @@ API semantics:
 - `pnpm verify` completed successfully: workspace contract; lint 4/4; types 4/4;
   common 54/54, API 55/55, web 50/50, native 27/27 (186 tests total); builds 4/4.
   The final SDK check acknowledged the existing Expo 56 Hermes warning as required.
+
+## Review fix round 2
+
+The second scoped review refined two failure-state contracts without changing API
+semantics:
+
+- A definitive rejection only unlocks an attempt when that attempt has never had an
+  uncertain outcome. Once the initial request may have committed, a later replay
+  returning 401 or 429 cannot prove that the original failed, so web and native keep
+  the original DTO/idempotency key and keep all draft controls locked throughout the
+  replay. Recovery can only replay that exact pair until the server resolves it.
+- Starting a new timeline filter now clears the previous generation's data and
+  cursor immediately. If the new filter fails, both clients show the explicit error,
+  unavailable (`—`) balances, no empty-state claim, and no stale load-more action.
+
+### Round-2 RED / GREEN evidence
+
+- `pnpm --filter @receivy/web test -- charge-create-screen.test.tsx timeline-screen.test.tsx`:
+  RED 3 failures / 50 passes (editing unlocked during 401 and 429 replays; failed
+  filter retained the old row/cursor). GREEN 53/53 after preserving the uncertain
+  attempt state and invalidating the old timeline page.
+- `pnpm --filter @receivy/mobile test -- charge-create-screen.test.tsx home-screen.test.tsx`:
+  RED 3 failures / 9 passes for the same native cases. GREEN 12/12. The 401/429
+  regressions also prove the third request receives the exact first DTO/key pair.
+- Focused post-fix gates: web and mobile lint plus `check-types` exited 0; Next
+  production build and Expo web export exited 0. The native tests emitted only the
+  existing Watchman recrawl warning.
 
 ## Self-review and known boundaries
 

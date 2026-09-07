@@ -4,6 +4,7 @@ import { planExpenseCharges, type ExpenseDetail, type ExpenseInput, type Expense
 import type { DbClient } from "../database";
 import { CHARGE_SELECT, chargeDto, type ChargeRow } from "../charges/repository";
 import { expenseRequestFingerprint, normalizeExpenseInput } from "./request";
+import { getPreferences } from "../notifications/repository";
 
 const EXPENSE_SELECT = { id: true, owner_id: true, type: true, description: true, total_cents: true, currency: true,
   installment_count: true, first_due_date: true, payment_method_id: true, idempotency_key: true, request_hash: true,
@@ -55,6 +56,8 @@ export async function prepareChargeMaterialization(db: DbClient, ownerId: string
 export async function persistChargePlan(db: DbClient, ownerId: string, plan: ExpensePlan, source: MaterializationSource,
   context: ChargeMaterializationContext, now: string): Promise<ChargeRow[]> {
   const rows: ChargeRow[] = [];
+  const owner = source.source === "expense" ? await db.users.findOne({ select: { timezone: true }, where: { id: ownerId } }) : undefined;
+  const notificationSchedule = source.source === "expense" ? { offsets: (await getPreferences(db, ownerId)).reminderOffsets, timezone: owner?.timezone ?? "America/Sao_Paulo" } : undefined;
   for (const item of plan.charges) {
     const recipient = context.recipients.get(item.personId);
     if (!recipient) throw new HttpNotFoundError("Contato indisponível.");
@@ -77,7 +80,7 @@ export async function persistChargePlan(db: DbClient, ownerId: string, plan: Exp
       aggregate_id: row.id, payload, created_at: now } });
     await db.outbox_events.insertOne({ select: { id: true }, data: { id: crypto.randomUUID(), type: "charge.created",
       aggregate_type: "charge", aggregate_id: row.id, ...(recipient.linkedUserId ? { recipient_user: { id: recipient.linkedUserId } } : {}),
-      ...(recipient.email ? { recipient_email: recipient.email } : {}), payload, state: "pending", attempts: 0,
+      ...(recipient.email ? { recipient_email: recipient.email } : {}), payload: JSON.stringify({ chargeId: row.id, source: row.source, notificationSchedule }), state: "pending", attempts: 0,
       available_at: now, created_at: now, updated_at: now } });
   }
   return rows;

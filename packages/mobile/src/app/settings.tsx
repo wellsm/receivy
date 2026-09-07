@@ -1,3 +1,11 @@
 import { useRouter } from "expo-router";
 import { PixSettingsScreen } from "@/components/pix-settings-screen";
-export default function SettingsRoute() { const router = useRouter(); return <PixSettingsScreen onBack={() => router.replace("/")} />; }
+import { NotificationSettings } from "@/components/notification-settings";
+import { useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+export default function SettingsRoute() {
+  const router = useRouter(); const [notifications, setNotifications] = useState(false);
+  return <View className="flex-1 bg-canvas"><SafeAreaView edges={["top"]}><Pressable accessibilityRole="button" onPress={() => setNotifications(value => !value)} className="min-h-12 justify-center px-5"><Text className="font-bold text-primary">{notifications ? "← Chaves Pix" : "Configurar notificações →"}</Text></Pressable></SafeAreaView>
+    {notifications ? <ScrollView contentContainerClassName="px-5 pb-12"><NotificationSettings /></ScrollView> : <PixSettingsScreen onBack={() => router.replace("/")} />}</View>;
+}

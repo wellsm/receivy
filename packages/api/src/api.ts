@@ -10,6 +10,7 @@ import type { PublicRoutes } from "./routes/public";
 import type { TimelineRoutes } from "./routes/timeline";
 import type { ProofRoutes } from "./routes/proofs";
 import type { RecurrenceRoutes } from "./routes/recurrences";
+import type { NotificationRoutes } from "./routes/notifications";
 
 /** Receivy HTTP API. */
 export declare class Api extends Http.Service {
@@ -32,6 +33,7 @@ export declare class Api extends Http.Service {
     ...TimelineRoutes,
     ...ProofRoutes,
     ...RecurrenceRoutes,
+    ...NotificationRoutes,
   ];
 
   cors: Http.UseCors<{

@@ -1,16 +1,16 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, writeFile, unlink } from "node:fs/promises";
+import { mkdir, writeFile, unlink, opendir, stat } from "node:fs/promises";
 import { createServer } from "node:http";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { MAX_PROOF_BYTES, readBounded, type ProofMime } from "./validation.ts";
-import type { ProofStorage } from "./storage";
+import type { ReconciliableProofStorage } from "./storage";
 
 type Config = { directory: string; secret: string; baseUrl: string };
 const KEY = /^(temporary|proofs)\/[a-f0-9-]{36}\/[a-f0-9-]{36}$/;
 function file(directory: string, key: string) { if (!isAbsolute(directory) || !KEY.test(key)) throw new Error("Invalid local storage path."); return join(directory, key); }
 function signature(secret: string, payload: string) { if (secret.length < 32) throw new Error("Local storage signing secret is not configured."); return createHmac("sha256", secret).update(payload).digest("hex"); }
-export function localProofStorage(config: Config): ProofStorage {
+export function localProofStorage(config: Config): ReconciliableProofStorage {
   const url = new URL(config.baseUrl);
   if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || url.protocol !== "http:" || !isAbsolute(config.directory)) throw new Error("Local proof storage requires a loopback HTTP server and absolute directory.");
   signature(config.secret, "configuration-check");
@@ -20,6 +20,21 @@ export function localProofStorage(config: Config): ProofStorage {
     return `${config.baseUrl}/objects?grant=${payload}.${signature(config.secret, payload)}`;
   }
   return {
+    async list(cursor) {
+      await mkdir(config.directory, { recursive: true });
+      const directory = await opendir(config.directory, { recursive: true });
+      const objects: { key: string; modifiedAt: string }[] = [];
+      let position = 0; const start = cursor ? Number(cursor) : 0;
+      if (!Number.isSafeInteger(start) || start < 0) throw new Error("Invalid local listing cursor.");
+      for await (const entry of directory) {
+        if (!entry.isFile()) continue;
+        if (position++ < start) continue;
+        const path = join(entry.parentPath, entry.name); const key = relative(config.directory, path);
+        if (KEY.test(key)) objects.push({ key, modifiedAt: (await stat(path)).mtime.toISOString() });
+        if (objects.length === 100) return { objects, cursor: String(position) };
+      }
+      return { objects, cursor: null };
+    },
     uploadUrl: async (key, mime, size) => { if (!key.startsWith("temporary/") || size > MAX_PROOF_BYTES || size <= 0) throw new Error("Invalid upload."); return sign(key, "PUT", mime, size, 300); },
     read: key => readBounded(createReadStream(file(config.directory, key))),
     async write(key, bytes) { const path = file(config.directory, key); await mkdir(dirname(path), { recursive: true }); await writeFile(path, bytes, { flag: "wx", mode: 0o600 }); },

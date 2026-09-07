@@ -19,11 +19,22 @@ import type { ActivityEventSchema } from "./schemas/activity-event";
 import type { OutboxEventSchema } from "./schemas/outbox-event";
 import type { PaymentProofSchema, UploadIntentSchema, ProofThrottleSchema } from "./schemas/payment-proof";
 import type { RecurrenceSchema, RecurrenceAllocationSchema, RecurrenceReminderSchema, RecurrenceOccurrenceSchema } from "./schemas/recurrence";
+import type { NotificationPreferenceSchema, DeviceTokenSchema, NotificationDeliverySchema } from "./schemas/notification";
+import type { StorageDeletionSchema, StorageCleanupCursorSchema } from "./schemas/storage-deletion";
 
 export declare class Db extends Database.Service<PostgresEngine> {
   client: Client<Db>;
 
   tables: [
+    Database.UseTable<{ name: "storage_deletions"; schema: StorageDeletionSchema;
+      indexes: { id: Index.Primary; object_key: Index.Unique; charge_id: Index.Secondary; "state:available_at": Index.Secondary } }>,
+    Database.UseTable<{ name: "storage_cleanup_cursors"; schema: StorageCleanupCursorSchema; indexes: { id: Index.Primary } }>,
+    Database.UseTable<{ name: "notification_preferences"; schema: NotificationPreferenceSchema;
+      relations: { "user_id@user": "users:id" }; indexes: { id: Index.Primary; user_id: Index.Unique } }>,
+    Database.UseTable<{ name: "device_tokens"; schema: DeviceTokenSchema;
+      relations: { "user_id@user": "users:id" }; indexes: { id: Index.Primary; token: Index.Unique; "user_id:installation_id": Index.Unique } }>,
+    Database.UseTable<{ name: "notification_deliveries"; schema: NotificationDeliverySchema;
+      indexes: { id: Index.Primary; idempotency_key: Index.Unique; charge_id: Index.Secondary; "state:available_at": Index.Secondary } }>,
     Database.UseTable<{ name: "recurrences"; schema: RecurrenceSchema;
       relations: { "owner_id@owner": "users:id"; "payment_method_id@payment_method": "payment_methods:id" };
       indexes: { id: Index.Primary; "owner_id:idempotency_key": Index.Unique; owner_id: Index.Secondary; state: Index.Secondary } }>,

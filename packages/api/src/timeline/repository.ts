@@ -3,6 +3,7 @@ import { HttpNotFoundError, HttpUnprocessableEntityError } from "@ez4/gateway";
 import type { ChargeState, Direction, PersonLedger, TimelinePage, TimelineItem } from "@receivy/common";
 import type { DbClient } from "../database";
 import { CHARGE_SELECT, chargeDto, type ChargeRow } from "../charges/repository";
+import { listRecurrences } from "../recurrences/repository";
 
 export type TimelineFilters = {
   cursor?: string;
@@ -78,13 +79,19 @@ function directionFor(row: ChargeRow, userId: string): Direction { return row.cr
 export async function getTimeline(db: DbClient, userId: string, filters: TimelineFilters): Promise<TimelinePage> {
   const user = await actor(db, userId);
   const today = localDate(user.timezone);
-  const pageQuery = await db.charges.findMany({ select: CHARGE_SELECT, where: visibleWhere(userId, user.verified_email, filters, true, today),
-    order: { due_date: Order.Asc, id: Order.Asc }, take: 51 });
-  const page = pageQuery.records.slice(0, 50);
   const allQuery = await db.charges.findMany({ select: CHARGE_SELECT, where: visibleWhere(userId, user.verified_email, filters, false, today) });
   const all = allQuery.records;
   const active = all.filter(row => row.state === "pending");
-  const next = pageQuery.records.length > 50 ? page.at(-1) : undefined;
+  const projected = filters.direction !== "payable" && filters.source !== "expense" && (!filters.status || filters.status === "pending")
+    ? (await listRecurrences(db, userId)).flatMap(r => r.previews).filter(p => (!filters.from || p.occurrenceDate >= filters.from) && (!filters.to || p.occurrenceDate <= filters.to)) : [];
+  const primary = [...all.map(row => ({ dueDate: row.due_date, id: row.id, row, preview: undefined })),
+    ...projected.map(preview => ({ dueDate: preview.occurrenceDate, id: `recurrence:${preview.recurrenceId}:${preview.occurrenceDate}`, row: undefined, preview }))]
+    .sort((a, b) => a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const cursor = cursorDate(filters.cursor);
+  const remaining = primary.filter(item => !cursor || item.dueDate > cursor.dueDate || (item.dueDate === cursor.dueDate && item.id > cursor.id));
+  const primaryPage = remaining.slice(0, 50);
+  const page = primaryPage.flatMap(item => item.row ? [item.row] : []);
+  const next = remaining.length > 50 ? primaryPage.at(-1) : undefined;
   // Group financial history with its charge page, preserving charge-cursor pagination.
   const history: TimelineItem[] = [];
   for (const row of page) {
@@ -100,9 +107,9 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
   const receivableIds = active.filter(row => row.creditor_id === userId).map(row => row.id);
   const proofsToReview = receivableIds.length ? await db.payment_proofs.count({ where: { charge_id: { isIn: receivableIds }, state: "pending" } }) : 0;
   return {
-    items: [...page.map((row): TimelineItem => ({ kind: "charge", direction: directionFor(row, userId), charge: {
-      id: row.id, description: row.description, amount: money(row.amount_cents), dueDate: row.due_date, state: row.state,
-      source: row.source, installment: row.installment, installmentCount: row.installment_count,
+    items: [...primaryPage.map((item): TimelineItem => item.preview ? { kind: "recurrence_preview", direction: "receivable", preview: item.preview } : ({ kind: "charge", direction: directionFor(item.row!, userId), charge: {
+      id: item.row!.id, description: item.row!.description, amount: money(item.row!.amount_cents), dueDate: item.row!.due_date, state: item.row!.state,
+      source: item.row!.source, installment: item.row!.installment, installmentCount: item.row!.installment_count,
     } })), ...history],
     summary: {
       receivable: money(sum(active.filter(row => row.creditor_id === userId))),
@@ -111,7 +118,7 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
       pending: money(sum(active.filter(row => row.state === "pending"))),
       proofsToReview,
     },
-    nextCursor: next ? Buffer.from(JSON.stringify({ dueDate: next.due_date, id: next.id })).toString("base64url") : null,
+    nextCursor: next ? Buffer.from(JSON.stringify({ dueDate: next.dueDate, id: next.id })).toString("base64url") : null,
   };
 }
 

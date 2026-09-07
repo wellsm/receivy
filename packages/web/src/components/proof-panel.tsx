@@ -47,10 +47,14 @@ export function ProofPanel({ base, state, creditor = false, publicView = false, 
     return () => clearTimeout(timer);
   }, [intent]);
   useEffect(() => { if (!publicView) return; let stopped = false;
-    setRecoveryId(storedIntent());
     const check = async () => { const id = storedIntent(); if (!id) return;
       const status = await readPublicProofStatus(base, id);
-      if (status && !stopped && storedIntent() === id) showPublicStatus(status, id);
+      if (!stopped && storedIntent() === id) {
+        // Publish recovery state when the real external status lookup settles,
+        // including an unavailable lookup so manual verification stays possible.
+        setRecoveryId(id);
+        if (status) showPublicStatus(status, id);
+      }
     }; void check(); const timer = setInterval(() => void check(), 15_000); return () => { stopped = true; clearInterval(timer); };
   }, [base, publicView, showPublicStatus]);
   useEffect(() => { if (!publicView) void browserFetch(base).then(async response => {

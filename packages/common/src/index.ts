@@ -6,3 +6,4 @@ export * from "./domain/people";
 export * from "./domain/split";
 export * from "./domain/charge-plan";
 export * from "./domain/financial-form";
+export * from "./domain/recurrence";

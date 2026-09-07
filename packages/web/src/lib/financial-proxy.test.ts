@@ -3,6 +3,8 @@ import { isAllowedFinancialRoute } from "./financial-proxy";
 
 describe("financial BFF allowlist", () => {
   it.each([
+    ["GET", "recurrences"], ["POST", "recurrences"], ["GET", "recurrences/id"], ["PATCH", "recurrences/id"],
+    ["GET", "recurrences/id/preview"], ["POST", "recurrences/id/pause"], ["POST", "recurrences/id/reactivate"], ["POST", "recurrences/id/end"],
     ["GET", "timeline"], ["POST", "expenses"], ["GET", "expenses/expense-id"],
     ["GET", "payment-methods"], ["POST", "payment-methods"], ["PATCH", "payment-methods/method-id"],
     ["POST", "payment-methods/method-id/default"], ["POST", "payment-methods/method-id/archive"],

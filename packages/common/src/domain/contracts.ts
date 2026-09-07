@@ -46,7 +46,21 @@ export type RecurrencePreview = {
   description: string;
   amount: Money;
   occurrenceDate: string;
+  materializationDate?: string;
 };
+
+export type RecurrenceReminder = { offsetDays: number; channel: "auto"; enabled: boolean };
+export type RecurrenceInput = {
+  description?: string; totalCents: number; frequency: RecurrenceFrequency; day: number; month?: number;
+  startDate?: string; endDate?: string; timezone: string; paymentMethodId?: string;
+  split: import("./split").ExpenseSplit; reminders?: RecurrenceReminder[];
+};
+export type RecurrenceDetail = Omit<RecurrenceInput, "description" | "startDate" | "reminders"> & {
+  id: string; description: string; startDate: string; reminders: RecurrenceReminder[];
+  state: "active" | "paused" | "ended"; createdAt: string; updatedAt: string;
+  nextMaterialization: string | null; previews: RecurrencePreview[];
+};
+export type RecurrencesPage = { recurrences: RecurrenceDetail[] };
 
 export type TimelineItem =
   | { kind: "charge"; direction: Direction; charge: ChargeSummary }

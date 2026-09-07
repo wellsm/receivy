@@ -32,6 +32,21 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
     await client.expense_allocations.deleteMany({ where: { expense_id: { isIn: expenseIds } } });
     await client.expenses.deleteMany({ where: { id: { isIn: expenseIds } } });
   }
+  const rules = await client.recurrences.findMany({ select: { id: true }, where: { owner_id: { isIn: userIds } } });
+  const ruleIds = rules.records.map(row => row.id);
+  if (ruleIds.length) {
+    const occurrences = await client.recurrence_occurrences.findMany({ select: { id: true }, where: { recurrence_id: { isIn: ruleIds } } });
+    const occurrenceIds = occurrences.records.map(row => row.id);
+    if (occurrenceIds.length) {
+      await client.outbox_events.deleteMany({ where: { aggregate_id: { isIn: occurrenceIds } } });
+      await client.activity_events.deleteMany({ where: { aggregate_id: { isIn: occurrenceIds } } });
+    }
+    await client.recurrence_occurrences.deleteMany({ where: { recurrence_id: { isIn: ruleIds } } });
+    await client.recurrence_reminders.deleteMany({ where: { recurrence_id: { isIn: ruleIds } } });
+    await client.recurrence_allocations.deleteMany({ where: { recurrence_id: { isIn: ruleIds } } });
+    await client.activity_events.deleteMany({ where: { aggregate_id: { isIn: ruleIds } } });
+    await client.recurrences.deleteMany({ where: { id: { isIn: ruleIds } } });
+  }
   await client.payment_methods.deleteMany({ where: { owner_id: { isIn: userIds } } });
   if (personIds.length) {
     await client.person_contacts.deleteMany({ where: { person_id: { isIn: personIds } } });

@@ -18,11 +18,24 @@ import type { PublicLinkSchema } from "./schemas/public-link";
 import type { ActivityEventSchema } from "./schemas/activity-event";
 import type { OutboxEventSchema } from "./schemas/outbox-event";
 import type { PaymentProofSchema, UploadIntentSchema, ProofThrottleSchema } from "./schemas/payment-proof";
+import type { RecurrenceSchema, RecurrenceAllocationSchema, RecurrenceReminderSchema, RecurrenceOccurrenceSchema } from "./schemas/recurrence";
 
 export declare class Db extends Database.Service<PostgresEngine> {
   client: Client<Db>;
 
   tables: [
+    Database.UseTable<{ name: "recurrences"; schema: RecurrenceSchema;
+      relations: { "owner_id@owner": "users:id"; "payment_method_id@payment_method": "payment_methods:id" };
+      indexes: { id: Index.Primary; "owner_id:idempotency_key": Index.Unique; owner_id: Index.Secondary; state: Index.Secondary } }>,
+    Database.UseTable<{ name: "recurrence_allocations"; schema: RecurrenceAllocationSchema;
+      relations: { "recurrence_id@recurrence": "recurrences:id"; "person_id@person": "people:id" };
+      indexes: { id: Index.Primary; "recurrence_id:allocation_order": Index.Unique; recurrence_id: Index.Secondary; person_id: Index.Secondary } }>,
+    Database.UseTable<{ name: "recurrence_reminders"; schema: RecurrenceReminderSchema;
+      relations: { "recurrence_id@recurrence": "recurrences:id" };
+      indexes: { id: Index.Primary; "recurrence_id:offset_days": Index.Unique; recurrence_id: Index.Secondary } }>,
+    Database.UseTable<{ name: "recurrence_occurrences"; schema: RecurrenceOccurrenceSchema;
+      relations: { "recurrence_id@recurrence": "recurrences:id" };
+      indexes: { id: Index.Primary; "recurrence_id:occurrence_date": Index.Unique; recurrence_id: Index.Secondary } }>,
     Database.UseTable<{
       name: "payment_proofs"; schema: PaymentProofSchema;
       relations: { "charge_id@charge": "charges:id"; "sender_user_id@sender_user": "users:id"; "reviewer_id@reviewer": "users:id" };

@@ -1,4 +1,4 @@
-import type { ChargeDetail, ExpenseDetail, ExpenseInput, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage, ProofDetail, ProofUploadIntent, ProofUploadInput } from "@receivy/common";
+import type { ChargeDetail, ExpenseDetail, ExpenseInput, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage, ProofDetail, ProofUploadIntent, ProofUploadInput, RecurrenceInput, RecurrenceDetail, RecurrencesPage } from "@receivy/common";
 import { authClient } from "@/auth/client";
 
 type Options = { authenticatedFetch: (path: string, init?: RequestInit) => Promise<Response>; publicWebBaseUrl?: string };
@@ -16,6 +16,11 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     return response.status === 204 ? undefined as T : response.json() as Promise<T>;
   }
   return {
+    recurrences() { return request<RecurrencesPage>("recurrences"); },
+    recurrence(id: string) { return request<RecurrenceDetail>(`recurrences/${id}`); },
+    recurrenceProfile() { return request<{ user: { timezone: string } }>("auth/me"); },
+    saveRecurrence(input: RecurrenceInput, key: string, id?: string) { return request<RecurrenceDetail>(id ? `recurrences/${id}` : "recurrences", { method: id ? "PATCH" : "POST", headers: { "idempotency-key": key }, body: JSON.stringify(input) }); },
+    transitionRecurrence(id: string, action: "pause" | "reactivate" | "end") { return request<RecurrenceDetail>(`recurrences/${id}/${action}`, { method: "POST" }); },
     timeline(query = "") { return request<TimelinePage>(`timeline${query ? `?${query}` : ""}`); },
     paymentMethods() { return request<PaymentMethodsPage>("payment-methods"); },
     savePaymentMethod(input: PaymentMethodInput, id?: string) { return request<PaymentMethod>(id ? `payment-methods/${id}` : "payment-methods", { method: id ? "PATCH" : "POST", body: JSON.stringify(input) }); },

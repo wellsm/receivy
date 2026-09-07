@@ -30,5 +30,5 @@ export function SessionGate() {
     );
   }
 
-  return <HomeScreen onOpenPeople={() => router.push("/people")} onCreateCharge={() => router.push("/charges/new")} onOpenCharge={id => router.push({ pathname: "/charges/[id]", params: { id } })} onOpenSettings={() => router.push("/settings")} />;
+  return <HomeScreen onOpenRecurrences={() => router.push("/recurrences")} onOpenPeople={() => router.push("/people")} onCreateCharge={() => router.push("/charges/new")} onOpenCharge={id => router.push({ pathname: "/charges/[id]", params: { id } })} onOpenSettings={() => router.push("/settings")} />;
 }

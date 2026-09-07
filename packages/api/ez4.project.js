@@ -24,7 +24,7 @@ export default {
   prefix: APP_STAGE,
   debugMode: APP_DEBUG === "true",
   projectName: "receivy",
-  sourceFiles: ["./src/api.ts"],
+  sourceFiles: ["./src/api.ts", "./src/recurrences/scheduler.ts"],
   stateFile: {
     path: `${APP_STAGE}-deploy`,
     remote: true,

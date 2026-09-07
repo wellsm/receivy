@@ -84,6 +84,9 @@ importers:
       '@ez4/raw-pg':
         specifier: file:../../vendor/ez4-raw-pg-0.52.0.tgz
         version: file:vendor/ez4-raw-pg-0.52.0.tgz
+      '@ez4/scheduler':
+        specifier: 0.52.0
+        version: 0.52.0
       '@ez4/schema':
         specifier: 0.52.0
         version: 0.52.0
@@ -104,6 +107,9 @@ importers:
         specifier: 0.52.0
         version: 0.52.0
       '@ez4/local-gateway':
+        specifier: 0.52.0
+        version: 0.52.0
+      '@ez4/local-scheduler':
         specifier: 0.52.0
         version: 0.52.0
       '@ez4/local-storage':
@@ -1455,6 +1461,10 @@ packages:
     resolution: {integrity: sha512-EXmXrcWUyJ360bX+fK2vitnNePZ/wD2BlFA/4o8cS/gJqHA0tjmrVZYDOb9GqZ0udw5FjOzIp6uClnCwRGlSnQ==}
     engines: {node: '>=22.7'}
 
+  '@ez4/local-scheduler@0.52.0':
+    resolution: {integrity: sha512-sfUt7EfnaY8tNNJbrCilQ0Ucxk5TeEZL8WBPpKuL/e5+dpgCUeZEUX8eNPJL+P9Mdy2OUCj66zPtlkNTDvLJnA==}
+    engines: {node: '>=22.7'}
+
   '@ez4/local-storage@0.52.0':
     resolution: {integrity: sha512-KvWVUEyi3sGf7owwwoKCsKuO1hk2MuCXXYUOOTPP1SXzGvzqsQOej26lvkzHCDEPMATlYeJs/1QkgE0gOGA+9w==}
     engines: {node: '>=22.7'}
@@ -1487,6 +1497,10 @@ packages:
 
   '@ez4/reflection@0.52.0':
     resolution: {integrity: sha512-EF9xwmQBzVULHqDBV4yIMGlrj82vbiPVh61cqTWdeHaDVcl0c+x1/Q4OYfxPliZSctjxsO8tSdwU4aT9hA4qpQ==}
+    engines: {node: '>=22.7'}
+
+  '@ez4/scheduler@0.52.0':
+    resolution: {integrity: sha512-OOmrOfp4cKC092liDm5k0iNweECpEdbdPJl7bNzZt+2zdCf2+w32B97raCWOpLagrcjglrfbUse4gAr412aUUA==}
     engines: {node: '>=22.7'}
 
   '@ez4/schema@0.52.0':
@@ -3449,6 +3463,10 @@ packages:
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
     hasBin: true
 
+  cron-parser@5.10.0:
+    resolution: {integrity: sha512-izNAxJyRWUP8ljBoDSub5WyrVOUlT4SLGShswE7eoRBpp6QUsSycYxLBMJlbshgPBMcPT/nrfgjNY2918ayv2A==}
+    engines: {node: '>=18'}
+
   cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
 
@@ -5076,6 +5094,10 @@ packages:
     resolution: {integrity: sha512-t5tS44bqd825zAW45UQxpG2CvcC4urOwn2TrwSH8u+MjeE+1NnWl6QqeQ/6NdjMqdOygyiT9p3Ev0p1NJykxjw==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  luxon@3.7.2:
+    resolution: {integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==}
+    engines: {node: '>=12'}
 
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
@@ -8446,6 +8468,16 @@ snapshots:
       '@ez4/utils': 0.52.0
       '@ez4/validator': 0.52.0
 
+  '@ez4/local-scheduler@0.52.0':
+    dependencies:
+      '@ez4/common': 0.52.0
+      '@ez4/local-common': 0.52.0
+      '@ez4/logger': 0.52.0
+      '@ez4/project': 0.52.0
+      '@ez4/scheduler': 0.52.0
+      '@ez4/utils': 0.52.0
+      cron-parser: 5.10.0
+
   '@ez4/local-storage@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
@@ -8516,6 +8548,16 @@ snapshots:
   '@ez4/reflection@0.52.0':
     dependencies:
       typescript: 6.0.3
+
+  '@ez4/scheduler@0.52.0':
+    dependencies:
+      '@ez4/common': 0.52.0
+      '@ez4/project': 0.52.0
+      '@ez4/reflection': 0.52.0
+      '@ez4/schema': 0.52.0
+      '@ez4/transform': 0.52.0
+      '@ez4/utils': 0.52.0
+      '@ez4/validator': 0.52.0
 
   '@ez4/schema@0.52.0':
     dependencies:
@@ -10528,6 +10570,10 @@ snapshots:
       - babel-plugin-macros
       - supports-color
       - ts-node
+
+  cron-parser@5.10.0:
+    dependencies:
+      luxon: 3.7.2
 
   cross-fetch@3.2.0:
     dependencies:
@@ -12580,6 +12626,8 @@ snapshots:
   lucide-react@0.544.0(react@19.2.3):
     dependencies:
       react: 19.2.3
+
+  luxon@3.7.2: {}
 
   lz-string@1.5.0: {}
 

@@ -3,8 +3,10 @@ import { after, before, describe, it } from 'node:test';
 import { Order } from '@ez4/database';
 import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
 import type { BillingInput } from '@receivy/common';
+import { resolveBillingSplit } from '@receivy/common';
 import { createBilling, getBilling, listBillings, materializeBillings, patchBilling, previewBilling } from '../../src/billings/repository';
 import { getCharge } from '../../src/charges/repository';
+import { getPreferences, savePreferences } from '../../src/notifications/repository';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { archivePerson, savePerson } from '../../src/people/repository';
 import { getTimeline } from '../../src/timeline/repository';
@@ -246,5 +248,82 @@ describe('billings on native PostgreSQL', () => {
       false
     );
     await patchBilling(db, OWNER, rule.id, { state: 'ended' });
+  });
+
+  it('round-trips a percentage split through Postgres and recomputes cents after totalCents changes', async () => {
+    const split = {
+      mode: 'percentage' as const,
+      parts: [
+        { kind: 'person' as const, personId, basisPoints: 3333 },
+        { kind: 'owner' as const, basisPoints: 6667 }
+      ]
+    };
+    const created = await createBilling(db, OWNER, 'percentage-key', { ...once({ totalCents: 10_001 }), split });
+    const persisted = (
+      await db.allocations.findMany({
+        select: { kind: true, split_mode: true, basis_points: true },
+        where: { billing_id: created.id },
+        order: { allocation_order: Order.Asc }
+      })
+    ).records;
+    deepEqual(
+      persisted.map((row) => [row.kind, row.split_mode, row.basis_points]),
+      [
+        ['person', 'percentage', 3333],
+        ['owner', 'percentage', 6667]
+      ]
+    );
+
+    const fetched = await getBilling(db, OWNER, created.id);
+    deepEqual(fetched.split, split);
+
+    const resolved = resolveBillingSplit(10_001, split);
+    const personCents = resolved.find((allocation) => allocation.kind === 'person')!.amountCents;
+    equal(personCents, 3_333);
+    deepEqual(
+      created.charges.map((charge) => charge.amount.amountCents),
+      [personCents]
+    );
+
+    const indefinite = await createBilling(
+      db,
+      OWNER,
+      'percentage-indefinite-key',
+      { ...once({ totalCents: 10_001 }), type: 'indefinite', frequency: 'monthly', startDate: '2026-01-31', split },
+      date('2026-01-01')
+    );
+    const patched = await patchBilling(db, OWNER, indefinite.id, { totalCents: 20_003 }, date('2026-01-01'));
+    equal(patched.total.amountCents, 20_003);
+    const reallocated = resolveBillingSplit(20_003, split);
+    const reallocatedRows = (
+      await db.allocations.findMany({
+        select: { amount_cents: true },
+        where: { billing_id: indefinite.id },
+        order: { allocation_order: Order.Asc }
+      })
+    ).records;
+    deepEqual(
+      reallocatedRows.map((row) => row.amount_cents),
+      reallocated.map((allocation) => allocation.amountCents)
+    );
+
+    await patchBilling(db, OWNER, indefinite.id, { state: 'ended' });
+  });
+
+  it('falls back reminders to the owner preferences and follows a preference change', async () => {
+    const original = await getPreferences(db, OWNER);
+
+    await savePreferences(db, OWNER, { ...original, reminderOffsets: [-7, -1] });
+
+    const created = await createBilling(db, OWNER, 'no-reminders-key', once({ description: 'Sem lembretes próprios' }));
+    deepEqual((await getBilling(db, OWNER, created.id)).reminders, [
+      { offsetDays: -7, enabled: true },
+      { offsetDays: -1, enabled: true }
+    ]);
+
+    await savePreferences(db, OWNER, { ...original, reminderOffsets: [-2] });
+    deepEqual((await getBilling(db, OWNER, created.id)).reminders, [{ offsetDays: -2, enabled: true }]);
+
+    await savePreferences(db, OWNER, original);
   });
 });

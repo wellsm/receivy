@@ -1,8 +1,3 @@
-export type NotificationPreferences = {
-  emailEnabled: boolean;
-  pushEnabled: boolean;
-  reminderOffsets: number[];
-};
 export type DeviceRegistration = {
   token: string;
   installationId: string;

@@ -7,7 +7,7 @@ export type BillingState = 'active' | 'paused' | 'ended';
 
 export type BillingReminder = { offsetDays: number; enabled: boolean };
 
-export const DEFAULT_BILLING_REMINDERS: BillingReminder[] = [-3, 0, 2].map((offsetDays) => ({ offsetDays, enabled: true }));
+export const DEFAULT_BILLING_REMINDERS: BillingReminder[] = [{ offsetDays: 0, enabled: true }];
 
 export const MAX_FINITE_OCCURRENCES = 120;
 

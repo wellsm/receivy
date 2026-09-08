@@ -180,3 +180,32 @@ export function normalizeBillingInput(input: BillingInput): NormalizedBillingInp
     split: input.split
   };
 }
+
+const CLOCK_PARTS: Intl.DateTimeFormatOptions = {
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit'
+};
+
+function zoneOffsetMs(utcMs: number, timezone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: timezone, ...CLOCK_PARTS }).formatToParts(new Date(utcMs));
+  const read = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+  const asUtc = Date.UTC(read('year'), read('month') - 1, read('day'), read('hour'), read('minute'), read('second'));
+
+  return asUtc - utcMs;
+}
+
+/** UTC instant of `localDate` at `time` (HH:mm) in `timezone`. Brazil has no DST, so one offset lookup is exact. */
+export function zonedInstant(localDate: string, time: string, timezone: string): string {
+  const guess = Date.parse(`${localDate}T${time}:00Z`);
+
+  return new Date(guess - zoneOffsetMs(guess, timezone)).toISOString();
+}
+
+export function civilHour(now: number, timezone: string): number {
+  return Number(new Intl.DateTimeFormat('en-US', { timeZone: timezone, hourCycle: 'h23', hour: '2-digit' }).format(now));
+}

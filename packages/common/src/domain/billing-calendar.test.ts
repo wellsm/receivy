@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { addCalendarDays, billingDates, billingDueDates, materializationDate, normalizeBillingInput } from './billing-calendar';
+import { DEFAULT_BILLING_REMINDERS } from './billing';
+import {
+  addCalendarDays,
+  billingDates,
+  billingDueDates,
+  civilHour,
+  materializationDate,
+  normalizeBillingInput,
+  zonedInstant
+} from './billing-calendar';
 
 const split = { mode: 'equal' as const, parts: [{ kind: 'person' as const, personId: 'ana' }] };
 
@@ -116,5 +125,26 @@ describe('billing calendar', () => {
         reminders: [{ offsetDays: 91, enabled: true }]
       })
     ).toThrow(/lembretes/i);
+  });
+});
+
+describe('zonedInstant', () => {
+  it('converts a local wall-clock time to the UTC instant of that zone', () => {
+    expect(zonedInstant('2026-09-10', '09:00', 'America/Sao_Paulo')).toBe('2026-09-10T12:00:00.000Z');
+    expect(zonedInstant('2026-09-10', '09:00', 'America/Manaus')).toBe('2026-09-10T13:00:00.000Z');
+    expect(zonedInstant('2026-09-10', '09:00', 'UTC')).toBe('2026-09-10T09:00:00.000Z');
+  });
+});
+
+describe('civilHour', () => {
+  it('returns the local hour of the zone', () => {
+    expect(civilHour(Date.parse('2026-09-10T11:59:00Z'), 'America/Sao_Paulo')).toBe(8);
+    expect(civilHour(Date.parse('2026-09-10T12:00:00Z'), 'America/Sao_Paulo')).toBe(9);
+  });
+});
+
+describe('DEFAULT_BILLING_REMINDERS', () => {
+  it('reminds only on the due date', () => {
+    expect(DEFAULT_BILLING_REMINDERS).toEqual([{ offsetDays: 0, enabled: true }]);
   });
 });

@@ -72,11 +72,16 @@ ou como argumento de build da imagem.
 
 O backend já expõe o núcleo passwordless em `/auth/email/code`,
 `/auth/email/confirm`, `/auth/refresh`, `/auth/logout` e `/auth/me`. O arquivo de
-exemplo usa `EMAIL_TRANSPORT=disabled`: ele exercita persistência e limitação de
-reenvio sem imprimir códigos no terminal. Para entrega real, defina
-`EMAIL_TRANSPORT=resend`, `RESEND_API_KEY` e `RESEND_FROM_EMAIL` em um gerenciador
-de segredos, além de gerar valores independentes e aleatórios de pelo menos 32
-bytes para `AUTH_JWT_SECRET` e `LOGIN_CODE_HASH_KEY`.
+exemplo usa `EMAIL_TRANSPORT=file` e `NOTIFICATION_EMAIL_TRANSPORT=file`: cada
+e-mail (código de login, avisos e lembretes) vira um arquivo `.eml` em
+`packages/api/.ez4/emails/`, ao lado do estado local do EZ4, e nada é impresso
+no terminal. Abra o arquivo mais recente para pegar o código. Esse modo é
+recusado fora de `APP_STAGE=local`; `disabled` descarta tudo em silêncio. Para
+entrega real, defina `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY` e
+`RESEND_FROM_EMAIL` em um gerenciador de segredos, além de gerar valores
+independentes e aleatórios de pelo menos 32 bytes para `AUTH_JWT_SECRET` e
+`LOGIN_CODE_HASH_KEY`. A escolha do provedor fica em
+`packages/api/src/email/factory.ts`.
 
 O acesso dura 15 minutos. O refresh é opaco, vive por 30 dias, gira a cada uso e
 fica armazenado apenas como hash. Reutilizar um refresh já consumido revoga toda

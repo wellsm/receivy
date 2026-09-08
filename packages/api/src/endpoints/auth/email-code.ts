@@ -3,6 +3,7 @@ import type { Http } from "@ez4/gateway";
 import type { String } from "@ez4/schema";
 import type { ApiProvider } from "../../provider";
 import { requestEmailCode } from "../../auth/email-login";
+import { createEmailSender } from "../../email/factory";
 import { createEmailTransport } from "../../email/transport";
 import { createAuthRepository } from "../../repositories/auth-repository";
 import { allowEmailCode } from "../../security/throttle";
@@ -21,13 +22,10 @@ export async function emailCodeHandler(
 ): Promise<EmailCodeResponse> {
   const { variables } = context;
   if (!await allowEmailCode(context.db, request.body.email, variables.LOGIN_CODE_HASH_KEY, request)) return { status: 204 };
-  const transport = variables.EMAIL_TRANSPORT === "resend"
-    ? createEmailTransport({
-        mode: "resend",
-        apiKey: variables.RESEND_API_KEY,
-        from: variables.RESEND_FROM_EMAIL,
-      })
-    : createEmailTransport({ mode: "disabled" });
+  const transport = createEmailTransport(
+    createEmailSender({ transport: variables.EMAIL_TRANSPORT, stage: variables.APP_STAGE, apiKey: variables.RESEND_API_KEY }),
+    variables.RESEND_FROM_EMAIL,
+  );
 
   await requestEmailCode(request.body, {
     codeHashKey: variables.LOGIN_CODE_HASH_KEY,

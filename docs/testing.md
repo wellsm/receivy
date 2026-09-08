@@ -119,10 +119,12 @@ plataformas. Pré-requisitos:
 4. `packages/mobile/.env.local` copiado do exemplo e
    `RECEIVY_LOCAL_NATIVE=1 npx expo run:ios` para o build de desenvolvimento.
 
-Com `EMAIL_TRANSPORT=disabled` nenhum código é impresso. Para o e-mail fictício,
-`node --env-file=local.env scripts/local-login-code.mjs <e-mail>` recupera o
-código vigente pelo HMAC do `LOGIN_CODE_HASH_KEY` local; o script recusa qualquer
-`APP_STAGE` diferente de `local` ou banco fora do loopback.
+Com `EMAIL_TRANSPORT=file` (padrão do `local.env.example`) o código chega em
+`packages/api/.ez4/emails/<data>-seu-codigo-de-acesso-ao-receivy-<id>.eml`; o
+arquivo mais recente é o pedido em curso. Para automação sem ler arquivos, ou
+com `disabled`, `node --env-file=local.env scripts/local-login-code.mjs <e-mail>`
+recupera o código vigente pelo HMAC do `LOGIN_CODE_HASH_KEY` local; o script
+recusa qualquer `APP_STAGE` diferente de `local` ou banco fora do loopback.
 
 Lições registradas em 2026-09-07: o watcher do Metro iniciado por `expo run:ios`
 perdeu edições em `packages/common` e `packages/mobile`; após mudar código,

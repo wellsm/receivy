@@ -445,6 +445,7 @@ describe("durable notification delivery", () => {
     const context: Parameters<typeof notificationJobHandler>[1] = {
       db,
       variables: {
+        APP_STAGE: "test",
         NOTIFICATION_EMAIL_TRANSPORT: "disabled",
         NOTIFICATION_PUSH_TRANSPORT: "disabled",
         EXPO_ACCESS_TOKEN: "disabled",
@@ -513,6 +514,7 @@ describe("durable notification delivery", () => {
     const context: Parameters<typeof notificationJobHandler>[1] = {
       db,
       variables: {
+        APP_STAGE: "test",
         NOTIFICATION_EMAIL_TRANSPORT: "resend",
         NOTIFICATION_PUSH_TRANSPORT: "disabled",
         EXPO_ACCESS_TOKEN: "disabled",

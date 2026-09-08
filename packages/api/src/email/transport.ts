@@ -1,41 +1,18 @@
 import type { EmailTransport } from "../auth/email-login";
+import type { EmailSender } from "./types";
 
-type Fetch = typeof fetch;
-
-type EmailTransportOptions =
-  | { mode: "disabled"; fetch?: Fetch }
-  | {
-      mode: "resend";
-      apiKey: string;
-      from: string;
-      fetch?: Fetch;
-    };
-
-export function createEmailTransport(options: EmailTransportOptions): EmailTransport {
+/** Login-code adapter over the vendor chosen by the factory (./factory.ts). */
+export function createEmailTransport(sender: EmailSender, from: string): EmailTransport {
   return {
     async sendLoginCode({ code, email }) {
-      if (options.mode === "disabled") {
-        return;
-      }
-
-      const request = options.fetch ?? globalThis.fetch;
-      const response = await request("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${options.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: options.from,
-          to: [email],
-          subject: "Seu código de acesso ao Receivy",
-          text: `Seu código de acesso é ${code}. Ele expira em 10 minutos.`,
-        }),
+      const result = await sender.send({
+        from,
+        to: email,
+        subject: "Seu código de acesso ao Receivy",
+        text: `Seu código de acesso é ${code}. Ele expira em 10 minutos.`,
       });
-
-      if (!response.ok) {
-        throw new Error("Email delivery failed");
-      }
+      if (result.status === "accepted" || result.status === "disabled") return;
+      throw new Error("Email delivery failed");
     },
   };
 }

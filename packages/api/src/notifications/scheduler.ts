@@ -16,6 +16,7 @@ export declare class NotificationScheduler extends Cron.Service {
     variables: Environment.ServiceVariables;
   };
   variables: {
+    APP_STAGE: Environment.Variable<"APP_STAGE">;
     NOTIFICATION_EMAIL_TRANSPORT: Environment.VariableOrValue<
       "NOTIFICATION_EMAIL_TRANSPORT",
       "disabled"

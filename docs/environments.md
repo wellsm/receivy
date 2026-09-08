@@ -10,7 +10,7 @@ mobile fala com a API diretamente e abre o web para links públicos.
 | Web | `http://localhost:3000` | `https://receivy.wellsm.dev` | `https://<domínio real>` |
 | API | `http://127.0.0.1:3735/local-receivy-api` | `https://<id>.execute-api.<região>.amazonaws.com/dev-receivy-api` | stage `prd` (URL do `pnpm output:prd` ou domínio próprio) |
 | Postgres | Docker `receivy-pg` (55434) | instância gerenciada do stage | instância gerenciada do stage |
-| E-mail | `disabled` | Resend, remetente `@receivy.wellsm.dev` | Resend, remetente no domínio real |
+| E-mail | `file`: arquivos `.eml` em `packages/api/.ez4/emails/` | Resend, remetente `@receivy.wellsm.dev` | Resend, remetente no domínio real |
 | Comprovantes | adaptador local explícito | bucket `ProofFiles` do stage | bucket `ProofFiles` do stage |
 | Push | `disabled` | `disabled` até haver projeto Expo/APNs/FCM | idem |
 

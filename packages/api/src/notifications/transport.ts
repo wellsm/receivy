@@ -1,3 +1,5 @@
+import { createEmailSender } from "../email/factory";
+
 export type SendResult =
   | { status: "accepted"; id: string }
   | {
@@ -40,6 +42,13 @@ export function notificationTransport(
   env: Record<string, string | undefined>,
   request: typeof fetch = globalThis.fetch,
 ): NotificationTransport {
+  const emailSender = createEmailSender({
+    transport: env.NOTIFICATION_EMAIL_TRANSPORT,
+    stage: env.APP_STAGE,
+    apiKey: env.RESEND_API_KEY,
+    fileDirectory: env.EMAIL_FILE_DIRECTORY,
+    fetch: request,
+  });
   const expoHeaders = {
     "Content-Type": "application/json",
     ...(env.EXPO_ACCESS_TOKEN && env.EXPO_ACCESS_TOKEN !== "disabled"
@@ -72,38 +81,9 @@ export function notificationTransport(
   }
   return {
     async email(input) {
-      if (env.NOTIFICATION_EMAIL_TRANSPORT !== "resend")
-        return { status: "disabled" };
-      if (
-        !env.RESEND_API_KEY ||
-        env.RESEND_API_KEY === "disabled" ||
-        !input.from ||
-        input.from === "disabled"
-      )
-        return { status: "permanent" };
-      try {
-        const response = await post(
-          "https://api.resend.com/emails",
-          {
-            Authorization: `Bearer ${env.RESEND_API_KEY}`,
-            "Content-Type": "application/json",
-            "Idempotency-Key": input.key,
-          },
-          {
-            from: input.from,
-            to: [input.to],
-            subject: input.subject,
-            text: input.text,
-          },
-        );
-        if (!response.ok) return { status: httpFailure(response.status) };
-        const body = (await response.json()) as { id?: string };
-        return typeof body.id === "string"
-          ? { status: "accepted", id: body.id }
-          : { status: "uncertain" };
-      } catch {
-        return { status: "uncertain" };
-      }
+      if (emailSender.mode === "disabled") return { status: "disabled" };
+      if (!input.from || input.from === "disabled") return { status: "permanent" };
+      return emailSender.send(input);
     },
     async push(input) {
       if (env.NOTIFICATION_PUSH_TRANSPORT !== "expo")

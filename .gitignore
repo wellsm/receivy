@@ -16,3 +16,7 @@ prd.env
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Local scratch
+.superpowers/
+.worktrees/

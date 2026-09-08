@@ -174,7 +174,7 @@ describe('financial repositories on PostgreSQL', () => {
     equal(await db.outbox_events.count({ where: { aggregate_id: chargeId, type: 'charge.created' } }), 1);
   });
 
-  it('returns one persisted result for simultaneous identical expense idempotency keys', async () => {
+  it('returns one persisted result for simultaneous identical billing idempotency keys', async () => {
     const person = await savePerson(db, OWNER, { name: 'Idempotent race' });
     const input = {
       type: 'until' as const,

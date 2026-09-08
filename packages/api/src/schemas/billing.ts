@@ -7,6 +7,7 @@ export interface BillingSchema extends Database.Schema {
   type: 'once' | 'until' | 'indefinite';
   frequency?: 'monthly' | 'yearly';
   description: String.Max<500>;
+  category: 'food' | 'transport' | 'groceries' | 'subscription' | 'loan' | 'housing' | 'travel' | 'other';
   total_cents: number;
   currency: 'BRL';
   start_date: String.Date;
@@ -28,8 +29,10 @@ export interface AllocationSchema extends Database.Schema {
   billing_id: String.UUID;
   person_id?: String.UUID;
   kind: 'owner' | 'person';
-  split_mode: 'fixed' | 'equal' | 'percentage';
+  split_mode: 'fixed' | 'equal' | 'percentage' | 'shares';
   basis_points?: number;
+  /** Quota weight for `shares` splits; null for every other mode. */
+  shares?: number;
   amount_cents: number;
   allocation_order: number;
   created_at: String.DateTime;

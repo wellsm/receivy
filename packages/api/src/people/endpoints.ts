@@ -9,7 +9,7 @@ import { archivePerson, getPerson, listPeople, savePerson } from './repository';
 
 declare class ListRequest implements Http.Request {
   identity: SessionIdentity;
-  query: { cursor?: String.UUID; archived?: boolean; search?: String.Max<254> };
+  query: { cursor?: String.UUID; archived?: boolean; search?: String.Max<254>; sort?: 'recent' };
 }
 declare class ListResponse implements Http.Response {
   status: 200;
@@ -52,7 +52,14 @@ function parse(input: PersonInput): PersonInput {
 export async function listPeopleHandler(request: ListRequest, context: Service.Context<ApiProvider>): Promise<ListResponse> {
   return {
     status: 200,
-    body: await listPeople(context.db, request.identity.userId, request.query.cursor, request.query.archived, request.query.search)
+    body: await listPeople(
+      context.db,
+      request.identity.userId,
+      request.query.cursor,
+      request.query.archived,
+      request.query.search,
+      request.query.sort
+    )
   };
 }
 export async function createPersonHandler(request: CreateRequest, context: Service.Context<ApiProvider>): Promise<CreateResponse> {

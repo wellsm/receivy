@@ -3,6 +3,7 @@ import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
 import {
   addCalendarDays,
   type BillingAllocation,
+  type BillingCategory,
   type BillingDetail,
   type BillingInput,
   type BillingPatch,
@@ -34,6 +35,7 @@ export const BILLING_SELECT = {
   type: true,
   frequency: true,
   description: true,
+  category: true,
   total_cents: true,
   currency: true,
   start_date: true,
@@ -55,6 +57,7 @@ export type BillingRow = {
   type: BillingType;
   frequency?: 'monthly' | 'yearly';
   description: string;
+  category: BillingCategory;
   total_cents: number;
   currency: 'BRL';
   start_date: string;
@@ -69,11 +72,27 @@ export type BillingRow = {
   updated_at: string;
 };
 
-export type BillingFilters = { type?: BillingType; state?: BillingState; cursor?: string };
+export type BillingFilters = {
+  type?: BillingType;
+  state?: BillingState;
+  cursor?: string;
+  search?: string;
+  category?: BillingCategory;
+};
+
+/** Card counters a list entry carries beyond the stored billing row. */
+type BillingCounters = {
+  participantCount: number;
+  chargeCount: number;
+  paidCount: number;
+  proofsPending: number;
+  shareChargeId: string | null;
+};
 
 // EZ4 0.52 optional-field typings omit SQL NULL; explicit null clears old values.
 const sqlNull = null as unknown as undefined;
 const PAGE_SIZE = 50;
+const SEARCH_LIMIT = 80;
 const PREVIEW_DAYS = 90;
 const MATERIALIZATION_BUDGET = 100;
 
@@ -99,7 +118,15 @@ async function billingRow(db: DbClient, ownerId: string, id: string, lock = fals
 async function splitFor(db: DbClient, id: string): Promise<{ split: BillingSplit; allocations: BillingAllocation[] }> {
   const rows = (
     await db.allocations.findMany({
-      select: { kind: true, person_id: true, split_mode: true, amount_cents: true, basis_points: true, allocation_order: true },
+      select: {
+        kind: true,
+        person_id: true,
+        split_mode: true,
+        amount_cents: true,
+        basis_points: true,
+        shares: true,
+        allocation_order: true
+      },
       where: { billing_id: id },
       order: { allocation_order: Order.Asc }
     })
@@ -118,13 +145,16 @@ async function splitFor(db: DbClient, id: string): Promise<{ split: BillingSplit
         }
       : mode === 'equal'
         ? { mode, parts: parties }
-        : { mode, parts: parties.map((party, index) => ({ ...party, basisPoints: rows[index]!.basis_points! })) };
+        : mode === 'shares'
+          ? { mode, parts: parties.map((party, index) => ({ ...party, shares: rows[index]!.shares ?? 1 })) }
+          : { mode, parts: parties.map((party, index) => ({ ...party, basisPoints: rows[index]!.basis_points! })) };
   const allocations = rows.map((row) => ({
     kind: row.kind,
     personId: row.person_id ?? null,
     splitMode: row.split_mode,
     amount: { amountCents: row.amount_cents, currency: 'BRL' as const },
-    order: row.allocation_order
+    order: row.allocation_order,
+    ...(row.shares === undefined || row.shares === null ? {} : { shares: row.shares })
   }));
 
   return { split, allocations };
@@ -175,7 +205,7 @@ async function nextMaterialization(db: DbClient, row: BillingRow, reminders: Bil
   return next ? materializationDate(next, reminders) : null;
 }
 
-function summary(row: BillingRow, nextDueDate: string | null, installmentCount?: number): BillingSummary {
+function summary(row: BillingRow, nextDueDate: string | null, counters: BillingCounters, installmentCount?: number): BillingSummary {
   return {
     id: row.id,
     type: row.type,
@@ -187,19 +217,49 @@ function summary(row: BillingRow, nextDueDate: string | null, installmentCount?:
     state: row.state,
     installmentCount,
     nextDueDate,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    category: row.category,
+    ...counters
   };
 }
 
-async function pendingDueDates(db: DbClient, id: string, today: string): Promise<string[]> {
+/** The closest pending charge that is not overdue; it drives both `nextDueDate` and the share action. */
+async function nextPendingCharge(db: DbClient, id: string, today: string): Promise<{ id: string; due_date: string } | undefined> {
   const rows = await db.charges.findMany({
-    select: { due_date: true },
+    select: { id: true, due_date: true },
     where: { billing_id: id, state: 'pending', due_date: { gte: today } },
     order: { due_date: Order.Asc },
     take: 1
   });
 
-  return rows.records.map((row) => row.due_date);
+  return rows.records[0];
+}
+
+async function overduePendingChargeId(db: DbClient, id: string): Promise<string | null> {
+  const rows = await db.charges.findMany({
+    select: { id: true },
+    where: { billing_id: id, state: 'pending' },
+    order: { due_date: Order.Asc },
+    take: 1
+  });
+
+  return rows.records[0]?.id ?? null;
+}
+
+async function chargeCounters(db: DbClient, id: string): Promise<Pick<BillingCounters, 'chargeCount' | 'paidCount' | 'proofsPending'>> {
+  const [row] = await db.rawQuery(
+    `SELECT COUNT(*) AS charge_count, COUNT(*) FILTER (WHERE c.state = 'paid') AS paid_count,
+      (SELECT COUNT(*) FROM payment_proofs p JOIN charges cc ON cc.id = p.charge_id
+        WHERE cc.billing_id = :id::uuid AND p.state = 'pending') AS proofs_pending
+    FROM charges c WHERE c.billing_id = :id::uuid`,
+    { id }
+  );
+
+  return {
+    chargeCount: Number(row?.['charge_count'] ?? 0),
+    paidCount: Number(row?.['paid_count'] ?? 0),
+    proofsPending: Number(row?.['proofs_pending'] ?? 0)
+  };
 }
 
 function installmentCountFor(row: BillingRow): number | undefined {
@@ -212,12 +272,14 @@ function installmentCountFor(row: BillingRow): number | undefined {
 
 async function summaryDto(db: DbClient, row: BillingRow, now: Date): Promise<BillingSummary> {
   const today = calendarDate(now, row.timezone);
-  const [nextPending] = await pendingDueDates(db, row.id, today);
+  const upcoming = await nextPendingCharge(db, row.id, today);
   const nextDueDate =
-    nextPending ??
+    upcoming?.due_date ??
     (row.type === 'indefinite' ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null) : null);
+  const participantCount = await db.allocations.count({ where: { billing_id: row.id, kind: 'person' } });
+  const shareChargeId = participantCount === 1 ? (upcoming?.id ?? (await overduePendingChargeId(db, row.id))) : null;
 
-  return summary(row, nextDueDate, installmentCountFor(row));
+  return summary(row, nextDueDate, { ...(await chargeCounters(db, row.id)), participantCount, shareChargeId }, installmentCountFor(row));
 }
 
 async function dto(db: DbClient, row: BillingRow, now: Date): Promise<BillingDetail> {
@@ -229,10 +291,23 @@ async function dto(db: DbClient, row: BillingRow, now: Date): Promise<BillingDet
     order: { due_date: Order.Asc, installment: Order.Asc }
   });
   const previews = await previewsFor(db, row, reminders, now);
-  const base = await summaryDto(db, row, now);
+  const upcoming = await nextPendingCharge(db, row.id, calendarDate(now, row.timezone));
 
+  // The detail response has its own field list: the card counters stay out of it.
   return {
-    ...base,
+    id: row.id,
+    type: row.type,
+    frequency: row.frequency,
+    description: row.description,
+    total: { amountCents: row.total_cents, currency: row.currency },
+    startDate: row.start_date,
+    endDate: row.end_date,
+    state: row.state,
+    installmentCount: installmentCountFor(row),
+    nextDueDate: upcoming?.due_date ?? previews[0]?.occurrenceDate ?? null,
+    createdAt: row.created_at,
+    category: row.category,
+    invite: null,
     updatedAt: row.updated_at,
     timezone: row.timezone,
     paymentMethodId: row.payment_method_id,
@@ -278,6 +353,7 @@ async function saveAllocations(db: DbClient, id: string, totalCents: number, spl
         amount_cents: part.amountCents,
         allocation_order: index,
         ...(original && 'basisPoints' in original ? { basis_points: original.basisPoints } : {}),
+        ...(original && 'shares' in original ? { shares: original.shares } : {}),
         created_at: now
       }
     });
@@ -332,6 +408,7 @@ export async function createBilling(
         type: input.type,
         frequency: input.frequency ?? sqlNull,
         description: input.description,
+        category: input.category ?? 'other',
         total_cents: input.totalCents,
         currency: 'BRL',
         start_date: input.startDate,
@@ -388,8 +465,54 @@ function decodeCursor(cursor?: string): { createdAt: string; id: string } | unde
   }
 }
 
+/**
+ * Literal, case-insensitive description match resolved to ids so the paged read stays the same query.
+ * The cursor clause is only spliced in when there is a cursor: a NULL date-time variable has no type
+ * the driver can infer.
+ */
+async function searchBillingIds(
+  db: DbClient,
+  ownerId: string,
+  filters: BillingFilters,
+  cursor: { createdAt: string; id: string } | undefined,
+  query: string
+): Promise<string[]> {
+  const paging = cursor ? 'AND (b.created_at < :createdAt OR (b.created_at = :createdAt AND b.id > :cursorId))' : '';
+  const rows = await db.rawQuery(
+    `SELECT b.id FROM billings b WHERE b.owner_id = :ownerId::uuid
+    AND (:type::text IS NULL OR b.type = :type::text)
+    AND (:state::text IS NULL OR b.state = :state::text)
+    AND (:category::text IS NULL OR b.category = :category::text)
+    AND position(:query in lower(b.description)) > 0
+    ${paging}
+    ORDER BY b.created_at DESC, b.id ASC LIMIT ${PAGE_SIZE + 1}`,
+    {
+      ownerId,
+      type: filters.type ?? null,
+      state: filters.state ?? null,
+      category: filters.category ?? null,
+      ...(cursor ? { createdAt: cursor.createdAt, cursorId: cursor.id } : {}),
+      query
+    }
+  );
+
+  return rows.map((row) => String(row['id']));
+}
+
 export async function listBillings(db: DbClient, ownerId: string, filters: BillingFilters = {}, now = new Date()): Promise<BillingsPage> {
   const cursor = decodeCursor(filters.cursor);
+  const query = (filters.search ?? '').normalize('NFC').trim().toLocaleLowerCase('pt-BR').slice(0, SEARCH_LIMIT);
+
+  let matchingIds: string[] | undefined;
+
+  if (query) {
+    matchingIds = await searchBillingIds(db, ownerId, filters, cursor, query);
+
+    if (!matchingIds.length) {
+      return { billings: [], nextCursor: null };
+    }
+  }
+
   const result = await db.billings.findMany({
     select: BILLING_SELECT,
     where: {
@@ -397,6 +520,8 @@ export async function listBillings(db: DbClient, ownerId: string, filters: Billi
         { owner_id: ownerId },
         ...(filters.type ? [{ type: filters.type }] : []),
         ...(filters.state ? [{ state: filters.state }] : []),
+        ...(filters.category ? [{ category: filters.category }] : []),
+        ...(matchingIds ? [{ id: { isIn: matchingIds } }] : []),
         ...(cursor ? [{ OR: [{ created_at: { lt: cursor.createdAt } }, { created_at: cursor.createdAt, id: { gt: cursor.id } }] }] : [])
       ]
     },
@@ -516,6 +641,7 @@ export async function patchBilling(
       where: { id },
       data: {
         description,
+        category: patch.category ?? row.category,
         total_cents: totalCents,
         payment_method: { id: paymentMethodId ?? sqlNull },
         ...(patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
@@ -549,7 +675,8 @@ function billingInputFrom(row: BillingRow, split: BillingSplit): BillingInput {
     endDate: row.end_date,
     timezone: row.timezone,
     paymentMethodId: row.payment_method_id,
-    split
+    split,
+    category: row.category
   };
 }
 

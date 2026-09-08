@@ -7,7 +7,7 @@ import { DEFAULT_BILLING_REMINDERS, resolveBillingSplit } from '@receivy/common'
 import { createBilling, getBilling, listBillings, materializeBillings, patchBilling, previewBilling } from '../../src/billings/repository';
 import { getCharge } from '../../src/charges/repository';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
-import { archivePerson, savePerson } from '../../src/people/repository';
+import { archivePerson, listPeople, savePerson } from '../../src/people/repository';
 import { getTimeline } from '../../src/timeline/repository';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
 
@@ -17,6 +17,7 @@ const date = (value: string) => new Date(`${value}T12:00:00Z`);
 
 let personId: string;
 let pixId: string;
+let sharesId: string;
 
 function once(overrides: Partial<BillingInput> = {}): BillingInput {
   return {
@@ -216,6 +217,179 @@ describe('billings on native PostgreSQL', () => {
     ok(page.billings.length >= 2);
     ok(page.billings.every((billing) => billing.type === 'once'));
     deepEqual(await listBillings(db, OTHER), { billings: [], nextCursor: null });
+  });
+
+  it('persists a category and a shares split with one charge per quota', async () => {
+    const [second, third, fourth] = await Promise.all([
+      savePerson(db, OWNER, { name: 'Cota Dois' }),
+      savePerson(db, OWNER, { name: 'Cota Tres' }),
+      savePerson(db, OWNER, { name: 'Cota Quatro' })
+    ]);
+    const split = {
+      mode: 'shares' as const,
+      parts: [
+        { kind: 'person' as const, personId, shares: 2 },
+        { kind: 'person' as const, personId: second!.id, shares: 2 },
+        { kind: 'person' as const, personId: third!.id, shares: 1 },
+        { kind: 'person' as const, personId: fourth!.id, shares: 1 }
+      ]
+    };
+    const created = await createBilling(
+      db,
+      OWNER,
+      'shares-key',
+      once({ description: 'Churrasco do sábado', totalCents: 12_000, category: 'food', split })
+    );
+
+    sharesId = created.id;
+    equal(created.category, 'food');
+    deepEqual(
+      created.charges.map((charge) => charge.amount.amountCents).sort((left, right) => left - right),
+      [2_000, 2_000, 4_000, 4_000]
+    );
+    deepEqual(
+      (
+        await db.allocations.findMany({
+          select: { split_mode: true, shares: true },
+          where: { billing_id: created.id },
+          order: { allocation_order: Order.Asc }
+        })
+      ).records.map((row) => [row.split_mode, row.shares]),
+      [
+        ['shares', 2],
+        ['shares', 2],
+        ['shares', 1],
+        ['shares', 1]
+      ]
+    );
+
+    const fetched = await getBilling(db, OWNER, created.id);
+
+    deepEqual(fetched.split, split);
+    deepEqual(
+      fetched.allocations.map((allocation) => allocation.shares),
+      [2, 2, 1, 1]
+    );
+    equal(fetched.category, 'food');
+    equal(fetched.invite, null);
+
+    // The request fingerprint covers the category, so a replay that changes it is a different request.
+    await rejects(
+      () =>
+        createBilling(db, OWNER, 'shares-key', once({ description: 'Churrasco do sábado', totalCents: 12_000, category: 'travel', split })),
+      HttpConflictError
+    );
+  });
+
+  it('summarizes participants, charges, proofs and the single shareable charge', async () => {
+    const summaryOf = async (id: string) => (await listBillings(db, OWNER)).billings.find((billing) => billing.id === id)!;
+    const before = await summaryOf(sharesId);
+
+    equal(before.participantCount, 4);
+    equal(before.chargeCount, 4);
+    equal(before.paidCount, 0);
+    equal(before.proofsPending, 0);
+    equal(before.shareChargeId, null);
+
+    const charges = await db.charges.findMany({ select: { id: true }, where: { billing_id: sharesId }, order: { id: Order.Asc } });
+    const instant = new Date().toISOString();
+
+    await db.charges.updateOne({ where: { id: charges.records[0]!.id }, data: { state: 'paid', paid_at: instant, updated_at: instant } });
+    await db.payment_proofs.insertOne({
+      data: {
+        id: crypto.randomUUID(),
+        charge: { id: charges.records[1]!.id },
+        object_key: `proofs/${sharesId}/counter.pdf`,
+        original_name: 'counter.pdf',
+        mime: 'application/pdf',
+        size: 1_024,
+        sha256: 'a'.repeat(64),
+        state: 'pending',
+        created_at: instant
+      }
+    });
+
+    const after = await summaryOf(sharesId);
+
+    equal(after.paidCount, 1);
+    equal(after.proofsPending, 1);
+    equal(after.chargeCount, 4);
+
+    const single = await createBilling(db, OWNER, 'share-single-key', once({ description: 'Cobrança sozinha', category: 'travel' }));
+
+    equal((await summaryOf(single.id)).shareChargeId, single.charges[0]!.id);
+    equal((await summaryOf(single.id)).participantCount, 1);
+  });
+
+  it('searches billings by description and filters them by category', async () => {
+    deepEqual(
+      (await listBillings(db, OWNER, { search: '  CHURRasco  ' })).billings.map((billing) => billing.id),
+      [sharesId]
+    );
+    equal((await listBillings(db, OWNER, { search: 'churrasco do sábado' })).billings.length, 1);
+    equal((await listBillings(db, OWNER, { search: 'nada-que-exista' })).billings.length, 0);
+    equal((await listBillings(db, OTHER, { search: 'churr' })).billings.length, 0);
+
+    const food = await listBillings(db, OWNER, { category: 'food' });
+
+    ok(food.billings.some((billing) => billing.id === sharesId));
+    ok(food.billings.every((billing) => billing.category === 'food'));
+    equal((await listBillings(db, OWNER, { search: 'churr', category: 'travel' })).billings.length, 0);
+    const dinners = (await listBillings(db, OWNER, { search: 'jantar' })).billings;
+
+    ok(dinners.length >= 2);
+    ok(dinners.every((billing) => billing.category === 'other'));
+
+    // The searched page must keep the exact cursor semantics of the unfiltered listing.
+    const cursor = Buffer.from(JSON.stringify({ createdAt: dinners[0]!.createdAt, id: dinners[0]!.id })).toString('base64url');
+    const paged = await listBillings(db, OWNER, { search: 'jantar', cursor });
+    const plain = (await listBillings(db, OWNER, { cursor })).billings.filter((billing) => billing.description === 'Jantar');
+
+    deepEqual(
+      paged.billings.map((billing) => billing.id),
+      plain.map((billing) => billing.id)
+    );
+    equal(
+      paged.billings.some((billing) => billing.id === dinners[0]!.id),
+      false
+    );
+  });
+
+  it('lets a finite billing change its category even though the split stays frozen', async () => {
+    const created = await createBilling(db, OWNER, 'category-patch-key', once({ description: 'Categoria editável' }));
+
+    equal(created.category, 'other');
+
+    const patched = await patchBilling(db, OWNER, created.id, { category: 'housing' });
+
+    equal(patched.category, 'housing');
+    equal((await getBilling(db, OWNER, created.id)).category, 'housing');
+    ok((await listBillings(db, OWNER, { category: 'housing' })).billings.some((billing) => billing.id === created.id));
+    await rejects(() => patchBilling(db, OWNER, created.id, { category: 'loan', totalCents: 5_000 }), HttpConflictError);
+  });
+
+  it('sorts contacts by their latest billing and always exposes lastBilledAt', async () => {
+    const older = await savePerson(db, OWNER, { name: 'Alfa Antiga' });
+    const newer = await savePerson(db, OWNER, { name: 'Zeta Recente' });
+    const never = await savePerson(db, OWNER, { name: 'Bravo Sem Cobrança' });
+    const forPerson = (id: string) => once({ split: { mode: 'equal', parts: [{ kind: 'person', personId: id }] } });
+
+    await createBilling(db, OWNER, 'recent-older-key', forPerson(older.id), date('2026-05-01'));
+    await createBilling(db, OWNER, 'recent-newer-key', forPerson(newer.id), date('2026-06-01'));
+
+    const recent = await listPeople(db, OWNER, undefined, false, '', 'recent');
+    const ids = recent.people.map((person) => person.id);
+
+    ok(ids.indexOf(newer.id) < ids.indexOf(older.id), 'the latest billed contact comes first');
+    ok(ids.indexOf(older.id) < ids.indexOf(never.id), 'contacts without billings come last');
+    equal(recent.nextCursor, null);
+    equal(recent.people.find((person) => person.id === never.id)?.lastBilledAt, null);
+    ok(recent.people.find((person) => person.id === newer.id)!.lastBilledAt!.startsWith('2026-06-01'));
+
+    const alphabetical = await listPeople(db, OWNER);
+
+    ok(alphabetical.people.find((person) => person.id === older.id)!.lastBilledAt!.startsWith('2026-05-01'));
+    equal(alphabetical.people.find((person) => person.id === never.id)?.lastBilledAt, null);
   });
 
   it('projects indefinite previews in the timeline and removes them after materialization', async () => {

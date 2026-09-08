@@ -8,6 +8,7 @@ export function billingRequestFingerprint(input: NormalizedBillingInput): string
       type: input.type,
       frequency: input.frequency ?? null,
       description: input.description,
+      category: input.category ?? 'other',
       totalCents: input.totalCents,
       startDate: input.startDate,
       endDate: input.endDate ?? null,

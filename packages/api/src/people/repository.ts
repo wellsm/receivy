@@ -13,6 +13,16 @@ async function lockOwner(db: DbClient, ownerId: string) {
   if (!owner) throw new HttpUnauthorizedError();
 }
 
+/** Latest allocation per person of the page; the same date-time format the table reads use. */
+async function lastBilledDates(db: DbClient, personIds: string[]): Promise<Map<string, string>> {
+  const rows = await db.rawQuery(
+    `SELECT a.person_id, to_char(MAX(a.created_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS last
+    FROM allocations a WHERE a.person_id = ANY(string_to_array(:ids::text, ',')::uuid[]) GROUP BY a.person_id`,
+    { ids: personIds.join(',') }
+  );
+  return new Map(rows.map((row) => [String(row['person_id']), String(row['last'])]));
+}
+
 async function details(
   db: DbClient,
   rows: { id: string; name: string; linked_user_id?: string; archived_at?: string; created_at: string }[]
@@ -22,6 +32,10 @@ async function details(
     select: { person_id: true, type: true, value: true },
     where: { person_id: { isIn: rows.map((row) => row.id) } }
   });
+  const billed = await lastBilledDates(
+    db,
+    rows.map((row) => row.id)
+  );
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -29,7 +43,8 @@ async function details(
     archivedAt: row.archived_at ?? null,
     createdAt: row.created_at,
     email: records.find((contact) => contact.person_id === row.id && contact.type === 'email')?.value ?? null,
-    phone: records.find((contact) => contact.person_id === row.id && contact.type === 'phone')?.value ?? null
+    phone: records.find((contact) => contact.person_id === row.id && contact.type === 'phone')?.value ?? null,
+    lastBilledAt: billed.get(row.id) ?? null
   }));
 }
 
@@ -39,8 +54,38 @@ export async function getPerson(db: DbClient, ownerId: string, id: string): Prom
   return (await details(db, [row]))[0]!;
 }
 
-export async function listPeople(db: DbClient, ownerId: string, cursor?: string, archived = false, search = ''): Promise<PeoplePage> {
+/**
+ * Contacts ordered by their latest billing, never-billed ones last. The offset-free cursor of the
+ * default listing cannot express this order, so `recent` always answers the first page with a null
+ * cursor; the quick billing form only shows the top of it.
+ */
+async function recentPeople(db: DbClient, ownerId: string, query: string): Promise<PeoplePage> {
+  const rows = await db.rawQuery(
+    `SELECT p.id FROM people p LEFT JOIN allocations a ON a.person_id = p.id
+    WHERE p.owner_id = :ownerId::uuid AND p.archived_at IS NULL
+    AND (:query::text = '' OR position(:query in lower(p.name)) > 0 OR EXISTS
+      (SELECT 1 FROM person_contacts c WHERE c.person_id = p.id AND position(:query in lower(c.value)) > 0))
+    GROUP BY p.id, p.name ORDER BY MAX(a.created_at) DESC NULLS LAST, p.name ASC LIMIT 50`,
+    { ownerId, query }
+  );
+  const ids = rows.map((row) => String(row['id']));
+  if (!ids.length) return { people: [], nextCursor: null };
+  const { records } = await db.people.findMany({ select: SELECT, where: { id: { isIn: ids } } });
+  const byId = new Map(records.map((record) => [record.id, record]));
+  const ordered = ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  return { people: await details(db, ordered), nextCursor: null };
+}
+
+export async function listPeople(
+  db: DbClient,
+  ownerId: string,
+  cursor?: string,
+  archived = false,
+  search = '',
+  sort?: 'recent'
+): Promise<PeoplePage> {
   const query = search.normalize('NFC').trim().toLocaleLowerCase('pt-BR').slice(0, 254);
+  if (sort === 'recent') return recentPeople(db, ownerId, query);
   let matchingIds: string[] | undefined;
   if (query) {
     const rows = await db.rawQuery(
@@ -148,7 +193,8 @@ export async function savePerson(db: DbClient, ownerId: string, input: PersonInp
       email: input.email ?? null,
       phone: input.phone ?? null,
       archivedAt: null,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      lastBilledAt: existing ? ((await lastBilledDates(tx, [personId])).get(personId) ?? null) : null
     };
   });
 }

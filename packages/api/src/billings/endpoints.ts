@@ -7,11 +7,12 @@ import type { SessionIdentity } from '../authorizers/session';
 import type { ApiProvider } from '../provider';
 import { createBilling, getBilling, listBillings, patchBilling, previewBilling } from './repository';
 
+// Keep the arms explicit: EZ4 reflection cannot extract intersections out of a union.
 declare class SplitBody {
-  mode: 'fixed' | 'equal' | 'percentage';
+  mode: 'fixed' | 'equal' | 'percentage' | 'shares';
   parts: (
-    | { kind: 'owner'; basisPoints?: number }
-    | { kind: 'person'; personId: String.UUID; amountCents?: number; basisPoints?: number }
+    | { kind: 'owner'; basisPoints?: number; shares?: Integer.Range<1, 1000> }
+    | { kind: 'person'; personId: String.UUID; amountCents?: number; basisPoints?: number; shares?: Integer.Range<1, 1000> }
   )[];
 }
 
@@ -31,6 +32,7 @@ declare class BillingBody implements Http.JsonBody {
   paymentMethodId?: String.UUID;
   reminders?: ReminderBody[];
   split: SplitBody;
+  category?: 'food' | 'transport' | 'groceries' | 'subscription' | 'loan' | 'housing' | 'travel' | 'other';
 }
 
 declare class PatchBody implements Http.JsonBody {
@@ -41,6 +43,7 @@ declare class PatchBody implements Http.JsonBody {
   clearPaymentMethod?: boolean;
   reminders?: ReminderBody[];
   state?: 'active' | 'paused' | 'ended';
+  category?: 'food' | 'transport' | 'groceries' | 'subscription' | 'loan' | 'housing' | 'travel' | 'other';
 }
 
 declare class CreateRequest implements Http.Request {
@@ -51,7 +54,13 @@ declare class CreateRequest implements Http.Request {
 
 declare class ListRequest implements Http.Request {
   identity: SessionIdentity;
-  query: { type?: 'once' | 'until' | 'indefinite'; state?: 'active' | 'paused' | 'ended'; cursor?: String.Max<500> };
+  query: {
+    type?: 'once' | 'until' | 'indefinite';
+    state?: 'active' | 'paused' | 'ended';
+    cursor?: String.Max<500>;
+    search?: String.Max<80>;
+    category?: 'food' | 'transport' | 'groceries' | 'subscription' | 'loan' | 'housing' | 'travel' | 'other';
+  };
 }
 
 declare class ReadRequest implements Http.Request {

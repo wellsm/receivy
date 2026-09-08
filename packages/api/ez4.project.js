@@ -26,7 +26,7 @@ export default {
   projectName: 'receivy',
   sourceFiles: [
     './src/api.ts',
-    './src/recurrences/scheduler.ts',
+    './src/billings/scheduler.ts',
     './src/notifications/scheduler.ts',
     './src/proofs/cleanup-scheduler.ts',
     './src/auth/apple-revocation-scheduler.ts'

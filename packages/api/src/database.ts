@@ -3,9 +3,8 @@ import type { PostgresEngine } from '@ez4/raw-pg/client';
 import type { ActivityEventSchema } from './schemas/activity-event';
 import type { AppleCredentialSchema } from './schemas/apple-credential';
 import type { AuthIdentitySchema } from './schemas/auth-identity';
+import type { AllocationSchema, BillingSchema } from './schemas/billing';
 import type { ChargeSchema } from './schemas/charge';
-import type { ExpenseSchema } from './schemas/expense';
-import type { ExpenseAllocationSchema } from './schemas/expense-allocation';
 import type { LoginCodeSchema } from './schemas/login-code';
 import type { DeviceTokenSchema, NotificationDeliverySchema, NotificationPreferenceSchema } from './schemas/notification';
 import type { OauthAttemptSchema } from './schemas/oauth-attempt';
@@ -17,12 +16,6 @@ import type { PaymentProofSchema, ProofThrottleSchema, UploadIntentSchema } from
 import type { PersonSchema } from './schemas/person';
 import type { PersonContactSchema } from './schemas/person-contact';
 import type { PublicLinkSchema } from './schemas/public-link';
-import type {
-  RecurrenceAllocationSchema,
-  RecurrenceOccurrenceSchema,
-  RecurrenceReminderSchema,
-  RecurrenceSchema
-} from './schemas/recurrence';
 import type { RefreshTokenSchema } from './schemas/refresh-token';
 import type { SessionFamilySchema } from './schemas/session-family';
 import type { StorageCleanupCursorSchema, StorageDeletionSchema } from './schemas/storage-deletion';
@@ -62,35 +55,6 @@ export declare class Db extends Database.Service<PostgresEngine> {
       indexes: { id: Index.Primary; idempotency_key: Index.Unique; charge_id: Index.Secondary; 'state:available_at': Index.Secondary };
     }>,
     Database.UseTable<{
-      name: 'recurrences';
-      schema: RecurrenceSchema;
-      relations: { 'owner_id@owner': 'users:id'; 'payment_method_id@payment_method': 'payment_methods:id' };
-      indexes: { id: Index.Primary; 'owner_id:idempotency_key': Index.Unique; owner_id: Index.Secondary; state: Index.Secondary };
-    }>,
-    Database.UseTable<{
-      name: 'recurrence_allocations';
-      schema: RecurrenceAllocationSchema;
-      relations: { 'recurrence_id@recurrence': 'recurrences:id'; 'person_id@person': 'people:id' };
-      indexes: {
-        id: Index.Primary;
-        'recurrence_id:allocation_order': Index.Unique;
-        recurrence_id: Index.Secondary;
-        person_id: Index.Secondary;
-      };
-    }>,
-    Database.UseTable<{
-      name: 'recurrence_reminders';
-      schema: RecurrenceReminderSchema;
-      relations: { 'recurrence_id@recurrence': 'recurrences:id' };
-      indexes: { id: Index.Primary; 'recurrence_id:offset_days': Index.Unique; recurrence_id: Index.Secondary };
-    }>,
-    Database.UseTable<{
-      name: 'recurrence_occurrences';
-      schema: RecurrenceOccurrenceSchema;
-      relations: { 'recurrence_id@recurrence': 'recurrences:id' };
-      indexes: { id: Index.Primary; 'recurrence_id:occurrence_date': Index.Unique; recurrence_id: Index.Secondary };
-    }>,
-    Database.UseTable<{
       name: 'payment_proofs';
       schema: PaymentProofSchema;
       relations: { 'charge_id@charge': 'charges:id'; 'sender_user_id@sender_user': 'users:id'; 'reviewer_id@reviewer': 'users:id' };
@@ -110,16 +74,16 @@ export declare class Db extends Database.Service<PostgresEngine> {
       indexes: { id: Index.Primary; 'owner_id:pix_key_type:pix_key': Index.Unique; owner_id: Index.Secondary };
     }>,
     Database.UseTable<{
-      name: 'expenses';
-      schema: ExpenseSchema;
+      name: 'billings';
+      schema: BillingSchema;
       relations: { 'owner_id@owner': 'users:id'; 'payment_method_id@payment_method': 'payment_methods:id' };
-      indexes: { id: Index.Primary; 'owner_id:idempotency_key': Index.Unique; owner_id: Index.Secondary };
+      indexes: { id: Index.Primary; 'owner_id:idempotency_key': Index.Unique; owner_id: Index.Secondary; 'state:type': Index.Secondary };
     }>,
     Database.UseTable<{
-      name: 'expense_allocations';
-      schema: ExpenseAllocationSchema;
-      relations: { 'expense_id@expense': 'expenses:id'; 'person_id@person': 'people:id' };
-      indexes: { id: Index.Primary; 'expense_id:allocation_order': Index.Unique; expense_id: Index.Secondary; person_id: Index.Secondary };
+      name: 'allocations';
+      schema: AllocationSchema;
+      relations: { 'billing_id@billing': 'billings:id'; 'person_id@person': 'people:id' };
+      indexes: { id: Index.Primary; 'billing_id:allocation_order': Index.Unique; billing_id: Index.Secondary; person_id: Index.Secondary };
     }>,
     Database.UseTable<{
       name: 'charges';
@@ -128,6 +92,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
         'creditor_id@creditor': 'users:id';
         'debtor_person_id@debtor_person': 'people:id';
         'recipient_user_id@recipient_user': 'users:id';
+        'billing_id@billing': 'billings:id';
       };
       indexes: {
         id: Index.Primary;
@@ -135,7 +100,8 @@ export declare class Db extends Database.Service<PostgresEngine> {
         recipient_user_id: Index.Secondary;
         recipient_email_snapshot: Index.Secondary;
         debtor_person_id: Index.Secondary;
-        source_id: Index.Secondary;
+        billing_id: Index.Secondary;
+        'billing_id:debtor_person_id:due_date': Index.Unique;
       };
     }>,
     Database.UseTable<{

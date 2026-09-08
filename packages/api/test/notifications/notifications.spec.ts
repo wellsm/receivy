@@ -1,17 +1,11 @@
 import { equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpConflictError, HttpForbiddenError } from '@ez4/gateway';
+import { disableSessionDevices } from '../../src/account/sessions';
 import { createBilling } from '../../src/billings/repository';
 import { cancelCharge } from '../../src/charges/repository';
 import { createEmailClient } from '../../src/email/compose';
-import {
-  getPreferences,
-  listDeliveries,
-  manualReminder,
-  registerDevice,
-  removeDevice,
-  savePreferences
-} from '../../src/notifications/repository';
+import { listDeliveries, manualReminder, registerDevice } from '../../src/notifications/repository';
 import { notificationJobHandler } from '../../src/notifications/scheduler';
 import type { NotificationTransport } from '../../src/notifications/transport';
 import { notificationTransport } from '../../src/notifications/transport';
@@ -93,16 +87,16 @@ describe('durable notification delivery', () => {
     });
     await savePerson(db, OWNER, { name: 'Edited', email: 'redirect@example.com' }, personId);
     await Promise.all([run(), run()]);
-    equal(emails.filter((e) => e.to === original).length, 2, 'one initial and one due -3 reminder');
+    equal(emails.filter((e) => e.to === original).length, 1, 'only the initial notice fires today');
     equal(emails.filter((e) => e.to === 'redirect@example.com').length, 0);
     const rows = await listDeliveries(db, OWNER, id);
-    equal(rows.length, 2);
+    equal(rows.length, 1);
     ok(rows.every((row) => row.state === 'accepted'));
     await rejects(() => listDeliveries(db, OTHER, id), HttpForbiddenError);
     const pending = await db.outbox_events.count({
       where: { aggregate_id: id, type: 'charge.reminder', state: 'pending' }
     });
-    equal(pending, 2);
+    equal(pending, 1, 'the due-date reminder stays queued for the due date');
   });
   it('keeps disabled delivery observable without undoing the charge', async () => {
     const id = await charge();
@@ -144,29 +138,7 @@ describe('durable notification delivery', () => {
     await run();
     ok((await listDeliveries(db, OWNER, id)).some((row) => row.state === 'suppressed'));
   });
-  it('enforces ownership, preferences, registration removal and concurrent manual quota', async () => {
-    const prefs = await getPreferences(db, DEBTOR);
-    equal(prefs.emailEnabled, true);
-    await savePreferences(db, DEBTOR, {
-      emailEnabled: false,
-      pushEnabled: true,
-      reminderOffsets: [0]
-    });
-    equal((await db.users.findOne({ select: { id: true }, where: { id: DEBTOR } }))?.id, DEBTOR);
-    await savePreferences(db, DEBTOR, {
-      emailEnabled: false,
-      pushEnabled: true,
-      reminderOffsets: [0]
-    });
-    equal((await db.users.findOne({ select: { id: true }, where: { id: DEBTOR } }))?.id, DEBTOR);
-    equal((await getPreferences(db, DEBTOR)).emailEnabled, false);
-    const device = await registerDevice(db, DEBTOR, {
-      token: 'ExponentPushToken[notification-test]',
-      platform: 'ios',
-      installationId: 'fixture-device'
-    });
-    await rejects(() => removeDevice(db, OTHER, device.id), HttpForbiddenError);
-    await removeDevice(db, DEBTOR, device.id);
+  it('enforces ownership and concurrent manual quota', async () => {
     const id = await charge();
     await rejects(() => manualReminder(db, OTHER, id, () => clock), HttpForbiddenError);
     const results = await Promise.allSettled([manualReminder(db, OWNER, id, () => clock), manualReminder(db, OWNER, id, () => clock)]);
@@ -174,11 +146,6 @@ describe('durable notification delivery', () => {
   });
   it('persists Expo tickets, polls receipts, disables revoked tokens and falls back only on definite failure', async () => {
     clock = start;
-    await savePreferences(db, DEBTOR, {
-      emailEnabled: true,
-      pushEnabled: true,
-      reminderOffsets: []
-    });
     await registerDevice(db, DEBTOR, {
       token: 'ExpoPushToken[notification-receipts]',
       platform: 'android',
@@ -206,22 +173,22 @@ describe('durable notification delivery', () => {
       }
     };
     await run(sender);
-    equal(pushes, 2);
+    equal(pushes, 1);
     equal(receipts, 0);
     ok((await listDeliveries(db, OWNER, id)).every((row) => row.state === 'accepted'));
     clock += 15 * 60_000;
     await run(sender);
-    equal(pushes, 2);
-    equal(receipts, 2);
+    equal(pushes, 1);
+    equal(receipts, 1);
     clock += 15 * 60_000;
     await run({
       ...sender,
       receipt: async () => ({ status: 'device_unregistered' })
     });
     await run();
-    equal(pushes, 2);
+    equal(pushes, 1);
     const rows = await listDeliveries(db, OWNER, id);
-    equal(rows.filter((row) => row.channel === 'email' && row.state === 'accepted').length, 2);
+    equal(rows.filter((row) => row.channel === 'email' && row.state === 'accepted').length, 1);
     equal(
       await db.device_tokens.count({
         where: { user_id: DEBTOR, active: true }
@@ -270,7 +237,7 @@ describe('durable notification delivery', () => {
         return { status: 'accepted', id: 'must-not-send' };
       }
     });
-    equal(pushes, 2);
+    equal(pushes, 1);
     equal((await listDeliveries(db, OWNER, id)).filter((row) => row.channel === 'email').length, 0);
     ok((await listDeliveries(db, OWNER, id)).every((row) => row.state === 'uncertain'));
   });
@@ -423,7 +390,7 @@ describe('durable notification delivery', () => {
       }
     };
     await notificationJobHandler({ requestId: 'native-email-with-disabled-push', event: null }, context);
-    equal(submittedTo.filter((to) => to === email).length, 2, 'initial and -3 reminder use enabled email');
+    equal(submittedTo.filter((to) => to === email).length, 1, 'only the initial notice uses enabled email today');
     ok((await listDeliveries(db, OWNER, id)).every((row) => row.channel === 'email' && row.state === 'accepted'));
     equal(submittedTo.filter((to) => to === historicalEmail).length, 0);
     ok((await listDeliveries(db, OWNER, historicalId)).every((row) => row.channel === 'push' && row.state === 'disabled'));
@@ -447,30 +414,31 @@ describe('durable notification delivery', () => {
     equal(submittedTo.filter((to) => to === disabledEmail).length, 0);
     ok((await listDeliveries(db, OWNER, disabledId)).every((row) => row.state === 'disabled'));
   });
-  it('freezes a billing with its own reminders, ignoring later preference changes', async () => {
+  it('billing with own reminders keeps them; billing without reminders uses the due-date default', async () => {
     clock = start;
-    await charge();
-    const billing = await createBilling(db, OWNER, `notify-frozen-${++count}`, {
+    const ownPersonId = (await savePerson(db, OWNER, { name: `Recipient ${++count}`, email: `notify-${count}@example.com` })).id;
+    const own = await createBilling(db, OWNER, `notify-own-${count}`, {
       type: 'once',
       totalCents: 1234,
       startDate: '2027-01-04',
       timezone: 'America/Sao_Paulo',
-      split: { mode: 'fixed', parts: [{ kind: 'person', personId, amountCents: 1234 }] },
-      reminders: [{ offsetDays: 0, enabled: true }]
+      split: { mode: 'fixed', parts: [{ kind: 'person', personId: ownPersonId, amountCents: 1234 }] },
+      reminders: [{ offsetDays: -3, enabled: true }]
     });
-    const id = billing.charges[0]!.id;
-    await savePreferences(db, OWNER, {
-      emailEnabled: true,
-      pushEnabled: true,
-      reminderOffsets: [-3, 0, 2]
-    });
+    const ownId = own.charges[0]!.id;
     await run();
-    equal((await listDeliveries(db, OWNER, id)).length, 1, 'only initial notice before the frozen due-day reminder');
+    // The -3 offset lands on today, proving the billing's own reminders are honored rather than replaced.
+    equal((await listDeliveries(db, OWNER, ownId)).length, 2, 'initial notice plus the -3 reminder due today');
+
+    const defaultId = await charge();
+    await run();
+    equal((await listDeliveries(db, OWNER, defaultId)).length, 1, 'only the initial notice fires today without explicit reminders');
     equal(
       await db.outbox_events.count({
-        where: { aggregate_id: id, type: 'charge.reminder' }
+        where: { aggregate_id: defaultId, type: 'charge.reminder' }
       }),
-      1
+      1,
+      'the due-date default schedules exactly one reminder, for the due date itself'
     );
   });
   it('backs off exponentially then dead-letters definitive failures without touching the debt', async () => {
@@ -485,7 +453,7 @@ describe('durable notification delivery', () => {
       }
     };
     await run(sender);
-    equal(sent, 2);
+    equal(sent, 1);
     for (const delay of [60_000, 120_000, 240_000, 480_000]) {
       clock += delay - 1;
       const previous: number = sent;
@@ -494,11 +462,11 @@ describe('durable notification delivery', () => {
       clock += 1;
       await run(sender);
     }
-    equal(sent, 10);
+    equal(sent, 5);
     ok((await listDeliveries(db, OWNER, id)).every((row) => row.state === 'failed' && row.attempts === 5));
     clock += 1000_000;
     await run(sender);
-    equal(sent, 10);
+    equal(sent, 5);
     equal((await db.charges.findOne({ select: { state: true }, where: { id } }))?.state, 'pending');
     const raw = (
       await db.notification_deliveries.findMany({
@@ -542,7 +510,7 @@ describe('durable notification delivery', () => {
     const execute = () => runNotifications(db, sender, { ...config, from: 'fixture@example.com' }, () => clock);
     await execute();
     const accepted = await listDeliveries(db, OWNER, id);
-    equal(accepted.length, 2);
+    equal(accepted.length, 1);
     ok(accepted.every((row) => row.state === 'accepted' && row.channel === 'push'));
     clock += 15 * 60_000;
     await execute();
@@ -567,10 +535,9 @@ describe('durable notification delivery', () => {
       data: { recipient_user: { id: accountA } }
     });
     await run({ ...transport, push: async () => ({ status: 'transient' }) });
-    await removeDevice(db, accountA, oldDevice.id);
+    await disableSessionDevices(db, accountA);
     const newDevice = await registerDevice(db, accountB, input);
     ok(newDevice.id !== oldDevice.id);
-    await removeDevice(db, accountA, oldDevice.id);
     const current = await db.device_tokens.findOne({
       select: { user_id: true, token: true, active: true },
       where: { id: newDevice.id }
@@ -585,16 +552,15 @@ describe('durable notification delivery', () => {
     equal(old?.user_id, accountA);
     equal(old?.active, false);
     const rows = await listDeliveries(db, OWNER, id);
-    equal(rows.length, 2);
+    equal(rows.length, 1);
     ok(rows.every((row) => row.state === 'suppressed'));
     equal(
       await db.notification_deliveries.count({
         where: { charge_id: id, device_id: oldDevice.id }
       }),
-      2
+      1
     );
     await rejects(() => registerDevice(db, accountA, input), HttpConflictError);
-    await rejects(() => removeDevice(db, accountB, oldDevice.id), HttpForbiddenError);
   });
   it('does not deactivate a rotated token when the old accepted ticket reports DeviceNotRegistered', async () => {
     clock = start;
@@ -611,7 +577,7 @@ describe('durable notification delivery', () => {
       data: { recipient_user: { id: userId } }
     });
     await run();
-    equal((await listDeliveries(db, OWNER, id)).filter((row) => row.state === 'accepted').length, 2);
+    equal((await listDeliveries(db, OWNER, id)).filter((row) => row.state === 'accepted').length, 1);
     const rotated = await registerDevice(db, userId, {
       ...input,
       token: 'ExpoPushToken[new-registration]'

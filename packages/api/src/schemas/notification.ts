@@ -1,13 +1,5 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
-export interface NotificationPreferenceSchema extends Database.Schema {
-  id: String.UUID;
-  user_id: String.UUID;
-  email_enabled: boolean;
-  push_enabled: boolean;
-  reminder_offsets: String.Max<100>;
-  updated_at: String.DateTime;
-}
 export interface DeviceTokenSchema extends Database.Schema {
   id: String.UUID;
   user_id: String.UUID;

@@ -3,7 +3,6 @@ import type { DbClient } from '../database';
 import type { NotificationDeliverySchema } from '../schemas/notification';
 import { digest, expandOutbox, type NotificationConfig } from './outbox';
 import { type RenderInputs, renderNotice } from './render';
-import { getPreferences } from './repository';
 import type { NotificationTransport, ReceiptResult, SendResult } from './transport';
 
 const SELECT = {
@@ -111,13 +110,6 @@ export async function runNotifications(db: DbClient, transport: NotificationTran
           inputs.expires * 1000 <= now)
       ) {
         await mark('suppressed', 'charge_or_capability_inactive');
-        return;
-      }
-      const preferences = row.recipient_user_id
-        ? await getPreferences(tx, row.recipient_user_id)
-        : { emailEnabled: true, pushEnabled: false };
-      if (!receipt && !(row.channel === 'email' ? preferences.emailEnabled : preferences.pushEnabled)) {
-        await mark('suppressed', 'recipient_preference');
         return;
       }
       const device = row.device_id
@@ -273,7 +265,7 @@ async function fallback(db: DbClient, eventId: string, now: number) {
   const first = rows[0];
   if (!first) return;
   const input = JSON.parse(first.render_inputs) as RenderInputs;
-  if (!input.email || (first.recipient_user_id && !(await getPreferences(db, first.recipient_user_id)).emailEnabled)) return;
+  if (!input.email) return;
   const stamp = new Date(now).toISOString();
   await db.notification_deliveries.insertOne({
     data: {

@@ -57,7 +57,7 @@ em UTC; calendário no timezone IANA do `billing`.
 | `end_date` | date \| nulo | obrigatório em `until`; nulo nos demais |
 | `timezone` | text | IANA, obrigatório |
 | `payment_method_id` | uuid \| nulo | chave Pix escolhida; nulo = padrão do dono na materialização |
-| `reminders` | json \| nulo | `[{ offsetDays, enabled }]`; nulo = usa `notification_preferences.reminder_offsets` do dono |
+| `reminders` | json \| nulo | `[{ offsetDays, enabled }]`; nulo = usa `DEFAULT_BILLING_REMINDERS` (`[0]`) |
 | `state` | `active` \| `paused` \| `ended` | `paused` só é aceito em `indefinite` |
 | `processed_through` | date \| nulo | cursor de materialização, só `indefinite` |
 | `idempotency_key`, `request_hash` | text | único por `(owner_id, idempotency_key)`; hash diferente com mesma chave → 409 |
@@ -109,12 +109,11 @@ Continua como registro de idempotência e histórico por canal. Perde
 `idempotency_key` único: `charge:<id>:initial`, `charge:<id>:reminder:<offset>`,
 `charge:<id>:manual:<eventId>`, sufixo `:email` ou `:push`.
 
-Lista final (22): `users`, `auth_identities`, `login_codes`,
+Lista final (21): `users`, `auth_identities`, `login_codes`,
 `oauth_attempts`, `oauth_grants`, `session_families`, `refresh_tokens`,
 `people`, `person_contacts`, `payment_methods`, `billings`, `allocations`,
 `charges`, `payments`, `public_links`, `upload_intents`, `payment_proofs`,
-`proof_throttles`, `notification_preferences`, `device_tokens`,
-`notification_deliveries`, `activity_events`.
+`proof_throttles`, `device_tokens`, `notification_deliveries`, `activity_events`.
 
 ## 4. Regras de domínio
 
@@ -171,10 +170,9 @@ filtro de datas. Nada muda para quem paga.
 
 ### Lembretes
 
-Origem dos offsets, nesta ordem: `billings.reminders` (se não nulo) →
-`notification_preferences.reminder_offsets` do dono → `[-3, 0, 2]`. Editar
-lembretes afeta lembretes ainda não enfileirados; enfileirados não são
-cancelados.
+Origem dos offsets: `billings.reminders` (se não nulo) → `DEFAULT_BILLING_REMINDERS`
+(`[0]`). Editar lembretes afeta lembretes ainda não enfileirados; enfileirados não
+são cancelados.
 
 ## 5. API e contratos
 
@@ -255,7 +253,7 @@ Crons (`Cron.Service`, `maxRetries: 1`, handler só consulta e enfileira):
 
 | Cron | Expressão | Trabalho |
 | --- | --- | --- |
-| `NotificationCron` | a cada 5 min | para `charges` pendentes com `due_date` entre hoje−90 e hoje+90 no timezone do `billing`, calcular offsets devidos hoje, inserir `delivery` `pending` se a `idempotency_key` não existir, enfileirar; reenfileirar `pending` antigas |
+| `NotificationCron` | a cada 5 min | para `charges` pendentes com `due_date` entre hoje−90 e hoje+90 no timezone do `billing`, calcular offsets devidos hoje a partir de `billings.reminders` (ou `DEFAULT_BILLING_REMINDERS`, `[0]`, quando nulo), inserir `delivery` `pending` se a `idempotency_key` não existir, enfileirar; reenfileirar `pending` antigas |
 | `BillingCron` | a cada hora | `billings` `indefinite` ativos cuja próxima ocorrência (após `processed_through`) tem data de materialização ≤ hoje → enfileirar `{ billingId }` |
 | `StorageCron` | a cada hora | listar objetos do bucket sem `payment_proofs`/`upload_intents` correspondentes e enfileirar `orphan`/`temporary`; varredura completa por prefixo, sem cursor |
 

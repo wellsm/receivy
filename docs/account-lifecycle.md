@@ -21,27 +21,10 @@ disables legacy registrations with no family link. Removed token tombstones pres
 delivery history and release the actual token for another account. Already accepted
 external sends cannot be recalled; unsubmitted/retry work is prevented.
 
-## Export
-
-POST account/export issues a five-minute, purpose-separated HMAC authorization bound
-to the authenticated user and family. POST account/export/download receives it in the
-body (not URL), revalidates the active session and returns filename plus JSON bytes.
-The web downloads an application/json attachment; mobile opens its native share sheet
-with JSON text. A leaked export ticket alone cannot download anything. No exports are
-persisted server-side, so no additional bucket, upload MIME or expiry policy is needed.
-
-Enumeration is explicit: own profile, address book/contacts, Pix methods, expenses,
-recurrences, uploaded proof metadata, preferences and activity facts; financial charge
-and payment history is restricted to creditor ownership or the immutable recipient
-ID/verified email authorization. Other accounts' address books are excluded. Login
-codes, provider identities/grants/attempts, refresh tokens, device tokens, public-link
-capabilities, storage object keys and credentials are never part of the export.
-User-downloaded/shared copies leave Receivy's control and must be protected by users.
-
 ## Deletion and retention allowlist
 
 DELETE account requires the literal EXCLUIR. One transaction revokes sessions, ends
-owned recurrence generation, removes owned login artifacts/preferences/Pix methods,
+owned recurrence generation, removes owned login artifacts/Pix methods,
 scrubs affected notification render inputs/recipient routing, prevents outbox retries,
 and erases user identity. A retry at the repository boundary is idempotent under the
 user lock. Already-revoked HTTP credentials get normal 401, not an auth exception.

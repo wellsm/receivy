@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Service } from '@ez4/common';
 import { HttpForbiddenError, HttpUnauthorizedError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
-import { createExportTicket, downloadExport, eraseAccount, listSessions, revokeSession, updateProfile } from '../../src/account/repository';
+import { eraseAccount, revokeSession, updateProfile } from '../../src/account/repository';
 import { issueAccessToken } from '../../src/auth/session';
 import { sessionAuthorizer } from '../../src/authorizers/session';
 import { getCharge, recordManualPayment } from '../../src/charges/repository';
@@ -58,10 +58,6 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     const current = await session(owner);
     equal((await authorize(current.access)).identity.userId, owner);
     await rejects(() => revokeSession(db, debtor, current.familyId), HttpForbiddenError);
-    equal(
-      (await listSessions(db, owner, current.familyId)).some((x) => x.current),
-      true
-    );
     await revokeSession(db, owner, current.familyId);
     await rejects(() => authorize(current.access), HttpUnauthorizedError);
     await rejects(() => authorize(issueAccessToken({ familyId: current.familyId, userId: debtor, secret })), HttpUnauthorizedError);
@@ -135,23 +131,10 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     equal(await db.payment_proofs.count({ where: { id: proofId } }), 1);
     await db.payment_proofs.deleteOne({ where: { id: proofId } });
   });
-  it('validates profile and exports only own data with a short-lived session-bound signature', async () => {
-    const auth = await session(owner);
-    const foreign = await session(debtor);
+  it('validates profile', async () => {
     await updateProfile(db, owner, { name: '  Ana  ', locale: 'pt-BR', timezone: 'America/Manaus', country: 'BR' });
+    equal((await db.users.findOne({ select: { name: true }, where: { id: owner } }))?.name, 'Ana');
     await rejects(() => updateProfile(db, owner, { name: ' ', locale: 'pt-BR', timezone: 'bad/zone', country: 'BR' }));
-    await savePerson(db, debtor, { name: 'Foreign private contact', email: 'private-foreign@example.com' });
-    const ticket = await createExportTicket(db, auth, secret, 1000);
-    const exported = await downloadExport(db, auth, ticket.token, secret, 1001);
-    equal(JSON.parse(exported.json).profile.name, 'Ana');
-    ok(!exported.json.includes('private-foreign'));
-    for (const excluded of ['refreshToken', 'token_hash', 'code_hash', 'ExpoPushToken', 'object_key'])
-      ok(!exported.json.includes(excluded));
-    await rejects(() => downloadExport(db, foreign, ticket.token, secret, 1001), HttpUnauthorizedError);
-    await rejects(() => downloadExport(db, auth, ticket.token + 'x', secret, 1001), HttpUnauthorizedError);
-    await rejects(() => downloadExport(db, auth, ticket.token, secret, 1300), HttpUnauthorizedError);
-    await revokeSession(db, owner, auth.familyId);
-    await rejects(() => downloadExport(db, auth, ticket.token, secret, 1001), HttpUnauthorizedError);
   });
   it("atomically erases identity, preserves other account's payment fact and closes re-registration history access", async () => {
     const person = await savePerson(db, owner, { name: 'Account Debtor', email: 'account-debtor@example.com' });

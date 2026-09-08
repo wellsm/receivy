@@ -132,7 +132,6 @@ export async function eraseAccount(
         await tx.billings.deleteOne({ where: { id: billing.id } });
       }
     await tx.payment_methods.deleteMany({ where: { owner_id: userId } });
-    await tx.notification_preferences.deleteMany({ where: { user_id: userId } });
     await tx.auth_identities.deleteMany({ where: { user_id: userId } });
     await tx.oauth_grants.deleteMany({ where: { user_id: userId } });
     await tx.login_codes.deleteMany({ where: { email: user.email } });

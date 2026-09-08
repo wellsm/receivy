@@ -52,7 +52,6 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
     await client.person_contacts.deleteMany({ where: { person_id: { isIn: personIds } } });
     await client.people.deleteMany({ where: { id: { isIn: personIds } } });
   }
-  await client.notification_preferences.deleteMany({ where: { user_id: { isIn: userIds } } });
   await client.device_tokens.deleteMany({ where: { user_id: { isIn: userIds } } });
   await client.activity_events.deleteMany({ where: { subject_user_id: { isIn: userIds } } });
   await client.users.deleteMany({ where: { id: { isIn: userIds } } });

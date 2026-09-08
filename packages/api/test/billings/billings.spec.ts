@@ -3,10 +3,9 @@ import { after, before, describe, it } from 'node:test';
 import { Order } from '@ez4/database';
 import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
 import type { BillingInput } from '@receivy/common';
-import { resolveBillingSplit } from '@receivy/common';
+import { DEFAULT_BILLING_REMINDERS, resolveBillingSplit } from '@receivy/common';
 import { createBilling, getBilling, listBillings, materializeBillings, patchBilling, previewBilling } from '../../src/billings/repository';
 import { getCharge } from '../../src/charges/repository';
-import { getPreferences, savePreferences } from '../../src/notifications/repository';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { archivePerson, savePerson } from '../../src/people/repository';
 import { getTimeline } from '../../src/timeline/repository';
@@ -130,7 +129,7 @@ describe('billings on native PostgreSQL', () => {
     );
     equal(created.charges.length, 0);
     ok(created.previews.length > 0);
-    equal(created.nextMaterialization, '2026-01-28');
+    equal(created.nextMaterialization, '2026-01-31');
     await rejects(
       () =>
         createBilling(
@@ -142,7 +141,7 @@ describe('billings on native PostgreSQL', () => {
         ),
       RangeError
     );
-    await Promise.all([materializeBillings(db, date('2026-01-28')), materializeBillings(db, date('2026-01-28'))]);
+    await Promise.all([materializeBillings(db, date('2026-01-31')), materializeBillings(db, date('2026-01-31'))]);
     const charges = await db.charges.findMany({ select: { due_date: true, installment: true }, where: { billing_id: created.id } });
     equal(charges.records.length, 1);
     equal(charges.records[0]!.due_date, '2026-01-31');
@@ -310,20 +309,8 @@ describe('billings on native PostgreSQL', () => {
     await patchBilling(db, OWNER, indefinite.id, { state: 'ended' });
   });
 
-  it('falls back reminders to the owner preferences and follows a preference change', async () => {
-    const original = await getPreferences(db, OWNER);
-
-    await savePreferences(db, OWNER, { ...original, reminderOffsets: [-7, -1] });
-
+  it('falls back a billing without reminders to the due-date default', async () => {
     const created = await createBilling(db, OWNER, 'no-reminders-key', once({ description: 'Sem lembretes próprios' }));
-    deepEqual((await getBilling(db, OWNER, created.id)).reminders, [
-      { offsetDays: -7, enabled: true },
-      { offsetDays: -1, enabled: true }
-    ]);
-
-    await savePreferences(db, OWNER, { ...original, reminderOffsets: [-2] });
-    deepEqual((await getBilling(db, OWNER, created.id)).reminders, [{ offsetDays: -2, enabled: true }]);
-
-    await savePreferences(db, OWNER, original);
+    deepEqual((await getBilling(db, OWNER, created.id)).reminders, DEFAULT_BILLING_REMINDERS);
   });
 });

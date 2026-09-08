@@ -1,65 +1,9 @@
 import { Order } from '@ez4/database';
 import { HttpBadRequestError, HttpConflictError, HttpError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import type { DeviceRegistration, NotificationDelivery, NotificationDevice, NotificationPreferences } from '@receivy/common';
+import type { DeviceRegistration, NotificationDelivery, NotificationDevice } from '@receivy/common';
 import { findChargeForActor } from '../charges/repository';
 import type { DbClient } from '../database';
 
-export async function getPreferences(db: DbClient, userId: string): Promise<NotificationPreferences> {
-  const row = await db.notification_preferences.findOne({
-    select: { email_enabled: true, push_enabled: true, reminder_offsets: true },
-    where: { user_id: userId }
-  });
-  return row
-    ? {
-        emailEnabled: row.email_enabled,
-        pushEnabled: row.push_enabled,
-        reminderOffsets: JSON.parse(row.reminder_offsets) as number[]
-      }
-    : { emailEnabled: true, pushEnabled: true, reminderOffsets: [-3, 0, 2] };
-}
-export async function savePreferences(db: DbClient, userId: string, input: NotificationPreferences): Promise<NotificationPreferences> {
-  if (
-    typeof input.emailEnabled !== 'boolean' ||
-    typeof input.pushEnabled !== 'boolean' ||
-    !Array.isArray(input.reminderOffsets) ||
-    input.reminderOffsets.length > 10 ||
-    input.reminderOffsets.some((n) => !Number.isInteger(n) || n < -90 || n > 90) ||
-    new Set(input.reminderOffsets).size !== input.reminderOffsets.length
-  )
-    throw new HttpBadRequestError('Preferências inválidas.');
-  return db.transaction(async (tx) => {
-    if (
-      !(await tx.users.findOne({
-        select: { id: true },
-        where: { id: userId, deleted_at: { isNull: true } },
-        lock: true
-      }))
-    )
-      throw new HttpNotFoundError();
-    const data = {
-      email_enabled: input.emailEnabled,
-      push_enabled: input.pushEnabled,
-      reminder_offsets: JSON.stringify([...input.reminderOffsets].sort((a, b) => a - b)),
-      updated_at: new Date().toISOString()
-    };
-    if (
-      await tx.notification_preferences.findOne({
-        select: { user_id: true },
-        where: { user_id: userId }
-      })
-    ) {
-      await tx.notification_preferences.updateOne({
-        where: { user_id: userId },
-        data
-      });
-    } else
-      await tx.notification_preferences.insertOne({
-        data: { id: crypto.randomUUID(), user: { id: userId }, ...data }
-      });
-    await audit(tx, userId, userId, 'notifications.preferences_updated');
-    return getPreferences(tx, userId);
-  });
-}
 async function audit(db: DbClient, userId: string, id: string, type: string) {
   await db.activity_events.insertOne({
     data: {
@@ -73,18 +17,6 @@ async function audit(db: DbClient, userId: string, id: string, type: string) {
       created_at: new Date().toISOString()
     }
   });
-}
-export async function listDevices(db: DbClient, userId: string): Promise<NotificationDevice[]> {
-  const rows = await db.device_tokens.findMany({
-    select: { id: true, platform: true, active: true, created_at: true },
-    where: { user_id: userId }
-  });
-  return rows.records.map((row) => ({
-    id: row.id,
-    platform: row.platform,
-    active: row.active,
-    createdAt: row.created_at
-  }));
 }
 export async function registerDevice(
   db: DbClient,
@@ -167,33 +99,6 @@ export async function registerDevice(
       active: true,
       createdAt: existing?.created_at ?? now
     };
-  });
-}
-export async function removeDevice(db: DbClient, userId: string, id: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.users.findOne({
-      select: { id: true },
-      where: { id: userId },
-      lock: true
-    });
-    const row = await tx.device_tokens.findOne({
-      select: { user_id: true },
-      where: { id }
-    });
-    if (!row) throw new HttpNotFoundError();
-    if (row.user_id !== userId) throw new HttpForbiddenError();
-    const now = new Date().toISOString();
-    // User lock serializes owner changes; lock deliveries before the device, as the worker does.
-    // Accepted/in-flight notices retain their observation and uncertainty history.
-    await tx.notification_deliveries.updateMany({
-      where: { device_id: id, state: 'pending' },
-      data: { state: 'suppressed', reason: 'device_removed', updated_at: now }
-    });
-    await tx.device_tokens.updateOne({
-      where: { id },
-      data: { active: false, token: `removed:${id}`, updated_at: now }
-    });
-    await audit(tx, userId, id, 'notifications.device_removed');
   });
 }
 export async function manualReminder(db: DbClient, userId: string, chargeId: string, clock = Date.now): Promise<{ queued: boolean }> {

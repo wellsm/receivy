@@ -16,6 +16,7 @@ import {
   billingDates,
   billingDueDates,
   calendarDate,
+  DEFAULT_BILLING_REMINDERS,
   materializationDate,
   normalizeBillingInput,
   planBillingCharges,
@@ -24,7 +25,6 @@ import {
 import { lockOwner, persistChargePlan, prepareChargeMaterialization } from '../charges/materialize';
 import { CHARGE_SELECT, chargeDto } from '../charges/repository';
 import type { DbClient } from '../database';
-import { getPreferences } from '../notifications/repository';
 import { closeProofs } from '../proofs/events';
 import { billingRequestFingerprint } from './request';
 
@@ -81,17 +81,9 @@ function parseReminders(row: Pick<BillingRow, 'reminders'>): BillingReminder[] |
   return row.reminders ? (JSON.parse(row.reminders) as BillingReminder[]) : undefined;
 }
 
-/** Offsets used for this billing: its own reminders, else the owner's notification defaults. */
-export async function effectiveReminders(db: DbClient, row: Pick<BillingRow, 'owner_id' | 'reminders'>): Promise<BillingReminder[]> {
-  const own = parseReminders(row);
-
-  if (own) {
-    return own;
-  }
-
-  const preferences = await getPreferences(db, row.owner_id);
-
-  return preferences.reminderOffsets.map((offsetDays) => ({ offsetDays, enabled: true }));
+/** Offsets used for this billing: its own reminders, else the due-date-only default. */
+export function effectiveReminders(row: Pick<BillingRow, 'reminders'>): BillingReminder[] {
+  return parseReminders(row) ?? DEFAULT_BILLING_REMINDERS;
 }
 
 async function billingRow(db: DbClient, ownerId: string, id: string, lock = false): Promise<BillingRow> {
@@ -223,13 +215,13 @@ async function summaryDto(db: DbClient, row: BillingRow, now: Date): Promise<Bil
   const [nextPending] = await pendingDueDates(db, row.id, today);
   const nextDueDate =
     nextPending ??
-    (row.type === 'indefinite' ? ((await previewsFor(db, row, await effectiveReminders(db, row), now))[0]?.occurrenceDate ?? null) : null);
+    (row.type === 'indefinite' ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null) : null);
 
   return summary(row, nextDueDate, installmentCountFor(row));
 }
 
 async function dto(db: DbClient, row: BillingRow, now: Date): Promise<BillingDetail> {
-  const reminders = await effectiveReminders(db, row);
+  const reminders = effectiveReminders(row);
   const { split, allocations } = await splitFor(db, row.id);
   const charges = await db.charges.findMany({
     select: CHARGE_SELECT,
@@ -427,7 +419,7 @@ export async function previewBilling(db: DbClient, ownerId: string, id: string, 
     throw new HttpConflictError('Só cobranças sem fim têm projeção.');
   }
 
-  return { previews: await previewsFor(db, row, await effectiveReminders(db, row), now) };
+  return { previews: await previewsFor(db, row, effectiveReminders(row), now) };
 }
 
 /** Timeline projection: every active indefinite billing of the owner. */
@@ -436,7 +428,7 @@ export async function indefinitePreviews(db: DbClient, ownerId: string, now = ne
   const previews: BillingPreview[] = [];
 
   for (const row of rows.records) {
-    previews.push(...(await previewsFor(db, row, await effectiveReminders(db, row), now)));
+    previews.push(...(await previewsFor(db, row, effectiveReminders(row), now)));
   }
 
   return previews;
@@ -590,7 +582,7 @@ export async function materializeBillings(db: DbClient, now = new Date()): Promi
           return { created: 0, evaluated: 0 };
         }
 
-        const reminders = await effectiveReminders(tx, row);
+        const reminders = effectiveReminders(row);
         const offsets = reminders.filter((reminder) => reminder.enabled).map((reminder) => reminder.offsetDays);
         const today = calendarDate(now, row.timezone);
         const latest = addCalendarDays(today, -(offsets.length ? Math.min(...offsets) : 0));

@@ -5,7 +5,6 @@ import { effectiveReminders } from '../billings/repository';
 import { CHARGE_SELECT, type ChargeRow } from '../charges/repository';
 import type { DbClient } from '../database';
 import { type RenderInputs, renderNotice } from './render';
-import { getPreferences } from './repository';
 
 export interface NotificationConfig {
   publicOrigin: string;
@@ -92,7 +91,9 @@ async function scheduleReminders(db: DbClient, charge: ChargeRow, now: number) {
     return;
   }
 
-  const offsets = (await effectiveReminders(db, billing)).filter((reminder) => reminder.enabled).map((reminder) => reminder.offsetDays);
+  const offsets = effectiveReminders(billing)
+    .filter((reminder) => reminder.enabled)
+    .map((reminder) => reminder.offsetDays);
 
   for (const offset of offsets) {
     const localDate = addCalendarDays(charge.due_date, offset);
@@ -138,9 +139,8 @@ async function planDelivery(
           }
         })
       : undefined;
-  const preferences = user ? await getPreferences(db, user.id) : { emailEnabled: true, pushEnabled: false };
   const devices =
-    user && preferences.pushEnabled && config.pushAvailable !== false
+    user && config.pushAvailable !== false
       ? (
           await db.device_tokens.findMany({
             select: { id: true },
@@ -197,7 +197,7 @@ async function planDelivery(
       ? 'pix_required'
       : !valid
         ? 'charge_or_capability_inactive'
-        : !devices.length && (!inputs.email || !preferences.emailEnabled)
+        : !devices.length && !inputs.email
           ? 'no_enabled_channel'
           : undefined;
   const recipients = devices.length

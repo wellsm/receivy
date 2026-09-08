@@ -27,20 +27,6 @@ export async function disableSessionDevices(tx: DbClient, userId: string, family
   }
 }
 
-export async function listSessions(db: DbClient, userId: string, currentId: string) {
-  const rows = await db.session_families.findMany({
-    select: { id: true, device_name: true, created_at: true, last_seen_at: true },
-    where: { user_id: userId, revoked_at: { isNull: true } }
-  });
-  return rows.records.map((row) => ({
-    id: row.id,
-    deviceName: row.device_name ?? 'Dispositivo',
-    createdAt: row.created_at,
-    lastSeenAt: row.last_seen_at,
-    current: row.id === currentId
-  }));
-}
-
 export async function revokeSession(db: DbClient, userId: string, familyId: string) {
   await db.transaction(async (tx) => {
     await tx.users.findOne({ select: { id: true }, where: { id: userId }, lock: true });

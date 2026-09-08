@@ -6,7 +6,7 @@ import type { AuthIdentitySchema } from './schemas/auth-identity';
 import type { AllocationSchema, BillingSchema } from './schemas/billing';
 import type { ChargeSchema } from './schemas/charge';
 import type { LoginCodeSchema } from './schemas/login-code';
-import type { DeviceTokenSchema, NotificationDeliverySchema, NotificationPreferenceSchema } from './schemas/notification';
+import type { DeviceTokenSchema, NotificationDeliverySchema } from './schemas/notification';
 import type { OauthAttemptSchema } from './schemas/oauth-attempt';
 import type { OauthGrantSchema } from './schemas/oauth-grant';
 import type { OutboxEventSchema } from './schemas/outbox-event';
@@ -37,12 +37,6 @@ export declare class Db extends Database.Service<PostgresEngine> {
       indexes: { id: Index.Primary; object_key: Index.Unique; charge_id: Index.Secondary; 'state:available_at': Index.Secondary };
     }>,
     Database.UseTable<{ name: 'storage_cleanup_cursors'; schema: StorageCleanupCursorSchema; indexes: { id: Index.Primary } }>,
-    Database.UseTable<{
-      name: 'notification_preferences';
-      schema: NotificationPreferenceSchema;
-      relations: { 'user_id@user': 'users:id' };
-      indexes: { id: Index.Primary; user_id: Index.Unique };
-    }>,
     Database.UseTable<{
       name: 'device_tokens';
       schema: DeviceTokenSchema;

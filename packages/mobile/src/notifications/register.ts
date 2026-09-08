@@ -31,7 +31,7 @@ export async function registerPushDevice(
     permission = await Notifications.requestPermissionsAsync();
   if (permission.status !== "granted")
     throw new Error(
-      "Push indisponível neste dispositivo; os avisos chegam por e-mail.",
+      "Permissão de notificações não concedida; os avisos chegam por e-mail.",
     );
   const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
   let installationId = await SecureStore.getItemAsync(

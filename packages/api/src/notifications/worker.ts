@@ -261,12 +261,29 @@ async function fallback(db: DbClient, eventId: string, now: number) {
       where: { event_id: eventId }
     })
   ).records;
-  if (rows.some((row) => row.channel === 'email') || rows.some((row) => row.channel === 'push' && row.state !== 'failed')) return;
+  if (rows.some((row) => row.channel === 'push' && row.state !== 'failed')) return;
+  const stamp = new Date(now).toISOString();
+  const email = rows.find((row) => row.channel === 'email');
+
+  if (email) {
+    // The follow-up was already planned; pull it forward instead of duplicating it.
+    if (email.state === 'pending' && Date.parse(email.available_at) > now)
+      await db.notification_deliveries.updateOne({
+        where: { id: email.id },
+        data: {
+          available_at: stamp,
+          reason: 'push_failed_fallback',
+          updated_at: stamp
+        }
+      });
+
+    return;
+  }
+
   const first = rows[0];
   if (!first) return;
   const input = JSON.parse(first.render_inputs) as RenderInputs;
   if (!input.email) return;
-  const stamp = new Date(now).toISOString();
   await db.notification_deliveries.insertOne({
     data: {
       id: crypto.randomUUID(),

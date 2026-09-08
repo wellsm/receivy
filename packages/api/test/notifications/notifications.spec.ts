@@ -5,6 +5,7 @@ import { disableSessionDevices } from '../../src/account/sessions';
 import { createBilling } from '../../src/billings/repository';
 import { cancelCharge } from '../../src/charges/repository';
 import { createEmailClient } from '../../src/email/compose';
+import { expandOutbox } from '../../src/notifications/outbox';
 import { listDeliveries, manualReminder, registerDevice } from '../../src/notifications/repository';
 import { notificationJobHandler } from '../../src/notifications/scheduler';
 import type { NotificationTransport } from '../../src/notifications/transport';
@@ -175,7 +176,13 @@ describe('durable notification delivery', () => {
     await run(sender);
     equal(pushes, 1);
     equal(receipts, 0);
-    ok((await listDeliveries(db, OWNER, id)).every((row) => row.state === 'accepted'));
+    const planned = await listDeliveries(db, OWNER, id);
+
+    equal(planned.filter((row) => row.channel === 'push' && row.state === 'accepted').length, 1);
+    const followup = planned.find((row) => row.channel === 'email')!;
+
+    equal(followup.state, 'pending');
+    equal(followup.reason, 'push_followup');
     clock += 15 * 60_000;
     await run(sender);
     equal(pushes, 1);
@@ -188,7 +195,11 @@ describe('durable notification delivery', () => {
     await run();
     equal(pushes, 1);
     const rows = await listDeliveries(db, OWNER, id);
-    equal(rows.filter((row) => row.channel === 'email' && row.state === 'accepted').length, 1);
+    const emailed = rows.filter((row) => row.channel === 'email');
+
+    equal(emailed.length, 1, 'the planned follow-up is advanced, never duplicated');
+    equal(emailed[0]!.id, followup.id);
+    equal(emailed[0]!.state, 'accepted');
     equal(
       await db.device_tokens.count({
         where: { user_id: DEBTOR, active: true }
@@ -220,8 +231,8 @@ describe('durable notification delivery', () => {
       }
     });
     const rows = await listDeliveries(db, OWNER, id);
-    ok(rows.every((row) => row.state === 'uncertain'));
-    const first = rows[0]!;
+    ok(rows.filter((row) => row.channel === 'push').every((row) => row.state === 'uncertain'));
+    const first = rows.find((row) => row.channel === 'push')!;
     await db.notification_deliveries.updateOne({
       where: { id: first.id },
       data: {
@@ -238,8 +249,20 @@ describe('durable notification delivery', () => {
       }
     });
     equal(pushes, 1);
-    equal((await listDeliveries(db, OWNER, id)).filter((row) => row.channel === 'email').length, 0);
-    ok((await listDeliveries(db, OWNER, id)).every((row) => row.state === 'uncertain'));
+    const settled = (
+      await db.notification_deliveries.findMany({
+        select: { channel: true, state: true, reason: true, available_at: true },
+        where: { charge_id: id }
+      })
+    ).records;
+
+    ok(settled.filter((row) => row.channel === 'push').every((row) => row.state === 'uncertain'));
+    const waiting = settled.filter((row) => row.channel === 'email');
+
+    equal(waiting.length, 1, 'no fallback e-mail is added beside an uncertain sibling');
+    equal(waiting[0]!.state, 'pending');
+    equal(waiting[0]!.reason, 'push_followup');
+    equal(Date.parse(waiting[0]!.available_at), start + 2 * 3600_000, 'the follow-up is not pulled forward');
   });
   it('retains unsupported events without blocking eligible events and exposes the unsupported backlog', async () => {
     const id = await charge();
@@ -280,13 +303,15 @@ describe('durable notification delivery', () => {
     await run();
     ok((await listDeliveries(db, OWNER, id)).every((row) => row.state === 'suppressed'));
     const expired = await charge();
+    const expiredAddress = `notify-${count}@example.com`;
     await run({ ...transport, email: async () => ({ status: 'uncertain' }) });
     clock += 23 * 3600_000;
     let attempts = 0;
+    // Follow-up rows queued by other fixtures may also come due here, so only this charge is counted.
     await run({
       ...transport,
-      email: async () => {
-        attempts++;
+      email: async (input) => {
+        if (input.to === expiredAddress) attempts++;
         return { status: 'accepted', id: 'unexpected' };
       }
     });
@@ -313,10 +338,19 @@ describe('durable notification delivery', () => {
       push: async (input) =>
         input.token.includes('sibling') ? { status: 'device_unregistered' } : { status: 'accepted', id: 'accepted-sibling' }
     });
-    const rows = await listDeliveries(db, OWNER, id);
-    equal(rows.filter((row) => row.channel === 'email').length, 0);
-    ok(rows.some((row) => row.state === 'accepted'));
-    ok(rows.some((row) => row.state === 'failed'));
+    const rows = (
+      await db.notification_deliveries.findMany({
+        select: { channel: true, state: true, reason: true, available_at: true },
+        where: { charge_id: id }
+      })
+    ).records;
+    const waiting = rows.filter((row) => row.channel === 'email');
+
+    equal(waiting.length, 1, 'the follow-up is the only e-mail row');
+    equal(waiting[0]!.reason, 'push_followup', 'the accepted sibling keeps the follow-up on its normal schedule');
+    equal(Date.parse(waiting[0]!.available_at), start + 2 * 3600_000);
+    ok(rows.some((row) => row.channel === 'push' && row.state === 'accepted'));
+    ok(rows.some((row) => row.channel === 'push' && row.state === 'failed'));
   });
   it('runs the actual configured scheduler handler with explicit disabled delivery', async () => {
     const id = await charge();
@@ -360,7 +394,10 @@ describe('durable notification delivery', () => {
       push: async () => ({ status: 'disabled' }),
       receipt: async () => ({ status: 'disabled' })
     });
-    ok((await listDeliveries(db, OWNER, historicalId)).every((row) => row.channel === 'push' && row.state === 'disabled'));
+    const historical = await listDeliveries(db, OWNER, historicalId);
+
+    ok(historical.filter((row) => row.channel === 'push').every((row) => row.state === 'disabled'));
+    ok(historical.every((row) => row.channel === 'push' || (row.state === 'pending' && row.reason === 'push_followup')));
 
     const id = await charge();
     const email = `notify-${count}@example.com`;
@@ -393,7 +430,10 @@ describe('durable notification delivery', () => {
     equal(submittedTo.filter((to) => to === email).length, 1, 'only the initial notice uses enabled email today');
     ok((await listDeliveries(db, OWNER, id)).every((row) => row.channel === 'email' && row.state === 'accepted'));
     equal(submittedTo.filter((to) => to === historicalEmail).length, 0);
-    ok((await listDeliveries(db, OWNER, historicalId)).every((row) => row.channel === 'push' && row.state === 'disabled'));
+    const replayed = await listDeliveries(db, OWNER, historicalId);
+
+    ok(replayed.filter((row) => row.channel === 'push').every((row) => row.state === 'disabled'));
+    ok(replayed.every((row) => row.channel === 'push' || (row.state === 'pending' && row.reason === 'push_followup')));
 
     const disabledId = await charge();
     const disabledEmail = `notify-${count}@example.com`;
@@ -510,13 +550,26 @@ describe('durable notification delivery', () => {
     const execute = () => runNotifications(db, sender, { ...config, from: 'fixture@example.com' }, () => clock);
     await execute();
     const accepted = await listDeliveries(db, OWNER, id);
-    equal(accepted.length, 1);
-    ok(accepted.every((row) => row.state === 'accepted' && row.channel === 'push'));
+    equal(accepted.filter((row) => row.channel === 'push' && row.state === 'accepted').length, 1);
+    equal(accepted.filter((row) => row.channel === 'email').length, 1, 'only the deferred follow-up');
     clock += 15 * 60_000;
     await execute();
     await execute();
     equal(submissions.filter((to) => to === email).length, 0);
-    ok((await listDeliveries(db, OWNER, id)).every((row) => row.state === 'uncertain' && row.channel === 'push'));
+    const stalled = (
+      await db.notification_deliveries.findMany({
+        select: { channel: true, state: true, reason: true, available_at: true },
+        where: { charge_id: id }
+      })
+    ).records;
+
+    ok(stalled.filter((row) => row.channel === 'push').every((row) => row.state === 'uncertain'));
+    const waiting = stalled.filter((row) => row.channel === 'email');
+
+    equal(waiting.length, 1);
+    equal(waiting[0]!.state, 'pending');
+    equal(waiting[0]!.reason, 'push_followup', 'an uncertain ticket never pulls the follow-up forward');
+    equal(Date.parse(waiting[0]!.available_at), start + 2 * 3600_000);
   });
   it('releases an explicitly removed token to a new account without transferring history or queued notices', async () => {
     clock = start;
@@ -552,8 +605,9 @@ describe('durable notification delivery', () => {
     equal(old?.user_id, accountA);
     equal(old?.active, false);
     const rows = await listDeliveries(db, OWNER, id);
-    equal(rows.length, 1);
-    ok(rows.every((row) => row.state === 'suppressed'));
+    equal(rows.filter((row) => row.channel === 'push').length, 1);
+    ok(rows.filter((row) => row.channel === 'push').every((row) => row.state === 'suppressed'));
+    ok(rows.every((row) => row.channel === 'push' || (row.state === 'pending' && row.reason === 'push_followup')));
     equal(
       await db.notification_deliveries.count({
         where: { charge_id: id, device_id: oldDevice.id }
@@ -626,6 +680,208 @@ describe('durable notification delivery', () => {
     clock += 60_000;
     await run(sender);
     equal(attempted.filter((token) => token === 'ExpoPushToken[inflight-new]').length, 0);
-    ok((await listDeliveries(db, OWNER, id)).every((row) => row.state === 'suppressed'));
+    const rows = await listDeliveries(db, OWNER, id);
+
+    ok(rows.filter((row) => row.channel === 'push').every((row) => row.state === 'suppressed'));
+    ok(rows.every((row) => row.channel === 'push' || (row.state === 'pending' && row.reason === 'push_followup')));
+  });
+  it('schedules reminders at 09:00 in the billing timezone and holds them until then', async () => {
+    clock = start;
+    const id = await charge();
+    const address = `notify-${count}@example.com`;
+    await run();
+
+    const reminder = (
+      await db.outbox_events.findMany({
+        select: { id: true, available_at: true },
+        where: { aggregate_id: id, type: 'charge.reminder' }
+      })
+    ).records[0];
+
+    equal(Date.parse(reminder!.available_at), Date.parse('2027-01-04T12:00:00Z'), '09:00 in America/Sao_Paulo');
+
+    // A legacy row scanned from UTC midnight must still wait for the civil hour.
+    await db.outbox_events.updateOne({
+      where: { id: reminder!.id },
+      data: { available_at: '2027-01-04T00:00:00Z' }
+    });
+
+    clock = Date.parse('2027-01-04T11:40:00Z');
+    const sent = emails.filter((entry) => entry.to === address).length;
+    await run();
+
+    equal(emails.filter((entry) => entry.to === address).length, sent, 'nothing goes out before 09:00 local');
+    const held = await db.outbox_events.findOne({
+      select: { state: true, available_at: true },
+      where: { id: reminder!.id }
+    });
+
+    equal(held?.state, 'pending');
+    equal(Date.parse(held!.available_at), Date.parse('2027-01-04T11:55:00Z'), 'deferred by fifteen minutes');
+
+    clock = Date.parse('2027-01-04T12:00:00Z');
+    await run();
+
+    equal(emails.filter((entry) => entry.to === address).length, sent + 1, 'the reminder fires at 09:00 local');
+    equal(
+      (
+        await db.outbox_events.findOne({
+          select: { state: true },
+          where: { id: reminder!.id }
+        })
+      )?.state,
+      'delivered'
+    );
+  });
+  it('sends push first and the e-mail two hours later only while the charge is still pending', async () => {
+    clock = start;
+    const userId = await recipient();
+    await registerDevice(db, userId, {
+      token: 'ExpoPushToken[followup-settled]',
+      platform: 'ios',
+      installationId: 'followup-settled'
+    });
+    const id = await charge();
+    const address = `notify-${count}@example.com`;
+    await db.charges.updateOne({
+      where: { id },
+      data: { recipient_user: { id: userId } }
+    });
+    await run();
+
+    const planned = (
+      await db.notification_deliveries.findMany({
+        select: { id: true, channel: true, state: true, reason: true, available_at: true },
+        where: { charge_id: id }
+      })
+    ).records;
+
+    equal(planned.length, 2, 'one push plus the deferred e-mail follow-up');
+    equal(planned.find((row) => row.channel === 'push')?.state, 'accepted');
+
+    const followup = planned.find((row) => row.channel === 'email')!;
+
+    equal(followup.state, 'pending');
+    equal(followup.reason, 'push_followup');
+    equal(Date.parse(followup.available_at), start + 2 * 3600_000);
+
+    clock = start + 3600_000;
+    await run();
+
+    equal(emails.filter((entry) => entry.to === address).length, 0, 'the follow-up waits the full two hours');
+
+    await db.charges.updateOne({ where: { id }, data: { state: 'paid' } });
+    clock = start + 2 * 3600_000;
+    await run();
+
+    equal(emails.filter((entry) => entry.to === address).length, 0, 'a settled charge never falls back to e-mail');
+    const settled = (await listDeliveries(db, OWNER, id)).find((row) => row.channel === 'email');
+
+    equal(settled?.state, 'suppressed');
+    equal(settled?.reason, 'charge_or_capability_inactive');
+  });
+  it('sends the follow-up e-mail at T+2h when the charge stays pending', async () => {
+    clock = start;
+    const userId = await recipient();
+    await registerDevice(db, userId, {
+      token: 'ExpoPushToken[followup-pending]',
+      platform: 'android',
+      installationId: 'followup-pending'
+    });
+    const id = await charge();
+    const address = `notify-${count}@example.com`;
+    await db.charges.updateOne({
+      where: { id },
+      data: { recipient_user: { id: userId } }
+    });
+    await run();
+
+    equal(emails.filter((entry) => entry.to === address).length, 0);
+
+    clock = start + 2 * 3600_000;
+    await run();
+
+    equal(emails.filter((entry) => entry.to === address).length, 1);
+
+    await run();
+
+    equal(emails.filter((entry) => entry.to === address).length, 1, 'the follow-up is never resent');
+    ok((await listDeliveries(db, OWNER, id)).some((row) => row.channel === 'email' && row.state === 'accepted'));
+  });
+  it('advances the follow-up e-mail when the push fails definitively', async () => {
+    clock = start;
+    const userId = await recipient();
+    await registerDevice(db, userId, {
+      token: 'ExpoPushToken[followup-unregistered]',
+      platform: 'ios',
+      installationId: 'followup-unregistered'
+    });
+    const id = await charge();
+    const address = `notify-${count}@example.com`;
+    await db.charges.updateOne({
+      where: { id },
+      data: { recipient_user: { id: userId } }
+    });
+    await expandOutbox(db, config, clock);
+
+    const planned = (
+      await db.notification_deliveries.findMany({
+        select: { id: true, reason: true },
+        where: { charge_id: id, channel: 'email' }
+      })
+    ).records;
+
+    equal(planned.length, 1);
+    equal(planned[0]!.reason, 'push_followup');
+
+    await run({ ...transport, push: async () => ({ status: 'device_unregistered' }) });
+
+    const advanced = (
+      await db.notification_deliveries.findMany({
+        select: { id: true, state: true, reason: true, available_at: true },
+        where: { charge_id: id, channel: 'email' }
+      })
+    ).records;
+
+    equal(advanced.length, 1, 'the follow-up row is reused, never duplicated');
+    equal(advanced[0]!.state, 'pending');
+    equal(advanced[0]!.reason, 'push_failed_fallback');
+    ok(Date.parse(advanced[0]!.available_at) <= clock);
+
+    await run();
+
+    equal(emails.filter((entry) => entry.to === address).length, 1);
+    const rows = (
+      await db.notification_deliveries.findMany({
+        select: { id: true },
+        where: { charge_id: id, channel: 'email' }
+      })
+    ).records;
+
+    equal(rows.length, 1, 'the fallback never inserts a second e-mail row');
+    equal(rows[0]!.id, planned[0]!.id, 'the planned follow-up row is the one that goes out');
+  });
+  it('e-mails immediately when the recipient has no active device', async () => {
+    clock = start;
+    const id = await charge();
+    const address = `notify-${count}@example.com`;
+    await expandOutbox(db, config, clock);
+
+    const planned = (
+      await db.notification_deliveries.findMany({
+        select: { channel: true, state: true, reason: true, available_at: true },
+        where: { charge_id: id }
+      })
+    ).records;
+
+    equal(planned.length, 1);
+    equal(planned[0]!.channel, 'email');
+    equal(planned[0]!.state, 'pending');
+    ok(!planned[0]!.reason, 'no follow-up reason without a push sibling');
+    equal(Date.parse(planned[0]!.available_at), clock);
+
+    await run();
+
+    equal(emails.filter((entry) => entry.to === address).length, 1);
   });
 });

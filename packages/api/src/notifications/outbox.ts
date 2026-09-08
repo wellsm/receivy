@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Order } from '@ez4/database';
-import { addCalendarDays } from '@receivy/common';
+import { addCalendarDays, civilHour, zonedInstant } from '@receivy/common';
 import { effectiveReminders } from '../billings/repository';
 import { CHARGE_SELECT, type ChargeRow } from '../charges/repository';
 import type { DbClient } from '../database';
@@ -13,6 +13,16 @@ export interface NotificationConfig {
   pushAvailable?: boolean;
 }
 export const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+
+/** Reminders reach the recipient at 09:00 of the billing timezone. */
+export const REMINDER_HOUR = 9;
+
+/** Distance between defensive civil-clock re-checks while a reminder is still early. */
+export const REMINDER_RETRY_MS = 15 * 60_000;
+
+/** A push notice gets this long to land before the e-mail follow-up becomes available. */
+export const EMAIL_FOLLOWUP_MS = 2 * 3600_000;
+
 const types = ['charge.created', 'charge.reminder', 'charge.manual_reminder'];
 export function civilDate(now: number, timezone: string): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -60,10 +70,13 @@ export async function expandOutbox(db: DbClient, config: NotificationConfig, now
           localDate: string;
           timezone: string;
         };
-        if (civilDate(now, schedule.timezone) < schedule.localDate) {
+        const date = civilDate(now, schedule.timezone);
+        const early = date < schedule.localDate || (date === schedule.localDate && civilHour(now, schedule.timezone) < REMINDER_HOUR);
+
+        if (early) {
           await tx.outbox_events.updateOne({
             where: { id: row.id },
-            data: { available_at: new Date(now + 3600_000).toISOString() }
+            data: { available_at: new Date(now + REMINDER_RETRY_MS).toISOString() }
           });
           return;
         }
@@ -98,7 +111,7 @@ async function scheduleReminders(db: DbClient, charge: ChargeRow, now: number) {
   for (const offset of offsets) {
     const localDate = addCalendarDays(charge.due_date, offset);
 
-    // UTC midnight is an earliest scan, then the worker compares the stored civil day.
+    // Scan starts at 09:00 local; the worker re-checks the civil clock defensively.
     await db.outbox_events.insertOne({
       data: {
         id: crypto.randomUUID(),
@@ -108,13 +121,20 @@ async function scheduleReminders(db: DbClient, charge: ChargeRow, now: number) {
         payload: JSON.stringify({ chargeId: charge.id, localDate, timezone: billing.timezone, offset }),
         state: 'pending',
         attempts: 0,
-        available_at: new Date(`${localDate}T00:00:00Z`).toISOString(),
+        available_at: zonedInstant(localDate, '09:00', billing.timezone),
         created_at: new Date(now).toISOString(),
         updated_at: new Date(now).toISOString()
       }
     });
   }
 }
+type Recipient = {
+  channel: 'push' | 'email';
+  key: string;
+  deviceId?: string;
+  availableAt: number;
+  followup?: string;
+};
 async function planDelivery(
   db: DbClient,
   charge: ChargeRow,
@@ -200,17 +220,33 @@ async function planDelivery(
         : !devices.length && !inputs.email
           ? 'no_enabled_channel'
           : undefined;
-  const recipients = devices.length
-    ? devices.map((d) => ({
-        channel: 'push' as const,
-        key: d.id,
-        deviceId: d.id
-      }))
+  // Push goes out now; the e-mail only follows when the push has had two hours to land.
+  const recipients: Recipient[] = devices.length
+    ? [
+        ...devices.map((device) => ({
+          channel: 'push' as const,
+          key: device.id,
+          deviceId: device.id,
+          availableAt: now
+        })),
+        ...(inputs.email
+          ? [
+              {
+                channel: 'email' as const,
+                key: inputs.email,
+                deviceId: undefined,
+                availableAt: now + EMAIL_FOLLOWUP_MS,
+                followup: 'push_followup'
+              }
+            ]
+          : [])
+      ]
     : [
         {
           channel: 'email' as const,
           key: inputs.email ?? 'manual-only',
-          deviceId: undefined
+          deviceId: undefined,
+          availableAt: now
         }
       ];
   for (const recipient of recipients) {
@@ -229,12 +265,12 @@ async function planDelivery(
       channel: recipient.channel,
       template,
       state: reason ? ('suppressed' as const) : ('pending' as const),
-      reason: reason ?? (null as unknown as undefined),
+      reason: reason ?? recipient.followup ?? (null as unknown as undefined),
       render_inputs: JSON.stringify(inputs),
       body_hash: valid ? digest(JSON.stringify(renderNotice(inputs, template, config.secret))) : '',
       idempotency_key: key,
       attempts: 0,
-      available_at: stamp,
+      available_at: new Date(recipient.availableAt).toISOString(),
       created_at: stamp,
       updated_at: stamp
     };

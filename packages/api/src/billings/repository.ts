@@ -515,7 +515,12 @@ export async function patchBilling(
       throw new RangeError('Fim anterior ao início.');
     }
 
-    await prepareChargeMaterialization(tx, ownerId, personIds(split), paymentMethodId);
+    // Only newly introduced recipients/Pix need revalidation; materializeBillings re-checks the stored
+    // split at occurrence time, so an already-persisted split must not block unrelated edits (e.g. ending
+    // a billing whose recipient was archived later).
+    if (patch.split !== undefined || patch.paymentMethodId !== undefined || patch.clearPaymentMethod) {
+      await prepareChargeMaterialization(tx, ownerId, personIds(split), paymentMethodId);
+    }
 
     if (patch.split !== undefined || patch.totalCents !== undefined) {
       await saveAllocations(tx, id, totalCents, split, instant);

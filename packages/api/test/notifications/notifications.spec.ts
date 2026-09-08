@@ -1,9 +1,9 @@
 import { equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpConflictError, HttpForbiddenError } from '@ez4/gateway';
+import { createBilling } from '../../src/billings/repository';
 import { cancelCharge } from '../../src/charges/repository';
 import { createEmailClient } from '../../src/email/compose';
-import { createExpense } from '../../src/expenses/repository';
 import {
   getPreferences,
   listDeliveries,
@@ -19,7 +19,7 @@ import { runNotifications } from '../../src/notifications/worker';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { savePerson } from '../../src/people/repository';
 import { createOrRotatePublicLink, revokePublicLink } from '../../src/public/repository';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 
 const OWNER = 'b1111111-1111-4111-8111-111111111111';
 const DEBTOR = 'b2222222-2222-4222-8222-222222222222';
@@ -59,16 +59,7 @@ async function charge() {
       email: `notify-${count}@example.com`
     })
   ).id;
-  const expense = await createExpense(db, OWNER, `notify-${count}`, {
-    totalCents: 1234,
-    installmentCount: 1,
-    firstDueDate: '2027-01-04',
-    split: {
-      mode: 'fixed',
-      parts: [{ kind: 'person', personId, amountCents: 1234 }]
-    }
-  });
-  return expense.charges[0]!.id;
+  return (await createOnceCharge(db, OWNER, `notify-${count}`, { personId, amountCents: 1234, dueDate: '2027-01-04' })).chargeId;
 }
 const run = (sender = transport) => runNotifications(db, sender, config, () => clock);
 describe('durable notification delivery', () => {
@@ -456,14 +447,18 @@ describe('durable notification delivery', () => {
     equal(submittedTo.filter((to) => to === disabledEmail).length, 0);
     ok((await listDeliveries(db, OWNER, disabledId)).every((row) => row.state === 'disabled'));
   });
-  it('snapshots expense reminder defaults at charge creation, not at delayed worker execution', async () => {
+  it('freezes a billing with its own reminders, ignoring later preference changes', async () => {
     clock = start;
-    await savePreferences(db, OWNER, {
-      emailEnabled: true,
-      pushEnabled: true,
-      reminderOffsets: [0]
+    await charge();
+    const billing = await createBilling(db, OWNER, `notify-frozen-${++count}`, {
+      type: 'once',
+      totalCents: 1234,
+      startDate: '2027-01-04',
+      timezone: 'America/Sao_Paulo',
+      split: { mode: 'fixed', parts: [{ kind: 'person', personId, amountCents: 1234 }] },
+      reminders: [{ offsetDays: 0, enabled: true }]
     });
-    const id = await charge();
+    const id = billing.charges[0]!.id;
     await savePreferences(db, OWNER, {
       emailEnabled: true,
       pushEnabled: true,

@@ -149,18 +149,19 @@ try {
   assert.equal((await request(`devices/${registered.body.id}`, { method: 'DELETE', headers })).status, 204);
   const person = await request('people', { method: 'POST', headers, body: JSON.stringify({ name: 'Ana HTTP' }) });
   assert.equal(person.status, 201);
-  const expense = await request('expenses', {
+  const billing = await request('billings', {
     method: 'POST',
     headers: { ...headers, 'idempotency-key': randomUUID() },
     body: JSON.stringify({
+      type: 'once',
       totalCents: 1234,
-      installmentCount: 1,
-      firstDueDate: '2027-01-01',
+      startDate: '2027-01-01',
+      timezone: 'America/Sao_Paulo',
       split: { mode: 'fixed', parts: [{ kind: 'person', personId: person.body.id, amountCents: 1234 }] }
     })
   });
-  assert.equal(expense.status, 201);
-  const chargeId = expense.body.charges[0].id;
+  assert.equal(billing.status, 201);
+  const chargeId = billing.body.charges[0].id;
   const unavailableStorage = await request(`charges/${chargeId}/proofs/uploads`, {
     method: 'POST',
     headers,
@@ -218,57 +219,45 @@ try {
   assert.equal(delivery.attempts, 0);
   assert.equal(delivery.reason, null);
   assert.equal((await request(`charges/${chargeId}/deliveries`, { headers: foreignHeaders })).status, 403);
-  const recurrence = {
+  const indefinite = {
+    type: 'indefinite',
     description: 'HTTP mensal',
     totalCents: 10001,
     frequency: 'monthly',
-    day: 31,
+    startDate: '2999-01-31',
     timezone: 'America/Sao_Paulo',
     split: { mode: 'equal', parts: [{ kind: 'person', personId: person.body.id }, { kind: 'owner' }] },
     reminders: [
-      { offsetDays: -5, channel: 'auto', enabled: true },
-      { offsetDays: 0, channel: 'auto', enabled: false }
+      { offsetDays: -5, enabled: true },
+      { offsetDays: 0, enabled: false }
     ]
   };
-  const created = await request('recurrences', {
+  const created = await request('billings', {
     method: 'POST',
     headers: { ...headers, 'idempotency-key': randomUUID() },
-    body: JSON.stringify(recurrence)
+    body: JSON.stringify(indefinite)
   });
   assert.equal(created.status, 201);
-  const read = await request(`recurrences/${created.body.id}`, { headers });
+  const read = await request(`billings/${created.body.id}`, { headers });
   assert.equal(read.status, 200);
   for (const result of [created.body, read.body]) {
-    for (const key of Object.keys(recurrence)) assert.deepEqual(result[key], recurrence[key], `recurrence HTTP field ${key}`);
-    assert.equal(typeof result.startDate, 'string');
+    for (const key of Object.keys(indefinite)) {
+      // BillingDetail snapshots the total as Money ({ amountCents, currency }), not a bare totalCents field.
+      if (key === 'totalCents') {
+        assert.equal(result.total.amountCents, indefinite.totalCents, 'billing HTTP field totalCents');
+        continue;
+      }
+      assert.deepEqual(result[key], indefinite[key], `billing HTTP field ${key}`);
+    }
     assert.equal(result.state, 'active');
-    assert.equal(result.previews[0].amount.amountCents, 5001);
+    assert.equal(result.charges.length, 0);
   }
-  for (const split of [
-    {
-      mode: 'percentage',
-      parts: [
-        { kind: 'person', personId: person.body.id, basisPoints: 5000 },
-        { kind: 'owner', basisPoints: 5000 }
-      ]
-    },
-    { mode: 'fixed', parts: [{ kind: 'person', personId: person.body.id, amountCents: 5001 }] }
-  ]) {
-    const variant = await request('recurrences', {
-      method: 'POST',
-      headers: { ...headers, 'idempotency-key': randomUUID() },
-      body: JSON.stringify({ ...recurrence, split })
-    });
-    assert.equal(variant.status, 201);
-    assert.deepEqual(variant.body.split, split);
-    const detail = await request(`recurrences/${variant.body.id}`, { headers });
-    assert.equal(detail.status, 200);
-    assert.deepEqual(detail.body.split, split);
-    assert.equal(detail.body.totalCents, 10001);
-    const listed = await request('recurrences', { headers });
-    assert.equal(listed.status, 200);
-    assert.deepEqual(listed.body.recurrences.find((rule) => rule.id === variant.body.id).split, split);
-  }
+  const paused = await request(`billings/${created.body.id}`, { method: 'PATCH', headers, body: JSON.stringify({ state: 'paused' }) });
+  assert.equal(paused.status, 200);
+  assert.equal(paused.body.state, 'paused');
+  const listed = await request('billings?type=indefinite', { headers });
+  assert.equal(listed.status, 200);
+  assert.ok(listed.body.billings.some((row) => row.id === created.body.id));
   const profile = { name: 'HTTP account', locale: 'pt-BR', timezone: 'America/Manaus', country: 'BR' };
   const savedProfile = await request('account/profile', { method: 'PATCH', headers, body: JSON.stringify(profile) });
   assert.equal(savedProfile.status, 200);

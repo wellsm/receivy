@@ -3,7 +3,6 @@ import { after, before, describe, it } from 'node:test';
 import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
 import { cancelCharge, recordManualPayment } from '../../src/charges/repository';
-import { createExpense } from '../../src/expenses/repository';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { savePerson } from '../../src/people/repository';
 import { publicFinalizeProofHandler, publicUploadProofHandler } from '../../src/proofs/endpoints';
@@ -12,7 +11,7 @@ import type { ProofStorage } from '../../src/proofs/storage';
 import { throttleProof } from '../../src/proofs/throttle';
 import { createOrRotatePublicLink, revokePublicLink } from '../../src/public/repository';
 import { getTimeline } from '../../src/timeline/repository';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 
 const OWNER = 'a1111111-1111-4111-8111-111111111111';
 const DEBTOR = 'a2222222-2222-4222-8222-222222222222';
@@ -35,13 +34,7 @@ let counter = 0;
 let personId: string;
 async function charge() {
   if (!personId) personId = (await savePerson(db, OWNER, { name: 'Proof debtor', email: 'proof-debtor@example.com' })).id;
-  const expense = await createExpense(db, OWNER, `proof-${++counter}`, {
-    totalCents: 1234,
-    installmentCount: 1,
-    firstDueDate: '2027-01-01',
-    split: { mode: 'fixed', parts: [{ kind: 'person', personId, amountCents: 1234 }] }
-  });
-  return expense.charges[0]!.id;
+  return (await createOnceCharge(db, OWNER, `proof-${++counter}`, { personId, amountCents: 1234, dueDate: '2027-01-01' })).chargeId;
 }
 async function upload(id: string) {
   const intent = await createUploadIntent(db, storage, id, actor, input);

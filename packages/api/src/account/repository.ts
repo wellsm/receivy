@@ -114,21 +114,16 @@ export async function downloadExport(
     const history = await Promise.all(
       charges.records.map((row) => chargeDto(tx, row, row.creditor_id === userId ? 'receivable' : 'payable'))
     );
-    const expenses = await tx.expenses.findMany({
-      select: { id: true, description: true, total_cents: true, installment_count: true, first_due_date: true },
-      where: { owner_id: userId }
-    });
-    const recurrences = await tx.recurrences.findMany({
+    const billings = await tx.billings.findMany({
       select: {
         id: true,
+        type: true,
+        frequency: true,
         description: true,
         total_cents: true,
-        frequency: true,
-        day: true,
-        month: true,
-        timezone: true,
         start_date: true,
         end_date: true,
+        timezone: true,
         state: true
       },
       where: { owner_id: userId }
@@ -155,8 +150,7 @@ export async function downloadExport(
         contacts,
         paymentMethods: methods.records,
         charges: history,
-        expenses: expenses.records,
-        recurrences: recurrences.records,
+        billings: billings.records,
         proofs: proofs.records,
         preferences: preferences ?? null,
         activities: activities.records

@@ -26,13 +26,18 @@ export async function eraseAccount(
     const families = await tx.session_families.findMany({ select: { id: true }, where: { user_id: userId } });
     if (families.records.length) await tx.refresh_tokens.deleteMany({ where: { family_id: { isIn: families.records.map((x) => x.id) } } });
     // Stop future generation before touching historical records. Existing amounts/state stay unchanged.
-    const rules = await tx.recurrences.findMany({ select: { id: true }, where: { owner_id: userId }, lock: true });
-    for (const rule of rules.records) {
-      await tx.recurrences.updateOne({
-        where: { id: rule.id },
-        data: { state: 'ended', description: 'Registro de conta excluída', ...{ payment_method_id: sqlNull }, updated_at: now }
+    const billings = await tx.billings.findMany({ select: { id: true }, where: { owner_id: userId }, lock: true });
+    for (const billing of billings.records) {
+      await tx.billings.updateOne({
+        where: { id: billing.id },
+        data: {
+          state: 'ended',
+          description: 'Registro de conta excluída',
+          payment_method: { id: sqlNull },
+          reminders: sqlNull,
+          updated_at: now
+        }
       });
-      await tx.recurrence_reminders.deleteMany({ where: { recurrence_id: rule.id } });
     }
     const charges = await tx.charges.findMany({
       select: { id: true, creditor_id: true, recipient_user_id: true, recipient_email_snapshot: true },
@@ -113,8 +118,7 @@ export async function eraseAccount(
       await tx.person_contacts.deleteMany({ where: { person_id: person.id } });
       const referenced =
         (await tx.charges.count({ where: { debtor_person_id: person.id } })) +
-        (await tx.expense_allocations.count({ where: { person_id: person.id } })) +
-        (await tx.recurrence_allocations.count({ where: { person_id: person.id } }));
+        (await tx.allocations.count({ where: { person_id: person.id } }));
       if (person.owner_id === userId && !referenced) await tx.people.deleteOne({ where: { id: person.id } });
       else
         await tx.people.updateOne({
@@ -122,12 +126,10 @@ export async function eraseAccount(
           data: { name: 'Conta excluída', active_email: sqlNull, ...{ linked_user_id: sqlNull }, archived_at: now, updated_at: now }
         });
     }
-    await tx.expenses.updateMany({ where: { owner_id: userId }, data: { ...{ payment_method_id: sqlNull }, updated_at: now } });
-    const expenses = await tx.expenses.findMany({ select: { id: true }, where: { owner_id: userId } });
-    for (const expense of expenses.records)
-      if (!(await tx.charges.count({ where: { source_id: expense.id } }))) {
-        await tx.expense_allocations.deleteMany({ where: { expense_id: expense.id } });
-        await tx.expenses.deleteOne({ where: { id: expense.id } });
+    for (const billing of billings.records)
+      if (!(await tx.charges.count({ where: { billing_id: billing.id } }))) {
+        await tx.allocations.deleteMany({ where: { billing_id: billing.id } });
+        await tx.billings.deleteOne({ where: { id: billing.id } });
       }
     await tx.payment_methods.deleteMany({ where: { owner_id: userId } });
     await tx.notification_preferences.deleteMany({ where: { user_id: userId } });
@@ -141,7 +143,7 @@ export async function eraseAccount(
         OR: [
           { recipient_user_id: userId },
           { recipient_email: user.email },
-          { aggregate_id: { isIn: [userId, ...rules.records.map((x) => x.id)] } }
+          { aggregate_id: { isIn: [userId, ...billings.records.map((x) => x.id)] } }
         ]
       },
       data: { state: 'failed', ...{ recipient_user_id: sqlNull }, recipient_email: sqlNull, payload: '{}', updated_at: now }

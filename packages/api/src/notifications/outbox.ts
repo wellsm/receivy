@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Order } from '@ez4/database';
 import { addCalendarDays } from '@receivy/common';
+import { effectiveReminders } from '../billings/repository';
 import { CHARGE_SELECT, type ChargeRow } from '../charges/repository';
 import type { DbClient } from '../database';
 import { type RenderInputs, renderNotice } from './render';
@@ -68,17 +69,7 @@ export async function expandOutbox(db: DbClient, config: NotificationConfig, now
           return;
         }
       }
-      if (row.type === 'charge.created' && !JSON.parse(row.payload).notificationResumed)
-        await scheduleReminders(
-          tx,
-          charge,
-          now,
-          (
-            JSON.parse(row.payload) as {
-              notificationSchedule?: { offsets: number[]; timezone: string };
-            }
-          ).notificationSchedule
-        );
+      if (row.type === 'charge.created' && !JSON.parse(row.payload).notificationResumed) await scheduleReminders(tx, charge, now);
       await planDelivery(tx, charge, row.id, row.type === 'charge.created' ? 'initial' : 'reminder', config, now);
       // This is outbox consumption only; remote status lives exclusively in deliveries.
       await tx.outbox_events.updateOne({
@@ -87,31 +78,25 @@ export async function expandOutbox(db: DbClient, config: NotificationConfig, now
       });
     });
 }
-async function scheduleReminders(db: DbClient, charge: ChargeRow, now: number, snapshot?: { offsets: number[]; timezone: string }) {
-  if (charge.state !== 'pending') return;
-  const owner = await db.users.findOne({
-    select: { timezone: true },
-    where: { id: charge.creditor_id }
+async function scheduleReminders(db: DbClient, charge: ChargeRow, now: number) {
+  if (charge.state !== 'pending') {
+    return;
+  }
+
+  const billing = await db.billings.findOne({
+    select: { owner_id: true, reminders: true, timezone: true },
+    where: { id: charge.billing_id }
   });
-  const occurrence = charge.source_occurrence_id
-    ? await db.recurrence_occurrences.findOne({
-        select: { reminders_json: true, timezone: true },
-        where: { id: charge.source_occurrence_id }
-      })
-    : undefined;
-  const timezone = occurrence?.timezone ?? snapshot?.timezone ?? owner?.timezone ?? 'America/Sao_Paulo';
-  const offsets = occurrence
-    ? (
-        JSON.parse(occurrence.reminders_json) as {
-          offsetDays: number;
-          enabled: boolean;
-        }[]
-      )
-        .filter((r) => r.enabled)
-        .map((r) => r.offsetDays)
-    : (snapshot?.offsets ?? (await getPreferences(db, charge.creditor_id)).reminderOffsets);
+
+  if (!billing) {
+    return;
+  }
+
+  const offsets = (await effectiveReminders(db, billing)).filter((reminder) => reminder.enabled).map((reminder) => reminder.offsetDays);
+
   for (const offset of offsets) {
     const localDate = addCalendarDays(charge.due_date, offset);
+
     // UTC midnight is an earliest scan, then the worker compares the stored civil day.
     await db.outbox_events.insertOne({
       data: {
@@ -119,12 +104,7 @@ async function scheduleReminders(db: DbClient, charge: ChargeRow, now: number, s
         aggregate_type: 'charge',
         aggregate_id: charge.id,
         type: 'charge.reminder',
-        payload: JSON.stringify({
-          chargeId: charge.id,
-          localDate,
-          timezone,
-          offset
-        }),
+        payload: JSON.stringify({ chargeId: charge.id, localDate, timezone: billing.timezone, offset }),
         state: 'pending',
         attempts: 0,
         available_at: new Date(`${localDate}T00:00:00Z`).toISOString(),

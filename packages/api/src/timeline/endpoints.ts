@@ -12,7 +12,7 @@ declare class TimelineRequest implements Http.Request {
     cursor?: String.Max<500>;
     direction?: 'receivable' | 'payable';
     status?: 'pending' | 'paid' | 'cancelled' | 'overdue';
-    source?: 'expense' | 'recurrence';
+    type?: 'once' | 'until' | 'indefinite';
     from?: String.Date;
     to?: String.Date;
   };

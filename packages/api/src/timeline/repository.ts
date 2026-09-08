@@ -1,16 +1,16 @@
 import { Order } from '@ez4/database';
 import { HttpNotFoundError, HttpUnprocessableEntityError } from '@ez4/gateway';
-import type { ChargeState, Direction, PersonLedger, TimelineItem, TimelinePage } from '@receivy/common';
+import type { BillingType, ChargeState, Direction, PersonLedger, TimelineItem, TimelinePage } from '@receivy/common';
+import { indefinitePreviews } from '../billings/repository';
 import { CHARGE_SELECT, type ChargeRow, chargeDto } from '../charges/repository';
 import type { DbClient } from '../database';
 import { getPerson } from '../people/repository';
-import { listRecurrences } from '../recurrences/repository';
 
 export type TimelineFilters = {
   cursor?: string;
   direction?: Direction;
   status?: ChargeState | 'overdue';
-  source?: 'expense' | 'recurrence';
+  type?: BillingType;
   from?: string;
   to?: string;
 };
@@ -64,7 +64,7 @@ function visibleWhere(userId: string, email: string | undefined, filters: Timeli
       access,
       ...(filters.status ? [{ state: filters.status === 'overdue' ? ('pending' as const) : filters.status }] : []),
       ...(filters.status === 'overdue' ? [{ due_date: { lt: today } }] : []),
-      ...(filters.source ? [{ source: filters.source }] : []),
+      ...(filters.type ? [{ billing_type: filters.type }] : []),
       ...(filters.from ? [{ due_date: { gte: filters.from } }] : []),
       ...(filters.to ? [{ due_date: { lte: filters.to } }] : []),
       ...(cursor ? [{ OR: [{ due_date: { gt: cursor.dueDate } }, { due_date: cursor.dueDate, id: { gt: cursor.id } }] }] : [])
@@ -90,16 +90,16 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
   const all = allQuery.records;
   const active = all.filter((row) => row.state === 'pending');
   const projected =
-    filters.direction !== 'payable' && filters.source !== 'expense' && (!filters.status || filters.status === 'pending')
-      ? (await listRecurrences(db, userId))
-          .flatMap((r) => r.previews)
-          .filter((p) => (!filters.from || p.occurrenceDate >= filters.from) && (!filters.to || p.occurrenceDate <= filters.to))
+    filters.direction !== 'payable' && (!filters.type || filters.type === 'indefinite') && (!filters.status || filters.status === 'pending')
+      ? (await indefinitePreviews(db, userId)).filter(
+          (preview) => (!filters.from || preview.occurrenceDate >= filters.from) && (!filters.to || preview.occurrenceDate <= filters.to)
+        )
       : [];
   const primary = [
     ...all.map((row) => ({ dueDate: row.due_date, id: row.id, row, preview: undefined })),
     ...projected.map((preview) => ({
       dueDate: preview.occurrenceDate,
-      id: `recurrence:${preview.recurrenceId}:${preview.occurrenceDate}`,
+      id: `billing:${preview.billingId}:${preview.occurrenceDate}`,
       row: undefined,
       preview
     }))
@@ -142,7 +142,7 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
       ...primaryPage.map(
         (item): TimelineItem =>
           item.preview
-            ? { kind: 'recurrence_preview', direction: 'receivable', preview: item.preview }
+            ? { kind: 'billing_preview', direction: 'receivable', preview: item.preview }
             : {
                 kind: 'charge',
                 direction: directionFor(item.row!, userId),
@@ -152,9 +152,10 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
                   amount: money(item.row!.amount_cents),
                   dueDate: item.row!.due_date,
                   state: item.row!.state,
-                  source: item.row!.source,
-                  installment: item.row!.installment,
-                  installmentCount: item.row!.installment_count
+                  billingId: item.row!.billing_id,
+                  billingType: item.row!.billing_type,
+                  installment: item.row!.installment ?? null,
+                  installmentCount: item.row!.installment_count ?? null
                 }
               }
       ),

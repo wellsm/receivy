@@ -3,13 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
 import { getCharge } from '../../src/charges/repository';
-import { createExpense } from '../../src/expenses/repository';
 import type { NotificationTransport } from '../../src/notifications/transport';
 import { runNotifications } from '../../src/notifications/worker';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { savePerson } from '../../src/people/repository';
 import { createOrRotatePublicLink, revokePublicLink } from '../../src/public/repository';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 
 const owner = randomUUID(),
   other = randomUUID();
@@ -30,14 +29,7 @@ describe('explicit first Pix publication', () => {
     await createUser(db, { id: owner, name: 'Owner', email: `${owner}@example.com` });
     await createUser(db, { id: other, name: 'Other', email: `${other}@example.com` });
     const person = await savePerson(db, owner, { name: 'Debtor', email: 'publication-debtor@example.com' });
-    chargeId = (
-      await createExpense(db, owner, 'first-pix', {
-        totalCents: 100,
-        installmentCount: 1,
-        firstDueDate: '2030-01-01',
-        split: { mode: 'fixed', parts: [{ kind: 'person', personId: person.id, amountCents: 100 }] }
-      })
-    ).charges[0]!.id;
+    chargeId = (await createOnceCharge(db, owner, 'first-pix', { personId: person.id, amountCents: 100, dueDate: '2030-01-01' })).chargeId;
   });
   after(async () => cleanupUsers(db, [owner, other]));
   it('keeps no-Pix creation possible but refuses first sharing and makes initial notice visibly wait', async () => {

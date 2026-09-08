@@ -7,7 +7,6 @@ import { createExportTicket, downloadExport, eraseAccount, listSessions, revokeS
 import { issueAccessToken } from '../../src/auth/session';
 import { sessionAuthorizer } from '../../src/authorizers/session';
 import { getCharge, recordManualPayment } from '../../src/charges/repository';
-import { createExpense } from '../../src/expenses/repository';
 import { registerDevice } from '../../src/notifications/repository';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { savePerson } from '../../src/people/repository';
@@ -16,7 +15,7 @@ import type { ProofStorage } from '../../src/proofs/storage';
 import type { ApiProvider } from '../../src/provider';
 import { createOrRotatePublicLink, getPublicCharge } from '../../src/public/repository';
 import { createAuthRepository } from '../../src/repositories/auth-repository';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 
 const owner = '61000000-0000-4000-8000-000000000001';
 const debtor = '61000000-0000-4000-8000-000000000002';
@@ -109,18 +108,17 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     ids.push(id);
     await createUser(db, { id, email: 'rollback-account@example.com', name: 'Rollback fixture' });
     const person = await savePerson(db, owner, { name: 'Rollback fixture', email: 'rollback-account@example.com' });
-    const expense = await createExpense(db, owner, 'account-rollback', {
-      totalCents: 50,
-      installmentCount: 1,
-      firstDueDate: '2026-10-01',
-      split: { mode: 'fixed', parts: [{ kind: 'person', personId: person.id, amountCents: 50 }] }
+    const { chargeId: rollbackChargeId } = await createOnceCharge(db, owner, 'account-rollback', {
+      personId: person.id,
+      amountCents: 50,
+      dueDate: '2026-10-01'
     });
     const proofId = crypto.randomUUID();
     const auth = await session(id);
     await db.payment_proofs.insertOne({
       data: {
         id: proofId,
-        charge: { id: expense.charges[0]!.id },
+        charge: { id: rollbackChargeId },
         sender_user: { id },
         object_key: 'invalid-legacy-key',
         original_name: 'fixture.pdf',
@@ -133,7 +131,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     });
     await rejects(() => eraseAccount(db, id, 'EXCLUIR'), RangeError);
     equal((await authorize(auth.access)).identity.userId, id);
-    equal((await getCharge(db, owner, expense.charges[0]!.id)).recipient.email, 'rollback-account@example.com');
+    equal((await getCharge(db, owner, rollbackChargeId)).recipient.email, 'rollback-account@example.com');
     equal(await db.payment_proofs.count({ where: { id: proofId } }), 1);
     await db.payment_proofs.deleteOne({ where: { id: proofId } });
   });
@@ -157,13 +155,11 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
   });
   it("atomically erases identity, preserves other account's payment fact and closes re-registration history access", async () => {
     const person = await savePerson(db, owner, { name: 'Account Debtor', email: 'account-debtor@example.com' });
-    const expense = await createExpense(db, owner, 'account-history', {
-      totalCents: 1234,
-      installmentCount: 1,
-      firstDueDate: '2026-10-01',
-      split: { mode: 'fixed', parts: [{ kind: 'person', personId: person.id, amountCents: 1234 }] }
+    const { chargeId } = await createOnceCharge(db, owner, 'account-history', {
+      personId: person.id,
+      amountCents: 1234,
+      dueDate: '2026-10-01'
     });
-    const chargeId = expense.charges[0]!.id;
     const publicLink = await createOrRotatePublicLink(db, owner, chargeId, secret);
     await recordManualPayment(db, owner, chargeId, { method: 'pix' });
     const ownedProofId = crypto.randomUUID();

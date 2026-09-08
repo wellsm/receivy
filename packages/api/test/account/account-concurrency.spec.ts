@@ -2,9 +2,8 @@ import { deepEqual, equal, ok } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { eraseAccount } from '../../src/account/deletion';
 import type { DbClient } from '../../src/database';
-import { createExpense } from '../../src/expenses/repository';
 import { savePerson } from '../../src/people/repository';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -94,12 +93,7 @@ describe('account erasure versus cross-account materialization', () => {
         return tx;
       });
       const materialize = (client: DbClient) =>
-        createExpense(client, creditor, `concurrent-${recipient}`, {
-          totalCents: 1234,
-          installmentCount: 1,
-          firstDueDate: '2026-10-01',
-          split: { mode: 'fixed', parts: [{ kind: 'person', personId: person.id, amountCents: 1234 }] }
-        });
+        createOnceCharge(client, creditor, `concurrent-${recipient}`, { personId: person.id, amountCents: 1234, dueDate: '2026-10-01' });
       const firstRun = first === 'materialization' ? materialize(firstClient) : eraseAccount(firstClient, recipient, 'EXCLUIR');
       const firstStarted = await entered.promise;
       const secondRun = first === 'materialization' ? eraseAccount(secondClient, recipient, 'EXCLUIR') : materialize(secondClient);

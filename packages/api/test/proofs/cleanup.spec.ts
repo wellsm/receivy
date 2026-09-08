@@ -1,12 +1,11 @@
 import { equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { BucketTester } from '@ez4/local-storage/test';
-import { createExpense } from '../../src/expenses/repository';
 import { savePerson } from '../../src/people/repository';
 import { drainStorageDeletions, enqueueStorageDeletion, reconcileProofStorage } from '../../src/proofs/cleanup';
 import { createUploadIntent, finalizeProof } from '../../src/proofs/repository';
 import type { ReconciliableProofStorage } from '../../src/proofs/storage';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 
 const OWNER = 'd1111111-1111-4111-8111-111111111111';
 const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
@@ -31,17 +30,7 @@ describe('durable proof storage cleanup', () => {
       name: 'Cleanup'
     });
     const person = await savePerson(db, OWNER, { name: 'Cleanup debtor' });
-    id = (
-      await createExpense(db, OWNER, 'cleanup-expense', {
-        totalCents: 100,
-        installmentCount: 1,
-        firstDueDate: '2027-01-01',
-        split: {
-          mode: 'fixed',
-          parts: [{ kind: 'person', personId: person.id, amountCents: 100 }]
-        }
-      })
-    ).charges[0]!.id;
+    id = (await createOnceCharge(db, OWNER, 'cleanup-expense', { personId: person.id, amountCents: 100, dueDate: '2027-01-01' })).chargeId;
   });
   after(async () => {
     await db.storage_deletions.deleteMany({ where: { charge_id: id } });

@@ -8,8 +8,10 @@ import { TimelineScreen } from "@/components/timeline-screen";
 import { PeopleScreen } from "@/components/people-screen";
 import { AccountSettings } from "@/components/account-settings";
 import { ChargeCreateScreen } from "@/components/charge-create-screen";
+import { OnboardingForm } from "@/components/onboarding-form";
 
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllGlobals(); });
 
 // jsdom has no layout, so color-contrast is measured from the design tokens in
@@ -39,6 +41,13 @@ describe("accessibility of the main web screens", () => {
     }
     expect(reachedEmail).toBe(true);
     expect(reachedSubmit).toBe(true);
+    await expectNoViolations(container);
+  });
+
+  it("onboarding form labels its single field and keeps Continuar disabled until a name exists", async () => {
+    const { container } = render(<OnboardingForm />);
+    expect(screen.getByLabelText("Nome")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
     await expectNoViolations(container);
   });
 

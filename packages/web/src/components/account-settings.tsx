@@ -7,7 +7,7 @@ import { browserFetch } from "@/lib/auth/browser-fetch";
 
 type LogoutContext = { action: "delete"; deleted: boolean } | { action: "revoke" };
 
-export function AccountSettings({ onboarding = false, onComplete }: { onboarding?: boolean; onComplete?: () => void }) {
+export function AccountSettings() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [sessions, setSessions] = useState<AccountSession[]>([]);
   const [name, setName] = useState("");
@@ -22,17 +22,16 @@ export function AccountSettings({ onboarding = false, onComplete }: { onboarding
     let active = true;
     void Promise.all([
       browserFetch("/api/auth/me").then(r => r.ok ? r.json() : Promise.reject()),
-      onboarding ? Promise.resolve({ sessions: [] })
-        : browserFetch("/api/financial/account/sessions").then(r => r.ok ? r.json() : Promise.reject()),
+      browserFetch("/api/financial/account/sessions").then(r => r.ok ? r.json() : Promise.reject()),
     ]).then(([profile, page]) => {
       if (!active) return;
       setUser(profile.user);
       setName(profile.user.name ?? "");
-      setTimezone(onboarding ? Intl.DateTimeFormat().resolvedOptions().timeZone : profile.user.timezone);
+      setTimezone(profile.user.timezone);
       setSessions(page.sessions);
     }, () => active && setNotice("Não foi possível carregar sua conta."));
     return () => { active = false; };
-  }, [onboarding]);
+  }, []);
 
   async function save() {
     setBusy(true);
@@ -44,7 +43,6 @@ export function AccountSettings({ onboarding = false, onComplete }: { onboarding
       if (!response.ok) throw new Error();
       setUser((await response.json()).user);
       setNotice("Perfil salvo.");
-      onComplete?.();
     } catch {
       setNotice("Não foi possível salvar. Confira seu nome e fuso horário.");
     } finally { setBusy(false); }
@@ -131,7 +129,7 @@ export function AccountSettings({ onboarding = false, onComplete }: { onboarding
 
   return (
     <section className="financial-page detail-section account-settings">
-      <h2>{onboarding ? "Como podemos chamar você?" : "Sua conta"}</h2>
+      <h2>Sua conta</h2>
       {notice && <p role="status">{notice}</p>}
       {logoutRetry && (
         <button type="button" className="secondary-button" disabled={busy} onClick={() => void retryLogout()}>
@@ -144,26 +142,20 @@ export function AccountSettings({ onboarding = false, onComplete }: { onboarding
             <label>Nome
               <input required maxLength={120} value={name} onChange={e => setName(e.target.value)} autoComplete="name" />
             </label>
-            {!onboarding && (
-              <>
-                <label>Idioma
-                  <select value="pt-BR" disabled><option value="pt-BR">Português (Brasil)</option></select>
-                </label>
-                <p>Português (Brasil) é o idioma disponível no MVP.</p>
-                <label>Fuso horário
-                  <input required maxLength={64} value={timezone} onChange={e => setTimezone(e.target.value)} />
-                </label>
-                <label>País
-                  <select value="BR" disabled><option value="BR">Brasil</option></select>
-                </label>
-              </>
-            )}
+            <label>Idioma
+              <select value="pt-BR" disabled><option value="pt-BR">Português (Brasil)</option></select>
+            </label>
+            <p>Português (Brasil) é o idioma disponível no MVP.</p>
+            <label>Fuso horário
+              <input required maxLength={64} value={timezone} onChange={e => setTimezone(e.target.value)} />
+            </label>
+            <label>País
+              <select value="BR" disabled><option value="BR">Brasil</option></select>
+            </label>
             <button type="submit" className="primary-button" disabled={busy || !name.trim()}>
-              {onboarding ? "Continuar" : "Salvar perfil"}
+              Salvar perfil
             </button>
           </form>
-          {!onboarding && (
-            <>
               <section className="detail-section" aria-labelledby="account-sessions-heading">
                 <h3 id="account-sessions-heading">Sessões e dispositivos</h3>
                 {sessions.map(item => (
@@ -190,8 +182,6 @@ export function AccountSettings({ onboarding = false, onComplete }: { onboarding
                   Excluir conta definitivamente
                 </button>
               </section>
-            </>
-          )}
         </>
       )}
       <p><a href="/terms">Termos de uso</a> · <a href="/privacy">Privacidade</a></p>

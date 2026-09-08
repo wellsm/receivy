@@ -968,3 +968,35 @@ a {
 .account-danger h3 { color: var(--color-danger); }
 @media (min-width: 840px) { .creation-layout { grid-template-columns: minmax(0, 1.45fr) minmax(300px, .8fr); }.detail-ledger { grid-template-columns: repeat(2, 1fr); }.detail-ledger.three { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 700px) { .settings-layout { grid-template-columns: 1fr; }.timeline-entry { grid-template-columns: 1fr; }.timeline-entry .money, .entry-link { justify-self: start; }.review-panel { position: static; }.detail-ledger.three { grid-template-columns: 1fr; } }
+
+.onboarding-page {
+  display: grid;
+  min-height: 100dvh;
+  align-content: center;
+  justify-items: center;
+  gap: 22px;
+  padding: 34px 22px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-primary-soft) 22%, transparent) 1px, transparent 1px) 0 0 / 64px 64px,
+    var(--color-canvas);
+}
+
+.onboarding-page .login-brand {
+  color: var(--color-primary-strong);
+}
+
+.onboarding-card h1 {
+  margin: 0;
+  font-size: clamp(28px, 6vw, 36px);
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.onboarding-page .login-legal {
+  margin-top: 0;
+}
+
+.onboarding-page .login-legal a {
+  color: var(--color-primary-strong);
+  font-weight: 700;
+}

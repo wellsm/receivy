@@ -87,6 +87,13 @@ O acesso dura 15 minutos. O refresh é opaco, vive por 30 dias, gira a cada uso 
 fica armazenado apenas como hash. Reutilizar um refresh já consumido revoga toda
 a família daquela sessão.
 
+Depois do login, uma conta sem nome cai na tela solo "Como podemos chamar você?"
+(`/onboarding` no web e no Expo) e só segue para o app após salvar um nome não
+vazio. A regra `needsOnboarding` vive em `@receivy/common`; no web ela roda no
+layout servidor do grupo `app/(protected)` (o `proxy.ts` renova o access cookie
+antes, como no Rewarlo) e no Expo em `ProfileGuard` + `SessionGate`, que
+consultam `auth/me` uma vez por access token.
+
 ## Restrição conhecida do Expo 56
 
 O projeto permanece intencionalmente no Expo SDK 56. O `expo-doctor` aprova 21 de

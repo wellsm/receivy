@@ -162,5 +162,19 @@ e exercita teclado; `packages/common/src/design/tokens.test.ts` calcula contrast
 WCAG dos tokens. Lacunas conhecidas ficam em `it.fails` com o motivo, e passam a
 falhar quando o token for corrigido, obrigando a promoção para `it`.
 
+## Onboarding do nome
+
+`packages/common/src/auth/onboarding.test.ts` fixa a regra `needsOnboarding`.
+No Expo, `profile.test.ts` (cache por access token), `profile-guard.test.tsx`
+(middleware de rota), `session-gate.test.tsx` (redireciona antes de montar as
+abas) e `onboarding-screen.test.tsx` (botão só habilita com nome não vazio)
+cobrem o fluxo; no web, `onboarding-form.test.tsx`, o caso de axe em
+`a11y.test.tsx` e `proxy.test.ts` (renovação do access cookie, rejeição do
+refresh, API indisponível). Em 2026-09-08 o fluxo foi provado de ponta a ponta:
+no web com cookies reais contra API e Next locais (`/` → 307 `/onboarding`,
+refresh-only cookie → cookies rotacionados e mesmo redirecionamento, PATCH do
+nome → `/onboarding` → 307 `/`), e no iOS Simulator com os fluxos Maestro
+`01-login` e `02-code` (tela solo sem abas, "Continuar" leva à timeline).
+
 Nenhum teste envia e-mail/push real nem acessa contas de produção. Segredos e
 arquivos de ambiente dos projetos de referência não fazem parte das fixtures.

@@ -1,14 +1,62 @@
+import type { SessionTokens } from "@receivy/common";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { ACCESS_COOKIE, REFRESH_COOKIE, safeNextPath } from "@/lib/auth/cookies";
+import { authApiFetch } from "@/lib/auth/api";
+import {
+  ACCESS_COOKIE,
+  ACCESS_MAX_AGE,
+  authCookieOptions,
+  REFRESH_COOKIE,
+  REFRESH_MAX_AGE,
+  safeNextPath,
+} from "@/lib/auth/cookies";
+import { clearSessionCookies } from "@/lib/auth/response";
 import { proofUploadOrigin } from "@/lib/proof-origin";
 import { appUrl } from "@/lib/app-url";
 
-export function proxy(request: NextRequest) {
-  const hasSession = Boolean(
-    request.cookies.get(ACCESS_COOKIE)?.value ||
-    request.cookies.get(REFRESH_COOKIE)?.value,
-  );
+function loginRedirect(request: NextRequest): NextResponse {
+  const login = appUrl(request, "/login");
+  const { pathname, search } = request.nextUrl;
+
+  login.searchParams.set("next", safeNextPath(`${pathname}${search}`));
+
+  return NextResponse.redirect(login);
+}
+
+/**
+ * The proxy is the only step that runs before every server render and may
+ * still write cookies, so an expired access cookie is refreshed here (Rewarlo
+ * pattern). Server components then see the rotated tokens through the
+ * forwarded cookie header. A rejected refresh signs the browser out; an
+ * unreachable API lets the page render so the client transport can retry.
+ */
+async function refreshSession(request: NextRequest, refreshToken: string): Promise<NextResponse> {
+  try {
+    const upstream = await authApiFetch("auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!upstream.ok) {
+      return clearSessionCookies(loginRedirect(request));
+    }
+
+    const session = (await upstream.json()) as SessionTokens;
+    const response = NextResponse.next();
+
+    response.cookies.set(ACCESS_COOKIE, session.accessToken, authCookieOptions(ACCESS_MAX_AGE));
+    response.cookies.set(REFRESH_COOKIE, session.refreshToken, authCookieOptions(REFRESH_MAX_AGE));
+
+    return response;
+  } catch {
+    return NextResponse.next();
+  }
+}
+
+export async function proxy(request: NextRequest): Promise<NextResponse> {
+  const accessToken = request.cookies.get(ACCESS_COOKIE)?.value;
+  const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value;
+  const hasSession = Boolean(accessToken || refreshToken);
   const pathname = request.nextUrl.pathname;
 
   if (pathname.startsWith("/pay/")) {
@@ -29,17 +77,16 @@ export function proxy(request: NextRequest) {
   }
 
   if (!hasSession) {
-    const login = appUrl(request, "/login");
-    login.searchParams.set(
-      "next",
-      safeNextPath(`${pathname}${request.nextUrl.search}`),
-    );
-    return NextResponse.redirect(login);
+    return loginRedirect(request);
+  }
+
+  if (!accessToken && refreshToken) {
+    return refreshSession(request, refreshToken);
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/", "/login", "/charges/:path*", "/pay/:path*", "/people/:path*", "/recurrences/:path*", "/settings/:path*"],
+  matcher: ["/", "/login", "/onboarding", "/charges/:path*", "/pay/:path*", "/people/:path*", "/recurrences/:path*", "/settings/:path*"],
 };

@@ -1,31 +1,69 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { ActivityIndicator, ScrollView, View } from "react-native";
-import { AccountSettings } from "./account-settings";
+import { ActivityIndicator, View } from "react-native";
+import { needsOnboarding } from "@receivy/common";
+import { profileStore, type ProfileStore } from "@/account/profile";
 import { authClient } from "@/auth/client";
 import { HomeScreen } from "./home-screen";
 
-export function SessionGate() {
+type SessionGateProps = {
+  client?: Pick<typeof authClient, "getAccessToken" | "refresh">;
+  store?: Pick<ProfileStore, "load">;
+};
+
+type Stage = "restoring" | "checking-profile" | "ready";
+
+export function SessionGate({ client = authClient, store = profileStore }: SessionGateProps) {
   const router = useRouter();
-  const [ready, setReady] = useState(() => Boolean(authClient.getAccessToken()));
-  const [needsName, setNeedsName] = useState(false);
-  useEffect(() => { if (!ready) return; let active = true; void authClient.authenticatedFetch("auth/me").then(async response => { if (response.ok && active) setNeedsName(!(await response.json()).user.name); }).catch(() => {}); return () => { active = false; }; }, [ready]);
+  const [stage, setStage] = useState<Stage>(() => (client.getAccessToken() ? "checking-profile" : "restoring"));
 
   useEffect(() => {
-    if (ready) {
+    if (stage !== "restoring") {
       return;
     }
+
     let active = true;
-    void authClient.refresh().then(
-      () => active && setReady(true),
+
+    void client.refresh().then(
+      () => active && setStage("checking-profile"),
       () => active && router.replace("/login"),
     );
+
     return () => {
       active = false;
     };
-  }, [ready, router]);
+  }, [client, router, stage]);
 
-  if (!ready) {
+  useEffect(() => {
+    if (stage !== "checking-profile") {
+      return;
+    }
+
+    let active = true;
+
+    void store.load().then(
+      (user) => {
+        if (!active) {
+          return;
+        }
+
+        if (needsOnboarding(user)) {
+          router.replace("/onboarding");
+          return;
+        }
+
+        setStage("ready");
+      },
+      // The home screen reports its own errors; an unreachable profile must not lock the app.
+      () => active && setStage("ready"),
+    );
+
+    return () => {
+      active = false;
+    };
+  }, [router, stage, store]);
+
+  if (stage !== "ready") {
     return (
       <View className="flex-1 items-center justify-center bg-canvas">
         <ActivityIndicator color="#0B513D" size="large" />
@@ -33,6 +71,13 @@ export function SessionGate() {
     );
   }
 
-  if (needsName) return <ScrollView contentContainerClassName="px-5 py-12"><AccountSettings onboarding onComplete={() => setNeedsName(false)} /></ScrollView>;
-  return <HomeScreen onOpenRecurrences={() => router.push("/recurrences")} onOpenPeople={() => router.push("/people")} onCreateCharge={() => router.push("/charges/new")} onOpenCharge={id => router.push({ pathname: "/charges/[id]", params: { id } })} onOpenSettings={() => router.push("/settings")} />;
+  return (
+    <HomeScreen
+      onOpenRecurrences={() => router.push("/recurrences")}
+      onOpenPeople={() => router.push("/people")}
+      onCreateCharge={() => router.push("/charges/new")}
+      onOpenCharge={(id) => router.push({ pathname: "/charges/[id]", params: { id } })}
+      onOpenSettings={() => router.push("/settings")}
+    />
+  );
 }

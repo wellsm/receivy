@@ -71,21 +71,3 @@ it("keeps current-session revocation distinct from failed browser sign-out", asy
   expect(screen.getByRole("button", { name: "Tentar encerrar a sessão novamente" })).toBeInTheDocument();
   expect(screen.queryByText("Sessão encerrada.")).not.toBeInTheDocument();
 });
-
-it("preserves name-only onboarding with device timezone and fixed launch values", async () => {
-  const onComplete = vi.fn();
-  const requests: unknown[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (_path: string, init?: RequestInit) => {
-    if (init?.method === "PATCH") requests.push(JSON.parse(init.body as string));
-    return Response.json({ user: { ...user, name: null } });
-  }));
-  render(<AccountSettings onboarding onComplete={onComplete} />);
-  const name = await screen.findByRole("textbox", { name: "Nome" });
-  expect(screen.getAllByRole("textbox")).toHaveLength(1);
-  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-  fireEvent.change(name, { target: { value: "Ana" } });
-  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
-  expect(await screen.findByText("Perfil salvo.")).toBeInTheDocument();
-  expect(requests).toEqual([{ name: "Ana", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, locale: "pt-BR", country: "BR" }]);
-  expect(onComplete).toHaveBeenCalledOnce();
-});

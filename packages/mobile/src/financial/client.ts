@@ -1,4 +1,4 @@
-import type { ChargeDetail, ExpenseDetail, ExpenseInput, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage, ProofDetail, ProofUploadIntent, ProofUploadInput, RecurrenceInput, RecurrenceDetail, RecurrencesPage } from "@receivy/common";
+import type { BillingDetail, BillingInput, BillingPatch, BillingsPage, ChargeDetail, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage, ProofDetail, ProofUploadIntent, ProofUploadInput } from "@receivy/common";
 import { authClient } from "@/auth/client";
 import { apiErrorMessage } from "@receivy/common";
 
@@ -17,17 +17,20 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     return response.status === 204 ? undefined as T : response.json() as Promise<T>;
   }
   return {
-    recurrences() { return request<RecurrencesPage>("recurrences"); },
-    recurrence(id: string) { return request<RecurrenceDetail>(`recurrences/${id}`); },
-    recurrenceProfile() { return request<{ user: { timezone: string } }>("auth/me"); },
-    saveRecurrence(input: RecurrenceInput, key: string, id?: string) { return request<RecurrenceDetail>(id ? `recurrences/${id}` : "recurrences", { method: id ? "PATCH" : "POST", headers: { "idempotency-key": key }, body: JSON.stringify(input) }); },
-    transitionRecurrence(id: string, action: "pause" | "reactivate" | "end") { return request<RecurrenceDetail>(`recurrences/${id}/${action}`, { method: "POST" }); },
+    billings(query = "") { return request<BillingsPage>(`billings${query ? `?${query}` : ""}`); },
+    billing(id: string) { return request<BillingDetail>(`billings/${id}`); },
+    profile() { return request<{ user: { timezone: string } }>("auth/me"); },
+    createBilling(input: BillingInput, idempotencyKey: string) {
+      return request<BillingDetail>("billings", { method: "POST", headers: { "idempotency-key": idempotencyKey }, body: JSON.stringify(input) }, "Não foi possível criar a cobrança.");
+    },
+    patchBilling(id: string, patch: BillingPatch) {
+      return request<BillingDetail>(`billings/${id}`, { method: "PATCH", body: JSON.stringify(patch) }, "Não foi possível salvar a cobrança.");
+    },
     timeline(query = "") { return request<TimelinePage>(`timeline${query ? `?${query}` : ""}`); },
     paymentMethods() { return request<PaymentMethodsPage>("payment-methods"); },
     savePaymentMethod(input: PaymentMethodInput, id?: string) { return request<PaymentMethod>(id ? `payment-methods/${id}` : "payment-methods", { method: id ? "PATCH" : "POST", body: JSON.stringify(input) }); },
     defaultPaymentMethod(id: string) { return request<PaymentMethod>(`payment-methods/${id}/default`, { method: "POST" }); },
     archivePaymentMethod(id: string) { return request<void>(`payment-methods/${id}/archive`, { method: "POST" }); },
-    createExpense(input: ExpenseInput, idempotencyKey: string) { return request<ExpenseDetail>("expenses", { method: "POST", headers: { "idempotency-key": idempotencyKey }, body: JSON.stringify(input) }, "Não foi possível criar a cobrança."); },
     charge(id: string) { return request<ChargeDetail>(`charges/${id}`); },
     proofs(id: string) { return request<{ proofs: ProofDetail[] }>(`charges/${id}/proofs`); },
     uploadIntent(id: string, input: ProofUploadInput) { return request<ProofUploadIntent>(`charges/${id}/proofs/uploads`, { method: "POST", body: JSON.stringify(input) }); },

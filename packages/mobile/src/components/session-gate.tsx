@@ -73,7 +73,7 @@ export function SessionGate({ client = authClient, store = profileStore }: Sessi
 
   return (
     <HomeScreen
-      onOpenRecurrences={() => router.push("/recurrences")}
+      onOpenBillings={() => router.push("/billings")}
       onOpenPeople={() => router.push("/people")}
       onCreateCharge={() => router.push("/charges/new")}
       onOpenCharge={(id) => router.push({ pathname: "/charges/[id]", params: { id } })}

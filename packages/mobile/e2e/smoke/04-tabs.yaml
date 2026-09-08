@@ -14,11 +14,11 @@ appId: dev.receivy.local
 - assertVisible: ${EMAIL}
 - tapOn: "← Timeline"
 - extendedWaitUntil:
-    visible: "Recorrências"
+    visible: "Cobranças"
     timeout: 15000
-- tapOn: "Recorrências"
+- tapOn: "Cobranças"
 - extendedWaitUntil:
-    visible: "Nova recorrência"
+    visible: "Nova cobrança"
     timeout: 15000
 - tapOn: "Timeline"
 - extendedWaitUntil:

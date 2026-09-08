@@ -26,13 +26,16 @@ appId: dev.receivy.local
 - extendedWaitUntil:
     visible: "Divida com clareza antes de cobrar."
     timeout: 15000
+- tapOn: "Uma vez"
 - tapOn: "Ana QA"
 - tapOn:
-    text: "Valor total"
+    text: "Valor de cada cobrança"
     index: 1
 - inputText: "100,00"
 - tapOn: "Divida com clareza antes de cobrar."
-- tapOn: "Descrição"
+- tapOn:
+    text: "Descrição"
+    index: 1
 - inputText: "Mercado QA"
 - tapOn: "Divida com clareza antes de cobrar."
 - scrollUntilVisible:

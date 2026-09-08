@@ -1,6 +1,9 @@
 # Contact -> charge -> inline Pix -> public link -> timeline totals.
 # Labels and inputs share the same string, so inputs are addressed by index 1
-# or by placeholder. Android opens the native share sheet on publish.
+# or by placeholder. Both platforms open a native share sheet on publish and
+# need dismissing before the charge-detail assertions: Android shows
+# "Sharing link" and closes on the hardware Back key; iOS shows its own
+# sheet, dismissed by tapping the "dismiss popup" backdrop element.
 appId: dev.receivy.local
 ---
 - tapOn: "Contatos"
@@ -92,6 +95,11 @@ appId: dev.receivy.local
 - tapOn: "Publicar com este Pix"
 - runFlow:
     when:
+      visible: "Sharing link"
+    commands:
+      - pressKey: Back
+- runFlow:
+    when:
       visible: "dismiss popup"
     commands:
       - tapOn: "dismiss popup"
@@ -104,9 +112,9 @@ appId: dev.receivy.local
     direction: UP
 - tapOn: "Voltar para timeline"
 - extendedWaitUntil:
-    visible: ".*50,00 pendentes no total"
+    visible: 'R\$.50,00 pendentes no total'
     timeout: 20000
-- assertVisible: ".*50,00 pendentes no total"
+- assertVisible: 'R\$.50,00 pendentes no total'
 - scrollUntilVisible:
     element:
       text: "Abrir cobrança Mercado QA"

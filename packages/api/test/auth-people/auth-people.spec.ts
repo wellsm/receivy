@@ -123,5 +123,8 @@ describe('auth and people repositories on dedicated PostgreSQL', () => {
       equal((await listPeople(db, owner, undefined, false, search)).people.length, 0);
     }
     equal((await listPeople(db, stranger, undefined, false, 'no-match')).people.length, 0);
+    // UUID/date-like terms must stay text parameters or the driver types them as uuid/date.
+    for (const search of [randomUUID(), '2026-10-31', '12:30:00'])
+      equal((await listPeople(db, stranger, undefined, false, search)).people.length, 0);
   });
 });

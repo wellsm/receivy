@@ -223,11 +223,11 @@ function summary(row: BillingRow, nextDueDate: string | null, counters: BillingC
   };
 }
 
-/** The closest pending charge that is not overdue; it drives both `nextDueDate` and the share action. */
-async function nextPendingCharge(db: DbClient, id: string, today: string): Promise<{ id: string; due_date: string } | undefined> {
+/** The earliest pending charge, overdue included; it is what `nextDueDate` reports. */
+async function earliestPendingCharge(db: DbClient, id: string): Promise<{ id: string; due_date: string } | undefined> {
   const rows = await db.charges.findMany({
     select: { id: true, due_date: true },
-    where: { billing_id: id, state: 'pending', due_date: { gte: today } },
+    where: { billing_id: id, state: 'pending' },
     order: { due_date: Order.Asc },
     take: 1
   });
@@ -235,20 +235,22 @@ async function nextPendingCharge(db: DbClient, id: string, today: string): Promi
   return rows.records[0];
 }
 
-async function overduePendingChargeId(db: DbClient, id: string): Promise<string | null> {
+/** The share action prefers a charge that is still due; it only falls back to the overdue one. */
+async function shareChargeIdFor(db: DbClient, id: string, today: string, earliest?: { id: string }): Promise<string | null> {
   const rows = await db.charges.findMany({
     select: { id: true },
-    where: { billing_id: id, state: 'pending' },
+    where: { billing_id: id, state: 'pending', due_date: { gte: today } },
     order: { due_date: Order.Asc },
     take: 1
   });
 
-  return rows.records[0]?.id ?? null;
+  return rows.records[0]?.id ?? earliest?.id ?? null;
 }
 
 async function chargeCounters(db: DbClient, id: string): Promise<Pick<BillingCounters, 'chargeCount' | 'paidCount' | 'proofsPending'>> {
   const [row] = await db.rawQuery(
-    `SELECT COUNT(*) AS charge_count, COUNT(*) FILTER (WHERE c.state = 'paid') AS paid_count,
+    `SELECT COUNT(*) FILTER (WHERE c.state <> 'cancelled') AS charge_count,
+      COUNT(*) FILTER (WHERE c.state = 'paid') AS paid_count,
       (SELECT COUNT(*) FROM payment_proofs p JOIN charges cc ON cc.id = p.charge_id
         WHERE cc.billing_id = :id::uuid AND p.state = 'pending') AS proofs_pending
     FROM charges c WHERE c.billing_id = :id::uuid`,
@@ -272,12 +274,12 @@ function installmentCountFor(row: BillingRow): number | undefined {
 
 async function summaryDto(db: DbClient, row: BillingRow, now: Date): Promise<BillingSummary> {
   const today = calendarDate(now, row.timezone);
-  const upcoming = await nextPendingCharge(db, row.id, today);
+  const earliest = await earliestPendingCharge(db, row.id);
   const nextDueDate =
-    upcoming?.due_date ??
+    earliest?.due_date ??
     (row.type === 'indefinite' ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null) : null);
   const participantCount = await db.allocations.count({ where: { billing_id: row.id, kind: 'person' } });
-  const shareChargeId = participantCount === 1 ? (upcoming?.id ?? (await overduePendingChargeId(db, row.id))) : null;
+  const shareChargeId = participantCount === 1 ? await shareChargeIdFor(db, row.id, today, earliest) : null;
 
   return summary(row, nextDueDate, { ...(await chargeCounters(db, row.id)), participantCount, shareChargeId }, installmentCountFor(row));
 }
@@ -291,7 +293,7 @@ async function dto(db: DbClient, row: BillingRow, now: Date): Promise<BillingDet
     order: { due_date: Order.Asc, installment: Order.Asc }
   });
   const previews = await previewsFor(db, row, reminders, now);
-  const upcoming = await nextPendingCharge(db, row.id, calendarDate(now, row.timezone));
+  const earliest = await earliestPendingCharge(db, row.id);
 
   // The detail response has its own field list: the card counters stay out of it.
   return {
@@ -304,7 +306,7 @@ async function dto(db: DbClient, row: BillingRow, now: Date): Promise<BillingDet
     endDate: row.end_date,
     state: row.state,
     installmentCount: installmentCountFor(row),
-    nextDueDate: upcoming?.due_date ?? previews[0]?.occurrenceDate ?? null,
+    nextDueDate: earliest?.due_date ?? previews[0]?.occurrenceDate ?? null,
     createdAt: row.created_at,
     category: row.category,
     invite: null,
@@ -353,7 +355,8 @@ async function saveAllocations(db: DbClient, id: string, totalCents: number, spl
         amount_cents: part.amountCents,
         allocation_order: index,
         ...(original && 'basisPoints' in original ? { basis_points: original.basisPoints } : {}),
-        ...(original && 'shares' in original ? { shares: original.shares } : {}),
+        // Only the `shares` mode owns the quota column; a stray field on another mode stays null.
+        ...(split.mode === 'shares' && original && 'shares' in original ? { shares: original.shares } : {}),
         created_at: now
       }
     });
@@ -483,7 +486,7 @@ async function searchBillingIds(
     AND (:type::text IS NULL OR b.type = :type::text)
     AND (:state::text IS NULL OR b.state = :state::text)
     AND (:category::text IS NULL OR b.category = :category::text)
-    AND position(:query in lower(b.description)) > 0
+    AND position(:query::text in lower(b.description)) > 0
     ${paging}
     ORDER BY b.created_at DESC, b.id ASC LIMIT ${PAGE_SIZE + 1}`,
     {

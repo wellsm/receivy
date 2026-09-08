@@ -59,14 +59,14 @@ export async function getPerson(db: DbClient, ownerId: string, id: string): Prom
  * default listing cannot express this order, so `recent` always answers the first page with a null
  * cursor; the quick billing form only shows the top of it.
  */
-async function recentPeople(db: DbClient, ownerId: string, query: string): Promise<PeoplePage> {
+async function recentPeople(db: DbClient, ownerId: string, query: string, archived: boolean): Promise<PeoplePage> {
   const rows = await db.rawQuery(
     `SELECT p.id FROM people p LEFT JOIN allocations a ON a.person_id = p.id
-    WHERE p.owner_id = :ownerId::uuid AND p.archived_at IS NULL
-    AND (:query::text = '' OR position(:query in lower(p.name)) > 0 OR EXISTS
-      (SELECT 1 FROM person_contacts c WHERE c.person_id = p.id AND position(:query in lower(c.value)) > 0))
+    WHERE p.owner_id = :ownerId::uuid AND (p.archived_at IS NOT NULL) = :archived::boolean
+    AND (:query::text = '' OR position(:query::text in lower(p.name)) > 0 OR EXISTS
+      (SELECT 1 FROM person_contacts c WHERE c.person_id = p.id AND position(:query::text in lower(c.value)) > 0))
     GROUP BY p.id, p.name ORDER BY MAX(a.created_at) DESC NULLS LAST, p.name ASC LIMIT 50`,
-    { ownerId, query }
+    { ownerId, archived, query }
   );
   const ids = rows.map((row) => String(row['id']));
   if (!ids.length) return { people: [], nextCursor: null };
@@ -85,15 +85,15 @@ export async function listPeople(
   sort?: 'recent'
 ): Promise<PeoplePage> {
   const query = search.normalize('NFC').trim().toLocaleLowerCase('pt-BR').slice(0, 254);
-  if (sort === 'recent') return recentPeople(db, ownerId, query);
+  if (sort === 'recent') return recentPeople(db, ownerId, query, archived);
   let matchingIds: string[] | undefined;
   if (query) {
     const rows = await db.rawQuery(
       `SELECT p.id FROM people p WHERE p.owner_id = :ownerId::uuid
       AND (p.archived_at IS NOT NULL) = :archived::boolean
       AND (:cursor::uuid IS NULL OR p.id > :cursor::uuid)
-      AND (position(:query in lower(p.name)) > 0 OR EXISTS
-        (SELECT 1 FROM person_contacts c WHERE c.person_id = p.id AND position(:query in lower(c.value)) > 0))
+      AND (position(:query::text in lower(p.name)) > 0 OR EXISTS
+        (SELECT 1 FROM person_contacts c WHERE c.person_id = p.id AND position(:query::text in lower(c.value)) > 0))
       ORDER BY p.id LIMIT 51`,
       { ownerId, archived, cursor: cursor ?? null, query }
     );

@@ -2,8 +2,8 @@ import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { Order } from '@ez4/database';
 import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
-import type { BillingInput } from '@receivy/common';
-import { DEFAULT_BILLING_REMINDERS, resolveBillingSplit } from '@receivy/common';
+import type { BillingInput, BillingSplit } from '@receivy/common';
+import { billingDueLabel, DEFAULT_BILLING_REMINDERS, resolveBillingSplit } from '@receivy/common';
 import { createBilling, getBilling, listBillings, materializeBillings, patchBilling, previewBilling } from '../../src/billings/repository';
 import { getCharge } from '../../src/charges/repository';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
@@ -329,6 +329,9 @@ describe('billings on native PostgreSQL', () => {
     equal((await listBillings(db, OWNER, { search: 'churrasco do sábado' })).billings.length, 1);
     equal((await listBillings(db, OWNER, { search: 'nada-que-exista' })).billings.length, 0);
     equal((await listBillings(db, OTHER, { search: 'churr' })).billings.length, 0);
+    // A date-like term must stay a text parameter instead of being sniffed into a `date` variable.
+    equal((await listBillings(db, OWNER, { search: '2026-10-31' })).billings.length, 0);
+    equal((await listBillings(db, OWNER, { search: '12:30:00' })).billings.length, 0);
 
     const food = await listBillings(db, OWNER, { category: 'food' });
 
@@ -352,6 +355,91 @@ describe('billings on native PostgreSQL', () => {
     equal(
       paged.billings.some((billing) => billing.id === dinners[0]!.id),
       false
+    );
+  });
+
+  it('reports the overdue due date while the share action still points at the next charge', async () => {
+    const solo = (await savePerson(db, OWNER, { name: 'Atrasado Solo' })).id;
+    const created = await createBilling(
+      db,
+      OWNER,
+      'overdue-key',
+      {
+        ...once({
+          description: 'Parcelas atrasadas',
+          totalCents: 3_000,
+          split: { mode: 'equal', parts: [{ kind: 'person', personId: solo }] }
+        }),
+        type: 'until',
+        frequency: 'monthly',
+        startDate: '2026-01-31',
+        endDate: '2026-03-31'
+      },
+      date('2026-01-01')
+    );
+    const chargeOn = (dueDate: string) => created.charges.find((charge) => charge.dueDate === dueDate)!.id;
+    const partial = (await listBillings(db, OWNER, { search: 'parcelas atrasadas' }, date('2026-02-15'))).billings[0]!;
+
+    equal(partial.nextDueDate, '2026-01-31');
+    equal(partial.shareChargeId, chargeOn('2026-02-28'));
+    equal((await getBilling(db, OWNER, created.id, date('2026-02-15'))).nextDueDate, '2026-01-31');
+
+    const late = (await listBillings(db, OWNER, { search: 'parcelas atrasadas' }, date('2026-06-01'))).billings[0]!;
+
+    equal(late.nextDueDate, '2026-01-31');
+    equal(late.shareChargeId, chargeOn('2026-01-31'), 'every charge overdue falls back to the earliest pending one');
+    equal(billingDueLabel(late, '2026-06-01'), 'Atrasado 121 dias');
+  });
+
+  it('ignores cancelled charges so an ended billing with every paid occurrence reads as settled', async () => {
+    const solo = (await savePerson(db, OWNER, { name: 'Liquidado Solo' })).id;
+    const created = await createBilling(
+      db,
+      OWNER,
+      'settled-key',
+      {
+        ...once({
+          description: 'Encerrada liquidada',
+          totalCents: 3_000,
+          split: { mode: 'equal', parts: [{ kind: 'person', personId: solo }] }
+        }),
+        type: 'until',
+        frequency: 'monthly',
+        startDate: '2026-01-31',
+        endDate: '2026-03-31'
+      },
+      date('2026-01-01')
+    );
+    const instant = new Date().toISOString();
+
+    await db.charges.updateOne({
+      where: { id: created.charges[0]!.id },
+      data: { state: 'paid', paid_at: instant, updated_at: instant }
+    });
+    await patchBilling(db, OWNER, created.id, { state: 'ended' }, date('2026-02-15'));
+
+    const ended = (await listBillings(db, OWNER, { search: 'encerrada liquidada' })).billings[0]!;
+
+    equal(ended.chargeCount, 1);
+    equal(ended.paidCount, 1);
+    equal(billingDueLabel(ended, '2026-06-01'), 'Liquidada');
+  });
+
+  it('keeps the quota column empty for splits that are not shares', async () => {
+    const stray = {
+      mode: 'equal',
+      parts: [
+        { kind: 'person', personId, shares: 7 },
+        { kind: 'owner', shares: 3 }
+      ]
+    } as unknown as BillingSplit;
+    const created = await createBilling(db, OWNER, 'stray-shares-key', once({ description: 'Cotas indevidas', split: stray }));
+    const rows = await db.allocations.findMany({ select: { shares: true }, where: { billing_id: created.id } });
+
+    ok(rows.records.every((row) => row.shares === null || row.shares === undefined));
+    deepEqual(
+      (await getBilling(db, OWNER, created.id)).allocations.map((allocation) => allocation.shares),
+      [undefined, undefined]
     );
   });
 
@@ -390,6 +478,25 @@ describe('billings on native PostgreSQL', () => {
 
     ok(alphabetical.people.find((person) => person.id === older.id)!.lastBilledAt!.startsWith('2026-05-01'));
     equal(alphabetical.people.find((person) => person.id === never.id)?.lastBilledAt, null);
+    // A date-like term must stay a text parameter here too.
+    equal((await listPeople(db, OWNER, undefined, false, '2026-10-31', 'recent')).people.length, 0);
+
+    await archivePerson(db, OWNER, never.id);
+
+    const archived = await listPeople(db, OWNER, undefined, true, '', 'recent');
+
+    ok(
+      archived.people.some((person) => person.id === never.id),
+      'the recent order honors the archived flag'
+    );
+    equal(
+      archived.people.some((person) => person.id === newer.id),
+      false
+    );
+    equal(
+      (await listPeople(db, OWNER, undefined, false, '', 'recent')).people.some((person) => person.id === never.id),
+      false
+    );
   });
 
   it('projects indefinite previews in the timeline and removes them after materialization', async () => {

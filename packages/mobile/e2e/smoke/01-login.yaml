@@ -28,12 +28,12 @@ appId: dev.receivy.local
       - tapOn:
           point: "90%,48%"
 - extendedWaitUntil:
-    visible: "Seu e-mail"
+    visible: "Controle o que tem a receber e a pagar"
     timeout: 15000
-- tapOn: "voce@exemplo.com"
+- tapOn: "seu.email@exemplo.com"
 - inputText: ${EMAIL}
-- tapOn: "Entre no Receivy"
-- tapOn: "Receber código"
+- tapOn: "Controle o que tem a receber e a pagar"
+- tapOn: "Continuar com E-mail"
 - extendedWaitUntil:
-    visible: "Código de 6 dígitos"
+    visible: "Código de Verificação"
     timeout: 15000

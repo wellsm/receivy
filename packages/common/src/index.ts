@@ -1,4 +1,5 @@
 export * from './auth/auth';
+export * from './auth/login-code';
 export * from './auth/onboarding';
 export * from './design/tokens';
 export * from './domain/account';

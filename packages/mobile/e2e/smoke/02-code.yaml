@@ -1,9 +1,9 @@
 appId: dev.receivy.local
 ---
-- tapOn: "000000"
+# The code field is focused automatically; typing fills the six boxes.
 - inputText: ${CODE}
-- tapOn: "Confira seu e-mail"
-- tapOn: "Entrar"
+- tapOn: "Digite o código de 6 dígitos"
+- tapOn: "Confirmar e Entrar"
 - extendedWaitUntil:
     visible: "Como podemos chamar você?"
     timeout: 20000

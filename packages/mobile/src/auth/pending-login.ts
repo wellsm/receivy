@@ -1,13 +1,20 @@
-let pendingEmail: string | null = null;
+type PendingLogin = { email: string; sentAt: number };
 
-export function setPendingLoginEmail(email: string): void {
-  pendingEmail = email;
+let pending: PendingLogin | null = null;
+
+/** Remembers the e-mail that just received a code and when it was sent (drives the expiry countdown). */
+export function setPendingLoginEmail(email: string, sentAt = Date.now()): void {
+  pending = { email, sentAt };
 }
 
 export function getPendingLoginEmail(): string | null {
-  return pendingEmail;
+  return pending?.email ?? null;
+}
+
+export function getPendingLoginSentAt(): number | null {
+  return pending?.sentAt ?? null;
 }
 
 export function clearPendingLoginEmail(): void {
-  pendingEmail = null;
+  pending = null;
 }

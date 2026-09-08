@@ -9,6 +9,7 @@ export type Person = {
   archivedAt: string | null;
   createdAt: string;
   hasAccount: boolean;
+  lastBilledAt: string | null;
 };
 export type PeoplePage = { people: Person[]; nextCursor: string | null };
 

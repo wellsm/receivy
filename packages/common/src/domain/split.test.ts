@@ -100,4 +100,26 @@ describe('billing split', () => {
       expect(() => resolveBillingSplit(100, { mode: 'percentage', parts: [{ ...ana, basisPoints }] })).toThrow();
     }
   });
+
+  it('splits by shares with largest remainder', () => {
+    const parts = [
+      { kind: 'person' as const, personId: 'a', shares: 2 },
+      { kind: 'person' as const, personId: 'b', shares: 2 },
+      { kind: 'person' as const, personId: 'c', shares: 1 },
+      { kind: 'person' as const, personId: 'd', shares: 1 },
+      { kind: 'person' as const, personId: 'e', shares: 1 },
+      { kind: 'person' as const, personId: 'f', shares: 1 }
+    ];
+
+    expect(resolveBillingSplit(80_000, { mode: 'shares', parts }).map((p) => p.amountCents)).toEqual([
+      20_000, 20_000, 10_000, 10_000, 10_000, 10_000
+    ]);
+    expect(resolveBillingSplit(100, { mode: 'shares', parts: parts.slice(0, 3) }).map((p) => p.amountCents)).toEqual([40, 40, 20]);
+    expect(() => resolveBillingSplit(100, { mode: 'shares', parts: [{ kind: 'owner', shares: 0 }] })).toThrow(
+      'Informe cotas inteiras de 1 a 1000.'
+    );
+    expect(() => resolveBillingSplit(100, { mode: 'shares', parts: [{ kind: 'owner', shares: 1001 }] })).toThrow(
+      'Informe cotas inteiras de 1 a 1000.'
+    );
+  });
 });

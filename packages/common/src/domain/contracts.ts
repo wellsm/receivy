@@ -9,7 +9,7 @@ export type Money = {
 export type Direction = 'receivable' | 'payable';
 export type ChargeState = 'pending' | 'paid' | 'cancelled';
 export type ProofState = 'pending' | 'accepted' | 'rejected';
-export type SplitMode = 'fixed' | 'equal' | 'percentage';
+export type SplitMode = 'fixed' | 'equal' | 'percentage' | 'shares';
 
 export type ChargeSummary = {
   id: string;

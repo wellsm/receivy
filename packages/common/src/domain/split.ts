@@ -4,7 +4,8 @@ export type BillingSplit =
   | { mode: 'equal'; parts: SplitParty[] }
   // Keep schema-visible unions explicit: EZ4 cannot extract object/union intersections.
   | { mode: 'percentage'; parts: ({ kind: 'owner'; basisPoints: number } | { kind: 'person'; personId: string; basisPoints: number })[] }
-  | { mode: 'fixed'; parts: { kind: 'person'; personId: string; amountCents: number }[] };
+  | { mode: 'fixed'; parts: { kind: 'person'; personId: string; amountCents: number }[] }
+  | { mode: 'shares'; parts: ({ kind: 'owner'; shares: number } | { kind: 'person'; personId: string; shares: number })[] };
 
 export type ResolvedAllocation = SplitParty & { amountCents: number };
 
@@ -85,6 +86,17 @@ function resolveAmounts(totalCents: number, split: BillingSplit, parties: SplitP
     }
 
     return distribute(totalCents, weights);
+  }
+
+  if (split.mode === 'shares') {
+    const shares = split.parts.map((part) => part.shares);
+    const invalid = shares.some((share) => !Number.isInteger(share) || share < 1 || share > 1000);
+
+    if (invalid) {
+      throw new RangeError('Informe cotas inteiras de 1 a 1000.');
+    }
+
+    return distribute(totalCents, shares);
   }
 
   throw new RangeError('Modo de rateio inválido.');

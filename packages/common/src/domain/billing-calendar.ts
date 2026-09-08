@@ -177,7 +177,8 @@ export function normalizeBillingInput(input: BillingInput): NormalizedBillingInp
     timezone: input.timezone,
     paymentMethodId: input.paymentMethodId || undefined,
     reminders: input.reminders ? validateReminders(input.reminders) : undefined,
-    split: input.split
+    split: input.split,
+    category: input.category
   };
 }
 

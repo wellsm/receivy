@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type BillingDraft, buildBillingInput } from './billing-draft';
+import { type BillingDraft, buildBillingInput, EMPTY_BILLING_DRAFT } from './billing-draft';
 
 const base: BillingDraft = {
   type: 'once',
@@ -15,6 +15,7 @@ const base: BillingDraft = {
   pix: '',
   mode: 'equal',
   values: {},
+  category: 'other',
   reminders: [{ offsetDays: '-3', enabled: true }]
 };
 
@@ -30,6 +31,7 @@ describe('billing draft review', () => {
       timezone: 'America/Sao_Paulo',
       paymentMethodId: undefined,
       reminders: [{ offsetDays: -3, enabled: true }],
+      category: 'other',
       split: { mode: 'equal', parts: [{ kind: 'person', personId: 'p1' }, { kind: 'owner' }] }
     });
   });
@@ -59,5 +61,63 @@ describe('billing draft review', () => {
     expect(() => buildBillingInput({ ...base, selected: [] })).toThrow(/contato/i);
     expect(() => buildBillingInput({ ...base, reminders: [{ offsetDays: '-', enabled: true }] })).toThrow(/dias inteiros/i);
     expect(() => buildBillingInput({ ...base, type: 'until', occurrences: '2,5' })).toThrow(/vezes/i);
+  });
+
+  it('builds a shares split and keeps the category', () => {
+    const draft = {
+      ...EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-10'),
+      selected: ['p1', 'p2'],
+      owner: true,
+      amount: '100,00',
+      description: 'Churrasco',
+      mode: 'shares' as const,
+      values: { p1: '2', owner: '1' },
+      category: 'food' as const
+    };
+
+    const input = buildBillingInput(draft);
+
+    expect(input.category).toBe('food');
+    expect(input.split).toEqual({
+      mode: 'shares',
+      parts: [
+        { kind: 'person', personId: 'p1', shares: 2 },
+        { kind: 'person', personId: 'p2', shares: 1 },
+        { kind: 'owner', shares: 1 }
+      ]
+    });
+  });
+});
+
+describe('EMPTY_BILLING_DRAFT', () => {
+  it('returns a fresh draft with the expected defaults', () => {
+    const draft = EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-10');
+
+    expect(draft).toEqual({
+      type: 'once',
+      selected: [],
+      owner: true,
+      amount: '',
+      description: '',
+      frequency: 'monthly',
+      start: '2026-09-10',
+      end: '',
+      occurrences: '',
+      timezone: 'America/Sao_Paulo',
+      pix: '',
+      mode: 'equal',
+      values: {},
+      category: 'other',
+      reminders: [{ offsetDays: '0', enabled: true }]
+    });
+  });
+
+  it('returns a distinct object on every call', () => {
+    const first = EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-10');
+    first.selected.push('p1');
+
+    const second = EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-10');
+
+    expect(second.selected).toEqual([]);
   });
 });

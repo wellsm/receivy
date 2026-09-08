@@ -1,5 +1,6 @@
 import type { BillingFrequency, BillingInput, BillingReminder, BillingType } from './billing';
 import { billingDates, normalizeBillingInput } from './billing-calendar';
+import type { BillingCategory } from './billing-category';
 import type { SplitMode } from './contracts';
 import { parseBRLCents, parsePercentageBasisPoints } from './financial-form';
 
@@ -19,9 +20,32 @@ export type BillingDraft = {
   timezone: string;
   pix: string;
   mode: SplitMode;
+  /** For `fixed`/`percentage`, the raw text amount per key; for `shares`, the raw text share count per key. */
   values: Record<string, string>;
+  category: BillingCategory;
   reminders: ReminderDraft[];
 };
+
+/** Fresh draft for a new billing form. Returns a new object on every call. */
+export function EMPTY_BILLING_DRAFT(timezone: string, today: string): BillingDraft {
+  return {
+    type: 'once',
+    selected: [],
+    owner: true,
+    amount: '',
+    description: '',
+    frequency: 'monthly',
+    start: today,
+    end: '',
+    occurrences: '',
+    timezone,
+    pix: '',
+    mode: 'equal',
+    values: {},
+    category: 'other',
+    reminders: [{ offsetDays: '0', enabled: true }]
+  };
+}
 
 function integer(value: string, message: string): number {
   if (!/^-?\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
@@ -55,6 +79,41 @@ function endDateFor(draft: BillingDraft): string | undefined {
   return dates.at(-1);
 }
 
+function buildSplit(draft: BillingDraft, parties: ({ kind: 'owner' } | { kind: 'person'; personId: string })[]): BillingInput['split'] {
+  if (draft.mode === 'equal') {
+    return { mode: draft.mode, parts: parties };
+  }
+
+  if (draft.mode === 'fixed') {
+    return {
+      mode: draft.mode,
+      parts: draft.selected.map((personId) => ({
+        kind: 'person' as const,
+        personId,
+        amountCents: parseBRLCents(draft.values[personId] ?? '')
+      }))
+    };
+  }
+
+  if (draft.mode === 'shares') {
+    return {
+      mode: draft.mode,
+      parts: parties.map((party) => ({
+        ...party,
+        shares: integer(draft.values[party.kind === 'owner' ? 'owner' : party.personId] || '1', 'Informe cotas inteiras de 1 a 1000.')
+      }))
+    };
+  }
+
+  return {
+    mode: draft.mode,
+    parts: parties.map((party) => ({
+      ...party,
+      basisPoints: parsePercentageBasisPoints(draft.values[party.kind === 'owner' ? 'owner' : party.personId] ?? '')
+    }))
+  };
+}
+
 /** Shared pure review boundary; raw text stays in each platform's local UI. */
 export function buildBillingInput(draft: BillingDraft): BillingInput {
   if (!draft.selected.length) {
@@ -66,25 +125,7 @@ export function buildBillingInput(draft: BillingDraft): BillingInput {
     ...(draft.owner ? [{ kind: 'owner' as const }] : [])
   ];
 
-  const split =
-    draft.mode === 'equal'
-      ? { mode: draft.mode, parts: parties }
-      : draft.mode === 'fixed'
-        ? {
-            mode: draft.mode,
-            parts: draft.selected.map((personId) => ({
-              kind: 'person' as const,
-              personId,
-              amountCents: parseBRLCents(draft.values[personId] ?? '')
-            }))
-          }
-        : {
-            mode: draft.mode,
-            parts: parties.map((party) => ({
-              ...party,
-              basisPoints: parsePercentageBasisPoints(draft.values[party.kind === 'owner' ? 'owner' : party.personId] ?? '')
-            }))
-          };
+  const split = buildSplit(draft, parties);
 
   return normalizeBillingInput({
     type: draft.type,
@@ -93,6 +134,7 @@ export function buildBillingInput(draft: BillingDraft): BillingInput {
     totalCents: parseBRLCents(draft.amount),
     startDate: draft.start,
     endDate: endDateFor(draft),
+    category: draft.category,
     timezone: draft.timezone,
     paymentMethodId: draft.pix || undefined,
     reminders: draft.reminders.map((reminder) => ({

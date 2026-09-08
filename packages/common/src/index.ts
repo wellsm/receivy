@@ -6,6 +6,8 @@ export * from './domain/account';
 export * from './domain/api-error';
 export * from './domain/billing';
 export * from './domain/billing-calendar';
+export * from './domain/billing-card';
+export * from './domain/billing-category';
 export * from './domain/billing-draft';
 export * from './domain/billing-plan';
 export * from './domain/contracts';

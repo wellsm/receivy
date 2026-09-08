@@ -1,3 +1,4 @@
+import type { BillingCategory } from './billing-category';
 import type { ChargeDetail, Money, SplitMode } from './contracts';
 import type { BillingSplit } from './split';
 
@@ -22,6 +23,7 @@ export type BillingInput = {
   paymentMethodId?: string;
   reminders?: BillingReminder[];
   split: BillingSplit;
+  category?: BillingCategory;
 };
 
 export type NormalizedBillingInput = BillingInput & { description: string };
@@ -34,6 +36,7 @@ export type BillingPatch = {
   clearPaymentMethod?: boolean;
   reminders?: BillingReminder[];
   state?: BillingState;
+  category?: BillingCategory;
 };
 
 export type BillingAllocation = {
@@ -42,6 +45,7 @@ export type BillingAllocation = {
   splitMode: SplitMode;
   amount: Money;
   order: number;
+  shares?: number;
 };
 
 export type BillingPreview = {
@@ -65,6 +69,14 @@ export type BillingSummary = {
   installmentCount?: number;
   nextDueDate: string | null;
   createdAt: string;
+  category: BillingCategory;
+  participantCount: number;
+  chargeCount: number;
+  paidCount: number;
+  /** Proofs awaiting review on the billing's charges. */
+  proofsPending: number;
+  /** The single pending charge when there is exactly one participant; null otherwise. */
+  shareChargeId: string | null;
 };
 
 export type BillingDetail = {
@@ -88,6 +100,26 @@ export type BillingDetail = {
   charges: ChargeDetail[];
   previews: BillingPreview[];
   nextMaterialization: string | null;
+  category: BillingCategory;
+  invite: BillingInvite | null;
 };
 
 export type BillingsPage = { billings: BillingSummary[]; nextCursor: string | null };
+
+export type BillingInvite = { url: string; expiresAt: string };
+
+export type PublicInviteView = {
+  creditorFirstName: string;
+  description: string;
+  amount: Money;
+  type: BillingType;
+  participantCount: number;
+  category: BillingCategory;
+  expired: boolean;
+};
+
+export type InviteAcceptResult = {
+  billingId: string;
+  chargeId: string | null;
+  joinedSplit: boolean;
+};

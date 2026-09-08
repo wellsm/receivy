@@ -19,6 +19,6 @@ appId: dev.receivy.local
     commands:
       - tapOn: "Continuar"
 - extendedWaitUntil:
-    visible: "Sua visão de hoje"
+    visible: "A RECEBER"
     timeout: 20000
 - assertVisible: "Sua timeline começa aqui"

@@ -2,7 +2,7 @@ appId: dev.receivy.local
 ---
 - tapOn: "Perfil"
 - extendedWaitUntil:
-    visible: "Meus Contatos"
+    visible: "Gerenciar contatos"
     timeout: 15000
 - assertVisible: "Sair da conta"
 - scrollUntilVisible:
@@ -11,7 +11,7 @@ appId: dev.receivy.local
     direction: DOWN
 - scrollUntilVisible:
     element:
-      text: "Minhas Chaves Pix"
+      text: "Gerenciar chaves Pix"
     direction: UP
 - tapOn: "Gerenciar chaves Pix"
 - extendedWaitUntil:
@@ -20,7 +20,7 @@ appId: dev.receivy.local
 - assertVisible: ${EMAIL}
 - tapOn: "← Perfil"
 - extendedWaitUntil:
-    visible: "Meus Contatos"
+    visible: "Gerenciar contatos"
     timeout: 15000
 - tapOn: "Cobranças"
 - extendedWaitUntil:

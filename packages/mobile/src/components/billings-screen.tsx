@@ -148,7 +148,7 @@ export function BillingsScreen({ client = financialClient, onBack, onCreate, onO
           </>
         ) : (
           <>
-            <Button label="Timeline" onPress={() => onBack?.()} />
+            <Button label="Feed" onPress={() => onBack?.()} />
             <Text className="text-4xl font-extrabold text-primary-strong">Cobranças</Text>
             <Text className="text-muted">Uma linha por cobrança configurada. A timeline mostra cada pessoa e vencimento.</Text>
             <Button label="Nova cobrança" primary onPress={() => onCreate?.()} />

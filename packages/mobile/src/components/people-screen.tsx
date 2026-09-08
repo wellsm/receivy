@@ -60,7 +60,7 @@ export function PeopleScreen({ onBack, onOpenLedger, client = peopleClient }: Pr
   return <SafeAreaView className="flex-1 bg-canvas">
     <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerClassName="px-5 pb-12 pt-2">
-        <Pressable accessibilityRole="button" onPress={onBack} className="min-h-12 justify-center"><Text className="font-bold text-primary">← Timeline</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={onBack} className="min-h-12 justify-center"><Text className="font-bold text-primary">← Perfil</Text></Pressable>
         <Text className="mt-5 text-xs font-bold uppercase tracking-widest text-primary">Sua agenda</Text>
         <Text className="mt-3 text-3xl font-extrabold leading-9 text-primary-strong">Quem faz parte das suas contas?</Text>
         <Text className="mt-3 text-sm leading-6 text-muted">Cadastre pessoas para organizar cobranças. Elas não precisam ter uma conta no Receivy.</Text>

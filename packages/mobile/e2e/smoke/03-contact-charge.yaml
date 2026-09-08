@@ -1,4 +1,4 @@
-# Contact -> charge -> inline Pix -> public link -> timeline totals.
+# Perfil -> contact -> Cobranças -> charge -> inline Pix -> public link -> feed totals.
 # Labels and inputs share the same string, so inputs are addressed by index 1
 # or by placeholder. Both platforms open a native share sheet on publish and
 # need dismissing before the charge-detail assertions: Android shows
@@ -6,7 +6,11 @@
 # sheet, dismissed by tapping the "dismiss popup" backdrop element.
 appId: dev.receivy.local
 ---
-- tapOn: "Contatos"
+- tapOn: "Perfil"
+- extendedWaitUntil:
+    visible: "Gerenciar contatos"
+    timeout: 15000
+- tapOn: "Gerenciar contatos"
 - extendedWaitUntil:
     visible: "Quem faz parte das suas contas?"
     timeout: 15000
@@ -22,9 +26,17 @@ appId: dev.receivy.local
     timeout: 15000
 - scrollUntilVisible:
     element:
-      text: "← Timeline"
+      text: "← Perfil"
     direction: UP
-- tapOn: "← Timeline"
+- tapOn: "← Perfil"
+- extendedWaitUntil:
+    visible: "← Feed"
+    timeout: 15000
+- tapOn: "← Feed"
+- extendedWaitUntil:
+    visible: "Cobranças"
+    timeout: 15000
+- tapOn: "Cobranças"
 - extendedWaitUntil:
     visible: "Nova cobrança"
     timeout: 15000
@@ -108,13 +120,13 @@ appId: dev.receivy.local
     timeout: 20000
 - scrollUntilVisible:
     element:
-      text: "Voltar para timeline"
+      text: "Voltar para o feed"
     direction: UP
-- tapOn: "Voltar para timeline"
+- tapOn: "Voltar para o feed"
 - extendedWaitUntil:
-    visible: 'R\$.50,00 pendentes no total'
+    visible: 'R\$.50,00'
     timeout: 20000
-- assertVisible: 'R\$.50,00 pendentes no total'
+- assertVisible: "1 pendência"
 - scrollUntilVisible:
     element:
       text: "Abrir cobrança Mercado QA"

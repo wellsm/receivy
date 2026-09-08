@@ -7,8 +7,8 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ replace: mockReplace }),
 }));
 
-jest.mock("./home-screen", () => ({
-  HomeScreen: () => {
+jest.mock("./feed-screen", () => ({
+  FeedScreen: () => {
     const { Text } = jest.requireActual("react-native");
     return <Text>Home tabs</Text>;
   },

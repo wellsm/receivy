@@ -1,18 +1,32 @@
 appId: dev.receivy.local
 ---
-- tapOn: "Ajustes"
+- tapOn: "Perfil"
 - extendedWaitUntil:
     visible: "Sua conta"
     timeout: 15000
 - assertVisible: "Sessões e dispositivos"
-- assertVisible: "Exportar dados"
-- assertVisible: "Excluir conta"
-- tapOn: "Chaves Pix"
+- scrollUntilVisible:
+    element:
+      text: "Exportar dados"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: "Excluir conta"
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      text: "Chaves Pix"
+    direction: UP
+- tapOn: "Gerenciar chaves Pix"
 - extendedWaitUntil:
     visible: "Suas chaves Pix"
     timeout: 15000
 - assertVisible: ${EMAIL}
-- tapOn: "← Timeline"
+- tapOn: "← Perfil"
+- extendedWaitUntil:
+    visible: "← Feed"
+    timeout: 15000
+- tapOn: "← Feed"
 - extendedWaitUntil:
     visible: "Cobranças"
     timeout: 15000
@@ -20,7 +34,7 @@ appId: dev.receivy.local
 - extendedWaitUntil:
     visible: "Nova cobrança"
     timeout: 15000
-- tapOn: "Timeline"
+- tapOn: "Feed"
 - extendedWaitUntil:
-    visible: "Sua visão de hoje"
+    visible: "A RECEBER"
     timeout: 15000

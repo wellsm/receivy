@@ -4,7 +4,7 @@ import { ActivityIndicator, View } from "react-native";
 import { needsOnboarding } from "@receivy/common";
 import { profileStore, type ProfileStore } from "@/account/profile";
 import { authClient } from "@/auth/client";
-import { HomeScreen } from "./home-screen";
+import { FeedScreen } from "./feed-screen";
 
 type SessionGateProps = {
   client?: Pick<typeof authClient, "getAccessToken" | "refresh">;
@@ -72,12 +72,11 @@ export function SessionGate({ client = authClient, store = profileStore }: Sessi
   }
 
   return (
-    <HomeScreen
+    <FeedScreen
       onOpenBillings={() => router.push("/billings")}
-      onOpenPeople={() => router.push("/people")}
-      onCreateCharge={() => router.push("/charges/new")}
       onOpenCharge={(id) => router.push({ pathname: "/charges/[id]", params: { id } })}
       onOpenSettings={() => router.push("/settings")}
+      onOpenNotifications={() => router.push("/settings")}
     />
   );
 }

@@ -114,8 +114,9 @@ export function NotificationSettings({
             className="min-h-12 rounded-xl border border-outline px-3"
           />
           <Text className="text-muted">
-            Novas cobranças avulsas: negativo antes, zero no dia, positivo
-            depois. Vazio desativa. Recorrências têm configuração própria.
+            Padrão para novas cobranças: negativo antes, zero no dia, positivo
+            depois. Vazio desativa. Cada cobrança pode sobrescrever nos
+            próprios lembretes.
           </Text>
           <Pressable
             accessibilityRole="button"

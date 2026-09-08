@@ -19,15 +19,18 @@ import {
 } from "@receivy/common";
 import { SafeAreaView } from "@/components/safe-area-view";
 import { FinancialRequestError, financialClient, type FinancialClient } from "@/financial/client";
+import { notificationClient, type NotificationClient } from "@/notifications/client";
 import { peopleClient } from "@/people/client";
 
 type Client = Pick<FinancialClient, "paymentMethods" | "profile" | "createBilling" | "patchBilling">;
+type Notifications = Pick<NotificationClient, "preferences">;
 
 type Attempt = { input: BillingInput; key: string; uncertain: boolean };
 
 type BillingFormScreenProps = {
   client?: Client;
   people?: Pick<typeof peopleClient, "list">;
+  notifications?: Notifications;
   billing?: BillingDetail | null;
   onSaved: (billing: BillingDetail) => void;
   onBack: () => void;
@@ -69,7 +72,7 @@ function Chip({ label, active, disabled, onPress, role = "button" }: { label: st
   );
 }
 
-export function BillingFormScreen({ client = financialClient, people = peopleClient, billing = null, onSaved, onBack }: BillingFormScreenProps) {
+export function BillingFormScreen({ client = financialClient, people = peopleClient, notifications = notificationClient, billing = null, onSaved, onBack }: BillingFormScreenProps) {
   const [contacts, setContacts] = useState<Person[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -123,10 +126,20 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
             setTimezone(user.timezone);
             setStart(calendarDate(new Date(), user.timezone));
           }),
+      billing
+        ? Promise.resolve()
+        : notifications
+            .preferences()
+            .then((preferences) => {
+              setReminders(preferences.reminderOffsets.map((offsetDays) => ({ offsetDays: String(offsetDays), enabled: true })));
+            })
+            .catch(() => {
+              // Owner preferences are optional context; the initial state already falls back to DEFAULT_BILLING_REMINDERS.
+            }),
     ])
       .then(() => setReady(true))
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Não foi possível carregar os dados."));
-  }, [billing, client, people]);
+  }, [billing, client, people, notifications]);
 
   function change<T>(setter: (value: T) => void) {
     return (value: T) => {
@@ -159,6 +172,16 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
     }
   }
 
+  function patchBody(input: BillingInput) {
+    const editable = { paymentMethodId: input.paymentMethodId, clearPaymentMethod: !input.paymentMethodId, reminders: input.reminders };
+
+    if (billing && billing.type !== "indefinite") {
+      return editable;
+    }
+
+    return { description: input.description, totalCents: input.totalCents, split: input.split, ...editable };
+  }
+
   async function save(retry = attempt) {
     if (!review && !retry) return;
 
@@ -168,16 +191,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
     setError("");
 
     try {
-      const saved = billing
-        ? await client.patchBilling(billing.id, {
-            description: sent.input.description,
-            totalCents: sent.input.totalCents,
-            split: sent.input.split,
-            paymentMethodId: sent.input.paymentMethodId,
-            clearPaymentMethod: !sent.input.paymentMethodId,
-            reminders: sent.input.reminders,
-          })
-        : await client.createBilling(sent.input, sent.key);
+      const saved = billing ? await client.patchBilling(billing.id, patchBody(sent.input)) : await client.createBilling(sent.input, sent.key);
       setAttempt(null);
       onSaved(saved);
     } catch (reason) {

@@ -113,7 +113,7 @@ export function BillingsScreen({ client = financialClient, onBack, onCreate, onO
             <Text className="text-3xl font-extrabold text-ink">{formatMoney(selected.total)} por cobrança</Text>
             {selected.state !== "ended" && (
               <View className="gap-2">
-                {selected.type === "indefinite" && <Button label="Editar" disabled={busy} onPress={() => setEditing(true)} />}
+                <Button label="Editar" disabled={busy} onPress={() => setEditing(true)} />
                 {selected.type === "indefinite" && (
                   <Button label={selected.state === "active" ? "Pausar" : "Reativar"} disabled={busy} onPress={() => void transition(selected.state === "active" ? "paused" : "active")} />
                 )}

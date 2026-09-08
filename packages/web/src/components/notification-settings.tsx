@@ -159,9 +159,10 @@ export function NotificationSettings() {
             />
           </label>
           <p>
-            Aplicados às novas cobranças avulsas. Negativo: antes do vencimento;
-            zero: no dia; positivo: depois. Vazio desativa lembretes padrão.
-            Recorrências usam sua própria configuração.
+            Valem como padrão para novas cobranças. Negativo: antes do
+            vencimento; zero: no dia; positivo: depois. Vazio desativa
+            lembretes padrão. Cada cobrança pode sobrescrever esses dias nos
+            próprios lembretes.
           </p>
           <button
             disabled={busy}

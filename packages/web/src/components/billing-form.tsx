@@ -10,6 +10,7 @@ import {
   type BillingFrequency,
   type BillingInput,
   type BillingType,
+  type NotificationPreferences,
   type PaymentMethod,
   type Person,
   type ReminderDraft,
@@ -101,6 +102,15 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
             setTimezone(user.timezone);
             setStart(calendarDate(new Date(), user.timezone));
           }),
+      billing
+        ? Promise.resolve()
+        : request<NotificationPreferences>("/api/financial/notification-preferences")
+            .then((preferences) => {
+              setReminders(preferences.reminderOffsets.map((offsetDays) => ({ offsetDays: String(offsetDays), enabled: true })));
+            })
+            .catch(() => {
+              // Owner preferences are optional context; the initial state already falls back to DEFAULT_BILLING_REMINDERS.
+            }),
     ])
       .then(() => setReady(true))
       .catch((e) => setError((e as Error).message));
@@ -137,6 +147,16 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
     }
   }
 
+  function patchBody(input: BillingInput) {
+    const editable = { paymentMethodId: input.paymentMethodId, clearPaymentMethod: !input.paymentMethodId, reminders: input.reminders };
+
+    if (billing && billing.type !== "indefinite") {
+      return editable;
+    }
+
+    return { description: input.description, totalCents: input.totalCents, split: input.split, ...editable };
+  }
+
   async function save(retry = attempt) {
     if (!review && !retry) return;
 
@@ -150,14 +170,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
         ? await request<BillingDetail>(`/api/financial/billings/${billing.id}`, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              description: sent.input.description,
-              totalCents: sent.input.totalCents,
-              split: sent.input.split,
-              paymentMethodId: sent.input.paymentMethodId,
-              clearPaymentMethod: !sent.input.paymentMethodId,
-              reminders: sent.input.reminders,
-            }),
+            body: JSON.stringify(patchBody(sent.input)),
           })
         : await request<BillingDetail>("/api/financial/billings", {
             method: "POST",

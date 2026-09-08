@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
+import type { BillingDetail } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { BillingForm } from "./billing-form";
 
@@ -65,4 +66,42 @@ it("freezes the payload and idempotency key across an uncertain retry", async ()
   await user.click(screen.getByRole("button", { name: "Tentar criar novamente" }));
   expect(posts[1]?.body).toBe(posts[0]?.body);
   expect(posts[1]?.headers).toEqual(posts[0]?.headers);
+});
+
+const onceBilling: BillingDetail = {
+  id: "b1",
+  type: "once",
+  description: "Jantar",
+  total: { amountCents: 9_000, currency: "BRL" },
+  startDate: "2026-10-31",
+  state: "active",
+  nextDueDate: "2026-10-31",
+  createdAt: "2026-09-01T00:00:00Z",
+  updatedAt: "2026-09-01T00:00:00Z",
+  timezone: "America/Sao_Paulo",
+  paymentMethodId: "pix-1",
+  reminders: [{ offsetDays: -3, enabled: true }],
+  split: { mode: "equal", parts: [{ kind: "person", personId: "p1" }] },
+  allocations: [],
+  charges: [],
+  previews: [],
+  nextMaterialization: null,
+};
+
+it("edits a once billing by sending only reminders and Pix, never the frozen fields", async () => {
+  const patches: unknown[] = [];
+  vi.mocked(browserFetch).mockImplementation(async (path, init) => {
+    if (path.startsWith("/api/people")) return Response.json({ people: [{ id: "p1", name: "Ana" }], nextCursor: null });
+    if (path.includes("payment-methods")) return Response.json({ paymentMethods: [] });
+    if (init?.method === "PATCH") {
+      patches.push(JSON.parse(String(init.body)));
+      return Response.json(onceBilling);
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  const user = userEvent.setup();
+  render(<BillingForm billing={onceBilling} onSaved={vi.fn()} onBack={vi.fn()} />);
+  await user.click(await screen.findByRole("button", { name: "Revisar cobrança" }));
+  await user.click(screen.getByRole("button", { name: "Salvar cobrança" }));
+  expect(patches).toEqual([{ paymentMethodId: "pix-1", clearPaymentMethod: false, reminders: [{ offsetDays: -3, enabled: true }] }]);
 });

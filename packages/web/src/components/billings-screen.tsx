@@ -104,7 +104,7 @@ export function BillingsScreen() {
         <strong className="review-total">{formatMoney(selected.total)} por cobrança</strong>
         {selected.state !== "ended" && (
           <div className="filter-strip">
-            {selected.type === "indefinite" && <button disabled={busy} onClick={() => setEditing(true)}>Editar</button>}
+            <button disabled={busy} onClick={() => setEditing(true)}>Editar</button>
             {canPause && (
               <button disabled={busy} onClick={() => void transition(selected.state === "active" ? "paused" : "active")}>
                 {selected.state === "active" ? "Pausar" : "Reativar"}

@@ -81,6 +81,8 @@ Mantém todas as colunas atuais, com estas mudanças:
 - `source`, `source_id`, `source_occurrence_id` → `billing_id` (obrigatório).
 - `installment`, `installment_count` passam a ser nulos em `indefinite`;
   `once` grava `1/1`; `until` grava `k/N`.
+- `billing_type` (snapshot de `billings.type`) para filtrar a timeline e
+  devolver `billingType` sem join.
 - Índice único novo `(billing_id, debtor_person_id, due_date)`: garante que a
   materialização nunca duplica uma ocorrência e substitui
   `recurrence_occurrences`.
@@ -132,9 +134,12 @@ Lista final (22): `users`, `auth_identities`, `login_codes`,
 
 Igual ao spec original: `fixed`, `equal`, `percentage`, largest remainder,
 ordem estável, parte do dono não gera `charge`. `resolveExpenseSplit` em
-`@receivy/common` passa a se chamar `resolveBillingSplit`; a soma por pessoa e
-por ocorrência permanece exata. Para `until`, a distribuição por parcela é a
-mesma de hoje (`planExpenseCharges` → `planBillingCharges`).
+`@receivy/common` passa a se chamar `resolveBillingSplit(totalCents, split)`.
+`total_cents` é o valor de **cada ocorrência** em todos os tipos: `once` cobra
+uma vez, `until` e `indefinite` cobram esse valor a cada data. O rateio é
+resolvido uma vez e repetido em cada ocorrência, então a soma por pessoa e por
+ocorrência permanece exata. Não existe mais "total da compra dividido em N";
+o atalho "N vezes" da tela só calcula `end_date`.
 
 ### Calendário
 
@@ -296,10 +301,11 @@ saem. O login nativo Apple valida o `id_token` e não guarda refresh token.
 
 ## 9. Erros
 
-`{ code, message, correlationId }` como hoje. Códigos novos:
-`BILLING_TYPE_MISMATCH` (campo incompatível com o tipo),
-`BILLING_STATE_LOCKED` (PATCH em `ended`), `BILLING_TOO_MANY_OCCURRENCES`,
-`BILLING_END_BEFORE_START`. Clientes mapeiam só `code` via `apiErrorMessage`.
+`{ code, message, correlationId }` como hoje, com os códigos já existentes:
+validação de tipo/datas/ocorrências → 400 `INVALID_REQUEST`; PATCH em
+`ended`, campo incompatível com o tipo ou `paused` fora de `indefinite` → 409
+`CONFLICT`. Clientes mapeiam só `code` via `apiErrorMessage`; a mensagem do
+servidor explica o motivo para logs e smoke.
 
 ## 10. Testes
 

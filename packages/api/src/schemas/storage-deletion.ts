@@ -1,11 +1,11 @@
-import type { Database } from "@ez4/database";
-import type { String } from "@ez4/schema";
+import type { Database } from '@ez4/database';
+import type { String } from '@ez4/schema';
 export interface StorageDeletionSchema extends Database.Schema {
   id: String.UUID;
   object_key: String.Max<300>;
   charge_id: String.UUID;
-  purpose: "orphan" | "temporary" | "account";
-  state: "pending" | "deleting" | "deleted" | "blocked";
+  purpose: 'orphan' | 'temporary' | 'account';
+  state: 'pending' | 'deleting' | 'deleted' | 'blocked';
   attempts: number;
   available_at: String.DateTime;
   lease_until?: String.DateTime;

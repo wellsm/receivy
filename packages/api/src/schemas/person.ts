@@ -1,5 +1,5 @@
-import type { Database } from "@ez4/database";
-import type { String } from "@ez4/schema";
+import type { Database } from '@ez4/database';
+import type { String } from '@ez4/schema';
 
 export interface PersonSchema extends Database.Schema {
   id: String.UUID;

@@ -76,9 +76,6 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
             <Text className="mt-3 text-4xl font-extrabold leading-10 tracking-tight text-primary-strong">
               Entre no Receivy
             </Text>
-            <Text className="mt-3 text-base leading-6 text-muted">
-              Sem senha. Enviaremos um código de uso único para o seu e-mail.
-            </Text>
 
             <View className="mt-8 gap-3">
               <Pressable
@@ -110,34 +107,36 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
               <View className="h-px flex-1 bg-outline/60" />
             </View>
 
-            <Text className="mb-2 text-sm font-bold text-ink">Seu e-mail</Text>
-            <TextInput
-              accessibilityLabel="Seu e-mail"
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="voce@exemplo.com"
-              placeholderTextColor="#7D8794"
-              className="h-14 rounded-2xl border border-outline bg-surface px-4 text-base text-ink"
-            />
-            <Pressable
-              accessibilityLabel="Receber código"
-              accessibilityRole="button"
-              disabled={busy || !email.trim()}
-              onPress={() => void submit()}
-              className="mt-4 h-14 flex-row items-center justify-center rounded-2xl bg-primary active:opacity-80 disabled:opacity-50"
-            >
-              {busy ? <ActivityIndicator color="white" /> : (
-                <Text className="text-base font-extrabold text-white">Receber código  →</Text>
+            <View>
+              <Text className="mb-2 text-sm font-bold text-ink">Seu e-mail</Text>
+              <TextInput
+                accessibilityLabel="Seu e-mail"
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="voce@exemplo.com"
+                placeholderTextColor="#7D8794"
+                className="h-14 rounded-2xl border border-outline bg-surface px-4 text-base text-ink"
+              />
+              <Pressable
+                accessibilityLabel="Receber código"
+                accessibilityRole="button"
+                disabled={busy || !email.trim()}
+                onPress={() => void submit()}
+                className="mt-4 h-14 flex-row items-center justify-center rounded-2xl bg-primary active:opacity-80 disabled:opacity-50"
+              >
+                {busy ? <ActivityIndicator color="white" /> : (
+                  <Text className="text-base font-extrabold text-white">Receber código  →</Text>
+                )}
+              </Pressable>
+              {error && (
+                <Text accessibilityRole="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm leading-5 text-red-700">
+                  {error}
+                </Text>
               )}
-            </Pressable>
-            {error && (
-              <Text accessibilityRole="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm leading-5 text-red-700">
-                {error}
-              </Text>
-            )}
+            </View>
           </View>
 
           <Text className="text-center text-xs leading-5 text-muted">

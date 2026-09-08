@@ -1,5 +1,5 @@
-import type { Database } from "@ez4/database";
-import type { String } from "@ez4/schema";
+import type { Database } from '@ez4/database';
+import type { String } from '@ez4/schema';
 export interface NotificationPreferenceSchema extends Database.Schema {
   id: String.UUID;
   user_id: String.UUID;
@@ -14,7 +14,7 @@ export interface DeviceTokenSchema extends Database.Schema {
   token: String.Max<300>;
   installation_id: String.Max<100>;
   session_family_id?: String.UUID;
-  platform: "ios" | "android";
+  platform: 'ios' | 'android';
   active: boolean;
   created_at: String.DateTime;
   updated_at: String.DateTime;
@@ -27,17 +27,9 @@ export interface NotificationDeliverySchema extends Database.Schema {
   recipient_user_id?: String.UUID;
   device_id?: String.UUID;
   device_token_hash?: String.Max<64>;
-  channel: "email" | "push";
-  template: "initial" | "reminder";
-  state:
-    | "pending"
-    | "sending"
-    | "accepted"
-    | "delivered"
-    | "disabled"
-    | "failed"
-    | "uncertain"
-    | "suppressed";
+  channel: 'email' | 'push';
+  template: 'initial' | 'reminder';
+  state: 'pending' | 'sending' | 'accepted' | 'delivered' | 'disabled' | 'failed' | 'uncertain' | 'suppressed';
   render_inputs: String.Max<4000>;
   body_hash: String.Max<64>;
   idempotency_key: String.Max<200>;

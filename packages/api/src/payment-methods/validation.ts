@@ -1,4 +1,4 @@
-export type PixKeyType = "cpf" | "cnpj" | "email" | "phone" | "random";
+export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -11,33 +11,37 @@ function validDigits(value: string, size: 11 | 14): boolean {
     return remainder < 2 ? 0 : 11 - remainder;
   };
   if (size === 11) {
-    return check(value, [10, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[9])
-      && check(value, [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[10]);
+    return (
+      check(value, [10, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[9]) &&
+      check(value, [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[10])
+    );
   }
-  return check(value, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[12])
-    && check(value, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[13]);
+  return (
+    check(value, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[12]) &&
+    check(value, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]) === Number(value[13])
+  );
 }
 
 export function normalizePixKey(type: PixKeyType, value: string): string {
-  const trimmed = value.normalize("NFC").trim();
+  const trimmed = value.normalize('NFC').trim();
   let normalized: string;
   let valid: boolean;
-  if (type === "cpf" || type === "cnpj") {
-    normalized = trimmed.replace(/\D/g, "");
-    valid = validDigits(normalized, type === "cpf" ? 11 : 14);
-  } else if (type === "email") {
+  if (type === 'cpf' || type === 'cnpj') {
+    normalized = trimmed.replace(/\D/g, '');
+    valid = validDigits(normalized, type === 'cpf' ? 11 : 14);
+  } else if (type === 'email') {
     normalized = trimmed.toLowerCase();
     valid = normalized.length <= 254 && EMAIL.test(normalized);
-  } else if (type === "phone") {
-    normalized = `+${trimmed.replace(/\D/g, "")}`;
+  } else if (type === 'phone') {
+    normalized = `+${trimmed.replace(/\D/g, '')}`;
     valid = /^\+[1-9]\d{7,14}$/.test(normalized);
-  } else if (type === "random") {
+  } else if (type === 'random') {
     normalized = trimmed.toLowerCase();
     valid = UUID.test(normalized);
   } else {
-    normalized = "";
+    normalized = '';
     valid = false;
   }
-  if (!valid) throw new RangeError("Chave Pix inválida.");
+  if (!valid) throw new RangeError('Chave Pix inválida.');
   return normalized;
 }

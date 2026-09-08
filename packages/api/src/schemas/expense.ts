@@ -1,13 +1,13 @@
-import type { Database } from "@ez4/database";
-import type { String } from "@ez4/schema";
+import type { Database } from '@ez4/database';
+import type { String } from '@ez4/schema';
 
 export interface ExpenseSchema extends Database.Schema {
   id: String.UUID;
   owner_id: String.UUID;
-  type: "one_time" | "installment";
+  type: 'one_time' | 'installment';
   description: String.Max<500>;
   total_cents: number;
-  currency: "BRL";
+  currency: 'BRL';
   installment_count: number;
   first_due_date: String.Date;
   payment_method_id?: String.UUID;

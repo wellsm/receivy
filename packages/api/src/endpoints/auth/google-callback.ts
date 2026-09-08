@@ -1,12 +1,12 @@
-import type { Service } from "@ez4/common";
-import type { Http } from "@ez4/gateway";
-import type { String } from "@ez4/schema";
-import type { ApiProvider } from "../../provider";
-import { HttpNotFoundError, HttpUnauthorizedError } from "@ez4/gateway";
-import { completeOauth, OauthFlowError } from "../../auth/oauth-flow";
-import { createAuthRepository } from "../../repositories/auth-repository";
-import { commitOauthIdentity } from "../../auth/oauth-commit";
-import { appendOauthGrant, oauthDependencies } from "./oauth-shared";
+import type { Service } from '@ez4/common';
+import type { Http } from '@ez4/gateway';
+import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
+import type { String } from '@ez4/schema';
+import { commitOauthIdentity } from '../../auth/oauth-commit';
+import { completeOauth, OauthFlowError } from '../../auth/oauth-flow';
+import type { ApiProvider } from '../../provider';
+import { createAuthRepository } from '../../repositories/auth-repository';
+import { appendOauthGrant, oauthDependencies } from './oauth-shared';
 
 declare class GoogleCallbackRequest implements Http.Request {
   query: {
@@ -23,26 +23,29 @@ declare class GoogleCallbackResponse implements Http.Response {
 
 export async function googleCallbackHandler(
   request: GoogleCallbackRequest,
-  context: Service.Context<ApiProvider>,
+  context: Service.Context<ApiProvider>
 ): Promise<GoogleCallbackResponse> {
-  const dependencies = oauthDependencies("google", context);
+  const dependencies = oauthDependencies('google', context);
   if (!dependencies.client) {
     throw new HttpNotFoundError();
   }
   try {
-    const result = await completeOauth({
-      code: request.query.code,
-      error: request.query.error,
-      provider: "google",
-      state: request.query.state,
-    }, {
-      providerClient: dependencies.client,
-      repo: createAuthRepository(context.db),
-      commitGrant: input => commitOauthIdentity(context.db, input),
-    });
+    const result = await completeOauth(
+      {
+        code: request.query.code,
+        error: request.query.error,
+        provider: 'google',
+        state: request.query.state
+      },
+      {
+        providerClient: dependencies.client,
+        repo: createAuthRepository(context.db),
+        commitGrant: (input) => commitOauthIdentity(context.db, input)
+      }
+    );
     return {
       status: 302,
-      headers: { location: appendOauthGrant(result.destination, result.grant) },
+      headers: { location: appendOauthGrant(result.destination, result.grant) }
     };
   } catch (error) {
     if (error instanceof OauthFlowError) {

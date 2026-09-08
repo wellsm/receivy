@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit && biome check .",
     "check-types": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --pool=forks",
     "test:watch": "vitest --pool=forks"

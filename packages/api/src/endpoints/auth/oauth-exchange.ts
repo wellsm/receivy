@@ -1,11 +1,11 @@
-import type { Service } from "@ez4/common";
-import type { Http } from "@ez4/gateway";
-import type { String } from "@ez4/schema";
-import type { AuthSessionResponse } from "@receivy/common";
-import type { ApiProvider } from "../../provider";
-import { HttpUnauthorizedError } from "@ez4/gateway";
-import { OauthFlowError } from "../../auth/oauth-flow";
-import { exchangeOauthAtomically } from "../../auth/atomic";
+import type { Service } from '@ez4/common';
+import type { Http } from '@ez4/gateway';
+import { HttpUnauthorizedError } from '@ez4/gateway';
+import type { String } from '@ez4/schema';
+import type { AuthSessionResponse } from '@receivy/common';
+import { exchangeOauthAtomically } from '../../auth/atomic';
+import { OauthFlowError } from '../../auth/oauth-flow';
+import type { ApiProvider } from '../../provider';
 
 declare class OauthExchangeRequest implements Http.Request {
   body: {
@@ -22,11 +22,11 @@ declare class OauthExchangeResponse implements Http.Response {
 
 export async function oauthExchangeHandler(
   request: OauthExchangeRequest,
-  context: Service.Context<ApiProvider>,
+  context: Service.Context<ApiProvider>
 ): Promise<OauthExchangeResponse> {
   try {
     const body = await exchangeOauthAtomically(context.db, request.body, {
-      accessTokenSecret: context.variables.AUTH_JWT_SECRET,
+      accessTokenSecret: context.variables.AUTH_JWT_SECRET
     });
     return { status: 200, body };
   } catch (error) {

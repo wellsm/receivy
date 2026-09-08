@@ -1,32 +1,20 @@
-import type {
-  AuthSessionResponse,
-  AuthUser,
-  ConfirmEmailCodeBody,
-  RequestEmailCodeBody,
-} from "@receivy/common";
-import { normalizeEmail } from "@receivy/common";
-import { generateEmailCode } from "./code";
-import { issueAccessToken } from "./session";
+import type { AuthSessionResponse, AuthUser, ConfirmEmailCodeBody, RequestEmailCodeBody } from '@receivy/common';
+import { normalizeEmail } from '@receivy/common';
+import { generateEmailCode } from './code';
+import { issueAccessToken } from './session';
 
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 
-export type LoginCodeOutcome =
-  | { kind: "valid" }
-  | { kind: "invalid" | "expired" | "exhausted" };
+export type LoginCodeOutcome = { kind: 'valid' } | { kind: 'invalid' | 'expired' | 'exhausted' };
 
 export interface AuthRepository {
-  replaceLoginCode(input: {
-    code: string;
-    codeHashKey: string;
-    email: string;
-  }): Promise<{ accepted: boolean }>;
-  consumeLoginCode(input: {
-    code: string;
-    codeHashKey: string;
-    email: string;
-  }): Promise<LoginCodeOutcome>;
+  replaceLoginCode(input: { code: string; codeHashKey: string; email: string }): Promise<{ accepted: boolean }>;
+  consumeLoginCode(input: { code: string; codeHashKey: string; email: string }): Promise<LoginCodeOutcome>;
   findOrCreateUserByEmail(email: string): Promise<AuthUser>;
-  issueSession(userId: string, deviceName?: string): Promise<{
+  issueSession(
+    userId: string,
+    deviceName?: string
+  ): Promise<{
     familyId: string;
     refreshToken: string;
   }>;
@@ -37,9 +25,9 @@ export interface EmailTransport {
 }
 
 export class AuthFlowError extends Error {
-  constructor(readonly code: "INVALID_CODE") {
-    super("Não foi possível confirmar o código.");
-    this.name = "AuthFlowError";
+  constructor(readonly code: 'INVALID_CODE') {
+    super('Não foi possível confirmar o código.');
+    this.name = 'AuthFlowError';
   }
 }
 
@@ -52,20 +40,18 @@ type RequestEmailCodeDependencies = {
 
 export async function requestEmailCode(
   input: RequestEmailCodeBody,
-  {
-    codeHashKey,
-    generateCode = generateEmailCode,
-    repo,
-    transport,
-  }: RequestEmailCodeDependencies,
+  { codeHashKey, generateCode = generateEmailCode, repo, transport }: RequestEmailCodeDependencies
 ): Promise<void> {
   const email = normalizeEmail(input.email);
   const code = generateCode();
   const result = await repo.replaceLoginCode({ code, codeHashKey, email });
 
   if (result.accepted) {
-    try { await transport.sendLoginCode({ code, email }); }
-    catch { console.warn({ event: "login_email_delivery_failed" }); }
+    try {
+      await transport.sendLoginCode({ code, email });
+    } catch {
+      console.warn({ event: 'login_email_delivery_failed' });
+    }
   }
 }
 
@@ -77,17 +63,17 @@ type ConfirmEmailCodeDependencies = {
 
 export async function confirmEmailCode(
   input: ConfirmEmailCodeBody,
-  { accessTokenSecret, codeHashKey, repo }: ConfirmEmailCodeDependencies,
+  { accessTokenSecret, codeHashKey, repo }: ConfirmEmailCodeDependencies
 ): Promise<AuthSessionResponse> {
   const email = normalizeEmail(input.email);
   const outcome = await repo.consumeLoginCode({
     code: input.code,
     codeHashKey,
-    email,
+    email
   });
 
-  if (outcome.kind !== "valid") {
-    throw new AuthFlowError("INVALID_CODE");
+  if (outcome.kind !== 'valid') {
+    throw new AuthFlowError('INVALID_CODE');
   }
 
   const user = await repo.findOrCreateUserByEmail(email);
@@ -95,13 +81,13 @@ export async function confirmEmailCode(
   const accessToken = issueAccessToken({
     familyId: session.familyId,
     secret: accessTokenSecret,
-    userId: user.id,
+    userId: user.id
   });
 
   return {
     accessToken,
     refreshToken: session.refreshToken,
     expiresIn: ACCESS_TOKEN_TTL_SECONDS,
-    user,
+    user
   };
 }

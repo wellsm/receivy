@@ -1,24 +1,36 @@
-import type { Db, DbClient } from "../../src/database";
-import { DatabaseTester } from "@ez4/local-database/test";
+import { DatabaseTester } from '@ez4/local-database/test';
+import type { Db, DbClient } from '../../src/database';
 
-export const db = DatabaseTester.getClient<Db>("Db");
+export const db = DatabaseTester.getClient<Db>('Db');
 
 export async function createUser(client: DbClient, input: { id: string; email: string; name: string }) {
   const now = new Date().toISOString();
-  await client.users.insertOne({ data: { id: input.id, email: input.email, verified_email: input.email,
-    name: input.name, locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL",
-    created_at: now, updated_at: now } });
+  await client.users.insertOne({
+    data: {
+      id: input.id,
+      email: input.email,
+      verified_email: input.email,
+      name: input.name,
+      locale: 'pt-BR',
+      timezone: 'America/Sao_Paulo',
+      country: 'BR',
+      currency: 'BRL',
+      created_at: now,
+      updated_at: now
+    }
+  });
 }
 
 export async function cleanupUsers(client: DbClient, userIds: string[]) {
   const people = await client.people.findMany({ select: { id: true }, where: { owner_id: { isIn: userIds } } });
-  const personIds = people.records.map(row => row.id);
+  const personIds = people.records.map((row) => row.id);
   const expenses = await client.expenses.findMany({ select: { id: true }, where: { owner_id: { isIn: userIds } } });
-  const expenseIds = expenses.records.map(row => row.id);
-  const charges = await client.charges.findMany({ select: { id: true }, where: { OR: [
-    { creditor_id: { isIn: userIds } }, { recipient_user_id: { isIn: userIds } },
-  ] } });
-  const chargeIds = charges.records.map(row => row.id);
+  const expenseIds = expenses.records.map((row) => row.id);
+  const charges = await client.charges.findMany({
+    select: { id: true },
+    where: { OR: [{ creditor_id: { isIn: userIds } }, { recipient_user_id: { isIn: userIds } }] }
+  });
+  const chargeIds = charges.records.map((row) => row.id);
   if (chargeIds.length) {
     await client.notification_deliveries.deleteMany({ where: { charge_id: { isIn: chargeIds } } });
     await client.public_links.deleteMany({ where: { charge_id: { isIn: chargeIds } } });
@@ -34,10 +46,10 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
     await client.expenses.deleteMany({ where: { id: { isIn: expenseIds } } });
   }
   const rules = await client.recurrences.findMany({ select: { id: true }, where: { owner_id: { isIn: userIds } } });
-  const ruleIds = rules.records.map(row => row.id);
+  const ruleIds = rules.records.map((row) => row.id);
   if (ruleIds.length) {
     const occurrences = await client.recurrence_occurrences.findMany({ select: { id: true }, where: { recurrence_id: { isIn: ruleIds } } });
-    const occurrenceIds = occurrences.records.map(row => row.id);
+    const occurrenceIds = occurrences.records.map((row) => row.id);
     if (occurrenceIds.length) {
       await client.outbox_events.deleteMany({ where: { aggregate_id: { isIn: occurrenceIds } } });
       await client.activity_events.deleteMany({ where: { aggregate_id: { isIn: occurrenceIds } } });

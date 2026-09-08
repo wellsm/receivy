@@ -1,6 +1,6 @@
-import { Order } from "@ez4/database";
-import type { DbClient } from "../database";
-import type { ProofStorage, ReconciliableProofStorage } from "./storage";
+import { Order } from '@ez4/database';
+import type { DbClient } from '../database';
+import type { ProofStorage, ReconciliableProofStorage } from './storage';
 
 const GRACE = 24 * 3600_000;
 const KEY = /^(temporary|proofs)\/([a-f0-9-]{36})\/([a-f0-9-]{36})$/;
@@ -11,26 +11,26 @@ export async function enqueueStorageDeletion(
   input: {
     key: string;
     chargeId: string;
-    purpose: "orphan" | "temporary" | "account";
+    purpose: 'orphan' | 'temporary' | 'account';
   },
-  now = Date.now(),
+  now = Date.now()
 ) {
-  if (!KEY.test(input.key)) throw new RangeError("Invalid proof object key.");
+  if (!KEY.test(input.key)) throw new RangeError('Invalid proof object key.');
   const existing = await db.storage_deletions.findOne({
     select: { id: true, state: true },
-    where: { object_key: input.key },
+    where: { object_key: input.key }
   });
   const stamp = new Date(now).toISOString();
   if (existing) {
-    if (existing.state === "blocked")
+    if (existing.state === 'blocked')
       await db.storage_deletions.updateOne({
         where: { id: existing.id },
         data: {
-          state: "pending",
+          state: 'pending',
           attempts: 0,
           available_at: stamp,
-          updated_at: stamp,
-        },
+          updated_at: stamp
+        }
       });
     return existing.id;
   }
@@ -41,101 +41,85 @@ export async function enqueueStorageDeletion(
       object_key: input.key,
       charge_id: input.chargeId,
       purpose: input.purpose,
-      state: "pending",
+      state: 'pending',
       attempts: 0,
       available_at: stamp,
       created_at: stamp,
-      updated_at: stamp,
-    },
+      updated_at: stamp
+    }
   });
   return id;
 }
-async function protectedObject(
-  db: DbClient,
-  key: string,
-  chargeId: string,
-  now: number,
-) {
-  if (await db.payment_proofs.count({ where: { object_key: key } }))
-    return true;
+async function protectedObject(db: DbClient, key: string, chargeId: string, now: number) {
+  if (await db.payment_proofs.count({ where: { object_key: key } })) return true;
   return !!(await db.upload_intents.count({
     where: {
       charge_id: chargeId,
-      state: "pending",
-      expires_at: { gt: new Date(now).toISOString() },
-    },
+      state: 'pending',
+      expires_at: { gt: new Date(now).toISOString() }
+    }
   }));
 }
-export async function reconcileProofStorage(
-  db: DbClient,
-  storage: ReconciliableProofStorage,
-  clock = Date.now,
-) {
+export async function reconcileProofStorage(db: DbClient, storage: ReconciliableProofStorage, clock = Date.now) {
   const now = clock();
   const stamp = new Date(now).toISOString();
   // Expired/finalized temporary intents are discoverable without bucket enumeration.
   const intents = await db.upload_intents.findMany({
     select: { id: true, charge_id: true, object_key: true },
     where: {
-      state: "pending",
-      expires_at: { lt: new Date(now - GRACE).toISOString() },
+      state: 'pending',
+      expires_at: { lt: new Date(now - GRACE).toISOString() }
     },
     order: { expires_at: Order.Asc },
-    take: 100,
+    take: 100
   });
   for (const intent of intents.records)
     await db.transaction(async (tx) => {
       await tx.charges.findOne({
         select: { id: true },
         where: { id: intent.charge_id },
-        lock: true,
+        lock: true
       });
       await tx.upload_intents.updateMany({
-        where: { id: intent.id, state: "pending", expires_at: { lte: stamp } },
-        data: { state: "expired" },
+        where: { id: intent.id, state: 'pending', expires_at: { lte: stamp } },
+        data: { state: 'expired' }
       });
       await enqueueStorageDeletion(
         tx,
         {
           key: intent.object_key,
           chargeId: intent.charge_id,
-          purpose: "temporary",
+          purpose: 'temporary'
         },
-        now,
+        now
       );
     });
   const progress = await db.storage_cleanup_cursors.findOne({
     select: { cursor: true },
-    where: { id: "proof-objects" },
+    where: { id: 'proof-objects' }
   });
   const page = await storage.list(progress?.cursor);
-  if (page.objects.length > 100)
-    throw new Error("Storage listing exceeded bounded page.");
+  if (page.objects.length > 100) throw new Error('Storage listing exceeded bounded page.');
   let queued = 0;
   for (const object of page.objects) {
     const parsed = KEY.exec(object.key);
-    if (
-      !parsed ||
-      !Number.isFinite(Date.parse(object.modifiedAt)) ||
-      Date.parse(object.modifiedAt) > now - GRACE
-    )
-      continue;
+    if (!parsed || !Number.isFinite(Date.parse(object.modifiedAt)) || Date.parse(object.modifiedAt) > now - GRACE) continue;
     const intent =
-      parsed[1] === "temporary"
+      parsed[1] === 'temporary'
         ? await db.upload_intents.findOne({
             select: { charge_id: true },
-            where: { object_key: object.key },
+            where: { object_key: object.key }
           })
         : undefined;
     // Unknown temporary namespace cannot be associated with a charge. It has no valid
     // intent after 24h, but retain conservatively until explicit account/journal work.
-    const chargeId = parsed[1] === "proofs" ? parsed[2]! : intent?.charge_id;
+    const chargeId = parsed[1] === 'proofs' ? parsed[2]! : intent?.charge_id;
     if (!chargeId) continue;
     await db.transaction(async (tx) => {
       await tx.charges.findOne({
         select: { id: true },
         where: { id: chargeId },
-        lock: true,
+        lock: true
       });
       if (await protectedObject(tx, object.key, chargeId, now)) return;
       await enqueueStorageDeletion(
@@ -143,9 +127,9 @@ export async function reconcileProofStorage(
         {
           key: object.key,
           chargeId,
-          purpose: parsed[1] === "proofs" ? "orphan" : "temporary",
+          purpose: parsed[1] === 'proofs' ? 'orphan' : 'temporary'
         },
-        now,
+        now
       );
       queued++;
     });
@@ -153,23 +137,19 @@ export async function reconcileProofStorage(
   // A failed DB read/list never advances this cursor or proves an object unreferenced.
   await db.rawQuery(
     "INSERT INTO storage_cleanup_cursors (id, cursor, updated_at) VALUES ('proof-objects', :cursor, :now) ON CONFLICT (id) DO UPDATE SET cursor = :cursor, updated_at = :now",
-    { cursor: page.cursor, now: stamp },
+    { cursor: page.cursor, now: stamp }
   );
   return { scanned: page.objects.length, queued };
 }
-export async function drainStorageDeletions(
-  db: DbClient,
-  storage: ProofStorage,
-  clock = Date.now,
-) {
+export async function drainStorageDeletions(db: DbClient, storage: ProofStorage, clock = Date.now) {
   const candidates = await db.storage_deletions.findMany({
     select: { id: true, charge_id: true },
     where: {
-      state: { isIn: ["pending", "deleting"] },
-      available_at: { lte: new Date(clock()).toISOString() },
+      state: { isIn: ['pending', 'deleting'] },
+      available_at: { lte: new Date(clock()).toISOString() }
     },
     order: { available_at: Order.Asc },
-    take: 100,
+    take: 100
   });
   let deleted = 0;
   for (const candidate of candidates.records) {
@@ -177,7 +157,7 @@ export async function drainStorageDeletions(
       await tx.charges.findOne({
         select: { id: true },
         where: { id: candidate.charge_id },
-        lock: true,
+        lock: true
       });
       const row = await tx.storage_deletions.findOne({
         select: {
@@ -187,16 +167,16 @@ export async function drainStorageDeletions(
           state: true,
           attempts: true,
           available_at: true,
-          lease_until: true,
+          lease_until: true
         },
         where: { id: candidate.id },
-        lock: true,
+        lock: true
       });
       const now = clock();
       const stamp = new Date(now).toISOString();
       if (
         !row ||
-        !["pending", "deleting"].includes(row.state) ||
+        !['pending', 'deleting'].includes(row.state) ||
         Date.parse(row.available_at) > now ||
         (row.lease_until && Date.parse(row.lease_until) > now)
       )
@@ -205,10 +185,10 @@ export async function drainStorageDeletions(
         await tx.storage_deletions.updateOne({
           where: { id: row.id },
           data: {
-            state: "blocked",
-            reason: "object_referenced_or_inflight",
-            updated_at: stamp,
-          },
+            state: 'blocked',
+            reason: 'object_referenced_or_inflight',
+            updated_at: stamp
+          }
         });
         return;
       }
@@ -216,12 +196,12 @@ export async function drainStorageDeletions(
       await tx.storage_deletions.updateOne({
         where: { id: row.id },
         data: {
-          state: "deleting",
+          state: 'deleting',
           attempts: row.attempts + 1,
           available_at: lease,
           lease_until: lease,
-          updated_at: stamp,
-        },
+          updated_at: stamp
+        }
       });
       return { ...row, lease };
     });
@@ -235,20 +215,14 @@ export async function drainStorageDeletions(
     }
     const now = clock();
     await db.storage_deletions.updateMany({
-      where: { id: claim.id, state: "deleting", lease_until: claim.lease },
+      where: { id: claim.id, state: 'deleting', lease_until: claim.lease },
       data: {
-        state: success
-          ? "deleted"
-          : claim.attempts >= 4
-            ? "blocked"
-            : "pending",
-        reason: success ? "deleted" : "storage_delete_failed",
-        available_at: new Date(
-          now + 60_000 * 2 ** Math.min(claim.attempts, 6),
-        ).toISOString(),
+        state: success ? 'deleted' : claim.attempts >= 4 ? 'blocked' : 'pending',
+        reason: success ? 'deleted' : 'storage_delete_failed',
+        available_at: new Date(now + 60_000 * 2 ** Math.min(claim.attempts, 6)).toISOString(),
         lease_until: new Date(now).toISOString(),
-        updated_at: new Date(now).toISOString(),
-      },
+        updated_at: new Date(now).toISOString()
+      }
     });
     if (success) deleted++;
   }

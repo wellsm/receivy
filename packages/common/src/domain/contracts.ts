@@ -1,16 +1,16 @@
-import type { ExpenseSplit } from "./split";
-import type { Person } from "./people";
+import type { Person } from './people';
+import type { ExpenseSplit } from './split';
 
 export type Money = {
   amountCents: number;
-  currency: "BRL";
+  currency: 'BRL';
 };
 
-export type Direction = "receivable" | "payable";
-export type ChargeState = "pending" | "paid" | "cancelled";
-export type ProofState = "pending" | "accepted" | "rejected";
-export type SplitMode = "fixed" | "equal" | "percentage";
-export type RecurrenceFrequency = "monthly" | "yearly";
+export type Direction = 'receivable' | 'payable';
+export type ChargeState = 'pending' | 'paid' | 'cancelled';
+export type ProofState = 'pending' | 'accepted' | 'rejected';
+export type SplitMode = 'fixed' | 'equal' | 'percentage';
+export type RecurrenceFrequency = 'monthly' | 'yearly';
 
 export type ChargeSummary = {
   id: string;
@@ -18,7 +18,7 @@ export type ChargeSummary = {
   amount: Money;
   dueDate: string;
   state: ChargeState;
-  source: "expense" | "recurrence";
+  source: 'expense' | 'recurrence';
   installment: number;
   installmentCount: number;
 };
@@ -31,10 +31,14 @@ export type ProofSummary = {
 };
 
 export type ProofDetail = ProofSummary & {
-  originalName: string; mime: "image/jpeg" | "image/png" | "application/pdf"; size: number;
-  reason: string | null; closureReason: "paid" | "cancelled" | null; reviewedAt: string | null;
+  originalName: string;
+  mime: 'image/jpeg' | 'image/png' | 'application/pdf';
+  size: number;
+  reason: string | null;
+  closureReason: 'paid' | 'cancelled' | null;
+  reviewedAt: string | null;
 };
-export type ProofUploadInput = { filename: string; mime: "image/jpeg" | "image/png" | "application/pdf"; size: number };
+export type ProofUploadInput = { filename: string; mime: 'image/jpeg' | 'image/png' | 'application/pdf'; size: number };
 export type ProofUploadIntent = { id: string; uploadUrl: string; expiresAt: string };
 
 export type PaymentSummary = {
@@ -52,44 +56,63 @@ export type RecurrencePreview = {
   materializationDate?: string;
 };
 
-export type RecurrenceReminder = { offsetDays: number; channel: "auto"; enabled: boolean };
+export type RecurrenceReminder = { offsetDays: number; channel: 'auto'; enabled: boolean };
 export type RecurrenceInput = {
-  description?: string; totalCents: number; frequency: RecurrenceFrequency; day: number; month?: number;
-  startDate?: string; endDate?: string; timezone: string; paymentMethodId?: string;
-  split: import("./split").ExpenseSplit; reminders?: RecurrenceReminder[];
+  description?: string;
+  totalCents: number;
+  frequency: RecurrenceFrequency;
+  day: number;
+  month?: number;
+  startDate?: string;
+  endDate?: string;
+  timezone: string;
+  paymentMethodId?: string;
+  split: import('./split').ExpenseSplit;
+  reminders?: RecurrenceReminder[];
 };
 // Explicit fields are required by EZ4 0.52's response-schema extraction:
 // mapped Omit/intersections type-check but silently omit inherited HTTP fields.
 export type RecurrenceDetail = {
-  totalCents: number; frequency: RecurrenceFrequency; day: number; month?: number;
-  endDate?: string; timezone: string; paymentMethodId?: string;
+  totalCents: number;
+  frequency: RecurrenceFrequency;
+  day: number;
+  month?: number;
+  endDate?: string;
+  timezone: string;
+  paymentMethodId?: string;
   split: ExpenseSplit;
-  id: string; description: string; startDate: string; reminders: RecurrenceReminder[];
-  state: "active" | "paused" | "ended"; createdAt: string; updatedAt: string;
-  nextMaterialization: string | null; previews: RecurrencePreview[];
+  id: string;
+  description: string;
+  startDate: string;
+  reminders: RecurrenceReminder[];
+  state: 'active' | 'paused' | 'ended';
+  createdAt: string;
+  updatedAt: string;
+  nextMaterialization: string | null;
+  previews: RecurrencePreview[];
 };
 export type RecurrencesPage = { recurrences: RecurrenceDetail[] };
 
 export type TimelineItem =
-  | { kind: "charge"; direction: Direction; charge: ChargeSummary }
-  | { kind: "proof"; direction: Direction; proof: ProofSummary }
-  | { kind: "payment"; direction: Direction; payment: PaymentSummary }
+  | { kind: 'charge'; direction: Direction; charge: ChargeSummary }
+  | { kind: 'proof'; direction: Direction; proof: ProofSummary }
+  | { kind: 'payment'; direction: Direction; payment: PaymentSummary }
   | {
-      kind: "recurrence_preview";
-      direction: "receivable";
+      kind: 'recurrence_preview';
+      direction: 'receivable';
       preview: RecurrencePreview;
     };
 
 export type HealthResponse = {
-  status: "ok";
-  service: "receivy-api";
+  status: 'ok';
+  service: 'receivy-api';
 };
 
-export type PixKeyType = "cpf" | "cnpj" | "email" | "phone" | "random";
+export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
 
 export type PaymentMethod = {
   id: string;
-  type: "pix";
+  type: 'pix';
   pixKeyType: PixKeyType;
   pixKey: string;
   label: string;
@@ -111,12 +134,12 @@ export type ExpenseInput = {
   totalCents: number;
   installmentCount: number;
   firstDueDate: string;
-  split: import("./split").ExpenseSplit;
+  split: import('./split').ExpenseSplit;
   paymentMethodId?: string;
 };
 
 export type ExpenseAllocation = {
-  kind: "owner" | "person";
+  kind: 'owner' | 'person';
   personId: string | null;
   splitMode: SplitMode;
   amount: Money;
@@ -138,7 +161,7 @@ export type PaymentRecord = {
   id: string;
   chargeId: string;
   amount: Money;
-  method: "pix" | "cash" | "transfer" | "other";
+  method: 'pix' | 'cash' | 'transfer' | 'other';
   paidAt: string;
   createdAt: string;
 };
@@ -147,7 +170,7 @@ export type ChargeDetail = ChargeSummary & {
   direction: Direction;
   recipient: ChargeRecipientSnapshot;
   pix: PixSnapshot | null;
-  sharingState: "ready" | "pix_required" | "legacy_without_pix" | "closed";
+  sharingState: 'ready' | 'pix_required' | 'legacy_without_pix' | 'closed';
   payment: PaymentRecord | null;
   cancelledAt: string | null;
   paidAt: string | null;
@@ -156,7 +179,7 @@ export type ChargeDetail = ChargeSummary & {
 
 export type ExpenseDetail = {
   id: string;
-  type: "one_time" | "installment";
+  type: 'one_time' | 'installment';
   description: string;
   total: Money;
   installmentCount: number;

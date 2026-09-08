@@ -93,6 +93,11 @@ pnpm --filter @receivy/api check-types:test
 pnpm verify
 ```
 
+`packages/api` e `packages/common` são formatados e lintados pelo Biome
+(`biome.json` na raiz: aspas simples, ponto e vírgula, sem vírgula final, 140
+colunas, imports organizados). `pnpm lint` já executa `biome check`; `pnpm format`
+aplica a formatação. `web` e `mobile` seguem no ESLint das suas ferramentas.
+
 A suíte nativa usa `test.env.example` e o banco `receivy_tests`, não o banco
 `receivy` usado pela aplicação. O runner reseta somente o banco de testes, após
 as verificações de segurança do preparo e de configuração. Não substitua a URL

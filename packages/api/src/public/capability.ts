@@ -1,33 +1,34 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 type IssueInput = { publicId: string; version: number; expiresAtSeconds: number; secret: string };
 type VerifyInput = { version: number; nowSeconds?: number; secret: string };
 
 export function assertPublicLinkSecretConfigured(secret: string): string {
-  if (!secret || secret === "disabled") throw new Error("Public link secret is not configured");
+  if (!secret || secret === 'disabled') throw new Error('Public link secret is not configured');
   return secret;
 }
 
 function signature(publicId: string, expires: number, version: number, secret: string): Buffer {
-  return createHmac("sha256", assertPublicLinkSecretConfigured(secret)).update(`${publicId}.${version}.${expires}`).digest();
+  return createHmac('sha256', assertPublicLinkSecretConfigured(secret)).update(`${publicId}.${version}.${expires}`).digest();
 }
 
 export function issuePublicChargeToken(input: IssueInput): string {
-  const mac = signature(input.publicId, input.expiresAtSeconds, input.version, input.secret).toString("base64url");
+  const mac = signature(input.publicId, input.expiresAtSeconds, input.version, input.secret).toString('base64url');
   return `${input.publicId}.${input.expiresAtSeconds}.${mac}`;
 }
 
 function invalid(): never {
-  throw new Error("Invalid public capability");
+  throw new Error('Invalid public capability');
 }
 
 export function verifyPublicChargeToken(token: string, input: VerifyInput): { publicId: string; expiresAtSeconds: number } {
-  const [publicId, rawExpires, rawSignature, extra] = token.split(".");
+  const [publicId, rawExpires, rawSignature, extra] = token.split('.');
   const expiresAtSeconds = Number(rawExpires);
   const nowSeconds = input.nowSeconds ?? Math.floor(Date.now() / 1000);
-  if (!publicId || !rawExpires || !rawSignature || extra || !Number.isSafeInteger(expiresAtSeconds) || expiresAtSeconds <= nowSeconds) invalid();
+  if (!publicId || !rawExpires || !rawSignature || extra || !Number.isSafeInteger(expiresAtSeconds) || expiresAtSeconds <= nowSeconds)
+    invalid();
   const expected = signature(publicId, expiresAtSeconds, input.version, input.secret);
-  const actual = Buffer.from(rawSignature, "base64url");
+  const actual = Buffer.from(rawSignature, 'base64url');
   if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) invalid();
   return { publicId, expiresAtSeconds };
 }

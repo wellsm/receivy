@@ -81,7 +81,7 @@ entrega real, defina `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY` e
 `RESEND_FROM_EMAIL` em um gerenciador de segredos, além de gerar valores
 independentes e aleatórios de pelo menos 32 bytes para `AUTH_JWT_SECRET` e
 `LOGIN_CODE_HASH_KEY`. A escolha do provedor fica em
-`packages/api/src/email/factory.ts`.
+`packages/api/src/email/service.ts` (Factory EZ4 com um vendor por transporte).
 
 O acesso dura 15 minutos. O refresh é opaco, vive por 30 dias, gira a cada uso e
 fica armazenado apenas como hash. Reutilizar um refresh já consumido revoga toda

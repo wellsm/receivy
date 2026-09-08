@@ -1,14 +1,14 @@
-export type AuthProvider = "email" | "google" | "apple";
+export type AuthProvider = 'email' | 'google' | 'apple';
 
 export type AuthUser = {
   id: string;
   email: string;
   name: string | null;
   avatarUrl: string | null;
-  locale: "pt-BR";
+  locale: 'pt-BR';
   timezone: string;
-  country: "BR";
-  currency: "BRL";
+  country: 'BR';
+  currency: 'BRL';
 };
 
 export type RequestEmailCodeBody = {
@@ -37,5 +37,5 @@ export type RefreshSessionBody = {
 export type LogoutBody = RefreshSessionBody;
 
 export function normalizeEmail(email: string): string {
-  return email.normalize("NFC").trim().toLowerCase();
+  return email.normalize('NFC').trim().toLowerCase();
 }

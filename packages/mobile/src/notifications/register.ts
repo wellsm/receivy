@@ -6,7 +6,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import type { DeviceRegistration, NotificationDevice } from "@receivy/common";
 
-/** Explicit user action only; credentials/project and a physical development build are required. */
+/** Runs automatically after login, best-effort; requires push credentials/project and a physical/development build. */
 export async function registerPushDevice(
   register: (input: DeviceRegistration) => Promise<NotificationDevice>,
 ) {
@@ -31,7 +31,7 @@ export async function registerPushDevice(
     permission = await Notifications.requestPermissionsAsync();
   if (permission.status !== "granted")
     throw new Error(
-      "Permissão de notificações não concedida. Você pode manter e-mail ativo.",
+      "Push indisponível neste dispositivo; os avisos chegam por e-mail.",
     );
   const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
   let installationId = await SecureStore.getItemAsync(

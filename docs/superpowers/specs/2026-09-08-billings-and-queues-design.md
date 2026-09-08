@@ -186,8 +186,8 @@ Rotas removidas: `POST/GET /expenses*`, todas as `/recurrences*`.
 | `GET /billings/{id}/preview` | próximas 90 dias projetadas (só `indefinite`); 409 nos demais |
 | `PATCH /billings/{id}` | edição e transição de estado no mesmo corpo (§4) |
 
-`charges`, `public-link`, `proofs`, `payments`, `timeline`, `people`,
-`payment-methods`, `notification-preferences` e `devices` não mudam de rota.
+`charges`, `public-link`, `proofs`, `payments`, `timeline`, `people` e
+`payment-methods` não mudam de rota; `POST /devices` também é mantido.
 `ChargeDetail` troca `source` por `billingId` e `billingType`.
 
 Contratos em `@receivy/common` (campos explícitos, sem `Omit`, por causa da

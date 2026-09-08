@@ -73,7 +73,7 @@ describe("OpenAPI × BFF", () => {
  * expressions become `{p}`, and string literals inside an expression (e.g.
  * `${rotate ? "/rotate" : ""}`) expand into one candidate per alternative. */
 function extractPathTemplates(source: string): Set<string> {
-  const prefixes = /^(billings|timeline|payment-methods|charges|people|account|auth|notification-preferences|devices|public)\b/;
+  const prefixes = /^(billings|timeline|payment-methods|charges|people|account|auth|devices|public)\b/;
   const found = new Set<string>();
   const finish = (candidate: string) => {
     const template = candidate.split("?")[0]!.trim().replace(/(?<!\/)\{p\}$/, "");

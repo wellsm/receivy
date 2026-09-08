@@ -6,7 +6,8 @@ certification, a bank service, a payment processor or automatic Pix verification
 ## Profile and sessions
 
 The first name-less login asks only for a name and derives timezone from the
-device's Intl configuration. Name and IANA timezone can be corrected in settings.
+device's Intl configuration. The name can be edited in Perfil; the IANA timezone
+is re-sent from the device on every save and is not user-editable.
 The existing launch contract remains pt-BR / BR / BRL; other languages and countries
 are not advertised as editable. Internationalization requires a later explicit scope.
 

@@ -19,7 +19,6 @@ export default function SettingsRoute() {
       onOpenPix={() => setSection("pix")}
       onOpenFeed={() => router.replace("/")}
       onOpenBillings={() => router.push("/billings")}
-      onOpenNotifications={() => {}}
       onLoggedOut={() => router.replace("/login")}
     />
   );

@@ -204,14 +204,24 @@ export function ProfileScreen({
           Perfil
         </Text>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Notificações"
-          onPress={onOpenNotifications}
-          className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted"
-        >
-          <Image source={ICONS.bell} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
-        </Pressable>
+        {onOpenNotifications ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Notificações"
+            onPress={onOpenNotifications}
+            className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted"
+          >
+            <Image source={ICONS.bell} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+          </Pressable>
+        ) : (
+          <View
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted"
+          >
+            <Image source={ICONS.bell} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+          </View>
+        )}
       </View>
 
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>

@@ -8,10 +8,8 @@ const SAFE_METHODS = new Set(["GET", "HEAD"]);
 const ID = "[A-Za-z0-9-]+";
 /** Exported only so the OpenAPI contract test can prove every entry maps to a real API operation. */
 export const ALLOWED_ROUTES: [string, RegExp][] = [
-  ["PATCH", /^account\/profile$/], ["GET", /^account\/sessions$/], ["DELETE", new RegExp(`^account/sessions/${ID}$`)],
-  ["DELETE", /^account$/], ["POST", /^account\/export(?:\/download)?$/],
-  ["GET", /^notification-preferences$/], ["PATCH", /^notification-preferences$/], ["GET", /^devices$/],
-  ["DELETE", new RegExp(`^devices/${ID}$`)], ["GET", new RegExp(`^charges/${ID}/deliveries$`)], ["POST", new RegExp(`^charges/${ID}/reminders$`)],
+  ["PATCH", /^account\/profile$/], ["DELETE", /^account$/],
+  ["GET", new RegExp(`^charges/${ID}/deliveries$`)], ["POST", new RegExp(`^charges/${ID}/reminders$`)],
   ["GET", /^billings(?:\?.*)?$/], ["POST", /^billings$/], ["GET", new RegExp(`^billings/${ID}(?:/preview)?$`)],
   ["PATCH", new RegExp(`^billings/${ID}$`)],
   ["GET", /^timeline$/],

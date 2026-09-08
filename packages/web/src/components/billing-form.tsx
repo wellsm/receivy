@@ -10,7 +10,6 @@ import {
   type BillingFrequency,
   type BillingInput,
   type BillingType,
-  type NotificationPreferences,
   type PaymentMethod,
   type Person,
   type ReminderDraft,
@@ -102,15 +101,6 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
             setTimezone(user.timezone);
             setStart(calendarDate(new Date(), user.timezone));
           }),
-      billing
-        ? Promise.resolve()
-        : request<NotificationPreferences>("/api/financial/notification-preferences")
-            .then((preferences) => {
-              setReminders(preferences.reminderOffsets.map((offsetDays) => ({ offsetDays: String(offsetDays), enabled: true })));
-            })
-            .catch(() => {
-              // Owner preferences are optional context; the initial state already falls back to DEFAULT_BILLING_REMINDERS.
-            }),
     ])
       .then(() => setReady(true))
       .catch((e) => setError((e as Error).message));

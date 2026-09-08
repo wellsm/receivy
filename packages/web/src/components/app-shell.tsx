@@ -32,7 +32,7 @@ function Brand() {
 
 function HeaderBell({ badge = false }: { badge?: boolean }) {
   return (
-    <Link className="header-bell" href="/settings#notifications" aria-label="Notificações">
+    <Link className="header-bell" href="/settings" aria-label="Notificações">
       <Bell aria-hidden="true" size={21} strokeWidth={1.8} />
       {badge && <span className="header-bell-dot" aria-hidden="true" />}
     </Link>

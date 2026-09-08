@@ -7,7 +7,7 @@ import { EmailLoginForm } from "@/components/email-login-form";
 import { CodeLoginForm } from "@/components/code-login-form";
 import { FeedScreen } from "@/components/feed-screen";
 import { PeopleScreen } from "@/components/people-screen";
-import { AccountSettings } from "@/components/account-settings";
+import { ProfileScreen } from "@/components/profile-screen";
 import { BillingForm } from "@/components/billing-form";
 import { OnboardingForm } from "@/components/onboarding-form";
 import { writePendingLogin } from "@/lib/auth/pending-login";
@@ -80,13 +80,13 @@ describe("accessibility of the main web screens", () => {
     await expectNoViolations(container);
   });
 
-  it("account settings keeps destructive action disabled until confirmation and has no axe violations", async () => {
-    const respond = async (path: string) => Response.json(path.endsWith("sessions") ? { sessions: [] } : { user });
-    vi.stubGlobal("fetch", vi.fn(respond));
-    vi.mocked(browserFetch).mockImplementation(async path => respond(String(path)));
-    const { container } = render(<AccountSettings />);
-    await screen.findByRole("button", { name: "Excluir conta definitivamente" });
-    expect(screen.getByRole("button", { name: "Excluir conta definitivamente" })).toBeDisabled();
+  it("profile exposes the destructive action and has no axe violations", async () => {
+    vi.mocked(browserFetch).mockImplementation(async path => {
+      if (String(path) === "/api/auth/me") return Response.json({ user });
+      throw new Error(`unexpected ${String(path)}`);
+    });
+    const { container } = render(<ProfileScreen version="1.0.0" />);
+    expect(await screen.findByRole("button", { name: "Excluir conta" })).toBeInTheDocument();
     await expectNoViolations(container);
   });
 

@@ -23,7 +23,7 @@ describe("AppShell", () => {
     expect(screen.queryByRole("link", { name: "Nova cobrança" })).not.toBeInTheDocument();
   });
 
-  it("links the bell to the notifications section and shows a dot only when badged", () => {
+  it("links the bell to the profile and shows a dot only when badged", () => {
     const { rerender } = render(
       <AppShell>
         <p>Conteúdo</p>
@@ -33,7 +33,7 @@ describe("AppShell", () => {
     const bells = screen.getAllByRole("link", { name: "Notificações" });
 
     for (const bell of bells) {
-      expect(bell).toHaveAttribute("href", "/settings#notifications");
+      expect(bell).toHaveAttribute("href", "/settings");
     }
 
     expect(document.querySelectorAll(".header-bell-dot").length).toBe(0);

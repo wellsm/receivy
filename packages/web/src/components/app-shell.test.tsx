@@ -12,7 +12,7 @@ describe("AppShell", () => {
 
     for (const label of [
       "Timeline",
-      "Recorrências",
+      "Cobranças",
       "Contatos",
       "Ajustes",
     ]) {

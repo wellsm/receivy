@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 
 const navigation = [
   { href: "/", label: "Timeline", icon: ListChecks },
-  { href: "/recurrences", label: "Recorrências", icon: CalendarClock },
+  { href: "/billings", label: "Cobranças", icon: CalendarClock },
   { href: "/people", label: "Contatos", icon: ContactRound },
   { href: "/settings", label: "Ajustes", icon: Settings },
 ] as const;

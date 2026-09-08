@@ -9,7 +9,7 @@ import { responseMessage } from "@/lib/financial-response";
 const filters: { label: string; value: string }[] = [
   { label: "Todos", value: "" }, { label: "A receber", value: "direction=receivable" },
   { label: "A pagar", value: "direction=payable" }, { label: "Hoje", value: "today" },
-  { label: "Esta semana", value: "week" }, { label: "Recorrências", value: "source=recurrence" },
+  { label: "Esta semana", value: "week" }, { label: "Sem fim", value: "type=indefinite" },
   { label: "Pendentes", value: "status=pending" },
 ];
 
@@ -25,7 +25,7 @@ function dateQuery(value: string): string {
 
 function itemDate(item: TimelineItem): string {
   return item.kind === "charge" ? item.charge.dueDate
-    : item.kind === "recurrence_preview" ? item.preview.occurrenceDate
+    : item.kind === "billing_preview" ? item.preview.occurrenceDate
     : item.kind === "proof" ? item.proof.createdAt.slice(0, 10) : item.payment.paidAt.slice(0, 10);
 }
 
@@ -36,7 +36,7 @@ function ChargeRow({ charge, direction }: { charge: ChargeSummary; direction: Di
       <span className={`direction-badge ${direction}`}>{direction === "receivable" ? "A receber" : "A pagar"}</span>
       <h3>{charge.description}</h3>
       <p>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${charge.dueDate}T00:00:00Z`))}
-        {charge.installmentCount > 1 ? ` · parcela ${charge.installment}/${charge.installmentCount}` : ""}</p>
+        {charge.installmentCount && charge.installmentCount > 1 ? ` · parcela ${charge.installment}/${charge.installmentCount}` : ""}</p>
     </div>
     <strong className="money">{formatMoney(charge.amount)}</strong>
     <span className={`state-label ${charge.state}`}>{charge.state === "pending" ? "Pendente" : charge.state === "paid" ? "Pago" : "Cancelado"}</span>
@@ -84,7 +84,7 @@ export function TimelineScreen() {
     {error && <p className="login-error" role="alert">{error} <button type="button" onClick={() => void load()}>Tentar novamente</button></p>}
     {loading && <p role="status">Carregando timeline…</p>}
     {!loading && !error && data?.items.length === 0 && <section className="empty-timeline"><div className="timeline-rail"><span /></div><div className="empty-copy"><h2>Sua timeline começa aqui</h2><p>Crie uma cobrança ou entre com o e-mail em que recebeu uma.</p><Link className="primary-link" href="/charges/new">Criar cobrança</Link></div></section>}
-    {[...groups].map(([date, items]) => <section className="timeline-day" key={date}><h2>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))}</h2><div className="timeline-list">{items.map((item, index) => item.kind === "charge" ? <ChargeRow key={item.charge.id} charge={item.charge} direction={item.direction} /> : <article className="timeline-entry" key={`${item.kind}-${index}`}><div className="timeline-dot" /><div><strong>{item.kind === "payment" ? "Pagamento registrado" : item.kind === "proof" ? "Comprovante" : item.preview.description}</strong>{item.kind === "recurrence_preview" && <><p className="direction-badge receivable">A receber · Previsto</p><p>{formatMoney(item.preview.amount)} · Ainda não é cobrança</p></>}</div></article>)}</div></section>)}
+    {[...groups].map(([date, items]) => <section className="timeline-day" key={date}><h2>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))}</h2><div className="timeline-list">{items.map((item, index) => item.kind === "charge" ? <ChargeRow key={item.charge.id} charge={item.charge} direction={item.direction} /> : <article className="timeline-entry" key={`${item.kind}-${index}`}><div className="timeline-dot" /><div><strong>{item.kind === "payment" ? "Pagamento registrado" : item.kind === "proof" ? "Comprovante" : item.preview.description}</strong>{item.kind === "billing_preview" && <><p className="direction-badge receivable">A receber · Previsto</p><p>{formatMoney(item.preview.amount)} · Ainda não é cobrança</p></>}</div></article>)}</div></section>)}
     {data?.nextCursor && <button className="secondary-button" disabled={loading} onClick={() => void load(filter, data.nextCursor ?? undefined)}>Carregar mais</button>}
   </div>;
 }

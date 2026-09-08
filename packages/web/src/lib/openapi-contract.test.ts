@@ -44,8 +44,7 @@ const WEB_EXCLUSIONS: Record<string, string> = {
 };
 // Authenticated paths the native app deliberately does not call yet.
 const NATIVE_DEFERRED: Record<string, string> = {
-  "expenses/{p}": "native opens charges, never the parent expense",
-  "recurrences/{p}/preview": "native reads previews from the recurrence detail payload",
+  "billings/{p}/preview": "native reads previews from the billing detail payload",
 };
 
 describe("OpenAPI × BFF", () => {

@@ -3,9 +3,9 @@ import { isAllowedFinancialRoute } from "./financial-proxy";
 
 describe("financial BFF allowlist", () => {
   it.each([
-    ["GET", "recurrences"], ["POST", "recurrences"], ["GET", "recurrences/id"], ["PATCH", "recurrences/id"],
-    ["GET", "recurrences/id/preview"], ["POST", "recurrences/id/pause"], ["POST", "recurrences/id/reactivate"], ["POST", "recurrences/id/end"],
-    ["GET", "timeline"], ["POST", "expenses"], ["GET", "expenses/expense-id"],
+    ["GET", "billings"], ["POST", "billings"], ["GET", "billings/id"], ["PATCH", "billings/id"],
+    ["GET", "billings/id/preview"],
+    ["GET", "timeline"],
     ["GET", "payment-methods"], ["POST", "payment-methods"], ["PATCH", "payment-methods/method-id"],
     ["POST", "payment-methods/method-id/default"], ["POST", "payment-methods/method-id/archive"],
     ["GET", "charges/charge-id"], ["POST", "charges/charge-id/cancel"], ["POST", "charges/charge-id/payments"],
@@ -15,6 +15,6 @@ describe("financial BFF allowlist", () => {
 
   it.each([
     ["POST", "timeline"], ["DELETE", "charges/id"], ["GET", "auth/me"], ["GET", "../auth/me"],
-    ["POST", "public/charges/token"], ["PATCH", "expenses/id"],
+    ["POST", "public/charges/token"], ["PATCH", "billings/id/nested"],
   ])("rejects %s %s", (method, path) => expect(isAllowedFinancialRoute(method, path)).toBe(false));
 });

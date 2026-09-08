@@ -7,7 +7,7 @@ import { LoginForm } from "@/components/login-form";
 import { TimelineScreen } from "@/components/timeline-screen";
 import { PeopleScreen } from "@/components/people-screen";
 import { AccountSettings } from "@/components/account-settings";
-import { ChargeCreateScreen } from "@/components/charge-create-screen";
+import { BillingForm } from "@/components/billing-form";
 import { OnboardingForm } from "@/components/onboarding-form";
 
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
@@ -78,17 +78,20 @@ describe("accessibility of the main web screens", () => {
     await expectNoViolations(container);
   });
 
-  it("charge creation form is operable by keyboard and has no axe violations", async () => {
-    vi.mocked(browserFetch).mockImplementation(async path => path.startsWith("/api/people")
-      ? Response.json({ people: [person], nextCursor: null })
-      : Response.json({ paymentMethods: [] }));
-    const { container } = render(<ChargeCreateScreen />);
+  it("billing creation form is operable by keyboard and has no axe violations", async () => {
+    vi.mocked(browserFetch).mockImplementation(async path => {
+      if (path.startsWith("/api/people")) return Response.json({ people: [person], nextCursor: null });
+      if (path.includes("payment-methods")) return Response.json({ paymentMethods: [] });
+      if (path.includes("auth/me")) return Response.json({ user: { timezone: "America/Sao_Paulo" } });
+      throw new Error(`unexpected ${path}`);
+    });
+    const { container } = render(<BillingForm billing={null} onSaved={vi.fn()} onBack={vi.fn()} />);
     const checkbox = await screen.findByRole("checkbox", { name: /Ana/ });
     const keyboard = userEvent.setup();
     checkbox.focus();
     await keyboard.keyboard(" ");
     expect(checkbox).toBeChecked();
-    expect(screen.getByLabelText("Valor total")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Tipo de cobrança" })).toBeInTheDocument();
     await expectNoViolations(container);
   });
 });

@@ -1,8 +1,8 @@
 import { Order } from '@ez4/database';
 import { HttpNotFoundError, HttpUnprocessableEntityError } from '@ez4/gateway';
-import type { BillingType, ChargeState, Direction, PersonLedger, TimelineItem, TimelinePage } from '@receivy/common';
+import type { BillingType, ChargeState, ChargeSummary, Direction, PersonLedger, TimelineItem, TimelinePage } from '@receivy/common';
 import { indefinitePreviews } from '../billings/repository';
-import { CHARGE_SELECT, type ChargeRow, chargeDto } from '../charges/repository';
+import { CHARGE_SELECT, type ChargeRow, chargeDto, counterpartName, latestProofState } from '../charges/repository';
 import type { DbClient } from '../database';
 import { getPerson } from '../people/repository';
 
@@ -113,8 +113,12 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
   const next = remaining.length > 50 ? primaryPage.at(-1) : undefined;
   // Group financial history with its charge page, preserving charge-cursor pagination.
   const history: TimelineItem[] = [];
+  const counterparts = new Map<string, string>();
+  const proofStates = new Map<string, ChargeSummary['proofState']>();
   for (const row of page) {
     const direction = directionFor(row, userId);
+    counterparts.set(row.id, await counterpartName(db, row, direction));
+    proofStates.set(row.id, await latestProofState(db, row.id));
     const proofs = await db.payment_proofs.findMany({
       select: { id: true, state: true, created_at: true },
       where: { charge_id: row.id, ...(direction === 'payable' ? { sender_user_id: userId } : {}) }
@@ -155,7 +159,9 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
                   billingId: item.row!.billing_id,
                   billingType: item.row!.billing_type,
                   installment: item.row!.installment ?? null,
-                  installmentCount: item.row!.installment_count ?? null
+                  installmentCount: item.row!.installment_count ?? null,
+                  counterpartName: counterparts.get(item.row!.id) ?? '',
+                  proofState: proofStates.get(item.row!.id) ?? null
                 }
               }
       ),
@@ -166,7 +172,9 @@ export async function getTimeline(db: DbClient, userId: string, filters: Timelin
       payable: money(sum(active.filter((row) => row.creditor_id !== userId))),
       overdue: money(sum(active.filter((row) => row.state === 'pending' && row.due_date < today))),
       pending: money(sum(active.filter((row) => row.state === 'pending'))),
-      proofsToReview
+      proofsToReview,
+      receivableCount: active.filter((row) => row.creditor_id === userId).length,
+      payableCount: active.filter((row) => row.creditor_id !== userId).length
     },
     nextCursor: next ? Buffer.from(JSON.stringify({ dueDate: next.dueDate, id: next.id })).toString('base64url') : null
   };

@@ -1,5 +1,6 @@
+import { Order } from '@ez4/database';
 import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import type { ChargeDetail, PaymentRecord } from '@receivy/common';
+import type { ChargeDetail, PaymentRecord, ProofState } from '@receivy/common';
 import { lockAccountReferences } from '../account/locking';
 import type { DbClient } from '../database';
 import { closeProofs } from '../proofs/events';
@@ -71,6 +72,29 @@ async function paymentFor(db: DbClient, chargeId: string): Promise<PaymentRecord
     : null;
 }
 
+/** Name shown on the other side of a charge: the debtor for the creditor, the creditor for the debtor. */
+export async function counterpartName(db: DbClient, row: ChargeRow, direction: 'receivable' | 'payable'): Promise<string> {
+  if (direction === 'receivable') {
+    return row.recipient_name_snapshot;
+  }
+
+  const creditor = await db.users.findOne({ select: { name: true }, where: { id: row.creditor_id } });
+
+  return creditor?.name?.trim() || 'Conta excluída';
+}
+
+/** State of the most recent proof attached to the charge, or null when none was sent. */
+export async function latestProofState(db: DbClient, chargeId: string): Promise<ProofState | null> {
+  const proofs = await db.payment_proofs.findMany({
+    select: { state: true },
+    where: { charge_id: chargeId },
+    order: { created_at: Order.Desc },
+    take: 1
+  });
+
+  return proofs.records[0]?.state ?? null;
+}
+
 export async function chargeDto(db: DbClient, row: ChargeRow, direction: 'receivable' | 'payable'): Promise<ChargeDetail> {
   return {
     id: row.id,
@@ -82,6 +106,8 @@ export async function chargeDto(db: DbClient, row: ChargeRow, direction: 'receiv
     billingType: row.billing_type,
     installment: row.installment ?? null,
     installmentCount: row.installment_count ?? null,
+    counterpartName: await counterpartName(db, row, direction),
+    proofState: await latestProofState(db, row.id),
     direction,
     recipient: { name: row.recipient_name_snapshot, email: row.recipient_email_snapshot ?? null },
     sharingState:

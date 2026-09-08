@@ -2510,6 +2510,23 @@
                               }
                             ]
                           },
+                          "counterpartName": {
+                            "type": "string"
+                          },
+                          "proofState": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "pending",
+                                  "accepted",
+                                  "rejected"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "direction": {
                             "enum": [
                               "receivable",
@@ -2672,6 +2689,8 @@
                           "billingType",
                           "installment",
                           "installmentCount",
+                          "counterpartName",
+                          "proofState",
                           "direction",
                           "recipient",
                           "pix",
@@ -3340,6 +3359,23 @@
                               }
                             ]
                           },
+                          "counterpartName": {
+                            "type": "string"
+                          },
+                          "proofState": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "pending",
+                                  "accepted",
+                                  "rejected"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "direction": {
                             "enum": [
                               "receivable",
@@ -3502,6 +3538,8 @@
                           "billingType",
                           "installment",
                           "installmentCount",
+                          "counterpartName",
+                          "proofState",
                           "direction",
                           "recipient",
                           "pix",
@@ -4122,6 +4160,23 @@
                               }
                             ]
                           },
+                          "counterpartName": {
+                            "type": "string"
+                          },
+                          "proofState": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "pending",
+                                  "accepted",
+                                  "rejected"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "direction": {
                             "enum": [
                               "receivable",
@@ -4284,6 +4339,8 @@
                           "billingType",
                           "installment",
                           "installmentCount",
+                          "counterpartName",
+                          "proofState",
                           "direction",
                           "recipient",
                           "pix",
@@ -4570,6 +4627,23 @@
                         }
                       ]
                     },
+                    "counterpartName": {
+                      "type": "string"
+                    },
+                    "proofState": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "pending",
+                            "accepted",
+                            "rejected"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "direction": {
                       "enum": [
                         "receivable",
@@ -4732,6 +4806,8 @@
                     "billingType",
                     "installment",
                     "installmentCount",
+                    "counterpartName",
+                    "proofState",
                     "direction",
                     "recipient",
                     "pix",
@@ -4849,6 +4925,23 @@
                         }
                       ]
                     },
+                    "counterpartName": {
+                      "type": "string"
+                    },
+                    "proofState": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "pending",
+                            "accepted",
+                            "rejected"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "direction": {
                       "enum": [
                         "receivable",
@@ -5011,6 +5104,8 @@
                     "billingType",
                     "installment",
                     "installmentCount",
+                    "counterpartName",
+                    "proofState",
                     "direction",
                     "recipient",
                     "pix",
@@ -5156,6 +5251,23 @@
                         }
                       ]
                     },
+                    "counterpartName": {
+                      "type": "string"
+                    },
+                    "proofState": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "pending",
+                            "accepted",
+                            "rejected"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
                     "direction": {
                       "enum": [
                         "receivable",
@@ -5318,6 +5430,8 @@
                     "billingType",
                     "installment",
                     "installmentCount",
+                    "counterpartName",
+                    "proofState",
                     "direction",
                     "recipient",
                     "pix",
@@ -5795,6 +5909,23 @@
                                         "type": "null"
                                       }
                                     ]
+                                  },
+                                  "counterpartName": {
+                                    "type": "string"
+                                  },
+                                  "proofState": {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "pending",
+                                          "accepted",
+                                          "rejected"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
@@ -5806,7 +5937,9 @@
                                   "billingId",
                                   "billingType",
                                   "installment",
-                                  "installmentCount"
+                                  "installmentCount",
+                                  "counterpartName",
+                                  "proofState"
                                 ],
                                 "additionalProperties": false
                               }
@@ -6020,6 +6153,12 @@
                         },
                         "proofsToReview": {
                           "type": "number"
+                        },
+                        "receivableCount": {
+                          "type": "number"
+                        },
+                        "payableCount": {
+                          "type": "number"
                         }
                       },
                       "required": [
@@ -6027,7 +6166,9 @@
                         "payable",
                         "overdue",
                         "pending",
-                        "proofsToReview"
+                        "proofsToReview",
+                        "receivableCount",
+                        "payableCount"
                       ],
                       "additionalProperties": false
                     },
@@ -6280,6 +6421,23 @@
                               }
                             ]
                           },
+                          "counterpartName": {
+                            "type": "string"
+                          },
+                          "proofState": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "pending",
+                                  "accepted",
+                                  "rejected"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "direction": {
                             "enum": [
                               "receivable",
@@ -6442,6 +6600,8 @@
                           "billingType",
                           "installment",
                           "installmentCount",
+                          "counterpartName",
+                          "proofState",
                           "direction",
                           "recipient",
                           "pix",

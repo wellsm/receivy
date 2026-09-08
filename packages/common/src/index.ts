@@ -9,6 +9,7 @@ export * from './domain/billing-calendar';
 export * from './domain/billing-draft';
 export * from './domain/billing-plan';
 export * from './domain/contracts';
+export * from './domain/feed';
 export * from './domain/financial-form';
 export * from './domain/money';
 export * from './domain/notifications';

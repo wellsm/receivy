@@ -21,6 +21,10 @@ export type ChargeSummary = {
   billingType: BillingType;
   installment: number | null;
   installmentCount: number | null;
+  /** Who is on the other side: the debtor for a receivable, the creditor for a payable. */
+  counterpartName: string;
+  /** State of the most recent proof on this charge, if any. */
+  proofState: ProofState | null;
 };
 
 export type ProofSummary = {
@@ -129,6 +133,8 @@ export type TimelineSummary = {
   overdue: Money;
   pending: Money;
   proofsToReview: number;
+  receivableCount: number;
+  payableCount: number;
 };
 
 export type TimelinePage = {

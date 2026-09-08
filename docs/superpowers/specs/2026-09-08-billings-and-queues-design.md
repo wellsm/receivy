@@ -150,7 +150,8 @@ lê dia e mês de `start_date`; os campos `day` e `month` deixam de existir.
 ### Edição e estado
 
 `PATCH /billings/{id}` aceita `description`, `totalCents`, `split`,
-`paymentMethodId`, `reminders`, `endDate` (só `until`), `state`. Regras:
+`paymentMethodId`, `reminders`, `state`. Estender o fim de uma `until` fica
+fora da slice 1: `endDate` não é patchável para nenhum tipo. Regras:
 
 - `once` e `until`: só `state: 'ended'` (cancela todas as `charges` pendentes
   na mesma transação) e `reminders`/`paymentMethodId`; demais campos → 409,
@@ -206,7 +207,7 @@ type BillingInput = {
   paymentMethodId?: string; reminders?: BillingReminder[];
   split: BillingSplit;
 };
-type BillingPatch = Partial<Pick<BillingInput, 'description' | 'totalCents' | 'split' | 'paymentMethodId' | 'reminders' | 'endDate'>> & { state?: BillingState };
+type BillingPatch = Partial<Pick<BillingInput, 'description' | 'totalCents' | 'split' | 'paymentMethodId' | 'reminders'>> & { state?: BillingState };
 type BillingDetail = { id; type; frequency?; description; total: Money; startDate; endDate?; timezone; paymentMethodId?; reminders: BillingReminder[]; state; installmentCount?: number; allocations: BillingAllocation[]; charges: ChargeDetail[]; previews: BillingPreview[]; nextMaterialization: string | null; createdAt; updatedAt };
 type BillingsPage = { billings: BillingSummary[]; nextCursor: string | null };
 ```

@@ -473,13 +473,8 @@ function assertPatchAllowed(row: BillingRow, patch: BillingPatch) {
     throw new HttpConflictError('Só cobranças sem fim podem ser pausadas.');
   }
 
-  if (patch.endDate !== undefined && row.type !== 'until') {
-    throw new HttpConflictError('Data final só existe em cobranças até uma data.');
-  }
-
   const frozen =
-    row.type !== 'indefinite' &&
-    (patch.description !== undefined || patch.totalCents !== undefined || patch.split !== undefined || patch.endDate !== undefined);
+    row.type !== 'indefinite' && (patch.description !== undefined || patch.totalCents !== undefined || patch.split !== undefined);
 
   if (frozen) {
     throw new HttpConflictError('Cobranças já geradas são snapshot: só lembretes, Pix e encerramento podem mudar.');
@@ -511,10 +506,6 @@ export async function patchBilling(
         ? undefined
         : normalizeBillingInput({ ...billingInputFrom(row, split), reminders: patch.reminders }).reminders;
 
-    if (patch.endDate && patch.endDate < row.start_date) {
-      throw new RangeError('Fim anterior ao início.');
-    }
-
     // Only newly introduced recipients/Pix need revalidation; materializeBillings re-checks the stored
     // split at occurrence time, so an already-persisted split must not block unrelated edits (e.g. ending
     // a billing whose recipient was archived later).
@@ -536,7 +527,6 @@ export async function patchBilling(
         total_cents: totalCents,
         payment_method: { id: paymentMethodId ?? sqlNull },
         ...(patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
-        ...(patch.endDate !== undefined ? { end_date: patch.endDate } : {}),
         ...(patch.state ? { state: patch.state } : {}),
         ...(resumed ? { processed_through: (row.processed_through ?? boundary) > boundary ? row.processed_through : boundary } : {}),
         updated_at: instant

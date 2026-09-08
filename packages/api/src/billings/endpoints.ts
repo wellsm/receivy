@@ -40,7 +40,6 @@ declare class PatchBody implements Http.JsonBody {
   paymentMethodId?: String.UUID;
   clearPaymentMethod?: boolean;
   reminders?: ReminderBody[];
-  endDate?: String.Date;
   state?: 'active' | 'paused' | 'ended';
 }
 

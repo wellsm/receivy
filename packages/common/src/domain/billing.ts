@@ -33,7 +33,6 @@ export type BillingPatch = {
   paymentMethodId?: string;
   clearPaymentMethod?: boolean;
   reminders?: BillingReminder[];
-  endDate?: string;
   state?: BillingState;
 };
 

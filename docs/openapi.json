@@ -3729,10 +3729,6 @@
                       "additionalProperties": false
                     }
                   },
-                  "endDate": {
-                    "type": "string",
-                    "format": "date"
-                  },
                   "state": {
                     "enum": [
                       "active",

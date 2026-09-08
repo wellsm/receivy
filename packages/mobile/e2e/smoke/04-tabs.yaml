@@ -2,20 +2,16 @@ appId: dev.receivy.local
 ---
 - tapOn: "Perfil"
 - extendedWaitUntil:
-    visible: "Sua conta"
+    visible: "Meus Contatos"
     timeout: 15000
-- assertVisible: "Sessões e dispositivos"
-- scrollUntilVisible:
-    element:
-      text: "Exportar dados"
-    direction: DOWN
+- assertVisible: "Sair da conta"
 - scrollUntilVisible:
     element:
       text: "Excluir conta"
     direction: DOWN
 - scrollUntilVisible:
     element:
-      text: "Chaves Pix"
+      text: "Minhas Chaves Pix"
     direction: UP
 - tapOn: "Gerenciar chaves Pix"
 - extendedWaitUntil:
@@ -24,11 +20,7 @@ appId: dev.receivy.local
 - assertVisible: ${EMAIL}
 - tapOn: "← Perfil"
 - extendedWaitUntil:
-    visible: "← Feed"
-    timeout: 15000
-- tapOn: "← Feed"
-- extendedWaitUntil:
-    visible: "Cobranças"
+    visible: "Meus Contatos"
     timeout: 15000
 - tapOn: "Cobranças"
 - extendedWaitUntil:

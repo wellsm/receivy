@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from "@/components/safe-area-view";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { notificationClient } from "@/notifications/client";
+import { ACTIVE_TINT, TabBar } from "./tab-bar";
 
 type FeedScreenProps = {
   client?: Pick<FinancialClient, "timeline">;
@@ -38,13 +39,6 @@ const FILTERS = [
 ] as const;
 
 const bellMark = require("../../assets/images/auth/bell.svg");
-const TAB_ICONS = {
-  Feed: require("../../assets/images/auth/tab-feed.svg"),
-  Cobranças: require("../../assets/images/auth/tab-billings.svg"),
-  Perfil: require("../../assets/images/auth/tab-profile.svg"),
-} as const;
-const ACTIVE_TINT = "#003828";
-const MUTED_TINT = "#5B6470";
 
 const BADGE_CLASS: Record<BadgeTone, string> = {
   danger: "bg-red-50 text-red-700",
@@ -419,27 +413,7 @@ export function FeedScreen({
         </View>
       </ScrollView>
 
-      <View className="absolute bottom-0 left-0 right-0 flex-row border-t border-outline/45 bg-surface px-2 pb-6 pt-2">
-        {(
-          [
-            ["Feed", undefined],
-            ["Cobranças", onOpenBillings],
-            ["Perfil", onOpenSettings],
-          ] as const
-        ).map(([label, onPress], index) => (
-          <Pressable
-            key={label}
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            accessibilityState={{ selected: index === 0 }}
-            onPress={onPress}
-            className={`flex-1 items-center gap-1 rounded-full py-2 ${index === 0 ? "bg-primary-soft/40" : ""}`}
-          >
-            <Image source={TAB_ICONS[label]} tintColor={index === 0 ? ACTIVE_TINT : MUTED_TINT} style={{ width: 22, height: 22 }} />
-            <Text className={`text-[11px] font-bold ${index === 0 ? "text-primary-strong" : "text-muted"}`}>{label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <TabBar active="Feed" onOpenBillings={onOpenBillings} onOpenSettings={onOpenSettings} />
     </SafeAreaView>
   );
 }

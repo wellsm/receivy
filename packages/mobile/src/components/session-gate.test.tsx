@@ -7,6 +7,12 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ replace: mockReplace }),
 }));
 
+const mockRegisterPushDevice = jest.fn();
+
+jest.mock("@/notifications/register", () => ({
+  registerPushDevice: (...args: unknown[]) => mockRegisterPushDevice(...args),
+}));
+
 jest.mock("./feed-screen", () => ({
   FeedScreen: () => {
     const { Text } = jest.requireActual("react-native");
@@ -24,7 +30,11 @@ function deps(user: { name: string | null }, token: string | null = "token") {
   return { client, store };
 }
 
-beforeEach(() => mockReplace.mockReset());
+beforeEach(() => {
+  mockReplace.mockReset();
+  mockRegisterPushDevice.mockReset();
+  mockRegisterPushDevice.mockResolvedValue({ id: "d1" });
+});
 
 describe("SessionGate", () => {
   it("routes to onboarding before rendering the home tabs when the name is missing", async () => {
@@ -39,6 +49,22 @@ describe("SessionGate", () => {
 
     expect(await screen.findByText("Home tabs")).toBeOnTheScreen();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("registers the push device once the session is ready and ignores its failures", async () => {
+    mockRegisterPushDevice.mockRejectedValue(new Error("permission denied"));
+
+    await render(<SessionGate {...deps(named)} />);
+
+    expect(await screen.findByText("Home tabs")).toBeOnTheScreen();
+    await waitFor(() => expect(mockRegisterPushDevice).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not register the push device before the profile is ready", async () => {
+    await render(<SessionGate {...deps(unnamed)} />);
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/onboarding"));
+    expect(mockRegisterPushDevice).not.toHaveBeenCalled();
   });
 
   it("refreshes a stored session first and falls back to login when that fails", async () => {

@@ -5,7 +5,6 @@ import { BillingFormScreen } from "./billing-form-screen";
 
 const ana = { id: "p1", name: "Ana", email: null, phone: null, archivedAt: null, createdAt: "2026-09-01", hasAccount: false };
 const people = { list: jest.fn().mockResolvedValue({ people: [ana], nextCursor: null }) };
-const notifications = { preferences: jest.fn().mockResolvedValue({ emailEnabled: true, pushEnabled: true, reminderOffsets: [-3, 0, 2] }) };
 
 function client(createBilling = jest.fn()) {
   return {
@@ -18,7 +17,7 @@ function client(createBilling = jest.fn()) {
 
 async function draft(api = client(), type: "Uma vez" | "Até uma data" | "Sem fim" = "Uma vez") {
   const onSaved = jest.fn();
-  await render(<BillingFormScreen client={api} people={people} notifications={notifications} onSaved={onSaved} onBack={jest.fn()} />);
+  await render(<BillingFormScreen client={api} people={people} onSaved={onSaved} onBack={jest.fn()} />);
   await fireEvent.press(await screen.findByRole("radio", { name: type }));
   await fireEvent.press(await screen.findByRole("checkbox", { name: "Ana" }));
   await fireEvent.changeText(screen.getByLabelText("Valor de cada cobrança"), "100,01");
@@ -91,7 +90,7 @@ describe("BillingFormScreen", () => {
     };
     const patchBilling = jest.fn().mockResolvedValue(onceBilling);
     const api = { ...client(), patchBilling };
-    await render(<BillingFormScreen client={api} people={people} notifications={notifications} billing={onceBilling} onSaved={jest.fn()} onBack={jest.fn()} />);
+    await render(<BillingFormScreen client={api} people={people} billing={onceBilling} onSaved={jest.fn()} onBack={jest.fn()} />);
     await fireEvent.press(await screen.findByRole("button", { name: "Revisar cobrança" }));
     await fireEvent.press(screen.getByRole("button", { name: "Salvar cobrança" }));
     await waitFor(() => expect(patchBilling).toHaveBeenCalled());

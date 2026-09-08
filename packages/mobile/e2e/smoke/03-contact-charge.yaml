@@ -30,11 +30,11 @@ appId: dev.receivy.local
     direction: UP
 - tapOn: "← Perfil"
 - extendedWaitUntil:
-    visible: "← Feed"
+    visible: "Meus Contatos"
     timeout: 15000
-- tapOn: "← Feed"
+- tapOn: "Feed"
 - extendedWaitUntil:
-    visible: "Cobranças"
+    visible: "A RECEBER"
     timeout: 15000
 - tapOn: "Cobranças"
 - extendedWaitUntil:

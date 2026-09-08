@@ -19,18 +19,14 @@ import {
 } from "@receivy/common";
 import { SafeAreaView } from "@/components/safe-area-view";
 import { FinancialRequestError, financialClient, type FinancialClient } from "@/financial/client";
-import { notificationClient, type NotificationClient } from "@/notifications/client";
 import { peopleClient } from "@/people/client";
 
 type Client = Pick<FinancialClient, "paymentMethods" | "profile" | "createBilling" | "patchBilling">;
-type Notifications = Pick<NotificationClient, "preferences">;
-
 type Attempt = { input: BillingInput; key: string; uncertain: boolean };
 
 type BillingFormScreenProps = {
   client?: Client;
   people?: Pick<typeof peopleClient, "list">;
-  notifications?: Notifications;
   billing?: BillingDetail | null;
   onSaved: (billing: BillingDetail) => void;
   onBack: () => void;
@@ -72,7 +68,7 @@ function Chip({ label, active, disabled, onPress, role = "button" }: { label: st
   );
 }
 
-export function BillingFormScreen({ client = financialClient, people = peopleClient, notifications = notificationClient, billing = null, onSaved, onBack }: BillingFormScreenProps) {
+export function BillingFormScreen({ client = financialClient, people = peopleClient, billing = null, onSaved, onBack }: BillingFormScreenProps) {
   const [contacts, setContacts] = useState<Person[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -126,20 +122,10 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
             setTimezone(user.timezone);
             setStart(calendarDate(new Date(), user.timezone));
           }),
-      billing
-        ? Promise.resolve()
-        : notifications
-            .preferences()
-            .then((preferences) => {
-              setReminders(preferences.reminderOffsets.map((offsetDays) => ({ offsetDays: String(offsetDays), enabled: true })));
-            })
-            .catch(() => {
-              // Owner preferences are optional context; the initial state already falls back to DEFAULT_BILLING_REMINDERS.
-            }),
     ])
       .then(() => setReady(true))
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Não foi possível carregar os dados."));
-  }, [billing, client, people, notifications]);
+  }, [billing, client, people]);
 
   function change<T>(setter: (value: T) => void) {
     return (value: T) => {

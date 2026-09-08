@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { needsOnboarding } from "@receivy/common";
 import { profileStore, type ProfileStore } from "@/account/profile";
 import { authClient } from "@/auth/client";
+import { notificationClient } from "@/notifications/client";
+import { registerPushDevice } from "@/notifications/register";
 import { FeedScreen } from "./feed-screen";
 
 type SessionGateProps = {
@@ -16,6 +18,7 @@ type Stage = "restoring" | "checking-profile" | "ready";
 export function SessionGate({ client = authClient, store = profileStore }: SessionGateProps) {
   const router = useRouter();
   const [stage, setStage] = useState<Stage>(() => (client.getAccessToken() ? "checking-profile" : "restoring"));
+  const pushRegistered = useRef(false);
 
   useEffect(() => {
     if (stage !== "restoring") {
@@ -62,6 +65,17 @@ export function SessionGate({ client = authClient, store = profileStore }: Sessi
       active = false;
     };
   }, [router, stage, store]);
+
+  useEffect(() => {
+    if (stage !== "ready" || pushRegistered.current) {
+      return;
+    }
+
+    pushRegistered.current = true;
+
+    // Best-effort: a denied permission or a build without push credentials must not disturb the session.
+    void registerPushDevice(notificationClient.register).catch(() => {});
+  }, [stage]);
 
   if (stage !== "ready") {
     return (

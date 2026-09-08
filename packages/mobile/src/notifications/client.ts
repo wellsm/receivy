@@ -2,7 +2,6 @@ import type {
   DeviceRegistration,
   NotificationDelivery,
   NotificationDevice,
-  NotificationPreferences,
 } from "@receivy/common";
 import { authClient } from "@/auth/client";
 import { apiErrorMessage } from "@receivy/common";
@@ -24,21 +23,11 @@ export function createNotificationClient(
       : (response.json() as Promise<T>);
   }
   return {
-    preferences: () =>
-      request<NotificationPreferences>("notification-preferences"),
-    save: (input: NotificationPreferences) =>
-      request<NotificationPreferences>("notification-preferences", {
-        method: "PATCH",
-        body: JSON.stringify(input),
-      }),
-    devices: () => request<{ devices: NotificationDevice[] }>("devices"),
     register: (input: DeviceRegistration) =>
       request<NotificationDevice>("devices", {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    remove: (id: string) =>
-      request<void>(`devices/${id}`, { method: "DELETE" }),
     remind: (id: string) =>
       request<{ queued: boolean }>(`charges/${id}/reminders`, {
         method: "POST",

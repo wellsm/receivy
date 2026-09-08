@@ -9,7 +9,7 @@ afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 describe("TimelineScreen", () => {
   const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { amountCents: 0, currency: "BRL" }, overdue: { amountCents: 0, currency: "BRL" }, pending: { amountCents: 0, currency: "BRL" }, proofsToReview: 0 } as const;
-  const charge = (id: string, description: string) => ({ kind: "charge" as const, direction: "payable" as const, charge: { id, description, amount: { amountCents: 100, currency: "BRL" as const }, dueDate: "2026-09-10", state: "pending" as const, source: "expense" as const, installment: 1, installmentCount: 1 } });
+  const charge = (id: string, description: string) => ({ kind: "charge" as const, direction: "payable" as const, charge: { id, description, amount: { amountCents: 100, currency: "BRL" as const }, dueDate: "2026-09-10", state: "pending" as const, billingId: "b1", billingType: "once" as const, installment: null, installmentCount: null } });
   const deferred = () => { let resolve!: (response: Response) => void; const promise = new Promise<Response>(done => { resolve = done; }); return { promise, resolve }; };
   it("renders persisted totals and explicit charge directions", async () => {
     vi.mocked(browserFetch).mockResolvedValue(Response.json({
@@ -21,7 +21,7 @@ describe("TimelineScreen", () => {
       },
       items: [{ kind: "charge", direction: "payable", charge: {
         id: "charge-1", description: "Aluguel", amount: { amountCents: 2500, currency: "BRL" },
-        dueDate: "2026-09-10", state: "pending", source: "expense", installment: 1, installmentCount: 1,
+        dueDate: "2026-09-10", state: "pending", billingId: "b1", billingType: "indefinite", installment: 1, installmentCount: 1,
       }}], nextCursor: null,
     }));
     render(<TimelineScreen />);

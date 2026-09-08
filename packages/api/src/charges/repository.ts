@@ -11,9 +11,8 @@ export const CHARGE_SELECT = {
   recipient_user_id: true,
   recipient_name_snapshot: true,
   recipient_email_snapshot: true,
-  source: true,
-  source_id: true,
-  source_occurrence_id: true,
+  billing_id: true,
+  billing_type: true,
   description: true,
   amount_cents: true,
   currency: true,
@@ -37,15 +36,14 @@ export type ChargeRow = {
   recipient_user_id?: string;
   recipient_name_snapshot: string;
   recipient_email_snapshot?: string;
-  source: 'expense' | 'recurrence';
-  source_id: string;
-  source_occurrence_id?: string;
+  billing_id: string;
+  billing_type: 'once' | 'until' | 'indefinite';
   description: string;
   amount_cents: number;
   currency: 'BRL';
   due_date: string;
-  installment: number;
-  installment_count: number;
+  installment?: number;
+  installment_count?: number;
   pix_key_type_snapshot?: 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
   pix_key_snapshot?: string;
   pix_label_snapshot?: string;
@@ -80,9 +78,10 @@ export async function chargeDto(db: DbClient, row: ChargeRow, direction: 'receiv
     amount: { amountCents: row.amount_cents, currency: row.currency },
     dueDate: row.due_date,
     state: row.state,
-    source: row.source,
-    installment: row.installment,
-    installmentCount: row.installment_count,
+    billingId: row.billing_id,
+    billingType: row.billing_type,
+    installment: row.installment ?? null,
+    installmentCount: row.installment_count ?? null,
     direction,
     recipient: { name: row.recipient_name_snapshot, email: row.recipient_email_snapshot ?? null },
     sharingState:

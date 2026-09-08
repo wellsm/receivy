@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { EmailLoginForm } from "@/components/email-login-form";
 import { CodeLoginForm } from "@/components/code-login-form";
-import { TimelineScreen } from "@/components/timeline-screen";
+import { FeedScreen } from "@/components/feed-screen";
 import { PeopleScreen } from "@/components/people-screen";
 import { AccountSettings } from "@/components/account-settings";
 import { BillingForm } from "@/components/billing-form";
@@ -27,7 +27,7 @@ async function expectNoViolations(container: HTMLElement) {
   expect(summary).toEqual([]);
 }
 
-const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { amountCents: 0, currency: "BRL" }, overdue: { amountCents: 0, currency: "BRL" }, pending: { amountCents: 0, currency: "BRL" }, proofsToReview: 0 };
+const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { amountCents: 0, currency: "BRL" }, overdue: { amountCents: 0, currency: "BRL" }, pending: { amountCents: 0, currency: "BRL" }, proofsToReview: 0, receivableCount: 0, payableCount: 0 };
 const user = { id: "user", email: "fixture@example.com", name: "Ana", avatarUrl: null, locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
 const person = { id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01", hasAccount: false };
 
@@ -63,9 +63,9 @@ describe("accessibility of the main web screens", () => {
     await expectNoViolations(container);
   });
 
-  it("timeline (empty) has no axe violations and its filters are keyboard buttons", async () => {
+  it("feed (empty) has no axe violations and its filters are keyboard buttons", async () => {
     vi.mocked(browserFetch).mockResolvedValue(Response.json({ summary, items: [], nextCursor: null }));
-    const { container } = render(<TimelineScreen />);
+    const { container } = render(<FeedScreen />);
     await screen.findByText("Sua timeline começa aqui");
     for (const name of ["A receber", "A pagar"]) expect(screen.getByRole("button", { name })).toBeEnabled();
     await expectNoViolations(container);

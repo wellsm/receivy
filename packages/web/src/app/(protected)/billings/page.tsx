@@ -3,7 +3,7 @@ import { BillingsScreen } from "@/components/billings-screen";
 
 export default function BillingsPage() {
   return (
-    <AppShell activePath="/billings" hideCreateAction>
+    <AppShell activePath="/billings">
       <BillingsScreen />
     </AppShell>
   );

@@ -1,24 +1,22 @@
 import {
-  CalendarClock,
-  ContactRound,
-  ListChecks,
-  Plus,
-  Settings,
+  Bell,
+  ReceiptText,
+  Rows3,
+  UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 const navigation = [
-  { href: "/", label: "Timeline", icon: ListChecks },
-  { href: "/billings", label: "Cobranças", icon: CalendarClock },
-  { href: "/people", label: "Contatos", icon: ContactRound },
-  { href: "/settings", label: "Ajustes", icon: Settings },
+  { href: "/", label: "Feed", icon: Rows3 },
+  { href: "/billings", label: "Cobranças", icon: ReceiptText },
+  { href: "/settings", label: "Perfil", icon: UserRound },
 ] as const;
 
 type AppShellProps = {
   children: ReactNode;
   activePath?: string;
-  hideCreateAction?: boolean;
+  notificationsBadge?: boolean;
 };
 
 function Brand() {
@@ -28,6 +26,15 @@ function Brand() {
         <span>R</span>
       </span>
       <span>Receivy</span>
+    </Link>
+  );
+}
+
+function HeaderBell({ badge = false }: { badge?: boolean }) {
+  return (
+    <Link className="header-bell" href="/settings#notifications" aria-label="Notificações">
+      <Bell aria-hidden="true" size={21} strokeWidth={1.8} />
+      {badge && <span className="header-bell-dot" aria-hidden="true" />}
     </Link>
   );
 }
@@ -53,11 +60,14 @@ function Navigation({ mobile = false, activePath = "/" }: { mobile?: boolean; ac
   );
 }
 
-export function AppShell({ children, activePath = "/", hideCreateAction = false }: AppShellProps) {
+export function AppShell({ children, activePath = "/", notificationsBadge = false }: AppShellProps) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <Brand />
+        <div className="sidebar-top">
+          <Brand />
+          <HeaderBell badge={notificationsBadge} />
+        </div>
         <Navigation activePath={activePath} />
         <div className="sidebar-footnote">
           <span className="status-dot" aria-hidden="true" />
@@ -68,14 +78,10 @@ export function AppShell({ children, activePath = "/", hideCreateAction = false 
       <div className="workspace">
         <header className="mobile-header">
           <Brand />
+          <HeaderBell badge={notificationsBadge} />
         </header>
 
         <main className="main-content">{children}</main>
-
-        {!hideCreateAction && <Link className="floating-action" href="/charges/new" aria-label="Nova cobrança">
-          <Plus aria-hidden="true" size={23} />
-          <span>Nova cobrança</span>
-        </Link>}
 
         <Navigation mobile activePath={activePath} />
       </div>

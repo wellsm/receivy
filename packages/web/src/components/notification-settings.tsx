@@ -116,7 +116,7 @@ export function NotificationSettings() {
     }
   }
   return (
-    <section className="financial-page detail-section">
+    <section id="notifications" className="financial-page detail-section">
       <h2>Notificações</h2>
       <p>
         Push nos dispositivos ativos, com e-mail quando não há push disponível.

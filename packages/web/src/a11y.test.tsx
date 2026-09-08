@@ -3,15 +3,19 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { LoginForm } from "@/components/login-form";
+import { EmailLoginForm } from "@/components/email-login-form";
+import { CodeLoginForm } from "@/components/code-login-form";
 import { TimelineScreen } from "@/components/timeline-screen";
 import { PeopleScreen } from "@/components/people-screen";
 import { AccountSettings } from "@/components/account-settings";
 import { BillingForm } from "@/components/billing-form";
 import { OnboardingForm } from "@/components/onboarding-form";
+import { writePendingLogin } from "@/lib/auth/pending-login";
+
+const routerMock = { replace: vi.fn(), push: vi.fn() };
 
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllGlobals(); });
 
 // jsdom has no layout, so color-contrast is measured from the design tokens in
@@ -28,19 +32,27 @@ const user = { id: "user", email: "fixture@example.com", name: "Ana", avatarUrl:
 const person = { id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01", hasAccount: false };
 
 describe("accessibility of the main web screens", () => {
-  it("login form has labelled fields, reachable submit and no axe violations", async () => {
+  it("email login form has labelled fields, reachable submit and no axe violations", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
-    const { container } = render(<LoginForm nextPath="/" />);
-    const email = screen.getByLabelText(/e-mail/i);
+    const { container } = render(<EmailLoginForm nextPath="/" />);
+    const email = screen.getByLabelText("Seu e-mail");
     const tab = userEvent.setup();
     let reachedEmail = false, reachedSubmit = false;
     for (let i = 0; i < 12 && !(reachedEmail && reachedSubmit); i++) {
       await tab.tab();
       if (document.activeElement === email) reachedEmail = true;
-      if (document.activeElement === screen.getByRole("button", { name: /Receber código/ })) reachedSubmit = true;
+      if (document.activeElement === screen.getByRole("button", { name: "Continuar com E-mail" })) reachedSubmit = true;
     }
     expect(reachedEmail).toBe(true);
     expect(reachedSubmit).toBe(true);
+    await expectNoViolations(container);
+  });
+
+  it("code confirmation form has a labelled code field and no axe violations", async () => {
+    writePendingLogin({ email: "ana@example.com", sentAt: Date.now(), nextPath: "/" });
+    const { container } = render(<CodeLoginForm />);
+    expect(await screen.findByLabelText("Código de 6 dígitos")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirmar e Entrar/ })).toBeDisabled();
     await expectNoViolations(container);
   });
 

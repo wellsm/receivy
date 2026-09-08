@@ -1,0 +1,76 @@
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { PENDING_LOGIN_KEY } from "@/lib/auth/pending-login";
+import { EmailLoginForm } from "./email-login-form";
+
+const push = vi.fn();
+const router = { push };
+
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
+
+function fetchMock(providers: { google: boolean; apple: boolean } = { google: true, apple: true }) {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url.includes("oauth/providers")) {
+      return Response.json(providers);
+    }
+
+    if (url.includes("email/code")) {
+      return new Response(null, { status: 204 });
+    }
+
+    return new Response(null, { status: 404 });
+  });
+}
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  push.mockReset();
+  sessionStorage.clear();
+});
+
+describe("EmailLoginForm", () => {
+  it("uses only an e-mail field and never asks for a password", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    render(<EmailLoginForm nextPath="/" />);
+
+    expect(await screen.findByLabelText("Seu e-mail")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/senha/i)).not.toBeInTheDocument();
+  });
+
+  it("stores the pending login and navigates to the code screen on success", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    const user = userEvent.setup();
+    render(<EmailLoginForm nextPath="/charges" />);
+
+    await user.type(screen.getByLabelText("Seu e-mail"), "ana@example.com");
+    await user.click(screen.getByRole("button", { name: "Continuar com E-mail" }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/login/code"));
+
+    const pending = JSON.parse(sessionStorage.getItem(PENDING_LOGIN_KEY) ?? "null");
+    expect(pending.email).toBe("ana@example.com");
+    expect(pending.nextPath).toBe("/charges");
+    expect(typeof pending.sentAt).toBe("number");
+  });
+
+  it("disables provider buttons the API reports as unavailable", async () => {
+    vi.stubGlobal("fetch", fetchMock({ google: false, apple: false }));
+    render(<EmailLoginForm nextPath="/" />);
+
+    expect(await screen.findByRole("button", { name: /Continuar com Google/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Continuar com Apple/ })).toBeDisabled();
+  });
+
+  it("shows the oauth error alert inside the card", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    render(<EmailLoginForm nextPath="/" oauthError />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Não foi possível concluir o login. Tente novamente ou use seu e-mail.",
+    );
+  });
+});

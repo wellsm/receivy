@@ -25,6 +25,17 @@ describe("public charge proxy headers", () => {
 });
 
 describe("session gate", () => {
+  it("lets an anonymous visitor reach the code confirmation screen", async () => {
+    const response = await proxy(request("/login/code"));
+    expect(response.status).toBe(200);
+  });
+
+  it("sends a signed-in visitor away from the code confirmation screen", async () => {
+    const response = await proxy(request("/login/code", { [ACCESS_COOKIE]: "access" }));
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/");
+  });
+
   it("sends anonymous visitors of the onboarding screen to login with a return path", async () => {
     const response = await proxy(request("/onboarding"));
     expect(response.status).toBe(307);

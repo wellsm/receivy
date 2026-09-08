@@ -861,6 +861,57 @@ describe('durable notification delivery', () => {
     equal(rows.length, 1, 'the fallback never inserts a second e-mail row');
     equal(rows[0]!.id, planned[0]!.id, 'the planned follow-up row is the one that goes out');
   });
+  it('keeps the follow-up backoff and provider reason when a late push failure arrives', async () => {
+    clock = start;
+    const userId = await recipient();
+    await registerDevice(db, userId, {
+      token: 'ExpoPushToken[followup-backoff]',
+      platform: 'ios',
+      installationId: 'followup-backoff'
+    });
+    const id = await charge();
+    await db.charges.updateOne({
+      where: { id },
+      data: { recipient_user: { id: userId } }
+    });
+    const polling: NotificationTransport = { ...transport, receipt: async () => ({ status: 'pending' }) };
+    await run(polling);
+
+    clock = start + 2 * 3600_000;
+    await run({ ...polling, email: async () => ({ status: 'transient' }) });
+
+    const attempted = (
+      await db.notification_deliveries.findMany({
+        select: { id: true, state: true, reason: true, attempts: true, available_at: true },
+        where: { charge_id: id, channel: 'email' }
+      })
+    ).records[0]!;
+
+    equal(attempted.attempts, 1);
+    equal(attempted.state, 'pending');
+    equal(attempted.reason, 'transient');
+    ok(Date.parse(attempted.available_at) > clock, 'the follow-up is inside its provider backoff');
+
+    // Receipts are polled for up to a day, so the definitive push failure lands mid-backoff.
+    await db.notification_deliveries.updateMany({
+      where: { charge_id: id, channel: 'push' },
+      data: { available_at: new Date(clock).toISOString() }
+    });
+    await run({ ...polling, receipt: async () => ({ status: 'device_unregistered' }) });
+
+    const kept = (
+      await db.notification_deliveries.findMany({
+        select: { id: true, state: true, reason: true, available_at: true },
+        where: { charge_id: id, channel: 'email' }
+      })
+    ).records;
+
+    equal(kept.length, 1);
+    equal(kept[0]!.id, attempted.id);
+    equal(kept[0]!.state, 'pending');
+    equal(kept[0]!.reason, 'transient', 'a late push failure must not overwrite the provider reason');
+    equal(Date.parse(kept[0]!.available_at), Date.parse(attempted.available_at), 'the provider backoff is preserved');
+  });
   it('e-mails immediately when the recipient has no active device', async () => {
     clock = start;
     const id = await charge();

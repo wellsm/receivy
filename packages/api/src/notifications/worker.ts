@@ -267,7 +267,8 @@ async function fallback(db: DbClient, eventId: string, now: number) {
 
   if (email) {
     // The follow-up was already planned; pull it forward instead of duplicating it.
-    if (email.state === 'pending' && Date.parse(email.available_at) > now)
+    // A follow-up already submitted once is inside its own provider backoff, which outranks this.
+    if (email.state === 'pending' && !email.first_attempt_at && Date.parse(email.available_at) > now)
       await db.notification_deliveries.updateOne({
         where: { id: email.id },
         data: {
@@ -280,6 +281,7 @@ async function fallback(db: DbClient, eventId: string, now: number) {
     return;
   }
 
+  // Only reachable for notices planned before the follow-up row existed; new plans always carry one.
   const first = rows[0];
   if (!first) return;
   const input = JSON.parse(first.render_inputs) as RenderInputs;

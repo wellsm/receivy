@@ -59,7 +59,7 @@ export function PeopleScreen({ onBack, onOpenLedger, client = peopleClient }: Pr
   }
   return <SafeAreaView className="flex-1 bg-canvas">
     <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerClassName="px-5 pb-12 pt-2">
+      <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerClassName="px-5 pb-12 pt-2">
         <Pressable accessibilityRole="button" onPress={onBack} className="min-h-12 justify-center"><Text className="font-bold text-primary">← Timeline</Text></Pressable>
         <Text className="mt-5 text-xs font-bold uppercase tracking-widest text-primary">Sua agenda</Text>
         <Text className="mt-3 text-3xl font-extrabold leading-9 text-primary-strong">Quem faz parte das suas contas?</Text>
@@ -67,9 +67,9 @@ export function PeopleScreen({ onBack, onOpenLedger, client = peopleClient }: Pr
         <View className="my-6 gap-3 rounded-3xl border border-outline bg-surface p-5">
           <Text className="text-xl font-bold text-primary-strong">{editing ? "Editar contato" : "Novo contato"}</Text>
           <Text className="font-semibold text-ink">Nome</Text>
-          <TextInput accessibilityLabel="Nome" maxLength={120} value={name} onChangeText={setName} className="min-h-12 rounded-xl border border-outline px-3 text-ink" />
+          <TextInput accessibilityLabel="Nome" autoComplete="name" autoCorrect={false} textContentType="name" maxLength={120} value={name} onChangeText={setName} className="min-h-12 rounded-xl border border-outline px-3 text-ink" />
           <Text className="font-semibold text-ink">E-mail (opcional)</Text>
-          <TextInput accessibilityLabel="E-mail do contato" maxLength={254} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" className="min-h-12 rounded-xl border border-outline px-3 text-ink" />
+          <TextInput accessibilityLabel="E-mail do contato" autoComplete="email" autoCorrect={false} textContentType="emailAddress" maxLength={254} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" className="min-h-12 rounded-xl border border-outline px-3 text-ink" />
           <Text className="font-semibold text-ink">Telefone com DDD (opcional)</Text>
           <TextInput accessibilityLabel="Telefone com DDD" maxLength={40} value={phone} onChangeText={setPhone} keyboardType="phone-pad" className="min-h-12 rounded-xl border border-outline px-3 text-ink" />
           <Pressable accessibilityRole="button" accessibilityLabel="Salvar contato" disabled={busy} onPress={() => void save()} className="mt-2 min-h-12 items-center justify-center rounded-xl bg-primary p-3">

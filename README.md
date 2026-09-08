@@ -111,17 +111,13 @@ configurados conforme [configuração OAuth](docs/oauth-setup.md).
 Deploy dos stages `dev` e `prd` na AWS, ordem das etapas e origem de cada
 variável: [guia de deploy](docs/deploy-guide.md) e [ambientes](docs/environments.md).
 
-Contatos já podem ser cadastrados, editados, paginados e arquivados no web e Expo,
-com isolamento por proprietário, nome sem canais obrigatórios e vínculo por
-e-mail confirmado. Arquivar preserva os canais e libera o e-mail para reutilização.
-
-O pacote compartilhado também contém o planejamento de rateios e parcelas:
-fixo, igual e percentual, preservação exata dos centavos e vencimentos mensais.
-Esse núcleo ainda não está conectado à persistência ou às telas de cobrança.
-
-O MVP ainda não está concluído: dados financeiros, comprovantes, Pix,
-recorrências e notificações continuam nos próximos incrementos descritos em
-`docs/superpowers/specs/2026-09-04-receivy-mvp-design.md`.
+Cobranças são uma entidade só (`billings`): "Uma vez", "Até uma data" (ou N
+vezes) e "Sem fim". O valor é por ocorrência; os tipos finitos geram todas as
+`charges` na criação e o tipo sem fim é materializado pelo job horário na
+janela do primeiro lembrete. A aba "Cobranças" lista uma linha por `billing`;
+a Timeline mostra cada pessoa e vencimento. Rotas: `POST/GET /billings`,
+`GET /billings/{id}`, `GET /billings/{id}/preview`, `PATCH /billings/{id}`
+(edição e estado no mesmo corpo).
 
 ## Verificação da fundação — 2026-09-04
 

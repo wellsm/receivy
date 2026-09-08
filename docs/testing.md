@@ -52,11 +52,17 @@ um mock foi chamado.
 Smoke HTTP e navegador continuam úteis para roteamento, validação de transporte,
 cookies, headers e fluxo visual, mas não substituem as specs do domínio. Scripts
 anteriores de prova local serão migrados quando a cobertura equivalente estiver
-validada. O incremento financeiro já usa
-`packages/api/test/financial/financial.spec.ts`: oito cenários com banco real,
-incluindo acesso por snapshots, concorrência no pagamento, links públicos e
-limites de precisão dos resumos. Autenticação e contatos ainda têm migração de
-suas provas locais prevista no fechamento do MVP.
+validada.
+
+Cobranças usam `packages/api/test/billings/billings.spec.ts`: seis cenários
+com banco real cobrindo os três tipos, idempotência por chave, snapshots,
+edição só de ocorrências futuras, materialização sem duplicar (índice único
+`billing_id:debtor_person_id:due_date`), pausa/retomada e projeção na
+timeline. `financial.spec.ts` continua com Pix, pagamento concorrente, links
+públicos e limites de precisão. As regras puras ficam em
+`packages/common/src/domain/billing-*.test.ts` e `split.test.ts`. Autenticação
+e contatos ainda têm migração de suas provas locais prevista no fechamento do
+MVP.
 
 Uma resposta correta do repositório não prova o JSON entregue pelo gateway.
 No QA de recorrências, o banco continha o valor correto, mas a reflexão de um
@@ -72,11 +78,8 @@ aplicação local. O adaptador fino de teste mantém as verificações de conte�
 pagamento e outbox. Testes separados exercitam o servidor HTTP local e as
 assinaturas reais do SDK S3 com credenciais fictícias, sem chamar a AWS.
 
-Recorrências acrescentam `packages/api/test/recurrences/recurrences.spec.ts`:
-o handler horário real é chamado com fixtures e relógio determinístico. A suíte
-confere o banco após replay/concorrência, pausa/retomada, edição e recuperação
-limitada de ocorrências atrasadas. As regras puras de calendário continuam em
-`packages/common/src/domain/recurrence.test.ts`, sem precisar de Postgres.
+O job horário que materializa cobranças sem fim é exercitado com fixtures e
+relógio determinístico dentro da própria `billings.spec.ts`.
 
 Execute `pnpm --filter @receivy/api test:integration` para a suíte nativa,
 usando a configuração dedicada de teste. `pnpm verify` cobre os gates de unidade,

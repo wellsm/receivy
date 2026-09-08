@@ -156,6 +156,18 @@ Encerramento e cenários anuais têm evidência automatizada, não uma repetiç�
 nesse percurso do navegador. A validação em dispositivo e na nuvem permanece
 externa. Navegador, servidores e banco descartáveis foram encerrados.
 
+**2026-09-08 — cobranças (`billings`) substituem despesas/recorrências:** `pnpm
+verify`, `pnpm --filter @receivy/api test:integration` (75/75) e
+`pnpm --filter @receivy/api test:http-smoke` passaram com o schema `billings`
+completo. Smoke local do web com cookies reais criou uma cobrança `once` (201,
+uma charge) e uma `indefinite` (201, zero charges, três previsões), listou as
+duas em `GET /billings`, pausou a `indefinite` via `PATCH` e confirmou
+`billing_preview` em `GET /timeline?type=indefinite` antes da pausa; `/billings`
+e `/charges/new` responderam 200 com "Cobranças"/"Como cobrar" no HTML. No iOS
+Simulator (iPhone 16e), os quatro fluxos Maestro (`01-login` a `04-tabs`)
+passaram de ponta a ponta, incluindo o seletor de tipo, a cobrança `once` de
+R$ 100,00 dividida (R$ 50,00 pendente) e a aba "Cobranças".
+
 ## Evidência de notificações e limpeza
 
 Commits `62af323`, `b6b081f` e `ac8b95e`: avisos iniciais/lembretes, preferências,

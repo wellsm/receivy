@@ -13,11 +13,14 @@ appId: dev.receivy.local
 - inputText: "Ana QA"
 - tapOn: "E-mail do contato"
 - inputText: "ana-qa@example.invalid"
-- tapOn: "Quem faz parte das suas contas?"
 - tapOn: "Salvar contato"
 - extendedWaitUntil:
     visible: "Contato salvo."
     timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: "← Timeline"
+    direction: UP
 - tapOn: "← Timeline"
 - extendedWaitUntil:
     visible: "Nova cobrança"
@@ -28,15 +31,31 @@ appId: dev.receivy.local
     timeout: 15000
 - tapOn: "Uma vez"
 - tapOn: "Ana QA"
+- scrollUntilVisible:
+    element:
+      text: "Valor de cada cobrança"
+    direction: DOWN
 - tapOn:
     text: "Valor de cada cobrança"
     index: 1
 - inputText: "100,00"
+- scrollUntilVisible:
+    element:
+      text: "Divida com clareza antes de cobrar."
+    direction: UP
 - tapOn: "Divida com clareza antes de cobrar."
+- scrollUntilVisible:
+    element:
+      text: "Descrição"
+    direction: DOWN
 - tapOn:
     text: "Descrição"
     index: 1
 - inputText: "Mercado QA"
+- scrollUntilVisible:
+    element:
+      text: "Divida com clareza antes de cobrar."
+    direction: UP
 - tapOn: "Divida com clareza antes de cobrar."
 - scrollUntilVisible:
     element:
@@ -73,9 +92,9 @@ appId: dev.receivy.local
 - tapOn: "Publicar com este Pix"
 - runFlow:
     when:
-      visible: "Sharing link"
+      visible: "dismiss popup"
     commands:
-      - pressKey: Back
+      - tapOn: "dismiss popup"
 - extendedWaitUntil:
     visible: "Compartilhar cobrança"
     timeout: 20000
@@ -85,9 +104,9 @@ appId: dev.receivy.local
     direction: UP
 - tapOn: "Voltar para timeline"
 - extendedWaitUntil:
-    visible: "R$ 50,00"
+    visible: ".*50,00 pendentes no total"
     timeout: 20000
-- assertVisible: "R$ 50,00 pendentes no total"
+- assertVisible: ".*50,00 pendentes no total"
 - scrollUntilVisible:
     element:
       text: "Abrir cobrança Mercado QA"

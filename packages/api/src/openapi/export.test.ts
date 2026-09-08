@@ -5,10 +5,13 @@ describe('pinned EZ4 reflected OpenAPI', () => {
   it('retains required fields, constraints, nullability and split unions from real route metadata', () => {
     const document = buildOpenApi();
     expect(Object.keys(document.paths).length).toBeGreaterThan(35);
-    const create = document.paths['/expenses']!.post!;
+    const create = document.paths['/billings']!.post!;
     expect(create.security).toEqual([{ bearerAuth: [] }]);
     expect(create.requestBody.content['application/json'].schema.required).toContain('totalCents');
     expect(create.requestBody.content['application/json'].schema.properties.split.properties.parts.items.anyOf).toHaveLength(2);
+    expect(create.requestBody.content['application/json'].schema.properties.type.enum).toEqual(['once', 'until', 'indefinite']);
+    expect(document.paths['/expenses']).toBeUndefined();
+    expect(document.paths['/recurrences']).toBeUndefined();
     const start = document.paths['/auth/apple/native/start']!.post!;
     expect(start.requestBody.content['application/json'].schema.properties.clientChallenge.maxLength).toBe(43);
     expect(start.security).toEqual([]);

@@ -2,15 +2,14 @@ import type { Http } from '@ez4/gateway';
 import type { NamingStyle } from '@ez4/schema';
 import type { AccountRoutes } from './routes/account';
 import type { AuthRoutes } from './routes/auth';
+import type { BillingRoutes } from './routes/billings';
 import type { ChargeRoutes } from './routes/charges';
-import type { ExpenseRoutes } from './routes/expenses';
 import type { HealthRoutes } from './routes/health';
 import type { NotificationRoutes } from './routes/notifications';
 import type { PaymentMethodRoutes } from './routes/payment-methods';
 import type { PeopleRoutes } from './routes/people';
 import type { ProofRoutes } from './routes/proofs';
 import type { PublicRoutes } from './routes/public';
-import type { RecurrenceRoutes } from './routes/recurrences';
 import type { TimelineRoutes } from './routes/timeline';
 import type { requestListener } from './security/listener';
 
@@ -31,12 +30,11 @@ export declare class Api extends Http.Service {
     ...AuthRoutes,
     ...PeopleRoutes,
     ...PaymentMethodRoutes,
-    ...ExpenseRoutes,
+    ...BillingRoutes,
     ...ChargeRoutes,
     ...PublicRoutes,
     ...TimelineRoutes,
     ...ProofRoutes,
-    ...RecurrenceRoutes,
     ...NotificationRoutes,
     ...AccountRoutes
   ];

@@ -1,5 +1,5 @@
+import type { BillingType } from './billing';
 import type { Person } from './people';
-import type { ExpenseSplit } from './split';
 
 export type Money = {
   amountCents: number;
@@ -10,7 +10,6 @@ export type Direction = 'receivable' | 'payable';
 export type ChargeState = 'pending' | 'paid' | 'cancelled';
 export type ProofState = 'pending' | 'accepted' | 'rejected';
 export type SplitMode = 'fixed' | 'equal' | 'percentage';
-export type RecurrenceFrequency = 'monthly' | 'yearly';
 
 export type ChargeSummary = {
   id: string;
@@ -18,9 +17,10 @@ export type ChargeSummary = {
   amount: Money;
   dueDate: string;
   state: ChargeState;
-  source: 'expense' | 'recurrence';
-  installment: number;
-  installmentCount: number;
+  billingId: string;
+  billingType: BillingType;
+  installment: number | null;
+  installmentCount: number | null;
 };
 
 export type ProofSummary = {
@@ -48,60 +48,11 @@ export type PaymentSummary = {
   paidAt: string;
 };
 
-export type RecurrencePreview = {
-  recurrenceId: string;
-  description: string;
-  amount: Money;
-  occurrenceDate: string;
-  materializationDate?: string;
-};
-
-export type RecurrenceReminder = { offsetDays: number; channel: 'auto'; enabled: boolean };
-export type RecurrenceInput = {
-  description?: string;
-  totalCents: number;
-  frequency: RecurrenceFrequency;
-  day: number;
-  month?: number;
-  startDate?: string;
-  endDate?: string;
-  timezone: string;
-  paymentMethodId?: string;
-  split: import('./split').ExpenseSplit;
-  reminders?: RecurrenceReminder[];
-};
-// Explicit fields are required by EZ4 0.52's response-schema extraction:
-// mapped Omit/intersections type-check but silently omit inherited HTTP fields.
-export type RecurrenceDetail = {
-  totalCents: number;
-  frequency: RecurrenceFrequency;
-  day: number;
-  month?: number;
-  endDate?: string;
-  timezone: string;
-  paymentMethodId?: string;
-  split: ExpenseSplit;
-  id: string;
-  description: string;
-  startDate: string;
-  reminders: RecurrenceReminder[];
-  state: 'active' | 'paused' | 'ended';
-  createdAt: string;
-  updatedAt: string;
-  nextMaterialization: string | null;
-  previews: RecurrencePreview[];
-};
-export type RecurrencesPage = { recurrences: RecurrenceDetail[] };
-
 export type TimelineItem =
   | { kind: 'charge'; direction: Direction; charge: ChargeSummary }
   | { kind: 'proof'; direction: Direction; proof: ProofSummary }
   | { kind: 'payment'; direction: Direction; payment: PaymentSummary }
-  | {
-      kind: 'recurrence_preview';
-      direction: 'receivable';
-      preview: RecurrencePreview;
-    };
+  | { kind: 'billing_preview'; direction: 'receivable'; preview: import('./billing').BillingPreview };
 
 export type HealthResponse = {
   status: 'ok';
@@ -128,23 +79,6 @@ export type PaymentMethodInput = {
 };
 
 export type PaymentMethodsPage = { paymentMethods: PaymentMethod[] };
-
-export type ExpenseInput = {
-  description?: string;
-  totalCents: number;
-  installmentCount: number;
-  firstDueDate: string;
-  split: import('./split').ExpenseSplit;
-  paymentMethodId?: string;
-};
-
-export type ExpenseAllocation = {
-  kind: 'owner' | 'person';
-  personId: string | null;
-  splitMode: SplitMode;
-  amount: Money;
-  order: number;
-};
 
 export type ChargeRecipientSnapshot = {
   name: string;
@@ -174,18 +108,6 @@ export type ChargeDetail = ChargeSummary & {
   payment: PaymentRecord | null;
   cancelledAt: string | null;
   paidAt: string | null;
-  createdAt: string;
-};
-
-export type ExpenseDetail = {
-  id: string;
-  type: 'one_time' | 'installment';
-  description: string;
-  total: Money;
-  installmentCount: number;
-  firstDueDate: string;
-  allocations: ExpenseAllocation[];
-  charges: ChargeDetail[];
   createdAt: string;
 };
 

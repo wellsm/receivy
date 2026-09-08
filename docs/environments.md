@@ -68,6 +68,9 @@ entram em `prd.env`. Nenhum valor de DNS, chave ou segredo pertence ao repositó
 
 ## Ordem de ativação do dev
 
+O passo a passo completo, com a origem de cada variável, está em
+`docs/deploy-guide.md`; este resumo mostra só as dependências entre etapas.
+
 1. `pnpm --filter @receivy/api deploy:dev` com `dev.env` completo (o EZ4 imprime a
    URL do API Gateway e o nome do bucket; `pnpm output:dev` repete).
 2. Publicar o web (imagem `packages/web/Dockerfile`) em `receivy.wellsm.dev` com

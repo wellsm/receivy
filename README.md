@@ -96,6 +96,8 @@ Estão implementados o login por e-mail/código na API, BFF/web e Expo, e a
 integração OAuth Google/Apple com validação OIDC e retorno vinculado ao cliente.
 Ativação e testes reais de Google/Apple dependem das credenciais e callbacks
 configurados conforme [configuração OAuth](docs/oauth-setup.md).
+Deploy dos stages `dev` e `prd` na AWS, ordem das etapas e origem de cada
+variável: [guia de deploy](docs/deploy-guide.md) e [ambientes](docs/environments.md).
 
 Contatos já podem ser cadastrados, editados, paginados e arquivados no web e Expo,
 com isolamento por proprietário, nome sem canais obrigatórios e vínculo por

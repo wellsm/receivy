@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACCOUNT_DELETED } from "@receivy/common";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ProfileScreen } from "./profile-screen";
 
@@ -41,6 +41,22 @@ function loadAccount() {
 
     throw new Error(`unexpected ${String(path)}`);
   });
+}
+
+/** The account deletion and the logout deliberately bypass browserFetch. */
+function stubDirectFetch(
+  erase: () => Promise<Response>,
+  logout: () => Response = () => new Response(null, { status: 204 }),
+) {
+  const direct = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>(async (path) => {
+    if (path === "/api/financial/account") return erase();
+    if (path === "/api/auth/logout") return logout();
+
+    throw new Error(`unexpected ${path}`);
+  });
+
+  vi.stubGlobal("fetch", direct);
+  return direct;
 }
 
 describe("ProfileScreen", () => {
@@ -117,14 +133,8 @@ describe("ProfileScreen", () => {
   });
 
   it("deletes the account only with the literal confirmation", async () => {
-    vi.mocked(browserFetch).mockImplementation(async (path) => {
-      if (path === "/api/auth/me") return Response.json({ user: account });
-      if (path === "/api/financial/account") return Response.json({ deleted: true });
-
-      throw new Error(`unexpected ${String(path)}`);
-    });
-    const logout = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-    vi.stubGlobal("fetch", logout);
+    loadAccount();
+    const direct = stubDirectFetch(async () => Response.json({ deleted: true }));
 
     render(<ProfileScreen version="1.0.0" />);
     const user = userEvent.setup();
@@ -141,24 +151,40 @@ describe("ProfileScreen", () => {
 
     await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
 
-    expect(browserFetch).toHaveBeenCalledWith("/api/financial/account", expect.objectContaining({ method: "DELETE" }));
-    const call = vi.mocked(browserFetch).mock.calls.find(([path]) => path === "/api/financial/account");
-    expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({ confirmation: "EXCLUIR" });
-    expect(logout).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+    // The delete bypasses browserFetch so a stale token cannot trigger a refresh
+    // and a hard navigation before the outcome is shown.
+    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/account", expect.anything());
+    expect(direct).toHaveBeenCalledWith("/api/financial/account", expect.objectContaining({ method: "DELETE" }));
+    const call = direct.mock.calls.find(([path]) => path === "/api/financial/account");
+    expect(JSON.parse(String(call![1]?.body))).toEqual({ confirmation: "EXCLUIR" });
+    expect(direct).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
     expect(await screen.findByText(ACCOUNT_DELETED)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Voltar ao login" })).toHaveAttribute("href", "/login");
     expect(routerMock.replace).not.toHaveBeenCalled();
   });
 
-  it("keeps a logout retry when the browser session cannot be cleared", async () => {
-    vi.mocked(browserFetch).mockImplementation(async (path) => {
-      if (path === "/api/auth/me") return Response.json({ user: account });
-      if (path === "/api/financial/account") return Response.json({ deleted: true });
+  it("reports an unconfirmed deletion when the account request is rejected", async () => {
+    loadAccount();
+    const direct = stubDirectFetch(async () => new Response(null, { status: 401 }));
 
-      throw new Error(`unexpected ${String(path)}`);
-    });
-    const logout = vi.fn().mockResolvedValue(new Response(null, { status: 500 }));
-    vi.stubGlobal("fetch", logout);
+    render(<ProfileScreen version="1.0.0" />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Excluir conta" }));
+    await user.type(screen.getByLabelText("Digite EXCLUIR para confirmar"), "EXCLUIR");
+    await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
+
+    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/account", expect.anything());
+    expect(direct).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+    expect(await screen.findByText(ACCOUNT_DELETION_UNCONFIRMED)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Voltar ao login" })).toHaveAttribute("href", "/login");
+    expect(routerMock.replace).not.toHaveBeenCalled();
+  });
+
+  it("keeps a logout retry when the browser session cannot be cleared", async () => {
+    loadAccount();
+    let logoutStatus = 500;
+    const direct = stubDirectFetch(async () => Response.json({ deleted: true }), () => new Response(null, { status: logoutStatus }));
 
     render(<ProfileScreen version="1.0.0" />);
     const user = userEvent.setup();
@@ -172,10 +198,11 @@ describe("ProfileScreen", () => {
     );
     expect(screen.getByRole("button", { name: "Tentar encerrar a sessão novamente" })).toBeInTheDocument();
 
-    logout.mockResolvedValue(new Response(null, { status: 204 }));
+    logoutStatus = 204;
     await user.click(screen.getByRole("button", { name: "Tentar encerrar a sessão novamente" }));
 
     expect(await screen.findByText(ACCOUNT_DELETED)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tentar encerrar a sessão novamente" })).not.toBeInTheDocument();
+    expect(direct.mock.calls.filter(([path]) => path === "/api/auth/logout")).toHaveLength(2);
   });
 });

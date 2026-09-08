@@ -152,7 +152,8 @@ export function ProfileScreen({ version }: { version: string }) {
     let deleted = false;
 
     try {
-      const response = await browserFetch("/api/financial/account", {
+      // No automatic retry/redirect: a 401 cannot certify that deletion committed.
+      const response = await fetch("/api/financial/account", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ confirmation }),
@@ -247,6 +248,7 @@ export function ProfileScreen({ version }: { version: string }) {
                   type="button"
                   className="profile-icon-button"
                   aria-label="Editar nome"
+                  disabled={busy}
                   onClick={() => {
                     setDraft(user.name ?? "");
                     setEditing(true);

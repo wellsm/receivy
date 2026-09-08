@@ -928,6 +928,7 @@ a {
 }
 
 .type-picker label {
+  position: relative;
   display: grid;
   gap: 2px;
   padding: 12px 14px;
@@ -939,6 +940,11 @@ a {
 .type-picker label.is-active {
   border-color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary-soft) 45%, transparent);
+}
+
+.type-picker label:has(input:focus-visible) {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .type-picker input {

@@ -26,7 +26,7 @@ import {
 import { lockOwner, persistChargePlan, prepareChargeMaterialization } from '../charges/materialize';
 import { CHARGE_SELECT, chargeDto } from '../charges/repository';
 import type { DbClient } from '../database';
-import { activeInvite } from '../invites/repository';
+import { activeInvite, type InviteLinkContext } from '../invites/links';
 import { closeProofs } from '../proofs/events';
 import { billingRequestFingerprint } from './request';
 
@@ -73,8 +73,7 @@ export type BillingRow = {
   updated_at: string;
 };
 
-/** Secret and web origin the detail needs to re-issue the active invite URL. */
-export type InviteLinkContext = { secret: string; webOrigin: string };
+export type { InviteLinkContext };
 
 export type BillingFilters = {
   type?: BillingType;

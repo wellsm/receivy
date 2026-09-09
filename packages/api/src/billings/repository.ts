@@ -238,33 +238,95 @@ async function earliestPendingCharge(db: DbClient, id: string): Promise<{ id: st
   return rows.records[0];
 }
 
-/** The share action prefers a charge that is still due; it only falls back to the overdue one. */
-async function shareChargeIdFor(db: DbClient, id: string, today: string, earliest?: { id: string }): Promise<string | null> {
-  const rows = await db.charges.findMany({
-    select: { id: true },
-    where: { billing_id: id, state: 'pending', due_date: { gte: today } },
-    order: { due_date: Order.Asc },
-    take: 1
-  });
+/** Everything a summary needs from the charges, allocations and proofs of one billing. */
+type SummaryAggregate = BillingCounters & { earliestPendingDue: string | null };
 
-  return rows.records[0]?.id ?? earliest?.id ?? null;
-}
+const EMPTY_AGGREGATE: SummaryAggregate = {
+  participantCount: 0,
+  chargeCount: 0,
+  paidCount: 0,
+  proofsPending: 0,
+  shareChargeId: null,
+  earliestPendingDue: null
+};
 
-async function chargeCounters(db: DbClient, id: string): Promise<Pick<BillingCounters, 'chargeCount' | 'paidCount' | 'proofsPending'>> {
-  const [row] = await db.rawQuery(
-    `SELECT COUNT(*) FILTER (WHERE c.state <> 'cancelled') AS charge_count,
-      COUNT(*) FILTER (WHERE c.state = 'paid') AS paid_count,
-      (SELECT COUNT(*) FROM payment_proofs p JOIN charges cc ON cc.id = p.charge_id
-        WHERE cc.billing_id = :id::uuid AND p.state = 'pending') AS proofs_pending
-    FROM charges c WHERE c.billing_id = :id::uuid`,
-    { id }
+/**
+ * One round trip for the whole page instead of three or four per row. `today` travels with each id
+ * because the share candidate is timezone-bound: it prefers the nearest charge still due and only
+ * falls back to the earliest overdue one. Dates are formatted in SQL so the driver cannot hand back
+ * `Date` objects where the DTO promises `YYYY-MM-DD`.
+ */
+async function summaryAggregates(db: DbClient, rows: BillingRow[], now: Date): Promise<Map<string, SummaryAggregate>> {
+  if (!rows.length) {
+    return new Map();
+  }
+
+  const records = await db.rawQuery(
+    `WITH page AS (
+      SELECT * FROM unnest(string_to_array(:ids::text, ',')::uuid[], string_to_array(:todays::text, ',')::date[]) AS entry(billing_id, today)
+    ),
+    counters AS (
+      SELECT p.billing_id,
+        COUNT(c.id) FILTER (WHERE c.state <> 'cancelled') AS charge_count,
+        COUNT(c.id) FILTER (WHERE c.state = 'paid') AS paid_count,
+        to_char(MIN(c.due_date) FILTER (WHERE c.state = 'pending'), 'YYYY-MM-DD') AS earliest_pending
+      FROM page p LEFT JOIN charges c ON c.billing_id = p.billing_id
+      GROUP BY p.billing_id
+    ),
+    participants AS (
+      SELECT p.billing_id, COUNT(DISTINCT a.person_id) AS participant_count
+      FROM page p JOIN allocations a ON a.billing_id = p.billing_id AND a.kind = 'person'
+      GROUP BY p.billing_id
+    ),
+    proofs AS (
+      SELECT p.billing_id, COUNT(*) AS proofs_pending
+      FROM page p
+      JOIN charges c ON c.billing_id = p.billing_id AND c.state <> 'cancelled'
+      JOIN payment_proofs pp ON pp.charge_id = c.id AND pp.state = 'pending'
+      GROUP BY p.billing_id
+    ),
+    share AS (
+      SELECT DISTINCT ON (p.billing_id) p.billing_id, c.id AS charge_id
+      FROM page p JOIN charges c ON c.billing_id = p.billing_id AND c.state = 'pending'
+      ORDER BY p.billing_id, (c.due_date >= p.today) DESC, c.due_date ASC, c.id ASC
+    )
+    SELECT p.billing_id,
+      COALESCE(counters.charge_count, 0) AS charge_count,
+      COALESCE(counters.paid_count, 0) AS paid_count,
+      counters.earliest_pending,
+      COALESCE(participants.participant_count, 0) AS participant_count,
+      COALESCE(proofs.proofs_pending, 0) AS proofs_pending,
+      share.charge_id
+    FROM page p
+    LEFT JOIN counters ON counters.billing_id = p.billing_id
+    LEFT JOIN participants ON participants.billing_id = p.billing_id
+    LEFT JOIN proofs ON proofs.billing_id = p.billing_id
+    LEFT JOIN share ON share.billing_id = p.billing_id`,
+    {
+      ids: rows.map((row) => row.id).join(','),
+      todays: rows.map((row) => calendarDate(now, row.timezone)).join(',')
+    }
   );
 
-  return {
-    chargeCount: Number(row?.['charge_count'] ?? 0),
-    paidCount: Number(row?.['paid_count'] ?? 0),
-    proofsPending: Number(row?.['proofs_pending'] ?? 0)
-  };
+  return new Map(
+    records.map((record) => {
+      const participantCount = Number(record['participant_count'] ?? 0);
+      const shareChargeId = record['charge_id'] ? String(record['charge_id']) : null;
+
+      return [
+        String(record['billing_id']),
+        {
+          participantCount,
+          chargeCount: Number(record['charge_count'] ?? 0),
+          paidCount: Number(record['paid_count'] ?? 0),
+          proofsPending: Number(record['proofs_pending'] ?? 0),
+          // The share action only makes sense while a single participant owns every charge.
+          shareChargeId: participantCount === 1 ? shareChargeId : null,
+          earliestPendingDue: record['earliest_pending'] ? String(record['earliest_pending']) : null
+        }
+      ];
+    })
+  );
 }
 
 function installmentCountFor(row: BillingRow): number | undefined {
@@ -275,16 +337,13 @@ function installmentCountFor(row: BillingRow): number | undefined {
   return billingDueDates({ type: row.type, frequency: row.frequency, startDate: row.start_date, endDate: row.end_date }).length;
 }
 
-async function summaryDto(db: DbClient, row: BillingRow, now: Date): Promise<BillingSummary> {
-  const today = calendarDate(now, row.timezone);
-  const earliest = await earliestPendingCharge(db, row.id);
+async function summaryDto(db: DbClient, row: BillingRow, now: Date, aggregate: SummaryAggregate): Promise<BillingSummary> {
+  const { earliestPendingDue, ...counters } = aggregate;
   const nextDueDate =
-    earliest?.due_date ??
+    earliestPendingDue ??
     (row.type === 'indefinite' ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null) : null);
-  const participantCount = await db.allocations.count({ where: { billing_id: row.id, kind: 'person' } });
-  const shareChargeId = participantCount === 1 ? await shareChargeIdFor(db, row.id, today, earliest) : null;
 
-  return summary(row, nextDueDate, { ...(await chargeCounters(db, row.id)), participantCount, shareChargeId }, installmentCountFor(row));
+  return summary(row, nextDueDate, counters, installmentCountFor(row));
 }
 
 async function dto(db: DbClient, row: BillingRow, now: Date, link?: InviteLinkContext): Promise<BillingDetail> {
@@ -544,8 +603,10 @@ export async function listBillings(db: DbClient, ownerId: string, filters: Billi
   const page = result.records.slice(0, PAGE_SIZE);
   const last = result.records.length > PAGE_SIZE ? page.at(-1) : undefined;
 
+  const aggregates = await summaryAggregates(db, page, now);
+
   return {
-    billings: await Promise.all(page.map((row) => summaryDto(db, row, now))),
+    billings: await Promise.all(page.map((row) => summaryDto(db, row, now, aggregates.get(row.id) ?? EMPTY_AGGREGATE))),
     nextCursor: last ? Buffer.from(JSON.stringify({ createdAt: last.created_at, id: last.id })).toString('base64url') : null
   };
 }

@@ -425,6 +425,75 @@ describe('billings on native PostgreSQL', () => {
     equal(billingDueLabel(ended, '2026-06-01'), 'Liquidada');
   });
 
+  it('answers a page of billings with the same summaries the details report', async () => {
+    const solo = (await savePerson(db, OWNER, { name: 'Página Solo' })).id;
+    const forSolo = (description: string) =>
+      once({ description, totalCents: 3_000, split: { mode: 'equal', parts: [{ kind: 'person', personId: solo }] } });
+
+    for (const [index, description] of ['Página um', 'Página dois', 'Página três'].entries()) {
+      await createBilling(db, OWNER, `page-summary-${index}`, forSolo(description), date('2026-03-01'));
+    }
+
+    const now = date('2026-03-05');
+    const page = await listBillings(db, OWNER, { search: 'página' }, now);
+
+    equal(page.billings.length, 3);
+
+    for (const listed of page.billings) {
+      const detail = await getBilling(db, OWNER, listed.id, now);
+
+      equal(listed.nextDueDate, detail.nextDueDate);
+      equal(listed.installmentCount, detail.installmentCount);
+      equal(listed.state, detail.state);
+      equal(listed.chargeCount, detail.charges.filter((charge) => charge.state !== 'cancelled').length);
+      equal(listed.paidCount, detail.charges.filter((charge) => charge.state === 'paid').length);
+      equal(listed.participantCount, detail.allocations.filter((allocation) => allocation.kind === 'person').length);
+      equal(listed.shareChargeId, detail.charges.find((charge) => charge.state === 'pending')!.id);
+      equal(listed.proofsPending, 0);
+    }
+  });
+
+  it('leaves proofs of cancelled charges out of the pending counter', async () => {
+    const solo = (await savePerson(db, OWNER, { name: 'Cancelado Solo' })).id;
+    const created = await createBilling(
+      db,
+      OWNER,
+      'cancelled-proof-key',
+      once({
+        description: 'Comprovante cancelado',
+        totalCents: 3_000,
+        split: { mode: 'equal', parts: [{ kind: 'person', personId: solo }] }
+      })
+    );
+    const charge = created.charges[0]!;
+    const instant = new Date().toISOString();
+    const listed = async () => (await listBillings(db, OWNER, { search: 'comprovante cancelado' })).billings[0]!;
+
+    await db.payment_proofs.insertOne({
+      data: {
+        id: crypto.randomUUID(),
+        charge: { id: charge.id },
+        object_key: `proofs/${created.id}/cancelled.pdf`,
+        original_name: 'cancelado.pdf',
+        mime: 'application/pdf',
+        size: 1_024,
+        sha256: 'b'.repeat(64),
+        state: 'pending',
+        created_at: instant
+      }
+    });
+
+    equal((await listed()).proofsPending, 1);
+
+    // A proof left pending on a cancelled charge asks for no review; the card must not badge it.
+    await db.charges.updateOne({ where: { id: charge.id }, data: { state: 'cancelled', cancelled_at: instant, updated_at: instant } });
+
+    const cancelled = await listed();
+
+    equal(cancelled.proofsPending, 0);
+    equal(cancelled.chargeCount, 0);
+  });
+
   it('keeps the quota column empty for splits that are not shares', async () => {
     const stray = {
       mode: 'equal',

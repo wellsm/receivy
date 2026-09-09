@@ -1,16 +1,24 @@
 import { useState } from "react";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { PixSettingsScreen } from "@/components/pix-settings-screen";
 import { ProfileScreen } from "@/components/profile-screen";
+import { patchDraft } from "@/financial/draft-store";
 
 type Section = "profile" | "pix";
 
 export default function SettingsRoute() {
   const router = useRouter();
-  const [section, setSection] = useState<Section>("profile");
+  const params = useLocalSearchParams<{ section?: string; returnTo?: string }>();
+  const [section, setSection] = useState<Section>(params.section === "pix" ? "pix" : "profile");
+  const toBilling = params.returnTo === "new-billing";
 
   if (section === "pix") {
-    return <PixSettingsScreen onBack={() => setSection("profile")} />;
+    return (
+      <PixSettingsScreen
+        onBack={() => (toBilling ? router.back() : setSection("profile"))}
+        onCreated={toBilling ? method => { patchDraft({ pix: method.id }); router.back(); } : undefined}
+      />
+    );
   }
 
   return (

@@ -1,6 +1,8 @@
 # Perfil -> contact -> Cobranças -> charge -> inline Pix -> public link -> feed totals.
-# Labels and inputs share the same string, so inputs are addressed by index 1
-# or by placeholder. Both platforms open a native share sheet on publish and
+# Labels and inputs share the same string, so those inputs are addressed by
+# index 1. Tapping a section title dismisses the keyboard (the form's ScrollView
+# uses keyboardShouldPersistTaps="handled"), which keeps the fixed footer
+# reachable. Both platforms open a native share sheet on publish and
 # need dismissing before the charge-detail assertions: Android shows
 # "Sharing link" and closes on the hardware Back key; iOS shows its own
 # sheet, dismissed by tapping the "dismiss popup" backdrop element.
@@ -42,23 +44,12 @@ appId: dev.receivy.local
     timeout: 15000
 - tapOn: "Nova cobrança"
 - extendedWaitUntil:
-    visible: "Divida com clareza antes de cobrar."
+    visible: "Para quem?"
     timeout: 15000
-- tapOn: "Uma vez"
 - tapOn: "Ana QA"
-- scrollUntilVisible:
-    element:
-      text: "Valor de cada cobrança"
-    direction: DOWN
-- tapOn:
-    text: "Valor de cada cobrança"
-    index: 1
+- tapOn: "Valor"
 - inputText: "100,00"
-- scrollUntilVisible:
-    element:
-      text: "Divida com clareza antes de cobrar."
-    direction: UP
-- tapOn: "Divida com clareza antes de cobrar."
+- tapOn: "Para quem?"
 - scrollUntilVisible:
     element:
       text: "Descrição"
@@ -69,19 +60,18 @@ appId: dev.receivy.local
 - inputText: "Mercado QA"
 - scrollUntilVisible:
     element:
-      text: "Divida com clareza antes de cobrar."
+      text: "Para quem?"
     direction: UP
-- tapOn: "Divida com clareza antes de cobrar."
-- scrollUntilVisible:
-    element:
-      text: "Revisar cobrança"
-    direction: DOWN
-- tapOn: "Revisar cobrança"
+- tapOn: "Para quem?"
 - scrollUntilVisible:
     element:
       text: "Criar cobrança"
     direction: DOWN
 - tapOn: "Criar cobrança"
+- extendedWaitUntil:
+    visible: "Cobrança criada"
+    timeout: 20000
+- tapOn: "Ver cobrança"
 - extendedWaitUntil:
     visible: "Pix antes de compartilhar"
     timeout: 20000

@@ -7,14 +7,9 @@ export default function NewChargeRoute() {
   return (
     <BillingFormScreen
       onBack={() => router.back()}
-      onSaved={(billing) => {
-        const first = billing.charges[0];
-        if (first) {
-          router.replace({ pathname: "/charges/[id]", params: { id: first.id } });
-          return;
-        }
-        router.replace("/billings");
-      }}
+      onSaved={(billing) => router.replace({ pathname: "/charges/created", params: { id: billing.id } })}
+      onCreateContact={() => router.push({ pathname: "/people", params: { returnTo: "new-billing" } })}
+      onCreatePix={() => router.push({ pathname: "/settings", params: { section: "pix", returnTo: "new-billing" } })}
     />
   );
 }

@@ -4,9 +4,9 @@ import { SafeAreaView } from "@/components/safe-area-view";
 import { normalizePerson, type Person } from "@receivy/common";
 import { peopleClient } from "@/people/client";
 
-type Props = { onBack: () => void; onOpenLedger?: (id: string) => void; client?: typeof peopleClient };
+type Props = { onBack: () => void; onOpenLedger?: (id: string) => void; onCreated?: (person: Person) => void; client?: typeof peopleClient };
 
-export function PeopleScreen({ onBack, onOpenLedger, client = peopleClient }: Props) {
+export function PeopleScreen({ onBack, onOpenLedger, onCreated, client = peopleClient }: Props) {
   const [people, setPeople] = useState<Person[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [archived, setArchived] = useState(false);
@@ -40,8 +40,10 @@ export function PeopleScreen({ onBack, onOpenLedger, client = peopleClient }: Pr
     catch (reason) { setError((reason as Error).message); return; }
     setBusy(true); setError(""); setNotice("");
     try {
-      await client.save(input, editing?.id);
+      const saved = await client.save(input, editing?.id);
+      const created = !editing;
       reset(); setNotice("Contato salvo."); await load();
+      if (created) onCreated?.(saved);
     } catch (reason) { setError((reason as Error).message); }
     finally { setBusy(false); }
   }

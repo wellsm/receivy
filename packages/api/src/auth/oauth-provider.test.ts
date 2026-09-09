@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createAppleRevoker, createOauthProviderClient, decodeOauthProviderConfig } from './oauth-provider';
+import { createOauthProviderClient, decodeOauthProviderConfig } from './oauth-provider';
 
 describe('OAuth provider configuration', () => {
   it.each(['google', 'apple', 'nativeApple'] as const)('exchanges and verifies a signed %s fixture', async (mode) => {
@@ -31,7 +31,6 @@ describe('OAuth provider configuration', () => {
       }
       return Response.json({ keys: [{ ...keys.publicKey.export({ format: 'jwk' }), kid: 'fixture', alg: 'RS256', use: 'sig' }] });
     };
-    const journal = { retain: vi.fn(async () => 'journal'), bind: vi.fn(async () => {}) };
     const client = createOauthProviderClient(
       provider,
       {
@@ -46,7 +45,6 @@ describe('OAuth provider configuration', () => {
         }
       },
       request,
-      journal,
       native
     );
     const identity = await client!.verifyAuthorizationCode({
@@ -59,39 +57,28 @@ describe('OAuth provider configuration', () => {
     expect(tokenBody?.get('code')).toBe('authorization-code');
     expect(tokenBody?.get('code_verifier')).toBe(provider === 'google' ? 'verifier' : null);
     if (provider === 'apple') {
-      expect(journal.retain).toHaveBeenCalledWith(native ? 'native-client' : 'client', 'refresh-fixture');
-      expect(journal.bind).toHaveBeenCalledWith('journal', 'person');
-      expect(identity.appleCredentialId).toBe('journal');
+      // The provider refresh token is never retained anywhere in the identity.
+      expect(JSON.stringify(identity)).not.toContain('refresh-fixture');
       expect(tokenBody?.get('redirect_uri')).toBe(native ? null : 'https://api.example/apple');
       expect(identity.name).toBe('Ana Silva');
       expect(tokenBody?.get('client_secret')?.split('.')).toHaveLength(3);
     }
   });
-  it('uses only the configured revocation endpoint and preserves retry/configuration outcomes', async () => {
+  it('enables the Apple client from configuration alone and keeps native gated on its own client id', () => {
     const key = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-    const config = {
-      apple: {
-        clientId: 'client',
-        nativeClientId: 'native',
-        callbackUri: 'https://api.example/apple',
-        keyId: 'key',
-        teamId: 'team',
-        privateKeyBase64: Buffer.from(key.privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64')
-      }
+    const apple = {
+      clientId: 'client',
+      callbackUri: 'https://api.example/apple',
+      keyId: 'key',
+      teamId: 'team',
+      privateKeyBase64: Buffer.from(key.privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64')
     };
-    const request = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(null, { status: 503 }))
-      .mockResolvedValueOnce(new Response(null, { status: 400 }))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }));
-    const revoke = createAppleRevoker(config, request);
-    expect(await revoke({ clientId: 'arbitrary', token: 'fixture' })).toBe('configuration_error');
+    const request = vi.fn<typeof fetch>();
+    expect(createOauthProviderClient('apple', { apple }, request)).not.toBeNull();
+    expect(createOauthProviderClient('apple', { apple }, request, true)).toBeNull();
+    expect(createOauthProviderClient('apple', { apple: { ...apple, nativeClientId: 'native' } }, request, true)).not.toBeNull();
+    expect(createOauthProviderClient('apple', { apple: { ...apple, privateKeyBase64: 'not-a-key' } }, request)).toBeNull();
     expect(request).not.toHaveBeenCalled();
-    for (const status of ['transient', 'configuration_error', 'revoked'])
-      expect(await revoke({ clientId: 'native', token: 'fixture' })).toBe(status);
-    expect(request.mock.calls.every(([url]) => url === 'https://appleid.apple.com/auth/revoke')).toBe(true);
-    expect((request.mock.calls[0]![1]!.body as URLSearchParams).get('token_type_hint')).toBe('refresh_token');
-    expect(createOauthProviderClient('apple', config, request)).toBeNull();
   });
   it('keeps all providers disabled when credentials are absent', () => {
     expect(decodeOauthProviderConfig('disabled')).toEqual({});

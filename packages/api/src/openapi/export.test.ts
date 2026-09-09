@@ -21,7 +21,7 @@ describe('pinned EZ4 reflected OpenAPI', () => {
     expect(publicGet.responses['200'].content['application/json'].schema.properties.pix.anyOf).toContainEqual({ type: 'null' });
     expect(document.paths['/auth/apple/callback']!.post!.requestBody.content['application/x-www-form-urlencoded']).toBeDefined();
     expect(document.paths['/charges/{id}/public-link']!.post!.requestBody.required).toBe(false);
-    expect(JSON.stringify(document)).not.toMatch(/privateKeyBase64|APPLE_CREDENTIAL_ENCRYPTION_KEY_B64|local\.env|\/Users\//);
+    expect(JSON.stringify(document)).not.toMatch(/privateKeyBase64|local\.env|\/Users\//);
   });
   it('fails closed for unsupported schema variants instead of producing permissive contracts', () => {
     expect(() => schemaToOpenApi({ type: 'unrecognized' } as never)).toThrow(/Unsupported/);

@@ -20,7 +20,7 @@ declare class ProfileResponse implements Http.Response {
 }
 declare class DeleteResponse implements Http.Response {
   status: 200;
-  body: { deleted: boolean; providerRevocation: 'not_required' | 'pending' | 'manual_action_required' | 'unknown' };
+  body: { deleted: boolean };
 }
 export async function profileHandler(request: ProfileRequest, context: Service.Context<ApiProvider>): Promise<ProfileResponse> {
   return { status: 200, body: { user: await updateProfile(context.db, request.identity.userId, request.body) } };

@@ -47,10 +47,11 @@ Neon, um projeto com dois branches:
    `postgresql://user:senha@host/db?sslmode=require`) → `EZ4_RAW_PG_DB_URL` do
    respectivo env.
 
-Neon suspende o compute sem atividade; os crons horários do Receivy
-(recorrências, notificações, limpeza) tocam o banco e mantêm o dev acordado
-enquanto houver dados, mas a primeira requisição após suspensão pode demorar
-alguns segundos. `GET /health` não toca o banco e não serve como sonda.
+Neon suspende o compute sem atividade; o `NotificationCron` roda a cada 5
+minutos (`cron(0/5 * * * ? *)`) e toca o banco, então o compute fica acordado
+sem depender de tráfego. Os demais crons são horários (`BillingCron` no minuto
+0, `StorageCron` no minuto 15). `GET /health` não toca o banco e não serve como
+sonda.
 
 ## 3. Segredos gerados localmente
 
@@ -60,12 +61,10 @@ Gere um valor **por stage** e nunca reutilize entre dev e prd:
 openssl rand -base64 32   # AUTH_JWT_SECRET
 openssl rand -base64 32   # LOGIN_CODE_HASH_KEY
 openssl rand -base64 32   # PUBLIC_LINK_HMAC_SECRET
-openssl rand -base64 32   # APPLE_CREDENTIAL_ENCRYPTION_KEY_B64 (exatamente 32 bytes em base64 padrão)
 ```
 
-`APPLE_CREDENTIAL_ENCRYPTION_KEY_B64` cifra os refresh tokens da Apple para a
-revogação na exclusão de conta; a API recusa qualquer valor que não decodifique
-em 32 bytes. Trocar essa chave depois inutiliza os tokens já guardados.
+O login Apple não guarda nenhum token do provedor: só o `id_token` é validado
+para criar/ligar a identidade, então não há chave de cifragem a gerar aqui.
 
 ## 4. `dev.env` mínimo
 
@@ -75,7 +74,7 @@ cp dev.env.example dev.env
 ```
 
 Preencha agora só o que já existe: AWS (passo 1), `EZ4_RAW_PG_DB_URL` (passo 2),
-os quatro segredos (passo 3), `PUBLIC_WEB_ORIGIN=https://receivy.wellsm.dev` e
+os três segredos (passo 3), `PUBLIC_WEB_ORIGIN=https://receivy.wellsm.dev` e
 `OAUTH_REDIRECT_ALLOW_LIST=https://receivy.wellsm.dev/auth/oauth/callback,receivy://auth/callback`.
 Deixe `OAUTH_PROVIDERS_CONFIG_B64=disabled`, `EMAIL_TRANSPORT=disabled`,
 `NOTIFICATION_EMAIL_TRANSPORT=disabled`, `NOTIFICATION_PUSH_TRANSPORT=disabled`
@@ -242,6 +241,59 @@ domínio real às listas estáticas de CORS em `packages/api/src/api.ts` e
 `packages/api/src/storage.ts`. Não existe `destroy` de prd por script; derrubar
 produção é `ez4 destroy` manual e consciente.
 
+## Filas e DLQ
+
+O EZ4 nomeia todo recurso como `<prefix>-<projectName>-<serviço em kebab-case>`
+(`prefix` é o `APP_STAGE` e `projectName` é `receivy`, ambos em
+`packages/api/ez4.project.js`). A DLQ de cada fila recebe o sufixo
+`-deadletter`. No stage `dev`:
+
+| Serviço             | Fila SQS                       | DLQ                                       |
+| ------------------- | ------------------------------ | ----------------------------------------- |
+| `NotificationQueue` | `dev-receivy-notification-queue` | `dev-receivy-notification-queue-deadletter` |
+| `BillingQueue`      | `dev-receivy-billing-queue`      | `dev-receivy-billing-queue-deadletter`      |
+| `StorageQueue`      | `dev-receivy-storage-queue`      | `dev-receivy-storage-queue-deadletter`      |
+
+Em `prd` troque o prefixo por `prd`. As três filas usam `maxAttempts: 5` e
+retenção de 20160 minutos (14 dias), com backoff de 5s a 300s.
+
+Crie um alarme no CloudWatch sobre
+`AWS/SQS → ApproximateNumberOfMessagesVisible` de **cada DLQ**, com limiar
+`>= 1` por 5 minutos (estatística `Maximum`) e uma ação de notificação. Uma DLQ
+não vazia é sempre trabalho perdido: aviso não entregue, ocorrência não
+materializada ou arquivo não apagado.
+
+`NotificationCron` roda a cada 5 minutos e, além de reenfileirar entregas
+pendentes, mantém o compute do Neon acordado — ver o passo 2.
+
+## Migração 2026-09-09
+
+Antes do deploy:
+
+```sql
+ALTER TABLE notification_deliveries ALTER COLUMN event_id TYPE varchar(200);
+```
+
+O EZ4 não encurta nem alarga colunas existentes; sem esse `ALTER` as chaves de
+evento novas estouram o tamanho antigo.
+
+Depois do deploy, com a versão nova estável, estas tabelas ficam sem nenhum
+leitor e podem ser derrubadas:
+
+```sql
+DROP TABLE IF EXISTS outbox_events;
+DROP TABLE IF EXISTS storage_deletions;
+DROP TABLE IF EXISTS storage_cleanup_cursors;
+DROP TABLE IF EXISTS apple_credentials;
+```
+
+`apple_credentials` some junto com `APPLE_CREDENTIAL_ENCRYPTION_KEY_B64`: o
+login Apple passa a validar só o `id_token` e nenhum refresh token do provedor é
+guardado. Remova a variável dos envs de dev e prd depois do deploy.
+
+A coluna `billings.category` não entra nesta migração: é opcional com default
+`other` e o EZ4 já a aplicou no deploy que a introduziu.
+
 ## Manutenção
 
 - Schema: o EZ4 aplica tabelas/colunas novas no deploy; coluna obrigatória em
@@ -252,8 +304,7 @@ produção é `ez4 destroy` manual e consciente.
   `EXPO_PUBLIC_WEB_URL`, consoles Google/Apple e Resend. Redeploy da API e do web.
 - Rotação de segredos: `AUTH_JWT_SECRET` derruba todas as sessões;
   `LOGIN_CODE_HASH_KEY` invalida códigos pendentes; `PUBLIC_LINK_HMAC_SECRET`
-  invalida todos os links públicos (rotacionar links depois);
-  `APPLE_CREDENTIAL_ENCRYPTION_KEY_B64` perde os tokens Apple guardados.
+  invalida todos os links públicos (rotacionar links depois).
 - Rodar a API local contra o banco dev: `pnpm serve:dev` carrega `dev.env` e,
   se existir, `local-dev.env` por cima (por exemplo `OAUTH_REDIRECT_ALLOW_LIST`
   com `localhost`, que nunca deve ir para a AWS).

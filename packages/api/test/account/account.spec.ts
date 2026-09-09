@@ -175,9 +175,9 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
       concurrent.map((result) => result.deleted),
       [true, true]
     );
-    // Exactly one erasure performs the work (no Apple identity => not_required); the loser observes an already-deleted row.
-    deepEqual(concurrent.map((result) => result.providerRevocation).sort(), ['not_required', 'unknown']);
-    deepEqual(await eraseAccount(db, debtor, 'EXCLUIR'), { deleted: true, providerRevocation: 'unknown', storageMessages: [] });
+    // Exactly one erasure performs the work; the loser observes an already-deleted row and reports no new files.
+    equal(concurrent.filter((result) => result.storageMessages.length > 0).length, 1);
+    deepEqual(await eraseAccount(db, debtor, 'EXCLUIR'), { deleted: true, storageMessages: [] });
     await rejects(() => authorize(current.access), HttpUnauthorizedError);
     const injectedFamily = crypto.randomUUID();
     await db.session_families.insertOne({
@@ -246,7 +246,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     storageQueue.sendMessage.mock.resetCalls();
     const request = { identity: { userId: id }, body: { confirmation: 'EXCLUIR' } } as Parameters<typeof deleteHandler>[0];
     const response = await deleteHandler(request, deleteContext);
-    deepEqual(response.body, { deleted: true, providerRevocation: 'not_required' });
+    deepEqual(response.body, { deleted: true });
     deepEqual(
       storageQueue.sendMessage.mock.calls.map((call) => call.arguments[0]),
       [{ objectKey, chargeId, purpose: 'account' }]

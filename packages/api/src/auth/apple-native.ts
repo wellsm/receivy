@@ -3,7 +3,6 @@ import type { AuthSessionResponse } from '@receivy/common';
 import { lockAccountReferences } from '../account/locking';
 import type { DbClient } from '../database';
 import { createAuthRepository } from '../repositories/auth-repository';
-import { activateAppleCredential, claimAppleActivation } from './apple-credentials';
 import { createOauthAttempt, hashOauthValue } from './oauth';
 import type { OauthProviderClient } from './oauth-flow';
 import { issueAccessToken } from './session';
@@ -45,12 +44,9 @@ export async function exchangeNativeApple(
   });
   return db.transaction(async (tx) => {
     await lockAccountReferences(tx, 'write');
-    if (!identity.appleCredentialId) throw new HttpUnauthorizedError();
-    await claimAppleActivation(tx, identity.appleCredentialId);
     const repo = createAuthRepository(tx),
       user = await repo.resolveUser({ provider: 'apple', identity });
     const session = await repo.issueSession(user.id, input.deviceName);
-    await activateAppleCredential(tx, identity.appleCredentialId, user.id);
     return {
       accessToken: issueAccessToken({ familyId: session.familyId, secret, userId: user.id }),
       refreshToken: session.refreshToken,

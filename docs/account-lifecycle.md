@@ -26,7 +26,7 @@ external sends cannot be recalled; unsubmitted/retry work is prevented.
 
 DELETE account requires the literal EXCLUIR. One transaction revokes sessions, ends
 owned recurrence generation, removes owned login artifacts/Pix methods,
-scrubs affected notification render inputs/recipient routing, prevents outbox retries,
+scrubs affected notification render inputs/recipient routing, stops pending delivery retries,
 revokes and removes the owner's `billing_invites` so no join link survives the account,
 and erases user identity. A retry at the repository boundary is idempotent under the
 user lock. Already-revoked HTTP credentials get normal 401, not an auth exception.

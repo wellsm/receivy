@@ -125,7 +125,6 @@ export function createOauthProviderClient(
   provider: OauthProvider,
   config: OauthProviderConfig,
   request: typeof fetch = fetch,
-  appleJournal?: { retain: (clientId: string, token: string) => Promise<string>; bind: (id: string, subject: string) => Promise<void> },
   native = false
 ): OauthProviderClient | null {
   const selected =
@@ -135,8 +134,9 @@ export function createOauthProviderClient(
   if (!selected) {
     return null;
   }
-  if (provider === 'apple' && (!appleJournal || !appleConfigurationAvailable(config.apple) || (native && !config.apple?.nativeClientId)))
+  if (provider === 'apple' && (!appleConfigurationAvailable(config.apple) || (native && !config.apple?.nativeClientId))) {
     return null;
+  }
 
   return {
     authorizationUrl(values: OauthAttemptValues): string {
@@ -167,19 +167,7 @@ export function createOauthProviderClient(
           })
         })
       );
-      let appleCredentialId: string | undefined;
-      if (provider === 'apple') {
-        if (typeof tokenResponse.refresh_token !== 'string' || !tokenResponse.refresh_token)
-          throw new Error('Apple refresh credential is missing');
-        try {
-          appleCredentialId = await appleJournal!.retain(selected.clientId, tokenResponse.refresh_token);
-        } catch {
-          // Remote issuance cannot roll back with the DB. Compensate; never issue a local session.
-          const outcome = await createAppleRevoker(config, request)({ clientId: selected.clientId, token: tokenResponse.refresh_token });
-          console.error(JSON.stringify({ event: 'apple_credential_journal_failed', compensation: outcome }));
-          throw new Error('Apple credential persistence failed');
-        }
-      }
+      // Only the id_token is consumed; the provider refresh token is deliberately never stored.
       if (typeof tokenResponse.id_token !== 'string') {
         throw new Error('OAuth identity token is missing');
       }
@@ -204,37 +192,10 @@ export function createOauthProviderClient(
         token: tokenResponse.id_token
       });
       const profileName = provider === 'apple' ? appleName(input.profile) : undefined;
-      if (appleCredentialId) await appleJournal!.bind(appleCredentialId, identity.subject);
       return {
         ...identity,
-        ...(profileName && !identity.name ? { name: profileName } : {}),
-        ...(appleCredentialId ? { appleCredentialId } : {})
+        ...(profileName && !identity.name ? { name: profileName } : {})
       };
-    }
-  };
-}
-
-export function createAppleRevoker(config: OauthProviderConfig, request: typeof fetch = fetch) {
-  return async ({ token, clientId }: { token: string; clientId: string }): Promise<'revoked' | 'transient' | 'configuration_error'> => {
-    const selected = config.apple;
-    if (!selected || ![selected.clientId, selected.nativeClientId].includes(clientId)) return 'configuration_error';
-    try {
-      const response = await request('https://appleid.apple.com/auth/revoke', {
-        signal: AbortSignal.timeout(10000),
-        redirect: 'error',
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: createAppleClientSecret({ ...selected, clientId }, Math.floor(Date.now() / 1000)),
-          token,
-          token_type_hint: 'refresh_token'
-        })
-      });
-      if (response.status === 200) return 'revoked';
-      return response.status === 429 || response.status >= 500 ? 'transient' : 'configuration_error';
-    } catch {
-      return 'transient';
     }
   };
 }

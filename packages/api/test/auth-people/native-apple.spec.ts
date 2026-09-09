@@ -1,21 +1,17 @@
 import { equal, ok, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, it } from 'node:test';
-import { bindAppleCredential, journalAppleCredential } from '../../src/auth/apple-credentials';
 import { beginNativeApple, exchangeNativeApple } from '../../src/auth/apple-native';
 import { hashOauthValue } from '../../src/auth/oauth';
 import type { OauthProviderClient } from '../../src/auth/oauth-flow';
 import { createAuthRepository } from '../../src/repositories/auth-repository';
 import { cleanupUsers, db } from '../fixtures/financial';
 
-const key = Buffer.alloc(32, 8).toString('base64'),
-  verifier = 'a'.repeat(43),
+const verifier = 'a'.repeat(43),
   secret = 'native-apple-fixture-only-secret';
 const users: string[] = [],
-  journals: string[] = [],
   states: string[] = [];
 after(async () => {
-  await db.apple_credentials.deleteMany({ where: { id: { isIn: journals } } });
   await db.oauth_attempts.deleteMany({ where: { state_hash: { isIn: states } } });
   const families = await db.session_families.findMany({ select: { id: true }, where: { user_id: { isIn: users } } });
   if (families.records.length)
@@ -24,7 +20,7 @@ after(async () => {
   await db.auth_identities.deleteMany({ where: { user_id: { isIn: users } } });
   await cleanupUsers(db, users);
 });
-it('binds native challenge/verifier/state, exchanges once concurrently, and commits identity/session/credential together', async () => {
+it('binds native challenge/verifier/state, exchanges once concurrently, and commits identity and session together', async () => {
   const challenge = await beginNativeApple(db, hashOauthValue(verifier));
   states.push(hashOauthValue(challenge.state));
   const subject = randomUUID(),
@@ -36,10 +32,7 @@ it('binds native challenge/verifier/state, exchanges once concurrently, and comm
       calls++;
       equal(input.nonce, challenge.nonce);
       equal(input.code, 'native-code');
-      const id = await journalAppleCredential(db, key, 'native-client', 'fixture-refresh');
-      journals.push(id);
-      await bindAppleCredential(db, key, id, subject);
-      return { subject, email, emailAuthoritative: true, appleCredentialId: id };
+      return { subject, email, emailAuthoritative: true };
     }
   };
   await rejects(() =>
@@ -57,7 +50,7 @@ it('binds native challenge/verifier/state, exchanges once concurrently, and comm
   ok(winner?.status === 'fulfilled');
   users.push(winner.value.user.id);
   equal(await db.session_families.count({ where: { user_id: winner.value.user.id } }), 1);
-  equal(await db.apple_credentials.count({ where: { user_id: winner.value.user.id, state: 'active' } }), 1);
+  equal(await db.auth_identities.count({ where: { user_id: winner.value.user.id, provider: 'apple', provider_user_id: subject } }), 1);
   await rejects(() =>
     exchangeNativeApple(db, { state: challenge.state, codeVerifier: verifier, authorizationCode: 'native-code' }, client, secret)
   );

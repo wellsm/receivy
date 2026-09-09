@@ -31,8 +31,7 @@ export default {
     './src/notifications/queue.ts',
     './src/notifications/cron.ts',
     './src/proofs/queue.ts',
-    './src/proofs/cron.ts',
-    './src/auth/apple-revocation-scheduler.ts'
+    './src/proofs/cron.ts'
   ],
   stateFile: {
     path: `${APP_STAGE}-deploy`,
@@ -87,7 +86,6 @@ export default {
     RESEND_API_KEY,
     RESEND_FROM_EMAIL,
     OAUTH_PROVIDERS_CONFIG_B64,
-    APPLE_CREDENTIAL_ENCRYPTION_KEY_B64: process.env.APPLE_CREDENTIAL_ENCRYPTION_KEY_B64 ?? 'disabled',
     OAUTH_REDIRECT_ALLOW_LIST,
     PUBLIC_LINK_HMAC_SECRET,
     NOTIFICATION_EMAIL_TRANSPORT: process.env.NOTIFICATION_EMAIL_TRANSPORT ?? 'disabled',

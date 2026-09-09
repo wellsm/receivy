@@ -8631,19 +8631,10 @@
                   "properties": {
                     "deleted": {
                       "type": "boolean"
-                    },
-                    "providerRevocation": {
-                      "enum": [
-                        "not_required",
-                        "pending",
-                        "manual_action_required",
-                        "unknown"
-                      ]
                     }
                   },
                   "required": [
-                    "deleted",
-                    "providerRevocation"
+                    "deleted"
                   ],
                   "additionalProperties": false
                 }

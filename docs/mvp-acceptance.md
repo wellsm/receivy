@@ -231,8 +231,8 @@ Revisão jurídica/contato do operador e provedores reais permanecem gates exter
 Endurecimento final: envelope de erro `{ code, message, correlationId }` com cópia
 do cliente derivada apenas do `code` (texto do backend nunca é exibido); listener
 de requisição que registra só correlação e status; quotas por IP confiável via
-patches EZ4 pinados; busca de contatos e selo de vínculo (`hasAccount`); revogação
-Apple na exclusão; OpenAPI gerada por reflexão e conferida por `openapi:check`;
+patches EZ4 pinados; busca de contatos e selo de vínculo (`hasAccount`);
+OpenAPI gerada por reflexão e conferida por `openapi:check`;
 smoke HTTP e specs de autenticação/pessoas migrados para a suíte `DatabaseTester`.
 
 Gate completo em 2026-09-07, tudo verde: `pnpm verify` (lint, tipos, build web/Expo,
@@ -249,8 +249,8 @@ backend foi apontado, comportamento esperado do BFF. Container descartável remo
 Testes ajustados ao contrato novo: componentes web/mobile passaram a mockar `code`
 e a esperar a cópia do cliente; `ACCOUNT_DELETED` é importado da `common`; o spec
 de quota de comprovantes agora exige que palpites inválidos consumam somente o
-bucket do IP que os fez, e a exclusão concorrente compara `providerRevocation`
-como conjunto. Abertos: dispositivos iOS/Android, EAS, provedores reais, auditoria
+bucket do IP que os fez, e a exclusão concorrente exige que exatamente uma das
+chamadas produza trabalho. Abertos: dispositivos iOS/Android, EAS, provedores reais, auditoria
 de teclado/foco/contraste e confronto automatizado OpenAPI × BFF/Expo.
 
 ## Smoke iOS — evidência local de 2026-09-07

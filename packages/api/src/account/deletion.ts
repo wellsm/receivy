@@ -1,5 +1,4 @@
 import { HttpBadRequestError, HttpUnauthorizedError } from '@ez4/gateway';
-import { detachAppleCredentials, type ProviderRevocation } from '../auth/apple-credentials';
 import type { DbClient } from '../database';
 import type { StorageMessage } from '../proofs/queue';
 import { lockAccountReferences } from './locking';
@@ -12,7 +11,7 @@ export async function eraseAccount(
   db: DbClient,
   userId: string,
   confirmation: string
-): Promise<{ deleted: boolean; providerRevocation: ProviderRevocation; storageMessages: StorageMessage[] }> {
+): Promise<{ deleted: boolean; storageMessages: StorageMessage[] }> {
   if (confirmation !== 'EXCLUIR') throw new HttpBadRequestError('Confirme digitando EXCLUIR.');
   return db.transaction(async (tx) => {
     // Built inside the transaction so a retried erasure never reports files twice.
@@ -20,9 +19,8 @@ export async function eraseAccount(
     await lockAccountReferences(tx, 'erase');
     const user = await tx.users.findOne({ select: { id: true, email: true, deleted_at: true }, where: { id: userId }, lock: true });
     if (!user) throw new HttpUnauthorizedError();
-    if (user.deleted_at) return { deleted: true, providerRevocation: 'unknown' as const, storageMessages };
+    if (user.deleted_at) return { deleted: true, storageMessages };
     const now = new Date().toISOString();
-    const providerRevocation = await detachAppleCredentials(tx, userId, now);
     await tx.session_families.updateMany({ where: { user_id: userId }, data: { revoked_at: now, device_name: sqlNull } });
     const families = await tx.session_families.findMany({ select: { id: true }, where: { user_id: userId } });
     if (families.records.length) await tx.refresh_tokens.deleteMany({ where: { family_id: { isIn: families.records.map((x) => x.id) } } });
@@ -160,6 +158,6 @@ export async function eraseAccount(
       }
     });
     // The caller sends these only after this transaction commits.
-    return { deleted: true, providerRevocation, storageMessages };
+    return { deleted: true, storageMessages };
   });
 }

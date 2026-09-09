@@ -101,7 +101,7 @@ export function BillingCreatedScreen({ client = financialClient, id, onOpenCharg
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView contentContainerClassName="gap-4 px-5 pb-12 pt-6" showsVerticalScrollIndicator={false}>
         {!billing && !error && <ActivityIndicator accessibilityLabel="Carregando cobrança" color={ACTIVE_TINT} />}
 

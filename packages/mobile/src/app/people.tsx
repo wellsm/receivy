@@ -9,7 +9,6 @@ export default function PeopleRoute() {
 
   return (
     <PeopleScreen
-      onBack={() => (toBilling ? router.back() : router.replace("/settings"))}
       onOpenLedger={id => router.push({ pathname: "/people/[id]", params: { id } })}
       onCreated={toBilling ? person => { patchDraft({ selected: [person.id] }); router.back(); } : undefined}
     />

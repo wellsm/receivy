@@ -4,9 +4,9 @@ import { SafeAreaView } from "@/components/safe-area-view";
 import { normalizePerson, type Person } from "@receivy/common";
 import { peopleClient } from "@/people/client";
 
-type Props = { onBack: () => void; onOpenLedger?: (id: string) => void; onCreated?: (person: Person) => void; client?: typeof peopleClient };
+type Props = { onOpenLedger?: (id: string) => void; onCreated?: (person: Person) => void; client?: typeof peopleClient };
 
-export function PeopleScreen({ onBack, onOpenLedger, onCreated, client = peopleClient }: Props) {
+export function PeopleScreen({ onOpenLedger, onCreated, client = peopleClient }: Props) {
   const [people, setPeople] = useState<Person[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [archived, setArchived] = useState(false);
@@ -59,10 +59,9 @@ export function PeopleScreen({ onBack, onOpenLedger, onCreated, client = peopleC
       } },
     ]);
   }
-  return <SafeAreaView className="flex-1 bg-canvas">
+  return <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
     <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerClassName="px-5 pb-12 pt-2">
-        <Pressable accessibilityRole="button" onPress={onBack} className="min-h-12 justify-center"><Text className="font-bold text-primary">← Perfil</Text></Pressable>
         <Text className="mt-5 text-xs font-bold uppercase tracking-widest text-primary">Sua agenda</Text>
         <Text className="mt-3 text-3xl font-extrabold leading-9 text-primary-strong">Quem faz parte das suas contas?</Text>
         <Text className="mt-3 text-sm leading-6 text-muted">Cadastre pessoas para organizar cobranças. Elas não precisam ter uma conta no Receivy.</Text>

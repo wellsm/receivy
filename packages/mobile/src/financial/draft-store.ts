@@ -7,6 +7,14 @@ import type { BillingDraft } from "@receivy/common";
  */
 let parked: BillingDraft | null = null;
 
+/**
+ * The billing form pushes the Pix key screen the first time an account without a
+ * key opens it. The trip is remembered so the return visit shows the blocking
+ * panel instead of bouncing the user out again; registering a key clears it, and
+ * so does leaving the form.
+ */
+let pixRequired = false;
+
 export function saveDraft(draft: BillingDraft): void {
   parked = draft;
 }
@@ -33,4 +41,17 @@ export function patchDraft(patch: { selected?: string[]; pix?: string }): void {
 
 export function clearDraft(): void {
   parked = null;
+  pixRequired = false;
+}
+
+export function pixRequiredSeen(): boolean {
+  return pixRequired;
+}
+
+export function markPixRequiredSeen(): void {
+  pixRequired = true;
+}
+
+export function clearPixRequiredSeen(): void {
+  pixRequired = false;
 }

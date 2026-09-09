@@ -18,7 +18,9 @@ appId: dev.receivy.local
     visible: "Suas chaves Pix"
     timeout: 15000
 - assertVisible: ${EMAIL}
-- tapOn: "← Perfil"
+# The Pix screen runs under the native stack header: its back button carries the
+# previous screen's title, so "Perfil" is the way back.
+- tapOn: "Perfil"
 - extendedWaitUntil:
     visible: "Gerenciar contatos"
     timeout: 15000

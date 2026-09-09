@@ -1,5 +1,5 @@
 import { EMPTY_BILLING_DRAFT } from "@receivy/common";
-import { clearDraft, patchDraft, saveDraft, takeDraft } from "./draft-store";
+import { clearDraft, clearPixRequiredSeen, markPixRequiredSeen, patchDraft, pixRequiredSeen, saveDraft, takeDraft } from "./draft-store";
 
 function draft() {
   return { ...EMPTY_BILLING_DRAFT("America/Sao_Paulo", "2026-09-08"), selected: ["p1"], amount: "85,00" };
@@ -52,5 +52,25 @@ describe("billing draft store", () => {
     clearDraft();
 
     expect(takeDraft()).toBeNull();
+  });
+
+  it("remembers the trip to the Pix keys so the form never bounces twice", () => {
+    expect(pixRequiredSeen()).toBe(false);
+
+    markPixRequiredSeen();
+
+    expect(pixRequiredSeen()).toBe(true);
+  });
+
+  it("forgets the Pix trip when the draft is dropped or a key shows up", () => {
+    markPixRequiredSeen();
+    clearDraft();
+
+    expect(pixRequiredSeen()).toBe(false);
+
+    markPixRequiredSeen();
+    clearPixRequiredSeen();
+
+    expect(pixRequiredSeen()).toBe(false);
   });
 });

@@ -1,16 +1,18 @@
 import { addCalendarDays, calendarDate, EMPTY_BILLING_DRAFT, type BillingDetail, type Person } from "@receivy/common";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { FinancialRequestError } from "@/financial/client";
-import { clearDraft, patchDraft, saveDraft, takeDraft } from "@/financial/draft-store";
+import { clearDraft, markPixRequiredSeen, patchDraft, pixRequiredSeen, saveDraft, takeDraft } from "@/financial/draft-store";
 import { BillingFormScreen } from "./billing-form-screen";
 
 let mockKeys = 0;
 let mockFocus: (() => void | (() => void)) | null = null;
+let mockRemoveListeners: (() => void)[] = [];
 
 jest.mock("expo-crypto", () => ({ randomUUID: () => `key-${++mockKeys}` }));
 
 // The route stays mounted across the side trip, so the focus callback is kept
-// here and replayed by the test instead of remounting the screen.
+// here and replayed by the test instead of remounting the screen. `beforeRemove`
+// listeners are collected the same way, to stand in for the native pop.
 jest.mock("expo-router", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories cannot close over module imports
   const react = require("react");
@@ -20,6 +22,17 @@ jest.mock("expo-router", () => {
       mockFocus = callback;
       react.useEffect(() => callback(), [callback]);
     },
+    useNavigation: () => ({
+      addListener: (event: string, listener: () => void) => {
+        if (event === "beforeRemove") {
+          mockRemoveListeners.push(listener);
+        }
+
+        return () => {
+          mockRemoveListeners = mockRemoveListeners.filter((known) => known !== listener);
+        };
+      },
+    }),
   };
 });
 
@@ -27,6 +40,15 @@ jest.mock("expo-router", () => {
 async function refocus() {
   await act(async () => {
     mockFocus?.();
+  });
+}
+
+/** Fires the navigator's `beforeRemove`, the way the native header does on a pop. */
+async function popScreen() {
+  await act(async () => {
+    for (const listener of mockRemoveListeners) {
+      listener();
+    }
   });
 }
 
@@ -53,9 +75,16 @@ function peopleApi(pages: { people: Person[]; nextCursor: string | null }[] = [{
   return { list };
 }
 
+const nubank = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, archivedAt: null };
+
+/** Wallets without a key gate the form, so the shared fixture carries one. */
+function emptyWallet() {
+  return financialApi({ paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }) });
+}
+
 function financialApi(overrides: Record<string, unknown> = {}) {
   return {
-    paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }),
+    paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [nubank] }),
     profile: jest.fn().mockResolvedValue({ user: { timezone: TIMEZONE } }),
     createBilling: jest.fn().mockResolvedValue({ id: "b1", charges: [{ id: "c1" }] }),
     patchBilling: jest.fn(),
@@ -66,7 +95,7 @@ function financialApi(overrides: Record<string, unknown> = {}) {
 async function quickForm(client = financialApi(), people = peopleApi(), props: Record<string, unknown> = {}) {
   const onSaved = jest.fn();
 
-  await render(<BillingFormScreen client={client as never} people={people} onSaved={onSaved} onBack={jest.fn()} {...props} />);
+  await render(<BillingFormScreen client={client as never} people={people} onSaved={onSaved} {...props} />);
   await screen.findByRole("button", { name: "Ana" });
 
   return { client, people, onSaved };
@@ -74,8 +103,8 @@ async function quickForm(client = financialApi(), people = peopleApi(), props: R
 
 async function fillQuickBilling() {
   await fireEvent.press(screen.getByRole("button", { name: "Ana" }));
-  await fireEvent.changeText(screen.getByLabelText("Valor"), "100,00");
-  await fireEvent.changeText(screen.getByLabelText("Descrição"), "Mercado QA");
+  await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+  await fireEvent.changeText(screen.getByLabelText("Título"), "Mercado QA");
 }
 
 const onceBilling: BillingDetail = {
@@ -139,7 +168,8 @@ describe("BillingFormScreen", () => {
     await fillQuickBilling();
     await fireEvent.press(screen.getByRole("button", { name: "Cotas" }));
     await fireEvent.changeText(screen.getByLabelText("Cotas de Ana"), "3");
-    expect(screen.getByText("3 cotas · R$ 75,00")).toBeOnTheScreen();
+    expect(screen.getByText("R$ 75,00")).toBeOnTheScreen();
+    expect(screen.queryByText(/cotas?/)).toBeNull();
 
     await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
@@ -205,17 +235,95 @@ describe("BillingFormScreen", () => {
 
   it("adds the quick amounts to the typed value", async () => {
     await quickForm();
-    await fireEvent.changeText(screen.getByLabelText("Valor"), "85,00");
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "8500");
     await fireEvent.press(screen.getByRole("button", { name: "+ R$ 10" }));
 
     expect(screen.getByLabelText("Valor")).toHaveDisplayValue("95,00");
   });
 
-  it("fills an empty description with the category label", async () => {
+  it("types the amount like a bank keypad and posts the cents", async () => {
+    const { client } = await quickForm();
+    const amount = screen.getByLabelText("Valor");
+
+    expect(amount).toHaveDisplayValue("0,00");
+
+    await fireEvent.changeText(amount, "1");
+    expect(amount).toHaveDisplayValue("0,01");
+
+    await fireEvent.changeText(amount, "0,010");
+    expect(amount).toHaveDisplayValue("0,10");
+
+    await fireEvent.changeText(amount, "0,1");
+    expect(amount).toHaveDisplayValue("0,01");
+
+    await fireEvent.changeText(amount, "123456");
+    expect(amount).toHaveDisplayValue("1.234,56");
+
+    await fireEvent.press(screen.getByRole("button", { name: "Ana" }));
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Mercado QA");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ totalCents: 123_456 });
+  });
+
+  it("names the third step Título and drops the old Descrição copy", async () => {
+    await quickForm();
+
+    expect(screen.getByLabelText("Título")).toHaveProp("placeholder", "Ex.: churrasco da firma");
+    expect(screen.getByText("Título")).toBeOnTheScreen();
+    expect(screen.queryByLabelText("Descrição")).toBeNull();
+    expect(screen.queryByText("Descrição")).toBeNull();
+  });
+
+  it("fills an empty title with the category label", async () => {
     await quickForm();
     await fireEvent.press(screen.getByRole("button", { name: "Transporte" }));
 
-    expect(screen.getByLabelText("Descrição")).toHaveDisplayValue("Transporte");
+    expect(screen.getByLabelText("Título")).toHaveDisplayValue("Transporte");
+  });
+
+  it("keeps each mode's split values while the user switches modes", async () => {
+    const { client } = await quickForm();
+
+    await fillQuickBilling();
+    await fireEvent.press(screen.getByRole("button", { name: "Valor fixo" }));
+    await fireEvent.changeText(screen.getByLabelText("Valor de Ana"), "60,00");
+
+    await fireEvent.press(screen.getByRole("button", { name: "Porcentagem" }));
+    expect(screen.getByLabelText("Porcentagem de Ana")).toHaveDisplayValue("");
+
+    await fireEvent.press(screen.getByRole("button", { name: "Valor fixo" }));
+    expect(screen.getByLabelText("Valor de Ana")).toHaveDisplayValue("60,00");
+
+    await fireEvent.press(screen.getByRole("button", { name: "Cotas" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0].split).toEqual({
+      mode: "shares",
+      parts: [{ kind: "person", personId: "p1", shares: 1 }, { kind: "owner", shares: 1 }],
+    });
+  });
+
+  it("shows the owner remainder as read-only text on a fixed split", async () => {
+    await quickForm();
+    await fillQuickBilling();
+    await fireEvent.press(screen.getByRole("button", { name: "Valor fixo" }));
+    await fireEvent.changeText(screen.getByLabelText("Valor de Ana"), "60,00");
+
+    expect(screen.getByText("Você fica com R$ 40,00")).toBeOnTheScreen();
+    expect(screen.queryByLabelText("Valor de Eu")).toBeNull();
+  });
+
+  it("drops the owner remainder and warns when the fixed split exceeds the total", async () => {
+    await quickForm();
+    await fillQuickBilling();
+    await fireEvent.press(screen.getByRole("button", { name: "Valor fixo" }));
+    await fireEvent.changeText(screen.getByLabelText("Valor de Ana"), "160,00");
+
+    expect(screen.getByText("O rateio ultrapassa o total.")).toBeOnTheScreen();
+    expect(screen.queryByText(/Você fica com/)).toBeNull();
   });
 
   it("explains inline what is missing instead of sending a broken billing", async () => {
@@ -256,7 +364,7 @@ describe("BillingFormScreen", () => {
     await waitFor(() => expect(screen.queryByLabelText("Buscar contatos")).toBeNull());
 
     await fireEvent.changeText(screen.getByLabelText("Valor"), "100,00");
-    await fireEvent.changeText(screen.getByLabelText("Descrição"), "Mercado QA");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Mercado QA");
     await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
 
@@ -315,13 +423,38 @@ describe("BillingFormScreen", () => {
     expect(screen.getByLabelText("Valor")).toHaveDisplayValue("85,00");
   });
 
-  it("drops the parked draft when I leave the form", async () => {
-    const onBack = jest.fn();
+  it("keeps the parked draft while a side trip is on top of the form", async () => {
     const onCreateContact = jest.fn();
 
-    await quickForm(financialApi(), peopleApi(), { onBack, onCreateContact });
-    await fireEvent.changeText(screen.getByLabelText("Valor"), "85,00");
+    await quickForm(financialApi(), peopleApi(), { onCreateContact });
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "8500");
     await fireEvent.press(screen.getByRole("button", { name: "Novo contato" }));
+
+    expect(takeDraft()).toMatchObject({ amount: "85,00" });
+  });
+
+  it("drops the parked draft when the form itself is popped", async () => {
+    const onCreateContact = jest.fn();
+
+    await quickForm(financialApi(), peopleApi(), { onCreateContact });
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "8500");
+    await fireEvent.press(screen.getByRole("button", { name: "Novo contato" }));
+    await popScreen();
+
+    expect(takeDraft()).toBeNull();
+  });
+
+  it("shows no manual back link when the native header owns the route", async () => {
+    await quickForm();
+
+    expect(screen.queryByRole("button", { name: "Voltar" })).toBeNull();
+    expect(screen.queryByText("← Voltar")).toBeNull();
+  });
+
+  it("keeps its own way out when the billings screen embeds the form", async () => {
+    const onBack = jest.fn();
+
+    await quickForm(financialApi(), peopleApi(), { onBack });
     await fireEvent.press(screen.getByRole("button", { name: "Voltar" }));
 
     expect(onBack).toHaveBeenCalled();
@@ -379,6 +512,55 @@ describe("BillingFormScreen", () => {
     expect(takeDraft()).toBeNull();
   });
 
+  it("parks the draft and opens the Pix keys once when the account has no key", async () => {
+    const onCreatePix = jest.fn();
+
+    await quickForm(emptyWallet(), peopleApi(), { onCreatePix });
+
+    await waitFor(() => expect(onCreatePix).toHaveBeenCalledWith(true));
+    expect(pixRequiredSeen()).toBe(true);
+    expect(takeDraft()).not.toBeNull();
+
+    // Typing after the trip must not push a second time.
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "7000");
+
+    expect(onCreatePix).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks the form instead of bouncing again when the user returns without a key", async () => {
+    markPixRequiredSeen();
+
+    const onCreatePix = jest.fn();
+
+    await quickForm(emptyWallet(), peopleApi(), { onCreatePix });
+
+    expect(await screen.findByText("Cadastre uma chave Pix para criar cobranças.")).toBeOnTheScreen();
+    expect(onCreatePix).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Criar cobrança" })).toBeDisabled();
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "7000");
+    await fireEvent.press(screen.getByRole("button", { name: "Cadastrar chave" }));
+
+    expect(onCreatePix).toHaveBeenCalledWith(true);
+    expect(takeDraft()).toMatchObject({ amount: "70,00" });
+  });
+
+  it("clears the Pix reminder and never gates the form once a key exists", async () => {
+    markPixRequiredSeen();
+
+    const client = financialApi({
+      paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [{ id: "pix-2", label: "Nubank", pixKey: "a@b.com", pixKeyType: "email", isDefault: true, archivedAt: null }] }),
+    });
+    const onCreatePix = jest.fn();
+
+    await quickForm(client, peopleApi(), { onCreatePix });
+
+    expect(screen.queryByText("Cadastre uma chave Pix para criar cobranças.")).toBeNull();
+    expect(onCreatePix).not.toHaveBeenCalled();
+    expect(pixRequiredSeen()).toBe(false);
+    expect(screen.getByRole("button", { name: "Criar cobrança" })).toBeEnabled();
+  });
+
   it("preselects the default Pix key for a fresh billing", async () => {
     const client = financialApi({
       paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [{ id: "pix-2", label: "Nubank", pixKey: "ana@example.com", isDefault: true, archivedAt: null }] }),
@@ -403,9 +585,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("A resposta não chegou.");
-    expect(screen.getByLabelText("Descrição")).toBeDisabled();
-    // Leaving must stay possible: the billing may already exist on the server.
-    expect(screen.getByRole("button", { name: "Voltar" })).toBeEnabled();
+    expect(screen.getByLabelText("Título")).toBeDisabled();
 
     await fireEvent.press(screen.getByRole("button", { name: "Tentar criar novamente" }));
     await waitFor(() => expect(client.createBilling).toHaveBeenCalledTimes(2));
@@ -421,7 +601,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Contato arquivado.");
-    expect(screen.getByLabelText("Descrição")).toBeEnabled();
+    expect(screen.getByLabelText("Título")).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Tentar criar novamente" })).toBeNull();
   });
 

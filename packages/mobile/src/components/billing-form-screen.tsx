@@ -1,12 +1,18 @@
 import {
   addCalendarDays,
+  addCentsToAmount,
+  amountDigitsToInput,
+  amountInputToDigits,
   BILLING_CATEGORIES,
   billingSummaryLine,
   buildBillingInput,
   calendarDate,
   draftTotalCents,
   EMPTY_BILLING_DRAFT,
+  EMPTY_SPLIT_VALUES,
+  formatAmountDigits,
   formatMoney,
+  parseBRLCents,
   previewBillingSplit,
   splitParties,
   splitPartyKey,
@@ -18,14 +24,15 @@ import {
   type Person,
   type SplitMode,
   type SplitParty,
+  type SplitValues,
 } from "@receivy/common";
 import * as Crypto from "expo-crypto";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useFocusEffect, useNavigation } from "expo-router";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/safe-area-view";
 import { financialClient, FinancialRequestError, type FinancialClient } from "@/financial/client";
-import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
+import { clearDraft, clearPixRequiredSeen, markPixRequiredSeen, pixRequiredSeen, saveDraft, takeDraft } from "@/financial/draft-store";
 import { peopleClient } from "@/people/client";
 import { ContactCarousel } from "./contact-carousel";
 import { ContactPickerSheet } from "./contact-picker-sheet";
@@ -40,15 +47,21 @@ type BillingFormScreenProps = {
   people?: Pick<typeof peopleClient, "list">;
   billing?: BillingDetail | null;
   onSaved: (billing: BillingDetail) => void;
-  onBack: () => void;
+  /**
+   * Only the embedded edit inside `BillingsScreen` needs its own way out; the
+   * routed form is popped by the native header instead.
+   */
+  onBack?: () => void;
   /** Absent when the screen cannot navigate to the contact form. */
   onCreateContact?: () => void;
   /** Absent when the screen cannot navigate to the Pix keys. */
-  onCreatePix?: () => void;
+  onCreatePix?: (required?: boolean) => void;
 };
 
 const FROZEN_NOTE = "Cobranças já geradas só permitem categoria, Pix e lembretes.";
 const LOAD_ERROR = "Não foi possível carregar os dados.";
+const PIX_GATE_NOTE = "Cadastre uma chave Pix para criar cobranças.";
+const NO_VALUES: Record<string, string> = {};
 
 const TYPES: { value: BillingType; label: string }[] = [
   { value: "once", label: "À vista" },
@@ -141,6 +154,31 @@ function dueText(start: string, today: string): string {
   return `${start.slice(8, 10)}/${start.slice(5, 7)}`;
 }
 
+/** Rebuilds the per-mode text buckets from a saved split, so editing starts on the mode it was created with. */
+function valuesFromBilling(billing: BillingDetail): SplitValues {
+  const values = EMPTY_SPLIT_VALUES();
+
+  for (const part of billing.split.parts) {
+    const key = part.kind === "owner" ? "owner" : part.personId;
+
+    if ("amountCents" in part) {
+      values.fixed[key] = moneyText(part.amountCents);
+      continue;
+    }
+
+    if ("basisPoints" in part) {
+      values.percentage[key] = String(part.basisPoints / 100).replace(".", ",");
+      continue;
+    }
+
+    if ("shares" in part) {
+      values.shares[key] = String(part.shares);
+    }
+  }
+
+  return values;
+}
+
 function draftFromBilling(billing: BillingDetail): BillingDraft {
   const parts = billing.split.parts;
 
@@ -157,18 +195,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     timezone: billing.timezone,
     pix: billing.paymentMethodId ?? "",
     mode: billing.split.mode,
-    values: Object.fromEntries(
-      parts.map((part) => [
-        part.kind === "owner" ? "owner" : part.personId,
-        "amountCents" in part
-          ? moneyText(part.amountCents)
-          : "basisPoints" in part
-            ? String(part.basisPoints / 100).replace(".", ",")
-            : "shares" in part
-              ? String(part.shares)
-              : "",
-      ]),
-    ),
+    values: valuesFromBilling(billing),
     category: billing.category,
     reminders: billing.reminders.map((reminder) => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
   };
@@ -212,6 +239,7 @@ function Chip({ label, active, disabled, onPress }: { label: string; active: boo
 }
 
 export function BillingFormScreen({ client = financialClient, people = peopleClient, billing = null, onSaved, onBack, onCreateContact, onCreatePix }: BillingFormScreenProps) {
+  const navigation = useNavigation();
   const [draft, setDraft] = useState<BillingDraft>(() =>
     billing ? draftFromBilling(billing) : EMPTY_BILLING_DRAFT("America/Sao_Paulo", calendarDate()),
   );
@@ -223,6 +251,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [gated, setGated] = useState(false);
   const loaded = useRef(false);
 
   const editing = Boolean(billing);
@@ -248,9 +277,14 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
 
           const active = wallet.paymentMethods.filter((method) => !method.archivedAt);
 
+          if (active.length) {
+            clearPixRequiredSeen();
+          }
+
           setRecent(agenda.people.slice(0, 12));
           setDirectory(agenda.people);
           setMethods(active);
+          setGated(!billing && !active.length);
           setDraft((current) => {
             const base = stored ?? current;
             const pix = billing || stored ? base.pix : (active.find((method) => method.isDefault)?.id ?? base.pix);
@@ -292,6 +326,28 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
     }, [billing, load]),
   );
 
+  // Pushing the contact or Pix screen keeps this route mounted, so the parked
+  // draft has to survive it. Only popping the form for good throws it away.
+  useEffect(() => {
+    return navigation.addListener("beforeRemove", () => {
+      clearDraft();
+    });
+  }, [navigation]);
+
+  // A billing without an active Pix key has nowhere to be paid, so the first
+  // load without one parks the draft and opens the key screen. Coming back
+  // still without a key must not bounce the user out again: the trip is
+  // remembered and the form shows the blocking panel instead.
+  useEffect(() => {
+    if (!gated || !ready || !onCreatePix || pixRequiredSeen()) {
+      return;
+    }
+
+    markPixRequiredSeen();
+    saveDraft(draft);
+    onCreatePix(true);
+  }, [draft, gated, onCreatePix, ready]);
+
   function update(patch: Partial<BillingDraft>) {
     if (locked) {
       return;
@@ -315,7 +371,22 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   }
 
   function addAmount(cents: number) {
-    update({ amount: moneyText(draftTotalCents(draft) + cents) });
+    update({ amount: addCentsToAmount(draft.amount, cents) });
+  }
+
+  // The field behaves like a bank keypad: whatever the keyboard hands back is
+  // reduced to its digits and re-rendered, so typing pushes cents to the left
+  // and the backspace drops the last digit.
+  function typeAmount(value: string) {
+    update({ amount: amountDigitsToInput(amountInputToDigits(value)) });
+  }
+
+  function changeSplitValue(key: string, value: string) {
+    if (draft.mode === "equal") {
+      return;
+    }
+
+    update({ values: { ...draft.values, [draft.mode]: { ...draft.values[draft.mode], [key]: value } } });
   }
 
   function patchBody(input: BillingInput) {
@@ -386,20 +457,57 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
     return key === "owner" ? "Eu" : (directory.find((person) => person.id === key)?.name ?? "Contato");
   }
 
+  /** What the owner keeps on a fixed split: the preview's share, or the remainder of a half-typed screen. */
+  function ownerRemainderCents(): number | null {
+    const previewed = amounts.owner;
+
+    if (previewed !== undefined) {
+      return previewed;
+    }
+
+    if (!totalCents) {
+      return null;
+    }
+
+    let used = 0;
+
+    for (const personId of draft.selected) {
+      const typed = draft.values.fixed[personId];
+
+      if (!typed) {
+        continue;
+      }
+
+      try {
+        used += parseBRLCents(typed);
+      } catch {
+        return null;
+      }
+    }
+
+    return used > totalCents ? null : totalCents - used;
+  }
+
+  const modeValues = draft.mode === "equal" ? NO_VALUES : draft.values[draft.mode];
   const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map((personId) => ({ kind: "person", personId })) : splitParties(draft);
   const rows: SplitRow[] = rowParties.map((party) => {
     const key = splitPartyKey(party);
     const cents = amounts[key];
-    const amount = cents === undefined ? "" : money(cents);
-    const shares = draft.values[key] || "1";
 
     return {
       key,
       name: nameOf(key),
-      value: draft.values[key] ?? "",
-      amountText: draft.mode === "shares" && amount ? `${shares} cota${shares === "1" ? "" : "s"} · ${amount}` : amount,
+      value: modeValues[key] ?? "",
+      // A fixed row is the amount itself, so repeating it beside the field says nothing.
+      amountText: draft.mode === "fixed" || cents === undefined ? "" : money(cents),
     };
   });
+
+  const remainder = draft.mode === "fixed" && draft.owner ? ownerRemainderCents() : null;
+
+  if (remainder !== null) {
+    rows.push({ key: "owner", name: nameOf("owner"), value: "", amountText: "", readonlyText: `Você fica com ${money(remainder)}` });
+  }
 
   const participants = draft.selected.length + (draft.owner ? 1 : 0);
   const perPerson = draft.mode === "equal" ? (Object.values(amounts)[0] ?? 0) : totalCents;
@@ -411,26 +519,42 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   const retry = editing ? "Tentar salvar novamente" : "Tentar criar novamente";
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
-      <View className="flex-row items-center gap-3 px-5 pb-2 pt-2">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Voltar"
-          onPress={() => {
-            clearDraft();
-            onBack();
-          }}
-          className="min-h-11 justify-center"
-        >
-          <Text className="font-bold text-primary">← Voltar</Text>
-        </Pressable>
-        <Text accessibilityRole="header" className="text-lg font-extrabold text-primary-strong">
-          {editing ? "Editar cobrança" : "Nova cobrança"}
-        </Text>
-      </View>
+    <SafeAreaView className="flex-1 bg-canvas" edges={onBack ? ["top"] : []}>
+      {onBack && (
+        <View className="flex-row items-center gap-3 px-5 pb-2 pt-2">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Voltar"
+            onPress={() => {
+              clearDraft();
+              onBack();
+            }}
+            className="min-h-11 justify-center"
+          >
+            <Text className="font-bold text-primary">← Voltar</Text>
+          </Pressable>
+          <Text accessibilityRole="header" className="text-lg font-extrabold text-primary-strong">
+            {editing ? "Editar cobrança" : "Nova cobrança"}
+          </Text>
+        </View>
+      )}
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 px-5 pb-40 pt-2" showsVerticalScrollIndicator={false}>
         {frozen && <Text className="rounded-2xl bg-primary-soft/50 p-4 text-sm text-primary-strong">{FROZEN_NOTE}</Text>}
+        {gated && (
+          <View className="gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+            <Text className="font-semibold text-amber-900">{PIX_GATE_NOTE}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cadastrar chave"
+              disabled={!onCreatePix}
+              onPress={() => onCreatePix && leaveTo(() => onCreatePix(true))}
+              className="min-h-12 items-center justify-center rounded-xl border border-outline bg-canvas"
+            >
+              <Text className="font-bold text-primary">Cadastrar chave</Text>
+            </Pressable>
+          </View>
+        )}
         {!ready && !error && <ActivityIndicator accessibilityLabel="Carregando dados" color={ACTIVE_TINT} />}
 
         <Step index={1} title="Para quem?">
@@ -469,11 +593,11 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
             <TextInput
               accessibilityLabel="Valor"
               editable={!locked && !frozen}
-              inputMode="decimal"
+              keyboardType="number-pad"
               placeholder="0,00"
               placeholderTextColor={MUTED_TINT}
-              value={draft.amount}
-              onChangeText={(value) => update({ amount: value })}
+              value={formatAmountDigits(amountInputToDigits(draft.amount))}
+              onChangeText={typeAmount}
               className="min-h-14 flex-1 text-2xl font-extrabold text-ink"
             />
           </View>
@@ -484,12 +608,12 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
           </View>
         </Step>
 
-        <Step index={3} title="Descrição">
+        <Step index={3} title="Título">
           <TextInput
-            accessibilityLabel="Descrição"
+            accessibilityLabel="Título"
             editable={!locked && !frozen}
             maxLength={500}
-            placeholder="Ex.: mercado do mês"
+            placeholder="Ex.: churrasco da firma"
             placeholderTextColor={MUTED_TINT}
             value={draft.description}
             onChangeText={(value) => update({ description: value })}
@@ -554,7 +678,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
             rows={rows}
             hint={hint ?? ""}
             disabled={locked || frozen}
-            onChange={(key, value) => update({ values: { ...draft.values, [key]: value } })}
+            onChange={changeSplitValue}
           />
         </Step>
 
@@ -594,7 +718,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
               />
             ))}
             <Chip label="Nenhuma" active={!draft.pix} disabled={locked} onPress={() => update({ pix: "" })} />
-            {!editing && onCreatePix && <Chip label="Cadastrar chave" active={false} disabled={locked} onPress={() => leaveTo(onCreatePix)} />}
+            {!editing && !gated && onCreatePix && <Chip label="Cadastrar chave" active={false} disabled={locked} onPress={() => leaveTo(onCreatePix)} />}
           </View>
         </Step>
 
@@ -660,9 +784,9 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={action}
-          disabled={busy}
+          disabled={busy || gated}
           onPress={submit}
-          className={`min-h-14 items-center justify-center rounded-2xl bg-primary ${busy ? "opacity-50" : ""}`}
+          className={`min-h-14 items-center justify-center rounded-2xl bg-primary ${busy || gated ? "opacity-50" : ""}`}
         >
           {busy ? <ActivityIndicator color="white" /> : <Text className="font-bold text-white">{action}</Text>}
         </Pressable>

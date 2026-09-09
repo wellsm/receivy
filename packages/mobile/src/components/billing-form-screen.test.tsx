@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT, type BillingDetail, type Person } from "@receivy/common";
+import { addCalendarDays, calendarDate, EMPTY_BILLING_DRAFT, type BillingDetail, type Person } from "@receivy/common";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { FinancialRequestError } from "@/financial/client";
 import { clearDraft, patchDraft, saveDraft, takeDraft } from "@/financial/draft-store";
@@ -34,7 +34,11 @@ function person(id: string, name: string, lastBilledAt: string | null = null): P
   return { id, name, email: null, phone: null, archivedAt: null, createdAt: "2026-09-01T00:00:00Z", hasAccount: false, lastBilledAt };
 }
 
-const ana = person("p1", "Ana", "2026-09-07T12:00:00Z");
+// The hint the carousel renders is relative to the wall clock, so the fixture has to be too.
+const TIMEZONE = "America/Sao_Paulo";
+const yesterday = () => addCalendarDays(calendarDate(new Date(), TIMEZONE), -1);
+
+const ana = person("p1", "Ana", `${yesterday()}T12:00:00.000Z`);
 const bruno = person("p2", "Bruno");
 
 function peopleApi(pages: { people: Person[]; nextCursor: string | null }[] = [{ people: [ana, bruno], nextCursor: null }]) {
@@ -52,7 +56,7 @@ function peopleApi(pages: { people: Person[]; nextCursor: string | null }[] = [{
 function financialApi(overrides: Record<string, unknown> = {}) {
   return {
     paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }),
-    profile: jest.fn().mockResolvedValue({ user: { timezone: "America/Sao_Paulo" } }),
+    profile: jest.fn().mockResolvedValue({ user: { timezone: TIMEZONE } }),
     createBilling: jest.fn().mockResolvedValue({ id: "b1", charges: [{ id: "c1" }] }),
     patchBilling: jest.fn(),
     ...overrides,

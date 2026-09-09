@@ -1,4 +1,4 @@
-import type { BillingDetail, BillingInput, BillingPatch, BillingsPage, ChargeDetail, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage, ProofDetail, ProofUploadIntent, ProofUploadInput } from "@receivy/common";
+import type { BillingDetail, BillingInput, BillingInvite, BillingPatch, BillingsPage, ChargeDetail, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage, ProofDetail, ProofUploadIntent, ProofUploadInput } from "@receivy/common";
 import { authClient } from "@/auth/client";
 import { apiErrorMessage } from "@receivy/common";
 
@@ -26,6 +26,8 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     patchBilling(id: string, patch: BillingPatch) {
       return request<BillingDetail>(`billings/${id}`, { method: "PATCH", body: JSON.stringify(patch) }, "Não foi possível salvar a cobrança.");
     },
+    invite(id: string) { return request<BillingInvite>(`billings/${id}/invite`, { method: "POST" }, "Não foi possível criar o convite."); },
+    revokeInvite(id: string) { return request<void>(`billings/${id}/invite`, { method: "DELETE" }, "Não foi possível revogar o convite."); },
     timeline(query = "") { return request<TimelinePage>(`timeline${query ? `?${query}` : ""}`); },
     paymentMethods() { return request<PaymentMethodsPage>("payment-methods"); },
     savePaymentMethod(input: PaymentMethodInput, id?: string) { return request<PaymentMethod>(id ? `payment-methods/${id}` : "payment-methods", { method: id ? "PATCH" : "POST", body: JSON.stringify(input) }); },

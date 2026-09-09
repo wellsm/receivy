@@ -47,7 +47,6 @@ const WEB_EXCLUSIONS: Record<string, string> = {
 // Authenticated paths the native app deliberately does not call yet.
 const NATIVE_DEFERRED: Record<string, string> = {
   "billings/{p}/preview": "native reads previews from the billing detail payload",
-  "billings/{p}/invite": "native invite sharing lands with the mobile billings list",
   "invites/{p}/accept": "an invite link always opens in the browser; there is no native join flow",
 };
 

@@ -6,9 +6,10 @@ export default function BillingsRoute() {
 
   return (
     <BillingsScreen
-      onBack={() => router.replace("/")}
       onCreate={() => router.push("/charges/new")}
       onOpenCharge={(id) => router.push({ pathname: "/charges/[id]", params: { id } })}
+      onOpenFeed={() => router.replace("/")}
+      onOpenSettings={() => router.push("/settings")}
     />
   );
 }

@@ -3,7 +3,7 @@
 import { pixKeyField, type PaymentMethod, type PaymentMethodsPage, type PixKeyType } from "@receivy/common";
 import { Building2, Copy, IdCard, KeyRound, Mail, MoreVertical, Plus, Smartphone } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
 
@@ -26,6 +26,7 @@ const ICONS: Record<PixKeyType, ComponentType<{ size?: number; "aria-hidden"?: b
 };
 
 const LIST_ERROR = "Não foi possível carregar suas chaves Pix.";
+const COPY_ERROR = "Não foi possível copiar a chave.";
 const SAFETY_NOTE = "Seus dados Pix ficam protegidos e nunca são compartilhados sem sua autorização.";
 
 function formHref({ returnTo, required }: PixSettingsScreenProps): string {
@@ -46,8 +47,15 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const trigger = useRef<HTMLButtonElement>(null);
 
   const newKeyHref = formHref({ returnTo, required });
+
+  /** Escape dismisses the popover and hands the keyboard back to the `⋮` button. */
+  function closeMenu() {
+    trigger.current?.focus();
+    setMenu(null);
+  }
 
   const load = useCallback(() => {
     return browserFetch("/api/financial/payment-methods")
@@ -72,11 +80,19 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
     setError("");
     setNotice("");
 
+    // A plain-http origin has no `navigator.clipboard` at all, and awaiting the
+    // optional chain would resolve happily: the guard has to come first, or the
+    // screen announces a copy that never happened.
+    if (!navigator.clipboard?.writeText) {
+      setError(COPY_ERROR);
+      return;
+    }
+
     try {
-      await navigator.clipboard?.writeText(method.pixKey);
+      await navigator.clipboard.writeText(method.pixKey);
       setNotice("Chave copiada");
     } catch {
-      setError("Não foi possível copiar a chave.");
+      setError(COPY_ERROR);
     }
   }
 
@@ -152,7 +168,18 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
           const name = method.label || LABELS[method.pixKeyType];
 
           return (
-            <article key={method.id} className={method.isDefault ? "pix-key-card is-default" : "pix-key-card"}>
+            <article
+              key={method.id}
+              className={method.isDefault ? "pix-key-card is-default" : "pix-key-card"}
+              onKeyDown={event => {
+                if (event.key !== "Escape" || menu !== method.id) {
+                  return;
+                }
+
+                event.stopPropagation();
+                closeMenu();
+              }}
+            >
               <div className="pix-key-card-top">
                 <span className="billing-card-icon" aria-hidden="true">
                   <Icon size={18} aria-hidden={true} />
@@ -166,7 +193,9 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
                   type="button"
                   className="billings-icon-button"
                   aria-label={`Mais ações da chave ${name}`}
+                  aria-haspopup="true"
                   aria-expanded={menu === method.id}
+                  ref={menu === method.id ? trigger : undefined}
                   onClick={() => setMenu(current => (current === method.id ? null : method.id))}
                 >
                   <MoreVertical size={16} aria-hidden="true" />

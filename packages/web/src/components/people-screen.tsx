@@ -3,7 +3,7 @@
 import { contactBadge, formatPhoneBR, initialsOf, type PeoplePage, type Person } from "@receivy/common";
 import { ChevronRight, Plus } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 
 const LIST_ERROR = "Não foi possível carregar os contatos.";
@@ -33,8 +33,17 @@ export function PeopleScreen({ returnTo }: { returnTo?: string }) {
   // to keep travelling: the list hands its own return path to the new contact.
   const newContactHref = returnTo ? `/people/new?returnTo=${encodeURIComponent(returnTo)}` : "/people/new";
 
+  // Every request carries the version it was born with. A slower `Carregar mais`
+  // must not append the previous query's page onto fresh search results, rewind
+  // the cursor or clear a spinner nobody is waiting on, so each response checks
+  // that it is still the one the screen asked for. Unmounting bumps the counter
+  // too, which drops the in-flight request instead of setting state on a dead
+  // component.
+  const version = useRef(0);
+
   const load = useCallback(
     (after?: string) => {
+      const mine = ++version.current;
       const query = new URLSearchParams({ ...(search ? { search } : {}), ...(after ? { cursor: after } : {}) });
 
       return browserFetch(`/api/people?${query}`)
@@ -45,25 +54,52 @@ export function PeopleScreen({ returnTo }: { returnTo?: string }) {
 
           const page = (await response.json()) as PeoplePage;
 
+          if (mine !== version.current) {
+            return;
+          }
+
           setPeople(previous => (after ? [...previous, ...page.people] : page.people));
           setCursor(page.nextCursor);
           setError("");
         })
-        .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : LIST_ERROR))
-        .finally(() => setLoading(false));
+        .catch((reason: unknown) => {
+          if (mine !== version.current) {
+            return;
+          }
+
+          setError(reason instanceof Error ? reason.message : LIST_ERROR);
+        })
+        .finally(() => {
+          if (mine !== version.current) {
+            return;
+          }
+
+          setLoading(false);
+        });
     },
     [search],
   );
 
   useEffect(() => {
-    const timer = setTimeout(() => setSearch(term.trim()), 300);
+    const timer = setTimeout(() => {
+      // A new query starts a new page run: the old cursor belongs to the results
+      // it is replacing.
+      setCursor(null);
+      setSearch(term.trim());
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [term]);
 
+  const invalidate = useCallback(() => {
+    version.current++;
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+
+    return invalidate;
+  }, [load, invalidate]);
 
   return (
     <section className="financial-page people-page">

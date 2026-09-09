@@ -177,7 +177,8 @@ export function ContactForm({ personId, returnTo }: ContactFormProps) {
         <label htmlFor="contact-email">E-mail</label>
         <input
           id="contact-email"
-          type="text"
+          type="email"
+          inputMode="email"
           maxLength={254}
           autoComplete="email"
           placeholder="contato@email.com"

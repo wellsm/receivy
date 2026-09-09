@@ -35,6 +35,8 @@ export function PixKeyForm({ returnTo, required = false }: PixKeyFormProps) {
   const [touched, setTouched] = useState(false);
   const [label, setLabel] = useState("");
   const [makeDefault, setMakeDefault] = useState(true);
+  // A ref, not state: the list request reads it from a closure created at mount.
+  const defaultTouched = useRef(false);
   const [accountEmail, setAccountEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -51,8 +53,9 @@ export function PixKeyForm({ returnTo, required = false }: PixKeyFormProps) {
         }
 
         // The very first key of an account is its main one; later keys only take
-        // over when the person says so.
-        setMakeDefault(!page.paymentMethods.some(method => !method.archivedAt));
+        // over when the person says so. A choice made while this request was in
+        // flight wins — the answer must never flip a toggle the user just set.
+        setMakeDefault(current => (defaultTouched.current ? current : !page.paymentMethods.some(method => !method.archivedAt)));
       })
       .catch(() => undefined);
 
@@ -218,7 +221,15 @@ export function PixKeyForm({ returnTo, required = false }: PixKeyFormProps) {
         <input id="pix-label" type="text" maxLength={120} placeholder="Nubank" value={label} onChange={event => setLabel(event.target.value)} />
 
         <label className="owner-toggle" htmlFor="pix-default">
-          <input id="pix-default" type="checkbox" checked={makeDefault} onChange={event => setMakeDefault(event.target.checked)} />
+          <input
+            id="pix-default"
+            type="checkbox"
+            checked={makeDefault}
+            onChange={event => {
+              defaultTouched.current = true;
+              setMakeDefault(event.target.checked);
+            }}
+          />
           Definir como chave principal
         </label>
       </fieldset>

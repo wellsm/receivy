@@ -69,6 +69,44 @@ it("copies a key to the clipboard and announces it", async () => {
   expect(await screen.findByText("Chave copiada")).toBeInTheDocument();
 });
 
+it("reports a failure instead of announcing a copy the browser cannot make", async () => {
+  api();
+  render(<PixSettingsScreen />);
+
+  const user = userEvent.setup();
+  // A plain-http origin exposes no clipboard at all.
+  const stub = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+
+  try {
+    await user.click((await screen.findAllByRole("button", { name: "Copiar chave" }))[0]!);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível copiar a chave.");
+    expect(screen.queryByText("Chave copiada")).not.toBeInTheDocument();
+  } finally {
+    if (stub) {
+      Object.defineProperty(navigator, "clipboard", stub);
+    }
+  }
+});
+
+it("closes the key menu on Escape and returns focus to its button", async () => {
+  api();
+  render(<PixSettingsScreen />);
+
+  const user = userEvent.setup();
+  const trigger = (await screen.findAllByRole("button", { name: /Mais ações/ }))[1]!;
+
+  await user.click(trigger);
+
+  expect(screen.getByRole("button", { name: "Excluir" })).toBeInTheDocument();
+
+  await user.keyboard("{Escape}");
+
+  expect(screen.queryByRole("button", { name: "Excluir" })).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+});
+
 it("promotes another key to the main one", async () => {
   const sent = api();
   render(<PixSettingsScreen />);

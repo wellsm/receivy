@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PeopleScreen } from "./people-screen";
@@ -88,6 +88,45 @@ describe("PeopleScreen", () => {
 
     expect(await screen.findByRole("link", { name: "Contato Bruno Lima" })).toBeInTheDocument();
     expect(browserFetch).toHaveBeenLastCalledWith(expect.stringContaining("cursor=cursor-2"));
+  });
+
+  it("ignores a slow Carregar mais page once a new search replaced the list", async () => {
+    const carla = { ...bruno, id: "carla", name: "Carla Dias", nickname: null, displayName: "Carla Dias" };
+    let release: (page: Response) => void = () => undefined;
+    const stale = new Promise<Response>(resolve => {
+      release = resolve;
+    });
+
+    vi.mocked(browserFetch).mockImplementation(async path => {
+      const url = String(path);
+
+      if (url.includes("cursor=cursor-2")) {
+        return stale;
+      }
+
+      if (url.includes("search=Bruno")) {
+        return Response.json({ people: [bruno], nextCursor: null });
+      }
+
+      return Response.json({ people: [ana], nextCursor: "cursor-2" });
+    });
+
+    render(<PeopleScreen />);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Carregar mais" }));
+    await user.type(screen.getByLabelText("Buscar contatos"), "Bruno");
+
+    expect(await screen.findByRole("link", { name: "Contato Bruno Lima" })).toBeInTheDocument();
+
+    await act(async () => {
+      release(Response.json({ people: [carla], nextCursor: "cursor-3" }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(screen.queryByRole("link", { name: "Contato Carla Dias" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Contato Aninha" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Carregar mais" })).not.toBeInTheDocument();
   });
 
   it("sends the new contact button to the dedicated form, carrying the return path", async () => {

@@ -74,6 +74,11 @@ function remainderHint(draft: BillingDraft, totalCents: number): string {
   }
 
   if (draft.mode === 'fixed') {
+    // When the owner takes part, the remainder is already the owner's share: no hint to close it.
+    if (draft.owner) {
+      return '';
+    }
+
     try {
       const values = draft.values.fixed;
       const used = draft.selected.reduce((total, personId) => total + parseBRLCents(values[personId] ?? ''), 0);

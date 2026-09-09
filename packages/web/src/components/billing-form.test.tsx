@@ -24,6 +24,7 @@ const today = () => calendarDate(new Date(), TIMEZONE);
 const ana = { id: "p1", name: "Ana", email: null, phone: null, archivedAt: null, createdAt: "2026-01-01", hasAccount: false, lastBilledAt: `${addCalendarDays(today(), -1)}T10:00:00.000Z` };
 const bruno = { id: "p2", name: "Bruno", email: null, phone: null, archivedAt: null, createdAt: "2026-01-01", hasAccount: false, lastBilledAt: null };
 const method = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, archivedAt: null };
+const PIX_SETUP = "/settings/pix?returnTo=%2Fcharges%2Fnew&required=1";
 
 type Sent = { path: string; init: RequestInit };
 
@@ -216,12 +217,13 @@ it("computes the live amount for each share row", async () => {
   expect(screen.queryByText(/\d+ cotas?/)).not.toBeInTheDocument();
 });
 
-it("warns about the missing remainder on a fixed split", async () => {
+it("warns about the missing remainder on a fixed split when the owner does not participate", async () => {
   api();
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("button", { name: /Ana/ }));
   await user.type(screen.getByLabelText("Valor"), "100,00");
+  await user.click(screen.getByRole("checkbox", { name: "Eu também participo" }));
   await user.click(screen.getByRole("radio", { name: "Valor fixo" }));
   await user.type(screen.getByLabelText("Valor de Ana"), "40,00");
 
@@ -240,6 +242,8 @@ it("shows the owner remainder as read-only text on a fixed split", async () => {
   expect(screen.getByText("Você fica com R$ 40,00")).toBeInTheDocument();
   expect(screen.queryByLabelText("Valor de Eu")).not.toBeInTheDocument();
   expect(screen.queryByText("R$ 60,00")).not.toBeInTheDocument();
+  // The read-only remainder row above is the only place the owner's share shows up.
+  expect(screen.queryByText(/Faltam/)).not.toBeInTheDocument();
 });
 
 it("drops the owner remainder and warns when the fixed split exceeds the total", async () => {
@@ -314,7 +318,7 @@ it("saves the draft and navigates when the user registers a Pix key", async () =
   await user.type(await screen.findByLabelText("Valor"), "70,00");
   await user.click(screen.getByRole("button", { name: "Cadastrar chave" }));
 
-  expect(routerMock.push).toHaveBeenCalledWith("/settings/pix?returnTo=/charges/new");
+  expect(routerMock.push).toHaveBeenCalledWith(PIX_SETUP);
   expect(window.sessionStorage.getItem("receivy.billingDraft")).toContain("70,00");
 });
 
@@ -451,8 +455,6 @@ it("shows the validation error inline when no contact is selected", async () => 
 
   expect(screen.getByRole("alert")).toHaveTextContent("Selecione ao menos um contato.");
 });
-
-const PIX_SETUP = "/settings/pix?returnTo=%2Fcharges%2Fnew&required=1";
 
 function withoutPixKeys() {
   return api(path => (path.includes("payment-methods") ? Response.json({ paymentMethods: [] }) : undefined));

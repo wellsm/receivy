@@ -48,14 +48,37 @@ describe('previewBillingSplit', () => {
     });
   });
 
-  it('reports the missing remainder of a fixed split', () => {
+  it('reports the missing remainder of a fixed split when the owner does not participate', () => {
     const preview = previewBillingSplit({
       ...base,
+      owner: false,
       mode: 'fixed',
       values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00', p2: '45,00' } }
     });
 
     expect(preview.error).toBe(`Faltam ${formatMoney({ amountCents: 500, currency: 'BRL' })}`);
+  });
+
+  it('prices the remainder as the owner share without a hint when the owner participates', () => {
+    const preview = previewBillingSplit({
+      ...base,
+      owner: true,
+      mode: 'fixed',
+      values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00', p2: '45,00' } }
+    });
+
+    expect(preview).toEqual({ amounts: { p1: 4000, p2: 4500, owner: 500 }, error: null });
+  });
+
+  it('still rejects a fixed split that overshoots the total when the owner participates', () => {
+    const preview = previewBillingSplit({
+      ...base,
+      owner: true,
+      mode: 'fixed',
+      values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '60,00', p2: '45,00' } }
+    });
+
+    expect(preview.error).toBe('O rateio ultrapassa o total.');
   });
 
   it('reports a percentage sum that is not 100%', () => {

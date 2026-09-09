@@ -657,7 +657,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
             Nenhuma
           </button>
           {!editing && !gated && (
-            <button type="button" className="chip" onClick={() => leaveTo(`/settings/pix?returnTo=${RETURN_TO}`)}>
+            <button type="button" className="chip" onClick={() => leaveTo(PIX_SETUP)}>
               Cadastrar chave
             </button>
           )}

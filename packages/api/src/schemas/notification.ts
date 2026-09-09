@@ -20,7 +20,7 @@ export interface NotificationDeliverySchema extends Database.Schema {
   device_id?: String.UUID;
   device_token_hash?: String.Max<64>;
   channel: 'email' | 'push';
-  template: 'initial' | 'reminder';
+  template: 'initial' | 'reminder' | 'manual';
   state: 'pending' | 'sending' | 'accepted' | 'delivered' | 'disabled' | 'failed' | 'uncertain' | 'suppressed';
   render_inputs: String.Max<4000>;
   body_hash: String.Max<64>;
@@ -31,6 +31,7 @@ export interface NotificationDeliverySchema extends Database.Schema {
   first_attempt_at?: String.DateTime;
   provider_id?: String.Max<200>;
   reason?: String.Max<80>;
+  queued_at?: String.DateTime;
   created_at: String.DateTime;
   updated_at: String.DateTime;
 }

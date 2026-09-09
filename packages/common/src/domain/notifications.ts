@@ -12,7 +12,7 @@ export type NotificationDevice = {
 export type NotificationDelivery = {
   id: string;
   channel: 'email' | 'push';
-  template: 'initial' | 'reminder';
+  template: 'initial' | 'reminder' | 'manual';
   state: 'pending' | 'sending' | 'accepted' | 'delivered' | 'disabled' | 'failed' | 'uncertain' | 'suppressed';
   attempts: number;
   reason: string | null;

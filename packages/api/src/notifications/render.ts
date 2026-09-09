@@ -11,7 +11,7 @@ export interface RenderInputs {
   origin: string;
   from: string;
 }
-export function renderNotice(input: RenderInputs, template: 'initial' | 'reminder', secret: string) {
+export function renderNotice(input: RenderInputs, template: 'initial' | 'reminder' | 'manual', secret: string) {
   const token = issuePublicChargeToken({
     publicId: input.publicId,
     version: input.version,

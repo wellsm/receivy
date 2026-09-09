@@ -1,4 +1,4 @@
 export type AccountProfileInput = { name: string; locale: 'pt-BR'; timezone: string; country: 'BR' };
 export const ACCOUNT_DELETED =
-  'Conta excluída no Receivy. A remoção de arquivos e a revogação Apple podem continuar em segundo plano. Se usou Apple, confira Ajustes > seu nome > Início de Sessão e Segurança > Iniciar sessão com a Apple e remova o Receivy caso ainda apareça. Isso não altera registros compartilhados preservados.';
+  'Conta excluída no Receivy. Arquivos e avisos pendentes são removidos em segundo plano. Isso não altera registros compartilhados preservados.';
 export const ACCOUNT_DELETION_UNCONFIRMED = 'Sessão encerrada; não foi possível confirmar a exclusão.';

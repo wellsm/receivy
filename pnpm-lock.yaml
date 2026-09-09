@@ -94,6 +94,9 @@ importers:
       '@ez4/project':
         specifier: 0.52.0
         version: 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/queue':
+        specifier: 0.52.0
+        version: 0.52.0
       '@ez4/raw-pg':
         specifier: file:../../vendor/ez4-raw-pg-0.52.0.tgz
         version: file:vendor/ez4-raw-pg-0.52.0.tgz
@@ -116,12 +119,18 @@ importers:
       '@ez4/aws-gateway':
         specifier: 0.52.0
         version: 0.52.0(patch_hash=76cb9d59f00810ab1899054c336421174999a5da63091b0b01fe6288ed726fc0)
+      '@ez4/aws-queue':
+        specifier: 0.52.0
+        version: 0.52.0
       '@ez4/local-database':
         specifier: 0.52.0
         version: 0.52.0
       '@ez4/local-gateway':
         specifier: 0.52.0
         version: 0.52.0(patch_hash=90c9e89be731eb7461d6f5cc081c8b970d0e4fae1d3ce18ecd09ac6c614e26f7)
+      '@ez4/local-queue':
+        specifier: 0.52.0
+        version: 0.52.0
       '@ez4/local-scheduler':
         specifier: 0.52.0
         version: 0.52.0
@@ -413,6 +422,10 @@ packages:
     resolution: {integrity: sha512-0ZSAgmEda33xPqVPt+bx2KzrXV1cUCKRRVPGliLu+V7DzHPa04CqPSi1maGEM4O0LDP0iI6HRSW5ULloNwayNw==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-sqs@3.1127.0':
+    resolution: {integrity: sha512-M0CQ5fy/jDuK6kcUBVOpciqm4rjiSR1AEKGt875EcbSjGmDccTU8V8YDbEmWNcJlJnZTaRawj+WLREe4MTYKcQ==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/client-sts@3.1126.0':
     resolution: {integrity: sha512-5h0Ro+RIToYQbjL/yfMDH8pGTwOEuzXuTKM3punYhpvf3WXyApg9j7DsACw3+Q5qDfG0VQjef2qCi+SgmVz0wg==}
     engines: {node: '>=20.0.0'}
@@ -477,6 +490,10 @@ packages:
 
   '@aws-sdk/middleware-sdk-s3@3.972.75':
     resolution: {integrity: sha512-wMIsNumRVKaNMKhvU/s9VrdEwE8S6gSzXp4RygFG5BEMnGkkXf8cjh8zf7cKJBpUDpqTWqwbz5isEgp9rH6Lng==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/middleware-sdk-sqs@3.972.42':
+    resolution: {integrity: sha512-D/O6iHAqlm0b430vIGewanSsr5RzaWbSDFlHYdKLWlZb4kaMKBmb44ReNHAFEKj5tNRY8pysw0qfciosB/VcJg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/nested-clients@3.997.44':
@@ -1511,6 +1528,10 @@ packages:
     resolution: {integrity: sha512-x5JmJ+pLjLhOcvpSord7sjkadI7DKL1UrEkz6QRAFJfWVytHadwqfiO4CZ07ZLF6I5U1pexAMN+aH+txRDLEUg==}
     engines: {node: '>=22.7'}
 
+  '@ez4/aws-queue@0.52.0':
+    resolution: {integrity: sha512-3h4ypbD3CElL41EH4szFNGVSahN3hTtHbp0nOgPxdE+iJpIxDZRussVRtF2ZTgV4WxPu7U99elhjMYNIwwR9uA==}
+    engines: {node: '>=22.7'}
+
   '@ez4/aws-vpc@0.52.0':
     resolution: {integrity: sha512-pvQSh8ToR3dNB5IbfxXoGjzHeDVxCqAoPwuMV8kW7/tzcB1wC39VBGI1rfj3pCtMbpRtPUlFkmRt9cwcRHw6CA==}
     engines: {node: '>=22.7'}
@@ -1547,6 +1568,10 @@ packages:
     resolution: {integrity: sha512-EXmXrcWUyJ360bX+fK2vitnNePZ/wD2BlFA/4o8cS/gJqHA0tjmrVZYDOb9GqZ0udw5FjOzIp6uClnCwRGlSnQ==}
     engines: {node: '>=22.7'}
 
+  '@ez4/local-queue@0.52.0':
+    resolution: {integrity: sha512-o8U9ThSZUXwZXn/mTUQYFx8i4Cx/Lm0cO98k3eqFQO5swv1qn7Ey6GmFW8MR/ewinx0MEYbERmtxXEQFHltKHQ==}
+    engines: {node: '>=22.7'}
+
   '@ez4/local-scheduler@0.52.0':
     resolution: {integrity: sha512-sfUt7EfnaY8tNNJbrCilQ0Ucxk5TeEZL8WBPpKuL/e5+dpgCUeZEUX8eNPJL+P9Mdy2OUCj66zPtlkNTDvLJnA==}
     engines: {node: '>=22.7'}
@@ -1575,6 +1600,10 @@ packages:
     resolution: {integrity: sha512-k0V8U8Hi9oZf+lg/KQLb3apXhNvd39uGOuwGWZtuvXD3fK2VMVAWOMldogOKDtefzqoDFmyAJqYwxw2IV/vGAQ==}
     engines: {node: '>=22.7'}
     hasBin: true
+
+  '@ez4/queue@0.52.0':
+    resolution: {integrity: sha512-tLDQk0/+NCbZ3S7bqSj6jFRuE25NYLbyd7+6u/7kUgcGO+rDurEx2skPTYJqXBOf5BeU1B6UHF6urXw86jbRFQ==}
+    engines: {node: '>=22.7'}
 
   '@ez4/raw-pg@file:vendor/ez4-raw-pg-0.52.0.tgz':
     resolution: {integrity: sha512-oTU18WJVW+3Kny6ZKtcwfbz5hiij9oeK1olGqNyUpmN8ztLSPN58Vy3BSCQPS05JX/eWdJpZBthFzfY4Fcy49Q==, tarball: file:vendor/ez4-raw-pg-0.52.0.tgz}
@@ -7133,6 +7162,18 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-sqs@3.1127.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/middleware-sdk-sqs': 3.972.42
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
   '@aws-sdk/client-sts@3.1126.0':
     dependencies:
       '@aws-sdk/core': 3.977.9
@@ -7282,6 +7323,13 @@ snapshots:
     dependencies:
       '@aws-sdk/core': 3.977.9
       '@aws-sdk/signature-v4-multi-region': 3.996.46
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
+  '@aws-sdk/middleware-sdk-sqs@3.972.42':
+    dependencies:
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
@@ -8581,6 +8629,22 @@ snapshots:
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
 
+  '@ez4/aws-queue@0.52.0':
+    dependencies:
+      '@aws-sdk/client-sqs': 3.1127.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
+      '@ez4/aws-function': 0.52.0
+      '@ez4/aws-identity': 0.52.0
+      '@ez4/aws-logs': 0.52.0
+      '@ez4/common': 0.52.0
+      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/queue': 0.52.0
+      '@ez4/schema': 0.52.0
+      '@ez4/state': 0.52.0
+      '@ez4/transform': 0.52.0
+      '@ez4/utils': 0.52.0
+      '@ez4/validator': 0.52.0
+
   '@ez4/aws-vpc@0.52.0':
     dependencies:
       '@aws-sdk/client-ec2': 3.1126.0
@@ -8653,6 +8717,16 @@ snapshots:
       '@ez4/utils': 0.52.0
       '@ez4/validator': 0.52.0
 
+  '@ez4/local-queue@0.52.0':
+    dependencies:
+      '@ez4/common': 0.52.0
+      '@ez4/local-common': 0.52.0(patch_hash=d3798e99bf23b021a759fb8e75ed6fecf0ab4caced18dbfbec1249e150615a46)
+      '@ez4/logger': 0.52.0
+      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/queue': 0.52.0
+      '@ez4/utils': 0.52.0
+      '@ez4/validator': 0.52.0
+
   '@ez4/local-scheduler@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
@@ -8716,6 +8790,16 @@ snapshots:
       '@ez4/reflection': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
+
+  '@ez4/queue@0.52.0':
+    dependencies:
+      '@ez4/common': 0.52.0
+      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/reflection': 0.52.0
+      '@ez4/schema': 0.52.0
+      '@ez4/transform': 0.52.0
+      '@ez4/utils': 0.52.0
+      '@ez4/validator': 0.52.0
 
   '@ez4/raw-pg@file:vendor/ez4-raw-pg-0.52.0.tgz':
     dependencies:

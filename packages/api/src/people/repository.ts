@@ -4,7 +4,7 @@ import type { PeoplePage, Person, PersonInput } from '@receivy/common';
 import { lockAccountReferences } from '../account/locking';
 import type { DbClient } from '../database';
 
-const SELECT = { id: true, name: true, linked_user_id: true, archived_at: true, created_at: true } as const;
+const SELECT = { id: true, name: true, nickname: true, linked_user_id: true, archived_at: true, created_at: true } as const;
 const sqlNull = null as unknown as string | undefined;
 const PAGE_SIZE = 50;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -25,28 +25,47 @@ async function lastBilledDates(db: DbClient, personIds: string[]): Promise<Map<s
   return new Map(rows.map((row) => [String(row['person_id']), String(row['last'])]));
 }
 
-async function details(
-  db: DbClient,
-  rows: { id: string; name: string; linked_user_id?: string; archived_at?: string; created_at: string }[]
-): Promise<Person[]> {
+/** Pending charges per person of the page; a single aggregate keeps the listing at one extra read. */
+async function pendingCharges(db: DbClient, personIds: string[]): Promise<Map<string, number>> {
+  const rows = await db.rawQuery(
+    `SELECT c.debtor_person_id, COUNT(*) AS active
+    FROM charges c WHERE c.debtor_person_id = ANY(string_to_array(:ids::text, ',')::uuid[])
+    AND c.state = 'pending' GROUP BY c.debtor_person_id`,
+    { ids: personIds.join(',') }
+  );
+  return new Map(rows.map((row) => [String(row['debtor_person_id']), Number(row['active'])]));
+}
+
+type PersonRow = {
+  id: string;
+  name: string;
+  nickname?: string;
+  linked_user_id?: string;
+  archived_at?: string;
+  created_at: string;
+};
+
+async function details(db: DbClient, rows: PersonRow[]): Promise<Person[]> {
   if (!rows.length) return [];
+  const ids = rows.map((row) => row.id);
   const { records } = await db.person_contacts.findMany({
     select: { person_id: true, type: true, value: true },
-    where: { person_id: { isIn: rows.map((row) => row.id) } }
+    where: { person_id: { isIn: ids } }
   });
-  const billed = await lastBilledDates(
-    db,
-    rows.map((row) => row.id)
-  );
+  const billed = await lastBilledDates(db, ids);
+  const active = await pendingCharges(db, ids);
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
+    nickname: row.nickname ?? null,
+    displayName: row.nickname || row.name,
     hasAccount: !!row.linked_user_id,
     archivedAt: row.archived_at ?? null,
     createdAt: row.created_at,
     email: records.find((contact) => contact.person_id === row.id && contact.type === 'email')?.value ?? null,
     phone: records.find((contact) => contact.person_id === row.id && contact.type === 'phone')?.value ?? null,
-    lastBilledAt: billed.get(row.id) ?? null
+    lastBilledAt: billed.get(row.id) ?? null,
+    activeCharges: active.get(row.id) ?? 0
   }));
 }
 
@@ -179,6 +198,20 @@ export async function listPeople(
   return { people: await details(db, page), nextCursor: records.length > PAGE_SIZE ? page.at(-1)!.id : null };
 }
 
+async function assertOnlyNicknameChanged(tx: DbClient, existing: { id: string; name: string }, input: PersonInput): Promise<void> {
+  const { records } = await tx.person_contacts.findMany({
+    select: { type: true, value: true },
+    where: { person_id: existing.id }
+  });
+  const stored = (type: 'email' | 'phone') => records.find((contact) => contact.type === type)?.value ?? undefined;
+
+  if (input.name === existing.name && (input.email ?? undefined) === stored('email') && (input.phone ?? undefined) === stored('phone')) {
+    return;
+  }
+
+  throw new HttpConflictError('Contato vinculado a uma conta: só o apelido pode mudar.');
+}
+
 export async function savePerson(db: DbClient, ownerId: string, input: PersonInput, id?: string): Promise<Person> {
   return db.transaction(async (tx) => {
     // Serialize agenda mutations so two concurrent inserts cannot both pass the
@@ -186,12 +219,16 @@ export async function savePerson(db: DbClient, ownerId: string, input: PersonInp
     await lockOwner(tx, ownerId);
     const existing = id
       ? await tx.people.findOne({
-          select: { id: true, active_email: true, archived_at: true },
+          select: { id: true, name: true, active_email: true, linked_user_id: true, archived_at: true },
           where: { id, owner_id: ownerId },
           lock: true
         })
       : undefined;
     if (id && (!existing || existing.archived_at)) throw new HttpNotFoundError();
+    // A linked contact mirrors a real account: the API keeps the account-derived fields (name, e-mail
+    // and phone) stable and lets the owner change only the nickname they call that person by.
+    // Creation is untouched; a person can only become linked through a verified e-mail.
+    if (existing?.linked_user_id) await assertOnlyNicknameChanged(tx, existing, input);
     if (input.email) {
       const duplicate = await tx.people.findOne({
         select: { id: true },
@@ -207,7 +244,7 @@ export async function savePerson(db: DbClient, ownerId: string, input: PersonInp
       : undefined;
     const now = new Date().toISOString();
     const personId = id ?? crypto.randomUUID();
-    const data = { name: input.name, active_email: input.email ?? sqlNull, updated_at: now };
+    const data = { name: input.name, nickname: input.nickname ?? sqlNull, active_email: input.email ?? sqlNull, updated_at: now };
     const row = existing
       ? await tx.people.updateOne({
           select: SELECT,
@@ -251,16 +288,11 @@ export async function savePerson(db: DbClient, ownerId: string, input: PersonInp
         });
       }
     }
-    return {
-      id: row.id,
-      name: row.name,
-      hasAccount: !!verifiedUser,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-      archivedAt: null,
-      createdAt: row.created_at,
-      lastBilledAt: existing ? ((await lastBilledDates(tx, [personId])).get(personId) ?? null) : null
-    };
+    // `updateOne` reports the row as it was before the write, so the response reads the stored one
+    // back after the channels are written and carries the same shape the listings do.
+    const saved = await tx.people.findOne({ select: SELECT, where: { id: personId, owner_id: ownerId } });
+    if (!saved) throw new HttpNotFoundError();
+    return (await details(tx, [saved]))[0]!;
   });
 }
 

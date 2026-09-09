@@ -15,8 +15,9 @@ import { cleanupUsers, createUser, db } from '../fixtures/financial';
 const owner = randomUUID(),
   stranger = randomUUID(),
   joining = randomUUID(),
-  paged = randomUUID();
-const ids = [owner, stranger, joining, paged];
+  paged = randomUUID(),
+  contacts = randomUUID();
+const ids = [owner, stranger, joining, paged, contacts];
 const emails = ids.map((id) => `auth-people-${id}@example.com`);
 const repo = createAuthRepository(db);
 const codeHashKey = 'auth-people-test-code-secret-only';
@@ -29,6 +30,7 @@ describe('auth and people repositories on dedicated PostgreSQL', () => {
     await createUser(db, { id: owner, email: emails[0]!, name: 'Owner' });
     await createUser(db, { id: stranger, email: emails[1]!, name: 'Stranger' });
     await createUser(db, { id: paged, email: emails[3]!, name: 'Paged' });
+    await createUser(db, { id: contacts, email: emails[4]!, name: 'Contacts' });
     const now = new Date().toISOString();
     await db.users.insertOne({
       data: {
@@ -72,14 +74,67 @@ describe('auth and people repositories on dedicated PostgreSQL', () => {
     equal(session.user.id, joining);
     equal((await listPeople(db, owner)).people.find((row) => row.id === person.id)?.hasAccount, true);
     equal((await db.people.findOne({ select: { linked_user_id: true }, where: { id: person.id } }))?.linked_user_id, joining);
-    await savePerson(db, owner, { name: 'Ana' }, person.id);
-    equal((await db.people.findOne({ select: { linked_user_id: true }, where: { id: person.id } }))?.linked_user_id, null);
-    await savePerson(db, owner, input, person.id);
+    // A linked contact mirrors an account: only the nickname is the owner's to change.
+    await rejects(() => savePerson(db, owner, { name: 'Ana' }, person.id), HttpConflictError);
+    await rejects(() => savePerson(db, owner, { ...input, phone: undefined }, person.id), HttpConflictError);
+    equal((await db.people.findOne({ select: { linked_user_id: true }, where: { id: person.id } }))?.linked_user_id, joining);
+    const nicknamed = await savePerson(db, owner, normalizePerson({ ...input, nickname: '  Aninha  da  Silva ' }), person.id);
+    equal(nicknamed.nickname, 'Aninha da Silva');
+    equal(nicknamed.displayName, 'Aninha da Silva');
+    equal(nicknamed.name, 'Ana Silva');
     equal((await db.people.findOne({ select: { linked_user_id: true }, where: { id: person.id } }))?.linked_user_id, joining);
     await archivePerson(db, owner, person.id);
     await archivePerson(db, owner, person.id);
     equal((await listPeople(db, owner, undefined, true)).people[0]?.email, emails[2]);
     ok((await savePerson(db, owner, input)).id !== person.id);
+  });
+
+  it('keeps the nickname, derives displayName and counts only pending charges', async () => {
+    const plain = await savePerson(db, contacts, { name: 'Camila Soares' });
+    equal(plain.nickname, null);
+    equal(plain.displayName, 'Camila Soares');
+    equal(plain.activeCharges, 0);
+
+    const saved = await savePerson(db, contacts, normalizePerson({ name: 'Camila Soares', nickname: '  Mila  ' }), plain.id);
+    equal(saved.nickname, 'Mila');
+    equal(saved.displayName, 'Mila');
+
+    const split = { mode: 'equal' as const, parts: [{ kind: 'person' as const, personId: plain.id }] };
+    for (const suffix of ['a', 'b', 'c']) {
+      await createBilling(
+        db,
+        contacts,
+        `nickname-charge-${suffix}`,
+        { type: 'once', description: 'Rateio', totalCents: 3000, startDate: '2026-12-20', timezone: 'America/Sao_Paulo', split },
+        new Date('2026-03-10T12:00:00Z')
+      );
+    }
+
+    const charges = await db.charges.findMany({ select: { id: true }, where: { debtor_person_id: plain.id } });
+    equal(charges.records.length, 3);
+    await db.charges.updateOne({
+      select: { id: true },
+      where: { id: charges.records[0]!.id },
+      data: { state: 'paid', paid_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    });
+    await db.charges.updateOne({
+      select: { id: true },
+      where: { id: charges.records[1]!.id },
+      data: { state: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    });
+
+    const listed = (await listPeople(db, contacts)).people.find((row) => row.id === plain.id);
+    equal(listed?.activeCharges, 1);
+    equal(listed?.displayName, 'Mila');
+
+    const recent = (await listPeople(db, contacts, undefined, false, '', 'recent')).people.find((row) => row.id === plain.id);
+    equal(recent?.activeCharges, 1);
+    equal(recent?.nickname, 'Mila');
+
+    // An empty nickname clears it and the full name takes the display slot back.
+    const cleared = await savePerson(db, contacts, normalizePerson({ name: 'Camila Soares', nickname: '   ' }), plain.id);
+    equal(cleared.nickname, null);
+    equal(cleared.displayName, 'Camila Soares');
   });
 
   it('serializes duplicate email creation and pages 52 owned records without repetition', async () => {

@@ -63,7 +63,7 @@ describe('billings on native PostgreSQL', () => {
     equal((await createBilling(db, OWNER, 'once-key', once())).id, created.id);
     await rejects(() => createBilling(db, OWNER, 'once-key', once({ totalCents: 9_001 })), HttpConflictError);
     await rejects(() => getBilling(db, OTHER, created.id), HttpNotFoundError);
-    await savePerson(db, OWNER, { name: 'Bruno Editado', email: 'billing-other@example.com' }, personId);
+    await savePerson(db, OWNER, { name: 'Bruno Editado', email: 'billing-edited@example.com' }, personId);
     const snapshot = await getCharge(db, OWNER, created.charges[0]!.id);
     deepEqual(snapshot.recipient, { name: 'Bruno', email: 'billing-debtor@example.com' });
     equal(snapshot.pix?.key, '52998224725');

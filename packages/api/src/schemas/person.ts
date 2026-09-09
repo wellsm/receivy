@@ -6,6 +6,7 @@ export interface PersonSchema extends Database.Schema {
   owner_id: String.UUID;
   linked_user_id?: String.UUID;
   name: String.Max<120>;
+  nickname?: String.Max<60>;
   active_email?: String.Max<254>;
   archived_at?: String.DateTime;
   created_at: String.DateTime;

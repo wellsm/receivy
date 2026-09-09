@@ -1017,6 +1017,19 @@
                     "name": {
                       "type": "string"
                     },
+                    "nickname": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
                     "email": {
                       "anyOf": [
                         {
@@ -1062,17 +1075,23 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "activeCharges": {
+                      "type": "number"
                     }
                   },
                   "required": [
                     "id",
                     "name",
+                    "nickname",
+                    "displayName",
                     "email",
                     "phone",
                     "archivedAt",
                     "createdAt",
                     "hasAccount",
-                    "lastBilledAt"
+                    "lastBilledAt",
+                    "activeCharges"
                   ],
                   "additionalProperties": false
                 }
@@ -1120,6 +1139,10 @@
                     "type": "string",
                     "maxLength": 120
                   },
+                  "nickname": {
+                    "type": "string",
+                    "maxLength": 60
+                  },
                   "email": {
                     "type": "string",
                     "maxLength": 254
@@ -1149,6 +1172,19 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "nickname": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "displayName": {
                       "type": "string"
                     },
                     "email": {
@@ -1196,17 +1232,23 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "activeCharges": {
+                      "type": "number"
                     }
                   },
                   "required": [
                     "id",
                     "name",
+                    "nickname",
+                    "displayName",
                     "email",
                     "phone",
                     "archivedAt",
                     "createdAt",
                     "hasAccount",
-                    "lastBilledAt"
+                    "lastBilledAt",
+                    "activeCharges"
                   ],
                   "additionalProperties": false
                 }
@@ -1290,6 +1332,19 @@
                           "name": {
                             "type": "string"
                           },
+                          "nickname": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
                           "email": {
                             "anyOf": [
                               {
@@ -1335,17 +1390,23 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "activeCharges": {
+                            "type": "number"
                           }
                         },
                         "required": [
                           "id",
                           "name",
+                          "nickname",
+                          "displayName",
                           "email",
                           "phone",
                           "archivedAt",
                           "createdAt",
                           "hasAccount",
-                          "lastBilledAt"
+                          "lastBilledAt",
+                          "activeCharges"
                         ],
                         "additionalProperties": false
                       }
@@ -1401,6 +1462,10 @@
                     "type": "string",
                     "maxLength": 120
                   },
+                  "nickname": {
+                    "type": "string",
+                    "maxLength": 60
+                  },
                   "email": {
                     "type": "string",
                     "maxLength": 254
@@ -1430,6 +1495,19 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "nickname": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "displayName": {
                       "type": "string"
                     },
                     "email": {
@@ -1477,17 +1555,23 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "activeCharges": {
+                      "type": "number"
                     }
                   },
                   "required": [
                     "id",
                     "name",
+                    "nickname",
+                    "displayName",
                     "email",
                     "phone",
                     "archivedAt",
                     "createdAt",
                     "hasAccount",
-                    "lastBilledAt"
+                    "lastBilledAt",
+                    "activeCharges"
                   ],
                   "additionalProperties": false
                 }
@@ -6993,6 +7077,19 @@
                         "name": {
                           "type": "string"
                         },
+                        "nickname": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
                         "email": {
                           "anyOf": [
                             {
@@ -7038,17 +7135,23 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "activeCharges": {
+                          "type": "number"
                         }
                       },
                       "required": [
                         "id",
                         "name",
+                        "nickname",
+                        "displayName",
                         "email",
                         "phone",
                         "archivedAt",
                         "createdAt",
                         "hasAccount",
-                        "lastBilledAt"
+                        "lastBilledAt",
+                        "activeCharges"
                       ],
                       "additionalProperties": false
                     },

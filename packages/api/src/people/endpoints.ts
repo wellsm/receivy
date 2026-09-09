@@ -19,12 +19,12 @@ declare class ListResponse implements Http.Response {
 
 declare class CreateRequest implements Http.Request {
   identity: SessionIdentity;
-  body: { name: String.Max<120>; email?: String.Max<254>; phone?: String.Max<40> };
+  body: { name: String.Max<120>; nickname?: String.Max<60>; email?: String.Max<254>; phone?: String.Max<40> };
 }
 declare class UpdateRequest implements Http.Request {
   identity: SessionIdentity;
   parameters: { id: String.UUID };
-  body: { name: String.Max<120>; email?: String.Max<254>; phone?: String.Max<40> };
+  body: { name: String.Max<120>; nickname?: String.Max<60>; email?: String.Max<254>; phone?: String.Max<40> };
 }
 declare class ArchiveRequest implements Http.Request {
   identity: SessionIdentity;

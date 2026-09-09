@@ -12,6 +12,7 @@ export * from './domain/billing-draft';
 export * from './domain/billing-plan';
 export * from './domain/billing-preview';
 export * from './domain/calendar-labels';
+export * from './domain/contact-format';
 export * from './domain/contracts';
 export * from './domain/feed';
 export * from './domain/financial-form';

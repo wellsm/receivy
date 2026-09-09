@@ -1,6 +1,6 @@
 import type { ChargeSummary, Direction } from './contracts';
 
-export type BadgeTone = 'danger' | 'info' | 'success' | 'neutral';
+export type BadgeTone = 'danger' | 'info' | 'success' | 'warning' | 'neutral';
 export type ChargeBadge = { label: string; tone: BadgeTone };
 export type ChargeAction = { kind: 'open' | 'remind'; label: string };
 

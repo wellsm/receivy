@@ -2,12 +2,17 @@
 
 import {
   addCalendarDays,
+  addCentsToAmount,
+  amountDigitsToInput,
+  amountInputToDigits,
   BILLING_CATEGORIES,
   billingSummaryLine,
   buildBillingInput,
   calendarDate,
   draftTotalCents,
   EMPTY_BILLING_DRAFT,
+  EMPTY_SPLIT_VALUES,
+  formatAmountDigits,
   formatMoney,
   parseBRLCents,
   previewBillingSplit,
@@ -22,11 +27,12 @@ import {
   type Person,
   type SplitMode,
   type SplitParty,
+  type SplitValues,
 } from "@receivy/common";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
+import { clearPixRequiredSeen, markPixRequiredSeen, pixRequiredSeen, saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 import { ContactCarousel } from "./contact-carousel";
 import { ContactPicker } from "./contact-picker";
@@ -41,7 +47,10 @@ type BillingFormProps = {
 };
 
 const RETURN_TO = "/charges/new";
+const PIX_SETUP = `/settings/pix?returnTo=${encodeURIComponent(RETURN_TO)}&required=1`;
 const FROZEN_NOTE = "Cobranças já geradas só permitem categoria, Pix e lembretes.";
+const PIX_GATE_NOTE = "Cadastre uma chave Pix para criar cobranças.";
+const NO_VALUES: Record<string, string> = {};
 
 const TYPES: { value: BillingType; label: string }[] = [
   { value: "once", label: "À vista" },
@@ -134,6 +143,31 @@ function dueText(start: string, today: string): string {
   return `${start.slice(8, 10)}/${start.slice(5, 7)}`;
 }
 
+/** Rebuilds the per-mode text buckets from a saved split, so editing starts on the mode it was created with. */
+function valuesFromBilling(billing: BillingDetail): SplitValues {
+  const values = EMPTY_SPLIT_VALUES();
+
+  for (const part of billing.split.parts) {
+    const key = part.kind === "owner" ? "owner" : part.personId;
+
+    if ("amountCents" in part) {
+      values.fixed[key] = moneyText(part.amountCents);
+      continue;
+    }
+
+    if ("basisPoints" in part) {
+      values.percentage[key] = String(part.basisPoints / 100).replace(".", ",");
+      continue;
+    }
+
+    if ("shares" in part) {
+      values.shares[key] = String(part.shares);
+    }
+  }
+
+  return values;
+}
+
 function draftFromBilling(billing: BillingDetail): BillingDraft {
   const parts = billing.split.parts;
 
@@ -150,18 +184,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     timezone: billing.timezone,
     pix: billing.paymentMethodId ?? "",
     mode: billing.split.mode,
-    values: Object.fromEntries(
-      parts.map(part => [
-        part.kind === "owner" ? "owner" : part.personId,
-        "amountCents" in part
-          ? moneyText(part.amountCents)
-          : "basisPoints" in part
-            ? String(part.basisPoints / 100).replace(".", ",")
-            : "shares" in part
-              ? String(part.shares)
-              : "",
-      ]),
-    ),
+    values: valuesFromBilling(billing),
     category: billing.category,
     reminders: billing.reminders.map(reminder => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
   };
@@ -188,6 +211,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [gated, setGated] = useState(false);
   const restored = useRef<StoredDraft | null>(null);
   const seeAll = useRef<HTMLButtonElement>(null);
 
@@ -221,9 +245,14 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
 
         const active = wallet.paymentMethods.filter(method => !method.archivedAt);
 
+        if (active.length) {
+          clearPixRequiredSeen();
+        }
+
         setRecent(agenda.people.slice(0, 12));
         setDirectory(agenda.people);
         setMethods(active);
+        setGated(!billing && !active.length);
         setDraft(current => {
           const base = stored ? stored.draft : current;
           const pix = billing || stored ? base.pix : (active.find(method => method.isDefault)?.id ?? base.pix);
@@ -245,6 +274,20 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
       live = false;
     };
   }, [billing]);
+
+  useEffect(() => {
+    // A billing without an active Pix key has nowhere to be paid, so the first
+    // load without one parks the draft and opens the key screen. Coming back
+    // still without a key must not bounce the user out again: the trip is
+    // remembered for the tab and the form shows the blocking panel instead.
+    if (!gated || !ready || pixRequiredSeen()) {
+      return;
+    }
+
+    markPixRequiredSeen();
+    saveDraft(draft, RETURN_TO);
+    router.push(PIX_SETUP);
+  }, [draft, gated, ready, router]);
 
   function update(patch: Partial<BillingDraft>) {
     if (locked) {
@@ -269,15 +312,22 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   }
 
   function addAmount(cents: number) {
-    let current = 0;
+    update({ amount: addCentsToAmount(draft.amount, cents) });
+  }
 
-    try {
-      current = parseBRLCents(draft.amount);
-    } catch {
-      current = 0;
+  // The field behaves like a bank keypad: whatever the browser hands back is
+  // reduced to its digits and re-rendered, so typing pushes cents to the left
+  // and Backspace drops the last digit.
+  function typeAmount(value: string) {
+    update({ amount: amountDigitsToInput(amountInputToDigits(value)) });
+  }
+
+  function changeSplitValue(key: string, value: string) {
+    if (draft.mode === "equal") {
+      return;
     }
 
-    update({ amount: moneyText(current + cents) });
+    update({ values: { ...draft.values, [draft.mode]: { ...draft.values[draft.mode], [key]: value } } });
   }
 
   async function save(sent: Attempt) {
@@ -360,20 +410,57 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
     return directory.find(person => person.id === key)?.name ?? "Contato";
   }
 
+  /** What the owner keeps on a fixed split: the preview's share, or the remainder of a half-typed screen. */
+  function ownerRemainderCents(): number | null {
+    const previewed = amounts.owner;
+
+    if (previewed !== undefined) {
+      return previewed;
+    }
+
+    if (!totalCents) {
+      return null;
+    }
+
+    let used = 0;
+
+    for (const personId of draft.selected) {
+      const typed = draft.values.fixed[personId];
+
+      if (!typed) {
+        continue;
+      }
+
+      try {
+        used += parseBRLCents(typed);
+      } catch {
+        return null;
+      }
+    }
+
+    return used > totalCents ? null : totalCents - used;
+  }
+
+  const modeValues = draft.mode === "equal" ? NO_VALUES : draft.values[draft.mode];
   const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map(personId => ({ kind: "person", personId })) : splitParties(draft);
   const rows: SplitRow[] = rowParties.map(party => {
     const key = splitPartyKey(party);
     const cents = amounts[key];
-    const amount = cents === undefined ? "" : money(cents);
-    const shares = draft.values[key] || "1";
 
     return {
       key,
       name: nameOf(key),
-      value: draft.values[key] ?? "",
-      amountText: draft.mode === "shares" && amount ? `${shares} cota${shares === "1" ? "" : "s"} · ${amount}` : amount,
+      value: modeValues[key] ?? "",
+      // A fixed row is the amount itself, so repeating it beside the field says nothing.
+      amountText: draft.mode === "fixed" || cents === undefined ? "" : money(cents),
     };
   });
+
+  const remainder = draft.mode === "fixed" && draft.owner ? ownerRemainderCents() : null;
+
+  if (remainder !== null) {
+    rows.push({ key: "owner", name: nameOf("owner"), value: "", amountText: "", readonlyText: `Você fica com ${money(remainder)}` });
+  }
 
   const people = draft.selected.length + (draft.owner ? 1 : 0);
   const perPerson = draft.mode === "equal" ? (Object.values(amounts)[0] ?? 0) : totalCents;
@@ -391,6 +478,14 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
         <p className="date-line">{editing ? "Editar cobrança" : "Nova cobrança"}</p>
       </header>
       {frozen && <p className="billing-frozen-note">{FROZEN_NOTE}</p>}
+      {gated && (
+        <div className="billing-pix-gate" role="status">
+          <p>{PIX_GATE_NOTE}</p>
+          <button type="button" className="secondary-button" onClick={() => leaveTo(PIX_SETUP)}>
+            Cadastrar chave
+          </button>
+        </div>
+      )}
       {!ready && !error && <p role="status">Carregando dados…</p>}
 
       <fieldset className="form-step" disabled={locked || frozen}>
@@ -426,7 +521,13 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
         <label htmlFor="billing-amount">{AMOUNT_LABELS[draft.type]}</label>
         <div className="amount-hero">
           <span aria-hidden="true">R$</span>
-          <input id="billing-amount" inputMode="decimal" placeholder="0,00" value={draft.amount} onChange={event => update({ amount: event.target.value })} />
+          <input
+            id="billing-amount"
+            inputMode="numeric"
+            placeholder="0,00"
+            value={formatAmountDigits(amountInputToDigits(draft.amount))}
+            onChange={event => typeAmount(event.target.value)}
+          />
         </div>
         <div className="chip-row">
           {QUICK_AMOUNTS.map(option => (
@@ -438,11 +539,12 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
       </fieldset>
 
       <fieldset className="form-step" disabled={locked}>
-        <legend>3. Descrição</legend>
-        <label htmlFor="billing-description">Descrição</label>
+        <legend>3. Título</legend>
+        <label htmlFor="billing-title">Título</label>
         <input
-          id="billing-description"
+          id="billing-title"
           maxLength={500}
+          placeholder="Ex.: churrasco da firma"
           disabled={frozen}
           value={draft.description}
           onChange={event => update({ description: event.target.value })}
@@ -513,7 +615,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
             </label>
           ))}
         </div>
-        <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={(key, value) => update({ values: { ...draft.values, [key]: value } })} />
+        <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={changeSplitValue} />
       </fieldset>
 
       <fieldset className="form-step" disabled={locked || scheduled}>
@@ -554,7 +656,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
           <button type="button" className={draft.pix ? "chip" : "chip is-active"} aria-pressed={!draft.pix} onClick={() => update({ pix: "" })}>
             Nenhuma
           </button>
-          {!editing && (
+          {!editing && !gated && (
             <button type="button" className="chip" onClick={() => leaveTo(`/settings/pix?returnTo=${RETURN_TO}`)}>
               Cadastrar chave
             </button>
@@ -599,7 +701,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
             Tentar novamente
           </button>
         ) : (
-          <button type="submit" className="primary-button" disabled={busy}>
+          <button type="submit" className="primary-button" disabled={busy || gated || !totalCents}>
             {editing ? "Salvar" : "Criar cobrança"}
           </button>
         )}

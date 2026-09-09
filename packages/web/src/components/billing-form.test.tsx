@@ -112,14 +112,77 @@ it("opens the contact panel and searches the whole agenda", async () => {
   expect(screen.getByRole("button", { name: /Bruno/ })).toHaveAttribute("aria-pressed", "true");
 });
 
-it("fills the description from a category chip while it is empty", async () => {
+it("fills the title from a category chip while it is empty", async () => {
   api();
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("button", { name: "Alimentação" }));
 
-  expect(screen.getByLabelText("Descrição")).toHaveValue("Alimentação");
+  expect(screen.getByLabelText("Título")).toHaveValue("Alimentação");
   expect(screen.getByRole("button", { name: "Alimentação" })).toHaveAttribute("aria-pressed", "true");
+});
+
+it("names the third step Título and drops the old Descrição copy", async () => {
+  api();
+  renderForm();
+
+  const title = await screen.findByLabelText("Título");
+
+  expect(title).toHaveAttribute("placeholder", "Ex.: churrasco da firma");
+  expect(screen.getByText("3. Título")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Descrição")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Descrição/)).not.toBeInTheDocument();
+});
+
+it("types the amount like a bank keypad and posts the cents", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("button", { name: /Ana/ }));
+
+  const amount = screen.getByLabelText("Valor");
+
+  expect(amount).toHaveValue("0,00");
+
+  await user.type(amount, "1");
+  expect(amount).toHaveValue("0,01");
+
+  await user.type(amount, "00");
+  expect(amount).toHaveValue("1,00");
+
+  await user.type(amount, "{Backspace}");
+  expect(amount).toHaveValue("0,10");
+
+  await user.type(amount, "00");
+  expect(amount).toHaveValue("10,00");
+
+  await user.click(screen.getByRole("button", { name: "Criar cobrança" }));
+
+  const post = sent.find(entry => entry.init.method === "POST");
+  expect(JSON.parse(String(post?.init.body))).toMatchObject({ totalCents: 1_000 });
+});
+
+it("groups the thousands in the amount and adds cents from the quick chips", async () => {
+  api();
+  const { user } = renderForm();
+
+  const amount = await screen.findByLabelText("Valor");
+  await user.type(amount, "123456");
+  expect(amount).toHaveValue("1.234,56");
+
+  await user.clear(amount);
+  await user.type(amount, "100");
+  await user.click(screen.getByRole("button", { name: "+ R$ 10" }));
+
+  expect(amount).toHaveValue("11,00");
+});
+
+it("keeps Criar cobrança disabled while the amount is still zero", async () => {
+  api();
+  renderForm();
+
+  expect(await screen.findByRole("button", { name: "Criar cobrança" })).toBeDisabled();
+  expect(screen.getByText("Escolha os contatos e informe o valor.")).toBeInTheDocument();
 });
 
 it("shows the installment field and renames the amount for a parcelado billing", async () => {
@@ -149,7 +212,8 @@ it("computes the live amount for each share row", async () => {
   await user.clear(screen.getByLabelText("Cotas de Eu"));
   await user.type(screen.getByLabelText("Cotas de Eu"), "2");
 
-  expect(screen.getAllByText("2 cotas · R$ 50,00")).toHaveLength(2);
+  expect(screen.getAllByText("R$ 50,00")).toHaveLength(2);
+  expect(screen.queryByText(/\d+ cotas?/)).not.toBeInTheDocument();
 });
 
 it("warns about the missing remainder on a fixed split", async () => {
@@ -162,6 +226,59 @@ it("warns about the missing remainder on a fixed split", async () => {
   await user.type(screen.getByLabelText("Valor de Ana"), "40,00");
 
   expect(screen.getByText("Faltam R$ 60,00")).toBeInTheDocument();
+});
+
+it("shows the owner remainder as read-only text on a fixed split", async () => {
+  api();
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("button", { name: /Ana/ }));
+  await user.type(screen.getByLabelText("Valor"), "100,00");
+  await user.click(screen.getByRole("radio", { name: "Valor fixo" }));
+  await user.type(screen.getByLabelText("Valor de Ana"), "60,00");
+
+  expect(screen.getByText("Você fica com R$ 40,00")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Valor de Eu")).not.toBeInTheDocument();
+  expect(screen.queryByText("R$ 60,00")).not.toBeInTheDocument();
+});
+
+it("drops the owner remainder and warns when the fixed split exceeds the total", async () => {
+  api();
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("button", { name: /Ana/ }));
+  await user.type(screen.getByLabelText("Valor"), "100,00");
+  await user.click(screen.getByRole("radio", { name: "Valor fixo" }));
+  await user.type(screen.getByLabelText("Valor de Ana"), "160,00");
+
+  expect(screen.getByText("O rateio ultrapassa o total.")).toBeInTheDocument();
+  expect(screen.queryByText(/Você fica com/)).not.toBeInTheDocument();
+});
+
+it("keeps each mode's split values while the user switches modes", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("button", { name: /Ana/ }));
+  await user.type(screen.getByLabelText("Valor"), "100,00");
+
+  await user.click(screen.getByRole("radio", { name: "Valor fixo" }));
+  await user.type(screen.getByLabelText("Valor de Ana"), "60,00");
+
+  await user.click(screen.getByRole("radio", { name: "Porcentagem" }));
+  expect(screen.getByLabelText("Porcentagem de Ana")).toHaveValue("");
+
+  await user.click(screen.getByRole("radio", { name: "Valor fixo" }));
+  expect(screen.getByLabelText("Valor de Ana")).toHaveValue("60,00");
+
+  await user.click(screen.getByRole("radio", { name: "Cotas" }));
+  await user.click(screen.getByRole("button", { name: "Criar cobrança" }));
+
+  const post = sent.find(entry => entry.init.method === "POST");
+  expect(JSON.parse(String(post?.init.body)).split).toEqual({
+    mode: "shares",
+    parts: [{ kind: "person", personId: "p1", shares: 1 }, { kind: "owner", shares: 1 }],
+  });
 });
 
 it("sets the due date from the quick buttons and summarises the billing in the footer", async () => {
@@ -313,7 +430,7 @@ it("keeps the payload and the idempotency key across an uncertain retry", async 
 
   await user.click(await screen.findByRole("button", { name: /Ana/ }));
   await user.type(screen.getByLabelText("Valor"), "100,00");
-  await user.type(screen.getByLabelText("Descrição"), "Jantar");
+  await user.type(screen.getByLabelText("Título"), "Jantar");
   await user.click(screen.getByRole("button", { name: "Criar cobrança" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Serviço temporariamente indisponível. Tente novamente.");
@@ -333,6 +450,50 @@ it("shows the validation error inline when no contact is selected", async () => 
   await user.click(screen.getByRole("button", { name: "Criar cobrança" }));
 
   expect(screen.getByRole("alert")).toHaveTextContent("Selecione ao menos um contato.");
+});
+
+const PIX_SETUP = "/settings/pix?returnTo=%2Fcharges%2Fnew&required=1";
+
+function withoutPixKeys() {
+  return api(path => (path.includes("payment-methods") ? Response.json({ paymentMethods: [] }) : undefined));
+}
+
+it("parks the draft and pushes the Pix setup once when the account has no key", async () => {
+  withoutPixKeys();
+  const { user } = renderForm();
+
+  await user.type(await screen.findByLabelText("Valor"), "7000");
+
+  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith(PIX_SETUP));
+  expect(routerMock.push).toHaveBeenCalledTimes(1);
+  expect(window.sessionStorage.getItem("receivy.pixRequiredSeen")).toBe("1");
+});
+
+it("blocks the form instead of bouncing again when the user returns without a key", async () => {
+  window.sessionStorage.setItem("receivy.pixRequiredSeen", "1");
+  withoutPixKeys();
+  const { user } = renderForm();
+
+  expect(await screen.findByText("Cadastre uma chave Pix para criar cobranças.")).toBeInTheDocument();
+  expect(routerMock.push).not.toHaveBeenCalled();
+
+  await user.type(screen.getByLabelText("Valor"), "7000");
+  expect(screen.getByRole("button", { name: "Criar cobrança" })).toBeDisabled();
+
+  await user.click(screen.getByRole("button", { name: "Cadastrar chave" }));
+
+  expect(routerMock.push).toHaveBeenCalledWith(PIX_SETUP);
+  expect(window.sessionStorage.getItem("receivy.billingDraft")).toContain("70,00");
+});
+
+it("clears the Pix reminder and never gates the form once a key exists", async () => {
+  window.sessionStorage.setItem("receivy.pixRequiredSeen", "1");
+  api();
+  renderForm();
+
+  expect(await screen.findByRole("button", { name: /Nubank/ })).toBeInTheDocument();
+  expect(screen.queryByText("Cadastre uma chave Pix para criar cobranças.")).not.toBeInTheDocument();
+  expect(window.sessionStorage.getItem("receivy.pixRequiredSeen")).toBeNull();
 });
 
 const onceBilling: BillingDetail = {
@@ -364,7 +525,7 @@ it("freezes a finite billing and patches only category, Pix and reminders", asyn
   expect(await screen.findByRole("button", { name: /Nubank/ })).toBeInTheDocument();
   expect(screen.getByText("Editar cobrança")).toBeInTheDocument();
   expect(screen.getByText("Cobranças já geradas só permitem categoria, Pix e lembretes.")).toBeInTheDocument();
-  expect(screen.getByLabelText("Descrição")).toBeDisabled();
+  expect(screen.getByLabelText("Título")).toBeDisabled();
   expect(screen.getByLabelText("Valor")).toBeDisabled();
   expect(screen.getByLabelText("Vencimento")).toBeDisabled();
   expect(screen.getByRole("radio", { name: "Parcelado" })).toBeDisabled();
@@ -394,7 +555,7 @@ it("keeps the schedule read-only while editing an open-ended billing", async () 
   expect(screen.getByRole("button", { name: "Amanhã" })).toBeDisabled();
 
   expect(screen.getByLabelText("Valor por ocorrência")).toBeEnabled();
-  expect(screen.getByLabelText("Descrição")).toBeEnabled();
+  expect(screen.getByLabelText("Título")).toBeEnabled();
   expect(screen.getByRole("radio", { name: "Cotas" })).toBeEnabled();
   expect(screen.queryByText("Cobranças já geradas só permitem categoria, Pix e lembretes.")).not.toBeInTheDocument();
 });

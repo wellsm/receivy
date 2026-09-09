@@ -3,6 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_BILLING_DRAFT } from "@receivy/common";
 import { PeopleScreen } from "./people-screen";
+import PeoplePage from "@/app/(protected)/people/page";
+import PersonPage from "@/app/(protected)/people/[id]/page";
+import PixSettingsPage from "@/app/(protected)/settings/pix/page";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft } from "@/lib/billing-draft";
 
@@ -57,5 +60,53 @@ describe("PeopleScreen", () => {
     await user.click(screen.getByRole("button", { name: "Salvar contato" }));
     await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/charges/new"));
     expect(takeDraft()?.draft.selected).toEqual(["p1", "person"]);
+  });
+});
+
+describe("contextual back links", () => {
+  function emptyApi() {
+    vi.mocked(browserFetch).mockImplementation(async path =>
+      String(path).includes("payment-methods")
+        ? Response.json({ paymentMethods: [] })
+        : String(path) === "/api/auth/me"
+          ? Response.json({ user: { email: "conta@example.com" } })
+          : Response.json({ people: [], nextCursor: null, charges: [] }),
+    );
+  }
+
+  it("names the screen the contacts page came from", async () => {
+    emptyApi();
+    render(await PeoplePage({ searchParams: Promise.resolve({ returnTo: "/charges/new" }) }));
+
+    expect(screen.getByRole("link", { name: "← Nova cobrança" })).toHaveAttribute("href", "/charges/new");
+  });
+
+  it("falls back to the profile when the contacts page was opened on its own", async () => {
+    emptyApi();
+    render(await PeoplePage({ searchParams: Promise.resolve({}) }));
+
+    expect(screen.getByRole("link", { name: "← Perfil" })).toHaveAttribute("href", "/settings");
+  });
+
+  it("sends the contact history back to the contact list", async () => {
+    emptyApi();
+    render(await PersonPage({ params: Promise.resolve({ id: "ana" }) }));
+
+    expect(screen.getByRole("link", { name: "← Contatos" })).toHaveAttribute("href", "/people");
+  });
+
+  it("names the screen the Pix keys page came from", async () => {
+    emptyApi();
+    render(await PixSettingsPage({ searchParams: Promise.resolve({ returnTo: "/charges/new", required: "1" }) }));
+
+    expect(screen.getByRole("link", { name: "← Nova cobrança" })).toHaveAttribute("href", "/charges/new");
+    expect(screen.getByText("Você precisa de uma chave Pix para criar cobranças.")).toBeInTheDocument();
+  });
+
+  it("falls back to the profile on the Pix keys page", async () => {
+    emptyApi();
+    render(await PixSettingsPage({ searchParams: Promise.resolve({}) }));
+
+    expect(screen.getByRole("link", { name: "← Perfil" })).toHaveAttribute("href", "/settings");
   });
 });

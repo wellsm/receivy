@@ -17,7 +17,7 @@ const routerMock = { replace: vi.fn(), push: vi.fn() };
 
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
-afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllGlobals(); window.sessionStorage.clear(); });
 
 // jsdom has no layout, so color-contrast is measured from the design tokens in
 // packages/common instead (tokens.test.ts); `region` is disabled because these are
@@ -108,7 +108,7 @@ describe("accessibility of the main web screens", () => {
     expect(screen.getByRole("radiogroup", { name: "Modalidade" })).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: "Divisão" })).toBeInTheDocument();
     expect(screen.getByLabelText("Valor")).toBeInTheDocument();
-    expect(screen.getByLabelText("Descrição")).toBeInTheDocument();
+    expect(screen.getByLabelText("Título")).toBeInTheDocument();
     expect(screen.getByLabelText("Vencimento")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Novo contato" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Criar cobrança" })).toBeInTheDocument();

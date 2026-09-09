@@ -1897,6 +1897,33 @@ a {
   font-weight: 700;
 }
 
+.billing-pix-gate {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface-muted);
+  justify-items: start;
+}
+
+.billing-pix-gate p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pix-required-notice {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .billing-frozen-note {
   margin: 0;
   padding: 12px 14px;
@@ -2213,6 +2240,14 @@ a {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   text-align: right;
+}
+
+.split-row--readonly .split-name {
+  overflow: visible;
+  color: var(--color-primary-strong);
+  font-variant-numeric: tabular-nums;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .split-hint {

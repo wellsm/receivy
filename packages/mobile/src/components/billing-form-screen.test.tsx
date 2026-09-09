@@ -169,7 +169,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Cotas" }));
     await fireEvent.changeText(screen.getByLabelText("Cotas de Ana"), "3");
     expect(screen.getByText("R$ 75,00")).toBeOnTheScreen();
-    expect(screen.queryByText(/cotas?/)).toBeNull();
+    expect(screen.queryByText(/\d+ cotas?/)).toBeNull();
 
     await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
@@ -187,11 +187,15 @@ describe("BillingFormScreen", () => {
     expect(screen.getByText("2 pessoas · R$ 50,00 cada · vence hoje")).toBeOnTheScreen();
   });
 
-  it("warns about the missing remainder of a fixed split", async () => {
+  it("warns about the missing remainder of a fixed split only when I do not take part", async () => {
     await quickForm();
     await fillQuickBilling();
     await fireEvent.press(screen.getByRole("button", { name: "Valor fixo" }));
     await fireEvent.changeText(screen.getByLabelText("Valor de Ana"), "40,00");
+
+    expect(screen.queryByText("Faltam R$ 60,00")).toBeNull();
+
+    await fireEvent(screen.getByLabelText("Eu também participo"), "valueChange", false);
 
     expect(screen.getByText("Faltam R$ 60,00")).toBeOnTheScreen();
   });

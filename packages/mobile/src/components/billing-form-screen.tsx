@@ -594,7 +594,6 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
               accessibilityLabel="Valor"
               editable={!locked && !frozen}
               keyboardType="number-pad"
-              placeholder="0,00"
               placeholderTextColor={MUTED_TINT}
               value={formatAmountDigits(amountInputToDigits(draft.amount))}
               onChangeText={typeAmount}

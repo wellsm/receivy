@@ -26,6 +26,7 @@ describe("safeNextPath", () => {
     expect(safeNextPath("/people?from=login")).toBe("/people?from=login");
     expect(safeNextPath("https://evil.example/steal")).toBe("/");
     expect(safeNextPath("//evil.example/steal")).toBe("/");
+    expect(safeNextPath("/\\evil.example/steal")).toBe("/");
     expect(safeNextPath("javascript:alert(1)")).toBe("/");
     expect(safeNextPath(null)).toBe("/");
   });

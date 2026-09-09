@@ -52,7 +52,7 @@ function ContactCard({ person, onPress }: { person: Person; onPress: () => void 
       className="min-h-16 flex-row items-center gap-3 rounded-2xl border border-outline/40 bg-surface p-4"
     >
       <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft">
-        <Text className="text-sm font-extrabold text-primary-strong">{initialsOf(person.name)}</Text>
+        <Text className="text-sm font-extrabold text-primary-strong">{initialsOf(person.displayName)}</Text>
       </View>
 
       <View className="flex-1 gap-1">

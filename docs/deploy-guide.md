@@ -290,6 +290,9 @@ ALTER TABLE billings ALTER COLUMN category SET DEFAULT 'other';
 O alargamento do check de `template` em `notification_deliveries` não pede passo
 manual: o EZ4 recria as constraints `_ck` no deploy.
 
+`people.nickname` é opcional no schema, então o EZ4 adiciona a coluna nullable
+sem passo manual.
+
 Depois do deploy, com a versão nova estável, estas tabelas ficam sem nenhum
 leitor e podem ser derrubadas:
 

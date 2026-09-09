@@ -48,7 +48,7 @@ describe("PeopleScreen", () => {
     expect(card).toHaveTextContent("Aninha");
     expect(card).toHaveTextContent("2 ativas");
     expect(card).toHaveTextContent("(11) 98765-4321");
-    expect(card).toHaveTextContent("AS");
+    expect(card.querySelector(".person-avatar")?.textContent).toBe("A");
 
     const other = screen.getByRole("link", { name: "Contato Bruno Lima" });
 

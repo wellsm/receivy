@@ -51,7 +51,7 @@ describe("PeopleScreen", () => {
     await render(<PeopleScreen client={client} />);
 
     expect(await screen.findByText("Aninha")).toBeOnTheScreen();
-    expect(screen.getByText("AP")).toBeOnTheScreen();
+    expect(screen.getByText("A")).toBeOnTheScreen();
     expect(screen.getByText("2 ativas")).toBeOnTheScreen();
     expect(screen.getByText("(11) 98765-4321")).toBeOnTheScreen();
     expect(screen.getByLabelText("Contato Aninha")).toBeOnTheScreen();

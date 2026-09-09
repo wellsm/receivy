@@ -158,7 +158,7 @@ export function PeopleScreen({ returnTo }: { returnTo?: string }) {
             <li key={person.id}>
               <Link className="people-card" href={`/people/${person.id}`} aria-label={`Contato ${person.displayName}`}>
                 <span className="person-avatar" aria-hidden="true">
-                  {initialsOf(person.name)}
+                  {initialsOf(person.displayName)}
                 </span>
                 <span className="people-card-lines">
                   <span className="people-card-top">

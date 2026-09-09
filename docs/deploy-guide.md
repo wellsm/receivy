@@ -277,6 +277,19 @@ ALTER TABLE notification_deliveries ALTER COLUMN event_id TYPE varchar(200);
 O EZ4 não encurta nem alarga colunas existentes; sem esse `ALTER` as chaves de
 evento novas estouram o tamanho antigo.
 
+A coluna `billings.category` é obrigatória no schema (`schemas/billing.ts`), então
+o EZ4 emite `NOT NULL` e a sincronização falha em tabela povoada. Crie e preencha a
+coluna antes do deploy:
+
+```sql
+ALTER TABLE billings ADD COLUMN IF NOT EXISTS category text;
+UPDATE billings SET category = 'other' WHERE category IS NULL;
+ALTER TABLE billings ALTER COLUMN category SET DEFAULT 'other';
+```
+
+O alargamento do check de `template` em `notification_deliveries` não pede passo
+manual: o EZ4 recria as constraints `_ck` no deploy.
+
 Depois do deploy, com a versão nova estável, estas tabelas ficam sem nenhum
 leitor e podem ser derrubadas:
 
@@ -290,9 +303,6 @@ DROP TABLE IF EXISTS apple_credentials;
 `apple_credentials` some junto com `APPLE_CREDENTIAL_ENCRYPTION_KEY_B64`: o
 login Apple passa a validar só o `id_token` e nenhum refresh token do provedor é
 guardado. Remova a variável dos envs de dev e prd depois do deploy.
-
-A coluna `billings.category` não entra nesta migração: é opcional com default
-`other` e o EZ4 já a aplicou no deploy que a introduziu.
 
 ## Manutenção
 

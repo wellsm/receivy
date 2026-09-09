@@ -27,6 +27,14 @@ immutable occurrence's `reminders_json` and timezone, not an edited rule. A UTC
 scan compares each reminder's stored civil date in its stored IANA timezone.
 Missed enabled reminder dates remain eligible on the next worker run.
 
+Reminder planning is not pre-scheduled: the five-minute `NotificationCron` plans a
+reminder only while its civil date, in the billing's stored timezone, is the current
+local day and the local hour is at or after 09:00 (`REMINDER_HOUR`). The pass is
+idempotent, so any run in that window plans it once. If the cron stays down for the
+whole remainder of that local day, the reminder for that day is simply not sent — a
+later run sees a new civil date and skips it. This differs from the previous design,
+where an instant was pre-scheduled and a late run still fired it.
+
 The authenticated creditor can explicitly request a new manual reminder, limited
 to one per charge per rolling 24 hours under the charge lock. This is a new
 intentional event, not an automatic retry of an uncertain notice. Terminal

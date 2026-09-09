@@ -802,7 +802,8 @@ export type OccurrenceResult = {
   dueDeliveryIds: string[];
 };
 
-const IDLE_OCCURRENCE: OccurrenceResult = { materialized: false, remaining: false, dueDeliveryIds: [] };
+/** Fresh result per call: `dueDeliveryIds` is handed to callers that may append to it. */
+const idleOccurrence = (): OccurrenceResult => ({ materialized: false, remaining: false, dueDeliveryIds: [] });
 
 /** Materializes a single occurrence; the caller enqueues the notices once the transaction commits. */
 export async function materializeNextOccurrence(
@@ -814,7 +815,7 @@ export async function materializeNextOccurrence(
   const owner = await db.billings.findOne({ select: { owner_id: true }, where: { id: billingId } });
 
   if (!owner) {
-    return IDLE_OCCURRENCE;
+    return idleOccurrence();
   }
 
   try {
@@ -825,7 +826,7 @@ export async function materializeNextOccurrence(
       const [dueDate, ...rest] = dueOccurrences(row, now, 2);
 
       if (!dueDate) {
-        return IDLE_OCCURRENCE;
+        return idleOccurrence();
       }
 
       const instant = now.toISOString();
@@ -866,6 +867,6 @@ export async function materializeNextOccurrence(
       await audit(tx, owner.owner_id, billingId, 'billing.materialization_skipped', now.toISOString(), { reason });
     });
 
-    return { ...IDLE_OCCURRENCE, skipped: reason };
+    return { ...idleOccurrence(), skipped: reason };
   }
 }

@@ -360,7 +360,7 @@ describe('queued notification delivery', () => {
     equal(first.reason, 'transient');
     equal(first.attempts, 1);
     equal(Date.parse(first.available_at), clock + 60_000);
-    ok(first.queued_at, 'the in-flight message keeps its queue stamp');
+    ok(!first.queued_at, 'the backed-off row leaves the queue so the cron can republish it');
 
     // A redelivery that beats the backoff must not consume an attempt.
     equal(await deliver(row!.id, failing), 'skipped');
@@ -374,6 +374,44 @@ describe('queued notification delivery', () => {
 
     equal(second.attempts, 2, 'the row counter escalates, never the message attempt');
     equal(Date.parse(second.available_at), clock + 120_000);
+  });
+
+  it('republishes a backed-off notice as soon as the backoff is due, not after the staleness window', async () => {
+    clock = start;
+
+    const { id } = await charge();
+    const [row] = await rows(id);
+
+    const failing: NotificationTransport = { ...transport, email: async () => ({ status: 'transient' }) };
+
+    await rejects(() => deliver(row!.id, failing));
+
+    const backed = (await rows(id))[0]!;
+
+    equal(backed.state, 'pending');
+    equal(Date.parse(backed.available_at), clock + 60_000);
+    ok(!backed.queued_at, 'the retry is no longer in flight');
+
+    forget();
+
+    // The queue redelivers within seconds: the claim guard drops it without consuming an attempt.
+    equal(await deliver(row!.id, failing), 'skipped');
+
+    await enqueueDueDeliveries(db, queue, clock);
+
+    ok(!queued().includes(row!.id), 'the cron waits for the backoff');
+
+    clock += 60_000;
+    forget();
+
+    await enqueueDueDeliveries(db, queue, clock);
+
+    ok(queued().includes(row!.id), 'the first cron pass after the backoff publishes it again');
+
+    const republished = (await rows(id))[0]!;
+
+    equal(republished.attempts, 1, 'republishing never consumes an attempt');
+    ok(republished.queued_at, 'the fresh message stamps the row again');
   });
 
   it('persists the attempt count when a retried e-mail finally goes out', async () => {

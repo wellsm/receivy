@@ -49,7 +49,7 @@ export type DeliveryRequest = {
 };
 
 /** Raised so the queue redelivers the message; the row already carries its own backoff. */
-export class TransientDeliveryError extends Error {
+class TransientDeliveryError extends Error {
   constructor() {
     super('transient notification delivery');
   }
@@ -285,8 +285,11 @@ export async function processDelivery(
       available = now + Math.min(60_000 * 2 ** (claim.attempts - 1), MAX_BACKOFF);
     }
 
-    // Only a row going back to `pending` keeps `queued_at`, so the cron never duplicates a retry.
-    const settled = state !== 'pending';
+    // Every settlement releases the row from the queue, including a retry going back to `pending`:
+    // the redelivery that follows the throw below arrives before `available_at` and is skipped, so
+    // only the cron republishes the row, and it does so on the first pass after the backoff is due
+    // (`queued_at IS NULL` branch) instead of waiting out the fifteen-minute staleness rule.
+    // Clearing it here is the single place that owns this; the claim guard just skips and returns.
 
     await tx.notification_deliveries.updateOne({
       where: { id: row.id },
@@ -295,7 +298,7 @@ export async function processDelivery(
         reason,
         available_at: new Date(available).toISOString(),
         lease_until: stamp,
-        ...(settled ? { queued_at: sqlNull } : {}),
+        queued_at: sqlNull,
         ...(result.status === 'accepted' ? { provider_id: result.id } : {}),
         updated_at: stamp
       }

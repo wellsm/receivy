@@ -1,7 +1,7 @@
 "use client";
 
 import type { Person } from "@receivy/common";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { initialOf } from "./contact-carousel";
 
@@ -10,12 +10,14 @@ type ContactPickerProps = {
   onToggle: (personId: string) => void;
   onSeen: (people: Person[]) => void;
   onClose: () => void;
+  /** The control that opened the panel; focus goes back to it on close. */
+  returnFocusTo?: RefObject<HTMLButtonElement | null>;
 };
 
 const LOAD_ERROR = "Não foi possível carregar os contatos.";
 
 /** Full agenda in a panel: server-side search plus cursor paging, multi selection. */
-export function ContactPicker({ selected, onToggle, onSeen, onClose }: ContactPickerProps) {
+export function ContactPicker({ selected, onToggle, onSeen, onClose, returnFocusTo }: ContactPickerProps) {
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
   const [people, setPeople] = useState<Person[]>([]);
@@ -62,12 +64,17 @@ export function ContactPicker({ selected, onToggle, onSeen, onClose }: ContactPi
   // (the "Ver todos" button) when it closes, so the keyboard never falls to the
   // top of the page.
   useEffect(() => {
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Captured once: StrictMode runs this effect twice in dev, and by the second
+    // pass the search field already holds the focus.
+    if (!opener.current) {
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
+
     searchField.current?.focus();
   }, []);
 
   function close() {
-    opener.current?.focus();
+    (returnFocusTo?.current ?? opener.current)?.focus();
     onClose();
   }
 

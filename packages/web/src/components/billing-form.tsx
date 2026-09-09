@@ -270,6 +270,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const restored = useRef<StoredDraft | null>(null);
+  const seeAll = useRef<HTMLButtonElement>(null);
 
   const editing = Boolean(billing);
   const locked = Boolean(attempt);
@@ -484,10 +485,18 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
           onToggle={toggle}
           onNew={() => leaveTo(`/people?returnTo=${RETURN_TO}`)}
         />
-        <button type="button" className="secondary-button" onClick={() => setPicker(true)}>
+        <button type="button" className="secondary-button" ref={seeAll} onClick={() => setPicker(true)}>
           Ver todos
         </button>
-        {picker && <ContactPicker selected={draft.selected} onToggle={toggle} onSeen={remember} onClose={() => setPicker(false)} />}
+        {picker && (
+          <ContactPicker
+            selected={draft.selected}
+            returnFocusTo={seeAll}
+            onToggle={toggle}
+            onSeen={remember}
+            onClose={() => setPicker(false)}
+          />
+        )}
         <label className="owner-toggle">
           <input type="checkbox" checked={draft.owner} onChange={event => update({ owner: event.target.checked })} /> Eu também participo
         </label>

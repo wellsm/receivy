@@ -215,6 +215,23 @@ it("returns focus to Ver todos when the contact panel closes", async () => {
   expect(document.activeElement).toBe(opener);
 });
 
+it("returns focus to Ver todos even when StrictMode runs the panel effects twice", async () => {
+  api();
+  const user = userEvent.setup();
+
+  render(
+    <StrictMode>
+      <BillingForm billing={null} onSaved={vi.fn()} onBack={vi.fn()} />
+    </StrictMode>,
+  );
+
+  const opener = await screen.findByRole("button", { name: "Ver todos" });
+  await user.click(opener);
+  await user.click(screen.getByRole("button", { name: "Concluir" }));
+
+  expect(document.activeElement).toBe(opener);
+});
+
 it("closes the contact panel with Escape and gives the focus back", async () => {
   api();
   const { user } = renderForm();

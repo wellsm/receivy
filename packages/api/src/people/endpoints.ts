@@ -9,7 +9,8 @@ import { archivePerson, getPerson, listPeople, savePerson } from './repository';
 
 declare class ListRequest implements Http.Request {
   identity: SessionIdentity;
-  query: { cursor?: String.UUID; archived?: boolean; search?: String.Max<254>; sort?: 'recent' };
+  // The `recent` order pages with an opaque base64url keyset cursor; the default order still sends a plain id.
+  query: { cursor?: String.Max<500>; archived?: boolean; search?: String.Max<254>; sort?: 'recent' };
 }
 declare class ListResponse implements Http.Response {
   status: 200;

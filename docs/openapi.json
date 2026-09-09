@@ -1241,7 +1241,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "format": "uuid"
+              "maxLength": 500
             }
           },
           {

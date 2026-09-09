@@ -2,18 +2,21 @@ import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
+import type { BillingSplit } from '@receivy/common';
 import { normalizePerson } from '@receivy/common';
 import { confirmEmailCode } from '../../src/auth/email-login';
 import { hashOauthValue } from '../../src/auth/oauth';
 import { exchangeOauthGrant, OauthFlowError } from '../../src/auth/oauth-flow';
+import { createBilling } from '../../src/billings/repository';
 import { archivePerson, listPeople, savePerson } from '../../src/people/repository';
 import { createAuthRepository } from '../../src/repositories/auth-repository';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
 
 const owner = randomUUID(),
   stranger = randomUUID(),
-  joining = randomUUID();
-const ids = [owner, stranger, joining];
+  joining = randomUUID(),
+  paged = randomUUID();
+const ids = [owner, stranger, joining, paged];
 const emails = ids.map((id) => `auth-people-${id}@example.com`);
 const repo = createAuthRepository(db);
 const codeHashKey = 'auth-people-test-code-secret-only';
@@ -25,6 +28,7 @@ describe('auth and people repositories on dedicated PostgreSQL', () => {
     equal(database?.['name'], 'receivy_tests');
     await createUser(db, { id: owner, email: emails[0]!, name: 'Owner' });
     await createUser(db, { id: stranger, email: emails[1]!, name: 'Stranger' });
+    await createUser(db, { id: paged, email: emails[3]!, name: 'Paged' });
     const now = new Date().toISOString();
     await db.users.insertOne({
       data: {
@@ -126,5 +130,61 @@ describe('auth and people repositories on dedicated PostgreSQL', () => {
     // UUID/date-like terms must stay text parameters or the driver types them as uuid/date.
     for (const search of [randomUUID(), '2026-10-31', '12:30:00'])
       equal((await listPeople(db, stranger, undefined, false, search)).people.length, 0);
+  });
+
+  it('pages the recent order across the NULLS LAST boundary without repeating a contact', async () => {
+    // 45 contacts billed last, 10 billed earlier and 50 never billed: the null boundary falls
+    // inside the second page, so both cursor branches are exercised.
+    const contacts: { id: string; name: string }[] = [];
+
+    for (let index = 0; index < 105; index++) {
+      contacts.push(await savePerson(db, paged, { name: `Recent ${String(index).padStart(3, '0')}` }));
+    }
+
+    const splitOf = (from: number, to: number) => ({
+      mode: 'equal' as const,
+      parts: contacts.slice(from, to).map((contact) => ({ kind: 'person' as const, personId: contact.id }))
+    });
+    const billing = (key: string, split: BillingSplit, when: Date) =>
+      createBilling(
+        db,
+        paged,
+        key,
+        {
+          type: 'once',
+          description: 'Rateio',
+          totalCents: 11_000,
+          startDate: '2026-12-20',
+          timezone: 'America/Sao_Paulo',
+          split
+        },
+        when
+      );
+
+    await billing('recent-older-page', splitOf(45, 55), new Date('2026-01-10T12:00:00Z'));
+    await billing('recent-newer-page', splitOf(0, 45), new Date('2026-02-10T12:00:00Z'));
+
+    const first = await listPeople(db, paged, undefined, false, '', 'recent');
+    const second = await listPeople(db, paged, first.nextCursor!, false, '', 'recent');
+    const third = await listPeople(db, paged, second.nextCursor!, false, '', 'recent');
+
+    equal(first.people.length, 50);
+    equal(second.people.length, 50);
+    equal(third.people.length, 5);
+    equal(third.nextCursor, null);
+    ok(first.nextCursor);
+    ok(second.nextCursor);
+
+    const listed = [...first.people, ...second.people, ...third.people];
+
+    equal(new Set(listed.map((person) => person.id)).size, 105);
+    deepEqual(
+      listed.map((person) => person.name),
+      contacts.map((contact) => contact.name)
+    );
+    // The last billed group leads, the earlier one follows and never-billed contacts close the order.
+    ok(listed.slice(0, 45).every((person) => person.lastBilledAt?.startsWith('2026-02-10')));
+    ok(listed.slice(45, 55).every((person) => person.lastBilledAt?.startsWith('2026-01-10')));
+    ok(listed.slice(55).every((person) => person.lastBilledAt === null));
   });
 });

@@ -352,7 +352,7 @@ describe('queued notification delivery', () => {
 
     const failing: NotificationTransport = { ...transport, email: async () => ({ status: 'transient' }) };
 
-    await rejects(() => deliver(row!.id, failing, 1));
+    await rejects(() => deliver(row!.id, failing));
 
     const first = (await rows(id))[0]!;
 
@@ -362,33 +362,112 @@ describe('queued notification delivery', () => {
     equal(Date.parse(first.available_at), clock + 60_000);
     ok(first.queued_at, 'the in-flight message keeps its queue stamp');
 
+    // A redelivery that beats the backoff must not consume an attempt.
+    equal(await deliver(row!.id, failing), 'skipped');
+    equal((await rows(id))[0]!.attempts, 1);
+
     clock += 60_000;
 
-    await rejects(() => deliver(row!.id, failing, 2));
+    await rejects(() => deliver(row!.id, failing));
 
     const second = (await rows(id))[0]!;
 
-    equal(second.attempts, 2);
+    equal(second.attempts, 2, 'the row counter escalates, never the message attempt');
     equal(Date.parse(second.available_at), clock + 120_000);
   });
 
-  it('records retry_exhausted on the last attempt and rethrows for the dead-letter queue', async () => {
+  it('persists the attempt count when a retried e-mail finally goes out', async () => {
+    clock = start;
+
+    const { id, address } = await charge();
+    const [row] = await rows(id);
+
+    await rejects(() => deliver(row!.id, { ...transport, email: async () => ({ status: 'transient' }) }));
+
+    clock += 60_000;
+
+    const before = emails.filter((entry) => entry.to === address).length;
+
+    equal(await deliver(row!.id), 'done');
+
+    const accepted = (await rows(id))[0]!;
+
+    equal(accepted.state, 'accepted');
+    equal(accepted.attempts, 2);
+    equal(emails.filter((entry) => entry.to === address).length, before + 1);
+  });
+
+  it('caps the retries at five real sends and then dead-letters the notice', async () => {
     clock = start;
 
     const { id } = await charge();
     const [row] = await rows(id);
 
-    const failing: NotificationTransport = { ...transport, email: async () => ({ status: 'transient' }) };
+    let sends = 0;
+    const failing: NotificationTransport = {
+      ...transport,
+      email: async () => {
+        sends++;
+        return { status: 'transient' };
+      }
+    };
 
-    await rejects(() => deliver(row!.id, failing, 5));
+    for (const backoff of [60_000, 120_000, 240_000, 480_000]) {
+      await rejects(() => deliver(row!.id, failing));
+
+      clock += backoff;
+    }
+
+    equal(sends, 4);
+
+    await rejects(() => deliver(row!.id, failing));
+
+    const exhausted = (await rows(id))[0]!;
+
+    equal(sends, 5, 'the transport is called exactly five times');
+    equal(exhausted.state, 'failed');
+    equal(exhausted.reason, 'retry_exhausted');
+    equal(exhausted.attempts, 5);
+    ok(!exhausted.queued_at, 'a settled row leaves the queue');
+
+    clock += 3600_000;
+
+    equal(await deliver(row!.id, failing), 'skipped');
+    equal(sends, 5, 'a dead-lettered notice is never submitted again');
+    equal((await db.charges.findOne({ select: { state: true }, where: { id } }))?.state, 'pending');
+  });
+
+  it('dead-letters a row left pending with its attempts spent, without calling the transport', async () => {
+    clock = start;
+
+    const { id } = await charge();
+    const [row] = await rows(id);
+
+    // A run that crashed after the claim leaves the row pending with the attempts already spent.
+    await db.notification_deliveries.updateOne({
+      where: { id: row!.id },
+      data: { attempts: 5, available_at: new Date(clock).toISOString(), lease_until: new Date(clock - 1).toISOString() }
+    });
+
+    let sends = 0;
+
+    equal(
+      await deliver(row!.id, {
+        ...transport,
+        email: async () => {
+          sends++;
+          return { status: 'accepted', id: 'must-not-send' };
+        }
+      }),
+      'done'
+    );
+
+    equal(sends, 0);
 
     const exhausted = (await rows(id))[0]!;
 
     equal(exhausted.state, 'failed');
     equal(exhausted.reason, 'retry_exhausted');
-    equal(exhausted.attempts, 5);
-    ok(!exhausted.queued_at, 'a settled row leaves the queue');
-    equal((await db.charges.findOne({ select: { state: true }, where: { id } }))?.state, 'pending');
   });
 
   it('turns an accepted ticket into a delivered receipt and stops there', async () => {

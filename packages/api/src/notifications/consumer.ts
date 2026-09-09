@@ -31,6 +31,15 @@ const SELECT = {
 const DEDUP_WINDOW = 23 * 3600_000; // Strictly below both providers' 24h expiry.
 const LEASE = 60_000;
 
+/**
+ * A queue message only counts its own redeliveries, and the cron always publishes a fresh one,
+ * so the row's persisted counter is what caps the retries of a notice.
+ */
+export const MAX_SEND_ATTEMPTS = 5;
+
+/** Ceiling for the exponential backoff written to `available_at`. */
+const MAX_BACKOFF = 15 * 60_000;
+
 const sqlNull = null as unknown as string | undefined;
 
 export type DeliveryRequest = {
@@ -48,7 +57,9 @@ export class TransientDeliveryError extends Error {
 
 /**
  * Sends one delivery or observes one push receipt. Returns `skipped` when the row is gone,
- * already terminal or still leased, and throws on a transient provider failure.
+ * already terminal, still leased or not yet due, and throws on a transient provider failure so
+ * the queue redelivers it. A redelivery that arrives before `available_at` is skipped without
+ * consuming an attempt: the retry ladder is the row's own `attempts`, never the message's.
  */
 export async function processDelivery(
   db: DbClient,
@@ -170,8 +181,13 @@ export async function processDelivery(
       return;
     }
 
+    if (!receipt && row.attempts >= MAX_SEND_ATTEMPTS) {
+      await mark('failed', 'retry_exhausted');
+      return;
+    }
+
     const lease = new Date(now + LEASE).toISOString();
-    const attempts = receipt ? row.attempts : input.attempt;
+    const attempts = receipt ? row.attempts : row.attempts + 1;
 
     await tx.notification_deliveries.updateOne({
       where: { id: row.id },
@@ -261,12 +277,12 @@ export async function processDelivery(
       available = now + 15 * 60_000;
     } else if (result.status === 'uncertain' && row.channel === 'push') {
       state = 'uncertain';
-    } else if (claim.attempts >= input.maxAttempts) {
+    } else if (claim.attempts >= MAX_SEND_ATTEMPTS || input.attempt >= input.maxAttempts) {
       state = result.status === 'uncertain' ? 'uncertain' : 'failed';
       reason = 'retry_exhausted';
     } else {
       state = 'pending';
-      available = now + 60_000 * 2 ** (claim.attempts - 1);
+      available = now + Math.min(60_000 * 2 ** (claim.attempts - 1), MAX_BACKOFF);
     }
 
     // Only a row going back to `pending` keeps `queued_at`, so the cron never duplicates a retry.

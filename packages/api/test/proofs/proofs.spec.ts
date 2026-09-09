@@ -69,7 +69,7 @@ describe('private proof transactions on PostgreSQL', () => {
     const retry = await upload(id);
     ok(retry.proof.id !== proof.id);
   });
-  it('serializes concurrent acceptance and writes integral payment/outbox/timeline', async () => {
+  it('serializes concurrent acceptance and writes integral payment/activity/timeline', async () => {
     const id = await charge();
     const { proof } = await upload(id);
     const results = await Promise.allSettled([
@@ -81,7 +81,7 @@ describe('private proof transactions on PostgreSQL', () => {
     const payment = await db.payments.findOne({ select: { amount_cents: true, proof_id: true }, where: { charge_id: id } });
     equal(payment?.amount_cents, 1234);
     equal(payment?.proof_id, proof.id);
-    equal(await db.outbox_events.count({ where: { aggregate_id: id, type: 'proof.accepted' } }), 1);
+    equal(await db.activity_events.count({ where: { aggregate_id: id, type: 'proof.accepted', subject_user_id: OWNER } }), 1);
     const timeline = await getTimeline(db, OWNER, {});
     ok(timeline.items.some((x) => x.kind === 'proof' && x.proof.id === proof.id));
     ok(timeline.items.some((x) => x.kind === 'payment' && x.payment.chargeId === id));

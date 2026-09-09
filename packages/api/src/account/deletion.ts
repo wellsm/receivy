@@ -77,10 +77,6 @@ export async function eraseAccount(
         });
         // Keep link tombstones so initial notification expansion cannot mint replacement capability.
         await tx.public_links.updateMany({ where: { charge_id: chargeId }, data: { revoked_at: now } });
-        await tx.outbox_events.updateMany({
-          where: { aggregate_id: chargeId },
-          data: { state: 'failed', ...{ recipient_user_id: sqlNull }, recipient_email: sqlNull, payload: '{}', updated_at: now }
-        });
         await tx.notification_deliveries.updateMany({
           where: { charge_id: chargeId, state: 'pending' },
           data: { state: 'suppressed', reason: 'account_deleted', updated_at: now }
@@ -140,16 +136,6 @@ export async function eraseAccount(
     await tx.login_codes.deleteMany({ where: { email: user.email } });
     await tx.activity_events.deleteMany({ where: { subject_user_id: userId } });
     await tx.activity_events.updateMany({ where: { actor_user_id: userId }, data: { ...{ actor_user_id: sqlNull }, payload: '{}' } });
-    await tx.outbox_events.updateMany({
-      where: {
-        OR: [
-          { recipient_user_id: userId },
-          { recipient_email: user.email },
-          { aggregate_id: { isIn: [userId, ...billings.records.map((x) => x.id)] } }
-        ]
-      },
-      data: { state: 'failed', ...{ recipient_user_id: sqlNull }, recipient_email: sqlNull, payload: '{}', updated_at: now }
-    });
     await tx.users.updateOne({
       where: { id: userId },
       data: {

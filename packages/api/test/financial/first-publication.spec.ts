@@ -2,9 +2,12 @@ import { deepEqual, equal, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
+import { QueueTester } from '@ez4/local-queue/test';
 import { getCharge } from '../../src/charges/repository';
+import { processDelivery } from '../../src/notifications/consumer';
+import type { NoticeContext } from '../../src/notifications/planner';
+import type { NotificationQueue } from '../../src/notifications/queue';
 import type { NotificationTransport } from '../../src/notifications/transport';
-import { runNotifications } from '../../src/notifications/worker';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { savePerson } from '../../src/people/repository';
 import { createOrRotatePublicLink, revokePublicLink } from '../../src/public/repository';
@@ -14,6 +17,14 @@ const owner = randomUUID(),
   other = randomUUID();
 const secret = 'first-publication-tests-only-secret';
 const config = { publicOrigin: 'https://receivy.example', secret };
+
+QueueTester.setClientMock<NotificationQueue>('NotificationQueue');
+
+const notice: NoticeContext = {
+  config,
+  queue: QueueTester.getClient<NotificationQueue>('NotificationQueue')
+};
+
 const sent: string[] = [];
 const transport: NotificationTransport = {
   email: async (x) => {
@@ -24,19 +35,32 @@ const transport: NotificationTransport = {
   receipt: async () => ({ status: 'delivered' })
 };
 let chargeId: string;
+
+async function deliverPending() {
+  const pending = await db.notification_deliveries.findMany({
+    select: { id: true },
+    where: { charge_id: chargeId, state: 'pending' }
+  });
+
+  for (const row of pending.records) {
+    await processDelivery(db, transport, config, { deliveryId: row.id, attempt: 1, maxAttempts: 5 });
+  }
+}
+
 describe('explicit first Pix publication', () => {
   before(async () => {
     await createUser(db, { id: owner, name: 'Owner', email: `${owner}@example.com` });
     await createUser(db, { id: other, name: 'Other', email: `${other}@example.com` });
     const person = await savePerson(db, owner, { name: 'Debtor', email: 'publication-debtor@example.com' });
-    chargeId = (await createOnceCharge(db, owner, 'first-pix', { personId: person.id, amountCents: 100, dueDate: '2030-01-01' })).chargeId;
+    chargeId = (await createOnceCharge(db, owner, 'first-pix', { personId: person.id, amountCents: 100, dueDate: '2030-01-01' }, notice))
+      .chargeId;
   });
   after(async () => cleanupUsers(db, [owner, other]));
   it('keeps no-Pix creation possible but refuses first sharing and makes initial notice visibly wait', async () => {
     equal((await getCharge(db, owner, chargeId)).pix, null);
     equal((await getCharge(db, owner, chargeId)).sharingState, 'pix_required');
     await rejects(() => createOrRotatePublicLink(db, owner, chargeId, secret), HttpConflictError);
-    await runNotifications(db, transport, config);
+    await deliverPending();
     equal(await db.public_links.count({ where: { charge_id: chargeId } }), 0);
     equal(sent.length, 0);
     equal(await db.notification_deliveries.count({ where: { charge_id: chargeId, state: 'suppressed', reason: 'pix_required' } }), 1);
@@ -46,13 +70,15 @@ describe('explicit first Pix publication', () => {
     const first = await savePaymentMethod(db, owner, { pixKeyType: 'email', pixKey: 'first@example.com' });
     const second = await savePaymentMethod(db, owner, { pixKeyType: 'email', pixKey: 'second@example.com' });
     await rejects(() => createOrRotatePublicLink(db, owner, chargeId, secret, false, undefined, foreign.id), HttpNotFoundError);
-    const [a, b] = await Promise.all([1, 2].map(() => createOrRotatePublicLink(db, owner, chargeId, secret, false, undefined, first.id)));
+    const [a, b] = await Promise.all(
+      [1, 2].map(() => createOrRotatePublicLink(db, owner, chargeId, secret, false, undefined, first.id, notice))
+    );
     deepEqual(a, b);
     equal((await getCharge(db, owner, chargeId)).pix?.key, 'first@example.com');
     equal((await getCharge(db, owner, chargeId)).sharingState, 'ready');
     await rejects(() => createOrRotatePublicLink(db, owner, chargeId, secret, false, undefined, second.id), HttpConflictError);
-    await runNotifications(db, transport, config);
-    await runNotifications(db, transport, config);
+    await deliverPending();
+    await deliverPending();
     equal(sent.length, 1);
     equal(new Set(sent).size, 1);
     await savePaymentMethod(db, owner, { pixKeyType: 'email', pixKey: 'edited@example.com' }, first.id);

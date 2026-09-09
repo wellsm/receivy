@@ -2,6 +2,7 @@ import type { Environment } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { Db } from './database';
 import type { EmailService } from './email/service';
+import type { NotificationQueue } from './notifications/queue';
 import type { ProofFiles } from './storage';
 
 export declare class ApiProvider implements Http.Provider {
@@ -9,6 +10,7 @@ export declare class ApiProvider implements Http.Provider {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
     proofFiles: Environment.Service<ProofFiles>;
+    notificationQueue: Environment.Service<NotificationQueue>;
     variables: Environment.ServiceVariables;
   };
 
@@ -29,5 +31,6 @@ export declare class ApiProvider implements Http.Provider {
     OAUTH_REDIRECT_ALLOW_LIST: Environment.Variable<'OAUTH_REDIRECT_ALLOW_LIST'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
     PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
+    NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
   };
 }

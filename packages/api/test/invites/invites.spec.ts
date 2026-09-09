@@ -183,8 +183,8 @@ describe('billing invites on native PostgreSQL', () => {
     equal(after.find((charge) => charge.debtor_person_id === guestPerson.id)?.id, result.chargeId);
 
     // Only the newly inserted charge announces itself; the repriced one keeps its original event.
-    equal(await db.outbox_events.count({ where: { aggregate_id: result.chargeId!, type: 'charge.created' } }), 1);
-    equal(await db.outbox_events.count({ where: { aggregate_id: before[0]!.id, type: 'charge.created' } }), 1);
+    equal(await db.activity_events.count({ where: { aggregate_id: result.chargeId!, type: 'charge.created', subject_user_id: OWNER } }), 1);
+    equal(await db.activity_events.count({ where: { aggregate_id: before[0]!.id, type: 'charge.created', subject_user_id: OWNER } }), 1);
     equal(await db.activity_events.count({ where: { aggregate_id: result.chargeId!, subject_user_id: GUEST } }), 1);
     ok(await db.activity_events.count({ where: { aggregate_id: billing.id, type: 'billings.invite_accepted' } }));
 
@@ -265,11 +265,11 @@ describe('billing invites on native PostgreSQL', () => {
 
     // One announcement per inserted charge; the repriced originals keep the single event they had.
     for (const charge of guestCharges) {
-      equal(await db.outbox_events.count({ where: { aggregate_id: charge.id, type: 'charge.created' } }), 1);
+      equal(await db.activity_events.count({ where: { aggregate_id: charge.id, type: 'charge.created', subject_user_id: OWNER } }), 1);
     }
 
     for (const charge of before) {
-      equal(await db.outbox_events.count({ where: { aggregate_id: charge.id, type: 'charge.created' } }), 1);
+      equal(await db.activity_events.count({ where: { aggregate_id: charge.id, type: 'charge.created', subject_user_id: OWNER } }), 1);
     }
 
     equal(result.chargeId, guestCharges[0]!.id);

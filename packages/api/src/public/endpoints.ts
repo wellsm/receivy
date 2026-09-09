@@ -3,6 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { PublicChargeView, PublicLink } from '@receivy/common';
 import type { SessionIdentity } from '../authorizers/session';
+import { noticeContext } from '../notifications/context';
 import type { ApiProvider } from '../provider';
 import { throttlePublicRead } from '../security/throttle';
 import { createOrRotatePublicLink, getPublicCharge, revokePublicLink } from './repository';
@@ -41,7 +42,8 @@ export async function createPublicLinkHandler(request: PublishRequest, context: 
       context.variables.PUBLIC_LINK_HMAC_SECRET,
       false,
       undefined,
-      request.body?.paymentMethodId
+      request.body?.paymentMethodId,
+      noticeContext(context)
     )
   };
 }

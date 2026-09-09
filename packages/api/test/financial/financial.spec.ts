@@ -171,7 +171,7 @@ describe('financial repositories on PostgreSQL', () => {
     const events = await db.activity_events.findMany({ select: { type: true }, where: { aggregate_id: chargeId } });
     ok(events.records.some((event) => event.type === 'charge.created'));
     ok(events.records.some((event) => event.type === 'charge.paid'));
-    equal(await db.outbox_events.count({ where: { aggregate_id: chargeId, type: 'charge.created' } }), 1);
+    equal(await db.activity_events.count({ where: { aggregate_id: chargeId, type: 'charge.created' } }), 1);
   });
 
   it('returns one persisted result for simultaneous identical billing idempotency keys', async () => {
@@ -194,7 +194,6 @@ describe('financial repositories on PostgreSQL', () => {
     equal(await db.allocations.count({ where: { billing_id: first.id } }), 2);
     equal(await db.charges.count({ where: { billing_id: first.id } }), 2);
     for (const charge of first.charges) {
-      equal(await db.outbox_events.count({ where: { aggregate_id: charge.id, type: 'charge.created' } }), 1);
       equal(await db.activity_events.count({ where: { aggregate_id: charge.id, type: 'charge.created' } }), 1);
     }
   });

@@ -27,7 +27,8 @@ export default {
   sourceFiles: [
     './src/api.ts',
     './src/billings/scheduler.ts',
-    './src/notifications/scheduler.ts',
+    './src/notifications/queue.ts',
+    './src/notifications/cron.ts',
     './src/proofs/cleanup-scheduler.ts',
     './src/auth/apple-revocation-scheduler.ts'
   ],

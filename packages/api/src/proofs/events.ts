@@ -17,27 +17,6 @@ export async function proofEvent(db: DbClient, row: ChargeRow, type: string, now
       }
     });
   }
-  const toCreditor = type === 'proof.submitted';
-  await db.outbox_events.insertOne({
-    data: {
-      id: crypto.randomUUID(),
-      type,
-      aggregate_type: 'charge',
-      aggregate_id: row.id,
-      ...(toCreditor
-        ? { recipient_user: { id: row.creditor_id } }
-        : row.recipient_user_id
-          ? { recipient_user: { id: row.recipient_user_id } }
-          : {}),
-      ...(!toCreditor && row.recipient_email_snapshot ? { recipient_email: row.recipient_email_snapshot } : {}),
-      payload,
-      state: 'pending',
-      attempts: 0,
-      available_at: now,
-      created_at: now,
-      updated_at: now
-    }
-  });
 }
 
 /** Call only inside the charge-locked transaction. Retain files and distinguish closure from file rejection. */

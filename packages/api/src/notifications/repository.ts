@@ -3,6 +3,7 @@ import { HttpBadRequestError, HttpConflictError, HttpError, HttpForbiddenError, 
 import type { DeviceRegistration, NotificationDelivery, NotificationDevice } from '@receivy/common';
 import { findChargeForActor } from '../charges/repository';
 import type { DbClient } from '../database';
+import { enqueueDue, type NoticeContext, planNotice } from './planner';
 
 async function audit(db: DbClient, userId: string, id: string, type: string) {
   await db.activity_events.insertOne({
@@ -101,40 +102,53 @@ export async function registerDevice(
     };
   });
 }
-export async function manualReminder(db: DbClient, userId: string, chargeId: string, clock = Date.now): Promise<{ queued: boolean }> {
-  return db.transaction(async (tx) => {
+export async function manualReminder(
+  db: DbClient,
+  userId: string,
+  chargeId: string,
+  notice: NoticeContext,
+  clock = Date.now
+): Promise<{ queued: boolean }> {
+  const dueDeliveryIds: string[] = [];
+
+  const result = await db.transaction(async (tx) => {
     const { row, direction } = await findChargeForActor(tx, userId, chargeId, true);
-    if (direction !== 'receivable') throw new HttpForbiddenError();
-    if (row.state !== 'pending') throw new HttpConflictError('Cobrança encerrada.');
-    const now = new Date(clock()).toISOString();
+
+    if (direction !== 'receivable') {
+      throw new HttpForbiddenError();
+    }
+
+    if (row.state !== 'pending') {
+      throw new HttpConflictError('Cobrança encerrada.');
+    }
+
+    const now = clock();
+
     if (
-      await tx.outbox_events.count({
+      await tx.notification_deliveries.count({
         where: {
-          aggregate_id: chargeId,
-          type: 'charge.manual_reminder',
-          created_at: { gt: new Date(clock() - 24 * 3600_000).toISOString() }
+          charge_id: chargeId,
+          template: 'manual',
+          created_at: { gt: new Date(now - 24 * 3600_000).toISOString() }
         }
       })
     ) {
       throw new HttpError(429, 'Aguarde 24 horas antes de enviar outro lembrete.');
     }
-    await tx.outbox_events.insertOne({
-      data: {
-        id: crypto.randomUUID(),
-        type: 'charge.manual_reminder',
-        aggregate_type: 'charge',
-        aggregate_id: chargeId,
-        payload: JSON.stringify({ chargeId }),
-        state: 'pending',
-        attempts: 0,
-        available_at: now,
-        created_at: now,
-        updated_at: now
-      }
-    });
+
+    const planned = await planNotice(tx, row, `charge:${chargeId}:manual:${crypto.randomUUID()}`, 'manual', notice.config, now);
+
+    dueDeliveryIds.push(...planned.due);
+
     await audit(tx, userId, chargeId, 'notifications.manual_reminder_requested');
+
     return { queued: true };
   });
+
+  // The rows are committed before the queue learns about them; a lost send is recovered by the cron.
+  await enqueueDue(db, notice.queue, dueDeliveryIds, clock());
+
+  return result;
 }
 export async function listDeliveries(db: DbClient, userId: string, chargeId: string): Promise<NotificationDelivery[]> {
   await findChargeForActor(db, userId, chargeId);

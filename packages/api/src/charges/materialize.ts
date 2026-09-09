@@ -2,6 +2,7 @@ import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import type { BillingPlan, BillingType, PaymentMethod } from '@receivy/common';
 import { lockAccountReferences } from '../account/locking';
 import type { DbClient } from '../database';
+import { type NoticeContext, planNotice } from '../notifications/planner';
 import { CHARGE_SELECT, type ChargeRow } from './repository';
 
 export type ChargeRecipientMaterialization = { personId: string; name: string; email?: string; linkedUserId?: string };
@@ -84,7 +85,14 @@ export async function prepareChargeMaterialization(
   return { recipients: await recipientSnapshots(db, ownerId, personIds), pix: await pixSnapshot(db, ownerId, paymentMethodId) };
 }
 
-async function recordCreation(db: DbClient, ownerId: string, row: ChargeRow, recipient: ChargeRecipientMaterialization, now: string) {
+async function recordCreation(
+  db: DbClient,
+  ownerId: string,
+  row: ChargeRow,
+  recipient: ChargeRecipientMaterialization,
+  now: string,
+  notice?: NoticeContext
+): Promise<string[]> {
   const payload = JSON.stringify({ chargeId: row.id, billingId: row.billing_id });
   const subjects = new Set([ownerId, ...(recipient.linkedUserId ? [recipient.linkedUserId] : [])]);
 
@@ -104,35 +112,30 @@ async function recordCreation(db: DbClient, ownerId: string, row: ChargeRow, rec
     });
   }
 
-  await db.outbox_events.insertOne({
-    select: { id: true },
-    data: {
-      id: crypto.randomUUID(),
-      type: 'charge.created',
-      aggregate_type: 'charge',
-      aggregate_id: row.id,
-      ...(recipient.linkedUserId ? { recipient_user: { id: recipient.linkedUserId } } : {}),
-      ...(recipient.email ? { recipient_email: recipient.email } : {}),
-      payload,
-      state: 'pending',
-      attempts: 0,
-      available_at: now,
-      created_at: now,
-      updated_at: now
-    }
-  });
+  if (!notice) {
+    return [];
+  }
+
+  const planned = await planNotice(db, row, `charge:${row.id}:initial`, 'initial', notice.config, Date.parse(now));
+
+  return planned.due;
 }
 
-/** Shared persistence seam for every billing type. Caller owns the transaction. */
+/**
+ * Shared persistence seam for every billing type. Caller owns the transaction and, once it
+ * commits, publishes `dueDeliveryIds` to the notification queue.
+ */
 export async function persistChargePlan(
   db: DbClient,
   ownerId: string,
   plan: BillingPlan,
   billing: ChargeBillingRef,
   context: ChargeMaterializationContext,
-  now: string
-): Promise<ChargeRow[]> {
+  now: string,
+  notice?: NoticeContext
+): Promise<{ rows: ChargeRow[]; dueDeliveryIds: string[] }> {
   const rows: ChargeRow[] = [];
+  const dueDeliveryIds: string[] = [];
 
   for (const item of plan.charges) {
     const recipient = context.recipients.get(item.personId);
@@ -170,8 +173,8 @@ export async function persistChargePlan(
 
     rows.push(row);
 
-    await recordCreation(db, ownerId, row, recipient, now);
+    dueDeliveryIds.push(...(await recordCreation(db, ownerId, row, recipient, now, notice)));
   }
 
-  return rows;
+  return { rows, dueDeliveryIds };
 }

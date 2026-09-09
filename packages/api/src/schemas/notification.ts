@@ -13,7 +13,7 @@ export interface DeviceTokenSchema extends Database.Schema {
 }
 export interface NotificationDeliverySchema extends Database.Schema {
   id: String.UUID;
-  event_id: String.UUID;
+  event_id: String.Max<200>;
   charge_id: String.UUID;
   recipient_key: String.Max<300>;
   recipient_user_id?: String.UUID;

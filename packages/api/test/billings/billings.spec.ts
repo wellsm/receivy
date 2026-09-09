@@ -61,7 +61,7 @@ describe('billings on native PostgreSQL', () => {
     deepEqual(snapshot.recipient, { name: 'Bruno', email: 'billing-debtor@example.com' });
     equal(snapshot.pix?.key, '52998224725');
     await savePerson(db, OWNER, { name: 'Bruno', email: 'billing-debtor@example.com' }, personId);
-    equal(await db.outbox_events.count({ where: { aggregate_id: created.charges[0]!.id, type: 'charge.created' } }), 1);
+    equal(await db.activity_events.count({ where: { aggregate_id: created.charges[0]!.id, type: 'charge.created' } }), 1);
   });
 
   it('creates every occurrence of an until billing at once with exact per-occurrence cents and clamped days', async () => {

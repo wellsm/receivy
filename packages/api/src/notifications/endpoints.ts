@@ -4,6 +4,7 @@ import type { String } from '@ez4/schema';
 import type { NotificationDelivery, NotificationDevice } from '@receivy/common';
 import type { SessionIdentity } from '../authorizers/session';
 import type { ApiProvider } from '../provider';
+import { noticeContext } from './context';
 import { listDeliveries, manualReminder, registerDevice } from './repository';
 
 declare class IdRequest implements Http.Request {
@@ -39,7 +40,7 @@ export async function registerDeviceHandler(request: DeviceRequest, context: Ser
 export async function manualReminderHandler(request: IdRequest, context: Service.Context<ApiProvider>): Promise<QueuedResponse> {
   return {
     status: 202,
-    body: await manualReminder(context.db, request.identity.userId, request.parameters.id)
+    body: await manualReminder(context.db, request.identity.userId, request.parameters.id, noticeContext(context))
   };
 }
 export async function listDeliveriesHandler(request: IdRequest, context: Service.Context<ApiProvider>): Promise<DeliveriesResponse> {

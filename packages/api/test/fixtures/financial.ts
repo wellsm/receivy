@@ -1,6 +1,7 @@
 import { DatabaseTester } from '@ez4/local-database/test';
 import { createBilling } from '../../src/billings/repository';
 import type { Db, DbClient } from '../../src/database';
+import type { NoticeContext } from '../../src/notifications/planner';
 
 export const db = DatabaseTester.getClient<Db>('Db');
 
@@ -39,7 +40,6 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
     await client.payment_proofs.deleteMany({ where: { charge_id: { isIn: chargeIds } } });
     await client.upload_intents.deleteMany({ where: { charge_id: { isIn: chargeIds } } });
     await client.activity_events.deleteMany({ where: { aggregate_id: { isIn: chargeIds } } });
-    await client.outbox_events.deleteMany({ where: { aggregate_id: { isIn: chargeIds } } });
     await client.charges.deleteMany({ where: { id: { isIn: chargeIds } } });
   }
   if (billingIds.length) {
@@ -63,16 +63,25 @@ export async function createOnceCharge(
   client: DbClient,
   ownerId: string,
   key: string,
-  input: { personId: string; amountCents: number; dueDate: string; paymentMethodId?: string }
+  input: { personId: string; amountCents: number; dueDate: string; paymentMethodId?: string },
+  notice?: NoticeContext
 ) {
-  const billing = await createBilling(client, ownerId, key, {
-    type: 'once',
-    totalCents: input.amountCents,
-    startDate: input.dueDate,
-    timezone: 'America/Sao_Paulo',
-    paymentMethodId: input.paymentMethodId,
-    split: { mode: 'fixed', parts: [{ kind: 'person', personId: input.personId, amountCents: input.amountCents }] }
-  });
+  const billing = await createBilling(
+    client,
+    ownerId,
+    key,
+    {
+      type: 'once',
+      totalCents: input.amountCents,
+      startDate: input.dueDate,
+      timezone: 'America/Sao_Paulo',
+      paymentMethodId: input.paymentMethodId,
+      split: { mode: 'fixed', parts: [{ kind: 'person', personId: input.personId, amountCents: input.amountCents }] }
+    },
+    new Date(),
+    undefined,
+    notice
+  );
 
   return { billing, chargeId: billing.charges[0]!.id };
 }

@@ -4,6 +4,7 @@ import { HttpBadRequestError } from '@ez4/gateway';
 import type { Integer, String } from '@ez4/schema';
 import type { BillingDetail, BillingInput, BillingPatch, BillingPreview, BillingsPage } from '@receivy/common';
 import type { SessionIdentity } from '../authorizers/session';
+import { noticeContext } from '../notifications/context';
 import type { ApiProvider } from '../provider';
 import { createBilling, getBilling, type InviteLinkContext, listBillings, patchBilling, previewBilling } from './repository';
 
@@ -118,7 +119,8 @@ export async function createBillingHandler(request: CreateRequest, context: Serv
       request.headers['idempotency-key'],
       request.body as BillingInput,
       new Date(),
-      inviteLink(context)
+      inviteLink(context),
+      noticeContext(context)
     )
   );
 

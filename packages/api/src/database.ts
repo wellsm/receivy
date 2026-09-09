@@ -10,7 +10,6 @@ import type { LoginCodeSchema } from './schemas/login-code';
 import type { DeviceTokenSchema, NotificationDeliverySchema } from './schemas/notification';
 import type { OauthAttemptSchema } from './schemas/oauth-attempt';
 import type { OauthGrantSchema } from './schemas/oauth-grant';
-import type { OutboxEventSchema } from './schemas/outbox-event';
 import type { PaymentSchema } from './schemas/payment';
 import type { PaymentMethodSchema } from './schemas/payment-method';
 import type { PaymentProofSchema, ProofThrottleSchema, UploadIntentSchema } from './schemas/payment-proof';
@@ -122,12 +121,6 @@ export declare class Db extends Database.Service<PostgresEngine> {
       schema: ActivityEventSchema;
       relations: { 'actor_user_id@actor_user': 'users:id'; 'subject_user_id@subject_user': 'users:id' };
       indexes: { id: Index.Primary; subject_user_id: Index.Secondary; aggregate_id: Index.Secondary };
-    }>,
-    Database.UseTable<{
-      name: 'outbox_events';
-      schema: OutboxEventSchema;
-      relations: { 'recipient_user_id@recipient_user': 'users:id' };
-      indexes: { id: Index.Primary; aggregate_id: Index.Secondary; 'state:available_at': Index.Secondary };
     }>,
     Database.UseTable<{
       name: 'people';

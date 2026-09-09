@@ -27,6 +27,7 @@ import { lockOwner, persistChargePlan, prepareChargeMaterialization } from '../c
 import { CHARGE_SELECT, chargeDto } from '../charges/repository';
 import type { DbClient } from '../database';
 import { activeInvite, type InviteLinkContext } from '../invites/links';
+import { enqueueDue, type NoticeContext } from '../notifications/planner';
 import { closeProofs } from '../proofs/events';
 import { billingRequestFingerprint } from './request';
 
@@ -435,7 +436,8 @@ export async function createBilling(
   key: string,
   raw: BillingInput,
   now = new Date(),
-  link?: InviteLinkContext
+  link?: InviteLinkContext,
+  notice?: NoticeContext
 ): Promise<BillingDetail> {
   if (!key.trim() || key.length > 200) {
     throw new RangeError('Idempotency-Key inválida.');
@@ -443,8 +445,9 @@ export async function createBilling(
 
   const input = normalizeBillingInput(raw);
   const hash = billingRequestFingerprint(input);
+  const dueDeliveryIds: string[] = [];
 
-  return db.transaction(async (tx) => {
+  const detail = await db.transaction(async (tx) => {
     await lockOwner(tx, ownerId);
 
     const existing = await tx.billings.findOne({ select: BILLING_SELECT, where: { owner_id: ownerId, idempotency_key: key } });
@@ -502,13 +505,22 @@ export async function createBilling(
         numbered: true
       });
 
-      await persistChargePlan(tx, ownerId, plan, { id, type: input.type }, context, instant);
+      const persisted = await persistChargePlan(tx, ownerId, plan, { id, type: input.type }, context, instant, notice);
+
+      dueDeliveryIds.push(...persisted.dueDeliveryIds);
     }
 
     await audit(tx, ownerId, id, 'billing.created', instant, { type: input.type });
 
     return dto(tx, row, now, link);
   });
+
+  // The rows are committed before the queue learns about them; a lost send is recovered by the cron.
+  if (notice) {
+    await enqueueDue(db, notice.queue, dueDeliveryIds, now.getTime());
+  }
+
+  return detail;
 }
 
 export async function getBilling(
@@ -756,7 +768,13 @@ function billingInputFrom(row: BillingRow, split: BillingSplit): BillingInput {
 }
 
 /** Hourly job for `indefinite` billings until slice 2 moves it to the queue consumer. */
-export async function materializeBillings(db: DbClient, now = new Date()): Promise<{ materialized: number; failures: string[] }> {
+export async function materializeBillings(
+  db: DbClient,
+  now = new Date(),
+  notice?: NoticeContext
+): Promise<{ materialized: number; failures: string[]; dueDeliveryIds: string[] }> {
+  const dueDeliveryIds: string[] = [];
+
   const candidates = (
     await db.billings.findMany({
       select: { id: true, owner_id: true },
@@ -810,7 +828,10 @@ export async function materializeBillings(db: DbClient, now = new Date()): Promi
             });
             const instant = now.toISOString();
 
-            await persistChargePlan(tx, row.owner_id, plan, { id: row.id, type: 'indefinite' }, context, instant);
+            const persisted = await persistChargePlan(tx, row.owner_id, plan, { id: row.id, type: 'indefinite' }, context, instant, notice);
+
+            dueDeliveryIds.push(...persisted.dueDeliveryIds);
+
             await audit(tx, row.owner_id, row.id, 'billing.materialized', instant, { dueDate });
 
             created++;
@@ -833,5 +854,5 @@ export async function materializeBillings(db: DbClient, now = new Date()): Promi
     }
   }
 
-  return { materialized, failures };
+  return { materialized, failures, dueDeliveryIds };
 }

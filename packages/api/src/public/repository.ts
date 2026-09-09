@@ -3,6 +3,7 @@ import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from '@ez4/g
 import type { PublicChargeView, PublicLink } from '@receivy/common';
 import { CHARGE_SELECT, findChargeForActor } from '../charges/repository';
 import type { DbClient } from '../database';
+import { enqueueDue, type NoticeContext, planNotice } from '../notifications/planner';
 import { assertPublicLinkSecretConfigured, issuePublicChargeToken, verifyPublicChargeToken } from './capability';
 
 const LINK_SELECT = {
@@ -38,10 +39,16 @@ export async function createOrRotatePublicLink(
   secret: string,
   rotate = false,
   nowSeconds = Math.floor(Date.now() / 1000),
-  paymentMethodId?: string
+  paymentMethodId?: string,
+  notice?: NoticeContext
 ): Promise<PublicLink> {
   assertPublicLinkSecretConfigured(secret);
-  return db.transaction(async (tx) => {
+
+  const dueDeliveryIds: string[] = [];
+
+  const link = await db.transaction(async (tx) => {
+    let resume = false;
+
     const { row, direction } = await findChargeForActor(tx, creditorId, chargeId, true);
     if (direction !== 'receivable') throw new HttpForbiddenError();
     if (row.state !== 'pending') throw new HttpConflictError('Charge is closed.');
@@ -76,24 +83,10 @@ export async function createOrRotatePublicLink(
           created_at: stamp
         }
       });
-      const {
-        records: [initial]
-      } = await tx.outbox_events.findMany({
-        select: { id: true, payload: true },
-        where: { aggregate_id: row.id, type: 'charge.created', state: 'delivered' },
-        take: 1
-      });
-      if (initial && (await tx.notification_deliveries.count({ where: { event_id: initial.id, reason: 'pix_required', attempts: 0 } }))) {
-        await tx.outbox_events.updateOne({
-          where: { id: initial.id },
-          data: {
-            state: 'pending',
-            available_at: stamp,
-            updated_at: stamp,
-            payload: JSON.stringify({ ...JSON.parse(initial.payload), notificationResumed: true })
-          }
-        });
-      }
+      // The initial notice was planned without a Pix key; publication replans it in place.
+      resume = !!(await tx.notification_deliveries.count({
+        where: { event_id: `charge:${row.id}:initial`, reason: 'pix_required', attempts: 0 }
+      }));
     } else if (paymentMethodId) {
       const method = await tx.payment_methods.findOne({
         select: { pix_key: true, pix_key_type: true },
@@ -136,8 +129,27 @@ export async function createOrRotatePublicLink(
         updated_at: now
       }
     });
+
+    // Replanning needs the published Pix snapshot and the capability created just above.
+    if (resume && notice) {
+      const published = await tx.charges.findOne({ select: CHARGE_SELECT, where: { id: row.id } });
+
+      if (published) {
+        const planned = await planNotice(tx, published, `charge:${published.id}:initial`, 'initial', notice.config, nowSeconds * 1000);
+
+        dueDeliveryIds.push(...planned.due);
+      }
+    }
+
     return response(created, secret);
   });
+
+  // The replanned rows are committed before the queue learns about them.
+  if (notice) {
+    await enqueueDue(db, notice.queue, dueDeliveryIds, nowSeconds * 1000);
+  }
+
+  return link;
 }
 
 export async function revokePublicLink(db: DbClient, creditorId: string, chargeId: string): Promise<void> {

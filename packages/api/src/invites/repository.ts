@@ -5,6 +5,7 @@ import { audit, BILLING_SELECT, type BillingRow, saveAllocations, splitFor } fro
 import { lockOwner, persistChargePlan, prepareChargeMaterialization } from '../charges/materialize';
 import { CHARGE_SELECT, type ChargeRow } from '../charges/repository';
 import type { DbClient } from '../database';
+import { enqueueDue, type NoticeContext } from '../notifications/planner';
 import { savePerson } from '../people/repository';
 import { INVITE_SELECT, resolveInvite } from './links';
 
@@ -88,7 +89,9 @@ async function reshapeOccurrences(
   charges: ChargeRow[],
   split: BillingSplit,
   personId: string,
-  now: string
+  now: string,
+  due: string[],
+  notice?: NoticeContext
 ): Promise<string | null> {
   const resolved = new Map(
     resolveBillingSplit(billing.total_cents, split).flatMap((allocation) =>
@@ -141,16 +144,19 @@ async function reshapeOccurrences(
       continue;
     }
 
-    const [created] = await persistChargePlan(
+    const { rows, dueDeliveryIds } = await persistChargePlan(
       db,
       billing.owner_id,
       { ...plan, charges: mine },
       { id: billing.id, type: billing.type },
       context,
-      now
+      now,
+      notice
     );
 
-    first ??= created?.id ?? null;
+    due.push(...dueDeliveryIds);
+
+    first ??= rows[0]?.id ?? null;
   }
 
   return first;
@@ -161,11 +167,13 @@ export async function acceptInvite(
   userId: string,
   token: string,
   secret: string,
-  now = new Date()
+  now = new Date(),
+  notice?: NoticeContext
 ): Promise<InviteAcceptResult> {
   const preview = await resolveInvite(db, token, secret);
+  const dueDeliveryIds: string[] = [];
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await lockOwner(tx, preview.owner_id);
 
     const invite = await tx.billing_invites.findOne({ select: INVITE_SELECT, where: { id: preview.id }, lock: true });
@@ -231,11 +239,20 @@ export async function acceptInvite(
     await assertSplitReshapable(tx, charges);
     await saveAllocations(tx, billing.id, billing.total_cents, next, instant);
 
-    const chargeId = charges.length ? await reshapeOccurrences(tx, billing, charges, next, personId, instant) : null;
+    const chargeId = charges.length
+      ? await reshapeOccurrences(tx, billing, charges, next, personId, instant, dueDeliveryIds, notice)
+      : null;
 
     await tx.billing_invites.updateOne({ where: { id: invite.id }, data: accepted });
     await audit(tx, billing.owner_id, billing.id, 'billings.invite_accepted', instant, { personId, joinedSplit: true });
 
     return { billingId: billing.id, chargeId, joinedSplit: true };
   });
+
+  // The acceptance is committed before the queue learns about it; a lost send is recovered by the cron.
+  if (notice) {
+    await enqueueDue(db, notice.queue, dueDeliveryIds, now.getTime());
+  }
+
+  return result;
 }

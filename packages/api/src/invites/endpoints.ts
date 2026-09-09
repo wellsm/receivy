@@ -3,6 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { BillingCategory, BillingInvite, BillingType, InviteAcceptResult } from '@receivy/common';
 import type { SessionIdentity } from '../authorizers/session';
+import { noticeContext } from '../notifications/context';
 import type { ApiProvider } from '../provider';
 import { INVITE_ACCEPT, throttlePublicRead } from '../security/throttle';
 import { acceptInvite, createInvite, getPublicInvite, revokeInvite } from './repository';
@@ -84,7 +85,14 @@ export async function publicInviteHandler(
 export async function acceptInviteHandler(request: AcceptRequest, context: Service.Context<ApiProvider>): Promise<AcceptResponse> {
   await throttlePublicRead(context.db, request.parameters.token, request, INVITE_ACCEPT);
 
-  const body = await acceptInvite(context.db, request.identity.userId, request.parameters.token, context.variables.PUBLIC_LINK_HMAC_SECRET);
+  const body = await acceptInvite(
+    context.db,
+    request.identity.userId,
+    request.parameters.token,
+    context.variables.PUBLIC_LINK_HMAC_SECRET,
+    new Date(),
+    noticeContext(context)
+  );
 
   return { status: 200, body };
 }

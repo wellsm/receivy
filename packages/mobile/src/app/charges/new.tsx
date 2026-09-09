@@ -7,9 +7,11 @@ export default function NewChargeRoute() {
   return (
     <BillingFormScreen
       onSaved={(billing) => router.replace({ pathname: "/charges/created", params: { id: billing.id } })}
-      onCreateContact={() => router.push({ pathname: "/people", params: { returnTo: "new-billing" } })}
+      // The side trips go straight to the form screens: the lists have nothing to
+      // add when the user already knows they are registering something new.
+      onCreateContact={() => router.push("/people/new?returnTo=new-billing")}
       onCreatePix={(required) =>
-        router.push({ pathname: "/settings/pix", params: { returnTo: "new-billing", ...(required ? { required: "1" } : {}) } })
+        router.push({ pathname: "/settings/pix/new", params: { returnTo: "new-billing", ...(required ? { required: "1" } : {}) } })
       }
     />
   );

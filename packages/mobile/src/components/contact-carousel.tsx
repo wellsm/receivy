@@ -39,7 +39,7 @@ export function ContactCarousel({ people, selected, today, disabled, onToggle, o
         <Pressable
           key={person.id}
           accessibilityRole="button"
-          accessibilityLabel={person.name}
+          accessibilityLabel={person.displayName}
           accessibilityState={{ selected: selected.includes(person.id), disabled }}
           disabled={disabled}
           onPress={() => onToggle(person.id)}
@@ -50,10 +50,10 @@ export function ContactCarousel({ people, selected, today, disabled, onToggle, o
               selected.includes(person.id) ? "border-primary bg-primary" : "border-outline bg-surface"
             }`}
           >
-            <Text className={`text-lg font-extrabold ${selected.includes(person.id) ? "text-white" : "text-primary-strong"}`}>{initialOf(person.name)}</Text>
+            <Text className={`text-lg font-extrabold ${selected.includes(person.id) ? "text-white" : "text-primary-strong"}`}>{initialOf(person.displayName)}</Text>
           </View>
           <Text className="text-xs font-bold text-ink" numberOfLines={1}>
-            {person.name}
+            {person.displayName}
           </Text>
           <Text className="text-[10px] text-muted" numberOfLines={1}>
             {lastBilledHint(person.lastBilledAt, today)}

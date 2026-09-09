@@ -202,7 +202,19 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
 }
 
 function unknownPerson(id: string): Person {
-  return { id, name: "Contato", email: null, phone: null, archivedAt: null, createdAt: "", hasAccount: false, lastBilledAt: null };
+  return {
+    id,
+    name: "Contato",
+    nickname: null,
+    displayName: "Contato",
+    email: null,
+    phone: null,
+    archivedAt: null,
+    createdAt: "",
+    hasAccount: false,
+    lastBilledAt: null,
+    activeCharges: 0,
+  };
 }
 
 function abbreviate(pixKey: string): string {

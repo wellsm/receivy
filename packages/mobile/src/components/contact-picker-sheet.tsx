@@ -84,7 +84,7 @@ export function ContactPickerSheet({ selected, people = peopleClient, onToggle, 
               <Pressable
                 key={person.id}
                 accessibilityRole="checkbox"
-                accessibilityLabel={person.name}
+                accessibilityLabel={person.displayName}
                 accessibilityState={{ checked: selected.includes(person.id) }}
                 onPress={() => onToggle(person.id)}
                 className={`min-h-14 flex-row items-center gap-3 rounded-2xl border px-4 ${
@@ -92,9 +92,9 @@ export function ContactPickerSheet({ selected, people = peopleClient, onToggle, 
                 }`}
               >
                 <View className="h-9 w-9 items-center justify-center rounded-full bg-primary-soft">
-                  <Text className="font-extrabold text-primary-strong">{initialOf(person.name)}</Text>
+                  <Text className="font-extrabold text-primary-strong">{initialOf(person.displayName)}</Text>
                 </View>
-                <Text className="flex-1 font-semibold text-ink">{person.name}</Text>
+                <Text className="flex-1 font-semibold text-ink">{person.displayName}</Text>
                 {selected.includes(person.id) && <Text className="font-bold text-primary">✓</Text>}
               </Pressable>
             ))}

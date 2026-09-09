@@ -43,6 +43,7 @@ const bellMark = require("../../assets/images/auth/bell.svg");
 const BADGE_CLASS: Record<BadgeTone, string> = {
   danger: "bg-red-50 text-red-700",
   info: "bg-blue-50 text-blue-800",
+  warning: "bg-amber-50 text-amber-900",
   success: "bg-primary-soft/50 text-primary-strong",
   neutral: "bg-surface-muted text-muted",
 };

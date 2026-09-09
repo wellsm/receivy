@@ -53,7 +53,19 @@ async function popScreen() {
 }
 
 function person(id: string, name: string, lastBilledAt: string | null = null): Person {
-  return { id, name, email: null, phone: null, archivedAt: null, createdAt: "2026-09-01T00:00:00Z", hasAccount: false, lastBilledAt };
+  return {
+    id,
+    name,
+    nickname: null,
+    displayName: name,
+    email: null,
+    phone: null,
+    archivedAt: null,
+    createdAt: "2026-09-01T00:00:00Z",
+    hasAccount: false,
+    lastBilledAt,
+    activeCharges: 0,
+  };
 }
 
 // The hint the carousel renders is relative to the wall clock, so the fixture has to be too.

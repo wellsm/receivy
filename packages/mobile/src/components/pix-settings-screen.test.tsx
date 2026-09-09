@@ -1,102 +1,141 @@
-import type { AuthUser } from "@receivy/common";
+import type { PaymentMethod } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-
+import { Alert } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { PixSettingsScreen } from "./pix-settings-screen";
 
-function client(overrides: Partial<Record<"paymentMethods" | "savePaymentMethod" | "defaultPaymentMethod" | "archivePaymentMethod", jest.Mock>> = {}) {
+jest.mock("expo-clipboard", () => ({ setStringAsync: jest.fn().mockResolvedValue(true), getStringAsync: jest.fn().mockResolvedValue("") }));
+
+// The list reloads on focus, so the screen only ever sees expo-router's hook.
+jest.mock("expo-router", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories cannot close over module imports
+  const react = require("react");
+
   return {
-    paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }),
-    savePaymentMethod: jest.fn(),
-    defaultPaymentMethod: jest.fn(),
-    archivePaymentMethod: jest.fn(),
+    useFocusEffect: (callback: () => void | (() => void)) => {
+      react.useEffect(() => callback(), [callback]);
+    },
+  };
+});
+
+function method(overrides: Partial<PaymentMethod> = {}): PaymentMethod {
+  return {
+    id: "pix-1",
+    label: "",
+    pixKey: "ana@example.com",
+    pixKeyType: "email",
+    isDefault: true,
+    archivedAt: null,
     ...overrides,
+  } as PaymentMethod;
+}
+
+function client(items: PaymentMethod[] = [method()]) {
+  return {
+    paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: items }),
+    defaultPaymentMethod: jest.fn().mockResolvedValue(method()),
+    archivePaymentMethod: jest.fn().mockResolvedValue(undefined),
   };
 }
 
-function profile(email = "conta@example.com") {
-  const user = { id: "u1", email, name: null, avatarUrl: null, locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" } satisfies AuthUser;
-
-  return { load: jest.fn().mockResolvedValue(user) };
-}
-
 describe("PixSettingsScreen", () => {
-  it("preserves the Pix draft when the mutation fails", async () => {
-    const savePaymentMethod = jest.fn().mockRejectedValue(new Error("Chave inválida."));
-    await render(<PixSettingsScreen client={client({ savePaymentMethod })} profile={profile("")} />);
-    await fireEvent.changeText(screen.getByLabelText("Chave Pix"), "pix@example.com");
-    await fireEvent.changeText(screen.getByLabelText("Nome da chave"), "Principal");
-    await fireEvent.press(screen.getByRole("button", { name: "Salvar chave" }));
-    expect(await screen.findByText("Chave inválida.")).toBeOnTheScreen();
-    expect(screen.getByLabelText("Chave Pix")).toHaveDisplayValue("pix@example.com");
-    expect(screen.getByLabelText("Nome da chave")).toHaveDisplayValue("Principal");
+  beforeEach(() => jest.clearAllMocks());
+
+  it("lists the active keys with the type label, the badge and the formatted key", async () => {
+    const api = client([method({ pixKeyType: "cpf", pixKey: "12345678901", label: "Nubank" })]);
+
+    await render(<PixSettingsScreen client={api} />);
+
+    expect(await screen.findByText("CPF")).toBeOnTheScreen();
+    expect(screen.getByText("Nubank")).toBeOnTheScreen();
+    expect(screen.getByText("123.456.789-01")).toBeOnTheScreen();
+    expect(screen.getByText("Principal")).toBeOnTheScreen();
+    expect(screen.getByText("CHAVES ATIVAS (1)")).toBeOnTheScreen();
+    expect(screen.getByText("Seus dados Pix ficam protegidos e nunca são compartilhados sem sua autorização.")).toBeOnTheScreen();
   });
 
-  it("reports a saved mutation separately when refreshing the list fails", async () => {
-    const paymentMethods = jest.fn().mockResolvedValueOnce({ paymentMethods: [] }).mockRejectedValueOnce(new Error("Sem conexão para atualizar."));
-    const savePaymentMethod = jest.fn().mockResolvedValue({ id: "pix-1" });
-    await render(<PixSettingsScreen client={client({ paymentMethods, savePaymentMethod })} profile={profile("")} />);
-    await fireEvent.changeText(screen.getByLabelText("Chave Pix"), "pix@example.com");
-    await fireEvent.press(screen.getByRole("button", { name: "Salvar chave" }));
-    expect(await screen.findByText("Chave salva, mas não foi possível atualizar a lista agora.")).toBeOnTheScreen();
-    expect(screen.queryByText("Chaves Pix atualizadas.")).toBeNull();
-    expect(screen.getByLabelText("Chave Pix")).toHaveDisplayValue("");
+  it("hides archived keys", async () => {
+    const api = client([method(), method({ id: "pix-2", pixKey: "velha@example.com", isDefault: false, archivedAt: "2026-09-01T00:00:00Z" })]);
+
+    await render(<PixSettingsScreen client={api} />);
+
+    expect(await screen.findByText("ana@example.com")).toBeOnTheScreen();
+    expect(screen.queryByText("velha@example.com")).toBeNull();
   });
 
-  it("prefills the e-mail key with the account e-mail and keeps it editable", async () => {
-    await render(<PixSettingsScreen client={client()} profile={profile()} />);
+  it("copies the key and announces it", async () => {
+    const api = client();
 
-    await waitFor(() => expect(screen.getByLabelText("Chave Pix")).toHaveDisplayValue("conta@example.com"));
+    await render(<PixSettingsScreen client={api} />);
 
-    await fireEvent.changeText(screen.getByLabelText("Chave Pix"), "outra@example.com");
+    await fireEvent.press(await screen.findByLabelText("Copiar chave"));
 
-    expect(screen.getByLabelText("Chave Pix")).toHaveDisplayValue("outra@example.com");
+    await waitFor(() => expect(Clipboard.setStringAsync).toHaveBeenCalledWith("ana@example.com"));
+    expect(await screen.findByText("Chave copiada")).toBeOnTheScreen();
   });
 
-  it("saves the prefilled account e-mail as the key", async () => {
-    const savePaymentMethod = jest.fn().mockResolvedValue({ id: "pix-1" });
-    await render(<PixSettingsScreen client={client({ savePaymentMethod })} profile={profile()} />);
+  it("promotes another key to the default one", async () => {
+    const api = client([method({ isDefault: false })]);
 
-    await waitFor(() => expect(screen.getByLabelText("Chave Pix")).toHaveDisplayValue("conta@example.com"));
-    await fireEvent.press(screen.getByRole("button", { name: "Salvar chave" }));
+    await render(<PixSettingsScreen client={api} />);
 
-    await waitFor(() => expect(savePaymentMethod).toHaveBeenCalledWith({ pixKeyType: "email", pixKey: "conta@example.com", label: undefined }, undefined));
+    await fireEvent.press(await screen.findByLabelText("Tornar padrão"));
+
+    await waitFor(() => expect(api.defaultPaymentMethod).toHaveBeenCalledWith("pix-1"));
+    expect(api.paymentMethods).toHaveBeenCalledTimes(2);
   });
 
-  it("starts the key over when another type is picked", async () => {
-    await render(<PixSettingsScreen client={client()} profile={profile()} />);
+  it("archives a key only after the confirmation", async () => {
+    const api = client();
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
 
-    await waitFor(() => expect(screen.getByLabelText("Chave Pix")).toHaveDisplayValue("conta@example.com"));
-    await fireEvent.press(screen.getByRole("button", { name: "CPF" }));
+    await render(<PixSettingsScreen client={api} />);
 
-    expect(screen.getByLabelText("Chave Pix")).toHaveDisplayValue("");
+    await fireEvent.press(await screen.findByLabelText("Mais opções"));
+    await fireEvent.press(screen.getByLabelText("Excluir"));
+
+    expect(alert).toHaveBeenCalled();
+    expect(api.archivePaymentMethod).not.toHaveBeenCalled();
+
+    const confirm = alert.mock.calls[0]?.[2]?.find((button) => button.text === "Excluir");
+
+    confirm?.onPress?.();
+
+    await waitFor(() => expect(api.archivePaymentMethod).toHaveBeenCalledWith("pix-1"));
+    alert.mockRestore();
   });
 
   it("announces why the Pix key is required when the billing form asked for it", async () => {
-    await render(<PixSettingsScreen client={client()} profile={profile("")} required />);
+    await render(<PixSettingsScreen client={client([])} required />);
 
     expect(await screen.findByText("Você precisa de uma chave Pix para criar cobranças.")).toBeOnTheScreen();
   });
 
   it("hides the required notice on a plain visit", async () => {
-    await render(<PixSettingsScreen client={client()} profile={profile("")} />);
+    await render(<PixSettingsScreen client={client([])} />);
 
+    expect(await screen.findByText("Nenhuma chave ainda")).toBeOnTheScreen();
     expect(screen.queryByText("Você precisa de uma chave Pix para criar cobranças.")).toBeNull();
   });
 
-  it("hands the new key back to the billing form once", async () => {
-    const savePaymentMethod = jest.fn().mockResolvedValue({ id: "pix-1" });
-    const onCreated = jest.fn();
-    await render(<PixSettingsScreen client={client({ savePaymentMethod })} profile={profile("")} onCreated={onCreated} />);
+  it("sends the form screen to the dedicated route and keeps no inline form", async () => {
+    const onNewKey = jest.fn();
 
-    await fireEvent.changeText(screen.getByLabelText("Chave Pix"), "pix@example.com");
-    await fireEvent.press(screen.getByRole("button", { name: "Salvar chave" }));
+    await render(<PixSettingsScreen client={client()} onNewKey={onNewKey} />);
 
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ id: "pix-1" }));
+    await fireEvent.press(await screen.findByLabelText("Cadastrar nova chave"));
+
+    expect(onNewKey).toHaveBeenCalled();
+    expect(screen.queryByLabelText("Salvar chave Pix")).toBeNull();
   });
 
-  it("no longer draws its own back link, the native header owns it", async () => {
-    await render(<PixSettingsScreen client={client()} profile={profile("")} />);
+  it("reports a list failure", async () => {
+    const api = client();
 
-    expect(screen.queryByText("← Perfil")).toBeNull();
+    api.paymentMethods.mockRejectedValue(new Error("Sem conexão."));
+
+    await render(<PixSettingsScreen client={api} />);
+
+    expect(await screen.findByText("Sem conexão.")).toBeOnTheScreen();
   });
 });

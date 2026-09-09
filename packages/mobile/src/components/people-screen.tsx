@@ -1,99 +1,237 @@
+import { contactBadge, formatPhoneBR, initialsOf, type BadgeTone, type Person } from "@receivy/common";
+import { Image } from "expo-image";
+import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, TextInput, View, KeyboardAvoidingView, Platform } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/safe-area-view";
-import { normalizePerson, type Person } from "@receivy/common";
 import { peopleClient } from "@/people/client";
+import { ACTIVE_TINT, MUTED_TINT } from "./tab-bar";
 
-type Props = { onOpenLedger?: (id: string) => void; onCreated?: (person: Person) => void; client?: typeof peopleClient };
+type PeopleScreenProps = {
+  client?: Pick<typeof peopleClient, "list">;
+  onOpenLedger?: (id: string) => void;
+  /** Absent when the screen cannot navigate to the contact form. */
+  onNewContact?: () => void;
+};
 
-export function PeopleScreen({ onOpenLedger, onCreated, client = peopleClient }: Props) {
+const LIST_ERROR = "Não foi possível carregar os contatos.";
+
+const chevronMark = require("../../assets/images/auth/chevron.svg");
+const plusMark = require("../../assets/images/auth/plus.svg");
+const searchMark = require("../../assets/images/auth/search.svg");
+
+const BADGE_CLASS: Record<BadgeTone, string> = {
+  danger: "bg-red-50 text-red-700",
+  info: "bg-blue-50 text-blue-800",
+  warning: "bg-amber-50 text-amber-900",
+  success: "bg-primary-soft/50 text-primary-strong",
+  neutral: "bg-surface-muted text-muted",
+};
+
+/** Phone first because it is what a reminder uses; the e-mail is the fallback line. */
+function subtitleOf(person: Person): string {
+  if (person.phone) {
+    return formatPhoneBR(person.phone);
+  }
+
+  return person.email ?? "Sem contato";
+}
+
+function countLabel(total: number): string {
+  return `${total} ${total === 1 ? "contato" : "contatos"}`;
+}
+
+function ContactCard({ person, onPress }: { person: Person; onPress: () => void }) {
+  const badge = contactBadge(person.activeCharges);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Contato ${person.displayName}`}
+      onPress={onPress}
+      className="min-h-16 flex-row items-center gap-3 rounded-2xl border border-outline/40 bg-surface p-4"
+    >
+      <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft">
+        <Text className="text-sm font-extrabold text-primary-strong">{initialsOf(person.name)}</Text>
+      </View>
+
+      <View className="flex-1 gap-1">
+        <View className="flex-row items-center gap-2">
+          <Text className="flex-1 text-base font-bold text-ink" numberOfLines={1}>
+            {person.displayName}
+          </Text>
+
+          <Text className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${BADGE_CLASS[badge.tone]}`}>{badge.label}</Text>
+        </View>
+
+        <Text className="text-xs text-muted" numberOfLines={1}>
+          {subtitleOf(person)}
+        </Text>
+      </View>
+
+      <Image source={chevronMark} tintColor={MUTED_TINT} style={{ width: 18, height: 18 }} />
+    </Pressable>
+  );
+}
+
+/** The agenda: server-side search, pending badges and a FAB towards the contact form. */
+export function PeopleScreen({ client = peopleClient, onOpenLedger, onNewContact }: PeopleScreenProps) {
   const [people, setPeople] = useState<Person[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [archived, setArchived] = useState(false);
+  const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState<Person | null>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const version = useRef(0);
-  const scroll = useRef<ScrollView>(null);
-  const load = useCallback((after?: string) => {
-    const current = ++version.current;
-    return client.list(archived, after, search).then(result => {
-      if (version.current !== current) return;
-      setPeople(previous => after ? [...previous, ...result.people] : result.people);
-      setCursor(result.nextCursor); setError("");
-    }).catch(reason => { if (version.current === current) setError((reason as Error).message); })
-      .finally(() => { if (version.current === current) setLoading(false); });
-  }, [archived, client, search]);
-  const invalidate = useCallback(() => { version.current++; }, []);
-  useEffect(() => { void load(); return invalidate; }, [load, invalidate]);
 
-  function reset() { setEditing(null); setName(""); setEmail(""); setPhone(""); }
-  async function save() {
-    let input;
-    try { input = normalizePerson({ name, email, phone }); }
-    catch (reason) { setError((reason as Error).message); return; }
-    setBusy(true); setError(""); setNotice("");
-    try {
-      const saved = await client.save(input, editing?.id);
-      const created = !editing;
-      reset(); setNotice("Contato salvo."); await load();
-      if (created) onCreated?.(saved);
-    } catch (reason) { setError((reason as Error).message); }
-    finally { setBusy(false); }
-  }
-  function archive(person: Person) {
-    Alert.alert(`Arquivar ${person.name}?`, "O histórico será preservado.", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Arquivar", onPress: () => {
-        setBusy(true); setError("");
-        void client.archive(person.id).then(async () => {
-          if (editing?.id === person.id) reset();
-          setNotice("Contato arquivado."); await load();
-        }).catch(reason => setError(reason.message)).finally(() => setBusy(false));
-      } },
-    ]);
-  }
-  return <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
-    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerClassName="px-5 pb-12 pt-2">
-        <Text className="mt-5 text-xs font-bold uppercase tracking-widest text-primary">Sua agenda</Text>
-        <Text className="mt-3 text-3xl font-extrabold leading-9 text-primary-strong">Quem faz parte das suas contas?</Text>
-        <Text className="mt-3 text-sm leading-6 text-muted">Cadastre pessoas para organizar cobranças. Elas não precisam ter uma conta no Receivy.</Text>
-        <View className="my-6 gap-3 rounded-3xl border border-outline bg-surface p-5">
-          <Text className="text-xl font-bold text-primary-strong">{editing ? "Editar contato" : "Novo contato"}</Text>
-          <Text className="font-semibold text-ink">Nome</Text>
-          <TextInput accessibilityLabel="Nome" autoComplete="name" autoCorrect={false} textContentType="name" maxLength={120} value={name} onChangeText={setName} className="min-h-12 rounded-xl border border-outline px-3 text-ink" />
-          <Text className="font-semibold text-ink">E-mail (opcional)</Text>
-          <TextInput accessibilityLabel="E-mail do contato" autoComplete="email" autoCorrect={false} textContentType="emailAddress" maxLength={254} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" className="min-h-12 rounded-xl border border-outline px-3 text-ink" />
-          <Text className="font-semibold text-ink">Telefone com DDD (opcional)</Text>
-          <TextInput accessibilityLabel="Telefone com DDD" maxLength={40} value={phone} onChangeText={setPhone} keyboardType="phone-pad" className="min-h-12 rounded-xl border border-outline px-3 text-ink" />
-          <Pressable accessibilityRole="button" accessibilityLabel="Salvar contato" disabled={busy} onPress={() => void save()} className="mt-2 min-h-12 items-center justify-center rounded-xl bg-primary p-3">
-            {busy ? <ActivityIndicator color="white" /> : <Text className="font-bold text-white">Salvar contato</Text>}
-          </Pressable>
-          {editing && <Pressable accessibilityRole="button" disabled={busy} onPress={reset} className="min-h-12 items-center justify-center"><Text className="text-primary">Cancelar edição</Text></Pressable>}
+  // Every request carries the version it was born with. A slower `Carregar mais`
+  // must not append the previous query's page onto fresh search results, and a
+  // blurred screen must not set state after its own reload was superseded.
+  const version = useRef(0);
+
+  const load = useCallback(
+    (after?: string) => {
+      const mine = ++version.current;
+
+      return client
+        .list(false, after, search || undefined)
+        .then((page) => {
+          if (mine !== version.current) {
+            return;
+          }
+
+          setPeople((previous) => (after ? [...previous, ...page.people] : page.people));
+          setCursor(page.nextCursor);
+          setError("");
+        })
+        .catch((reason: unknown) => {
+          if (mine !== version.current) {
+            return;
+          }
+
+          setError(reason instanceof Error ? reason.message : LIST_ERROR);
+        })
+        .finally(() => {
+          if (mine === version.current) {
+            setLoading(false);
+          }
+        });
+    },
+    [client, search],
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // A new query starts a new page run: the old cursor belongs to the results
+      // it is replacing.
+      setCursor(null);
+      setSearch(term.trim());
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [term]);
+
+  const invalidate = useCallback(() => {
+    version.current++;
+  }, []);
+
+  // The form lives on its own screen, so coming back has to show what it saved.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+
+      return invalidate;
+    }, [load, invalidate]),
+  );
+
+  return (
+    <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 px-5 pb-32 pt-3" showsVerticalScrollIndicator={false}>
+        <View className="flex-row items-center gap-2 rounded-2xl border border-outline/40 bg-surface px-4">
+          <Image source={searchMark} tintColor={MUTED_TINT} style={{ width: 16, height: 16 }} />
+
+          <TextInput
+            accessibilityLabel="Buscar contatos"
+            placeholder="Buscar por nome, telefone ou e-mail..."
+            placeholderTextColor={MUTED_TINT}
+            maxLength={254}
+            autoCorrect={false}
+            value={term}
+            onChangeText={(value) => {
+              setLoading(true);
+              setTerm(value);
+            }}
+            className="min-h-12 flex-1 text-ink"
+          />
         </View>
-        {error ? <Text accessibilityRole="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{error}</Text> : null}
-        {notice ? <Text accessibilityRole="alert" className="mb-4 text-primary">{notice}</Text> : null}
-        <Text className="font-semibold text-ink">Buscar contatos</Text><TextInput accessibilityLabel="Buscar contatos" maxLength={254} value={search} onChangeText={value => { setLoading(true); setPeople([]); setCursor(null); setSearch(value); }} className="my-3 min-h-12 rounded-xl border border-outline px-3 text-ink" />
-        <View className="flex-row items-center justify-between"><Text className="text-xl font-bold text-primary-strong">Contatos</Text><View className="flex-row items-center gap-2"><Text className="text-sm text-muted">Arquivados</Text><Switch accessibilityLabel="Ver arquivados" disabled={busy || loading} value={archived} onValueChange={value => { setLoading(true); setPeople([]); setCursor(null); setArchived(value); reset(); }} /></View></View>
-        {loading && <ActivityIndicator accessibilityLabel="Carregando contatos" className="my-4" />}
-        {!loading && !error && !people.length && <Text className="py-8 text-base leading-6 text-muted">{archived ? "Nenhum contato arquivado." : "Sua agenda começa com uma pessoa. Preencha o formulário acima."}</Text>}
-        {people.map(person => <View key={person.id} className="gap-2 border-b border-outline py-5">
-          <Text className="text-lg font-bold text-ink">{person.name}</Text><Text className="text-sm text-muted">{person.hasAccount ? "Com conta" : "Sem conta"}</Text><Text className="text-sm text-muted">{person.email ?? "Sem e-mail"}</Text>{person.phone && <Text className="text-sm text-muted">{person.phone}</Text>}
-          <Pressable accessibilityRole="button" accessibilityLabel={`Ver histórico de ${person.name}`} onPress={() => onOpenLedger?.(person.id)} className="min-h-12 justify-center"><Text className="font-semibold text-primary">Ver saldo e histórico</Text></Pressable>
-          {!person.archivedAt && <View className="flex-row gap-4">
-            <Pressable accessibilityRole="button" accessibilityLabel={`Editar ${person.name}`} disabled={busy} className="min-h-12 justify-center" onPress={() => { setEditing(person); setName(person.name); setEmail(person.email ?? ""); setPhone(person.phone ?? ""); scroll.current?.scrollTo({ y: 0, animated: true }); }}><Text className="font-semibold text-primary">Editar</Text></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Arquivar ${person.name}`} disabled={busy} onPress={() => archive(person)} className="min-h-12 justify-center"><Text className="text-muted">Arquivar</Text></Pressable>
-          </View>}
-        </View>)}
-        {(cursor || error) && <Pressable accessibilityRole="button" disabled={busy || loading} onPress={() => { setLoading(true); void load(error ? undefined : cursor ?? undefined); }} className="min-h-12 items-center justify-center"><Text className="text-primary">{error ? "Tentar carregar novamente" : "Carregar mais contatos"}</Text></Pressable>}
+
+        <View className="flex-row items-center justify-between">
+          <Text className="text-xs font-bold tracking-wider text-muted">CONTATOS</Text>
+          <Text className="text-xs text-muted">{countLabel(people.length)}</Text>
+        </View>
+
+        {error ? (
+          <View className="gap-2 rounded-2xl bg-red-50 p-4">
+            <Text accessibilityRole="alert" className="text-red-700">
+              {error}
+            </Text>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Tentar novamente"
+              onPress={() => {
+                setLoading(true);
+                void load();
+              }}
+              className="min-h-11 justify-center"
+            >
+              <Text className="font-bold text-primary">Tentar novamente</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {loading && !people.length ? <ActivityIndicator accessibilityLabel="Carregando contatos" color={ACTIVE_TINT} /> : null}
+
+        {!loading && !error && !people.length ? (
+          <View className="items-center gap-2 rounded-3xl border border-outline/40 bg-surface p-8">
+            <Text className="text-lg font-extrabold text-primary-strong">Nenhum contato ainda</Text>
+            <Text className="text-center text-sm leading-5 text-muted">Cadastre alguém para dividir despesas e lembrar pagamentos.</Text>
+          </View>
+        ) : null}
+
+        <View className="gap-2">
+          {people.map((person) => (
+            <ContactCard key={person.id} person={person} onPress={() => onOpenLedger?.(person.id)} />
+          ))}
+        </View>
+
+        {cursor ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Carregar mais"
+            accessibilityState={{ disabled: loading }}
+            disabled={loading}
+            onPress={() => {
+              setLoading(true);
+              void load(cursor);
+            }}
+            className="min-h-12 items-center justify-center rounded-xl border border-outline"
+          >
+            <Text className="font-bold text-primary">Carregar mais</Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
-    </KeyboardAvoidingView>
-  </SafeAreaView>;
+
+      {onNewContact ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Novo contato"
+          onPress={onNewContact}
+          className="absolute bottom-8 right-5 h-14 flex-row items-center gap-2 rounded-full bg-primary px-5"
+        >
+          <Image source={plusMark} tintColor="#ffffff" style={{ width: 18, height: 18 }} />
+          <Text className="font-bold text-white">Novo contato</Text>
+        </Pressable>
+      ) : null}
+    </SafeAreaView>
+  );
 }

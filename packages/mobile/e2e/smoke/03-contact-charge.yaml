@@ -4,6 +4,9 @@
 # uses keyboardShouldPersistTaps="handled"), which keeps the fixed footer
 # reachable. Sub-screens now run under the native stack header, so "back" is a
 # tap on the previous screen's title in the header ("Perfil", "Cobranças").
+# Keys and contacts are registered on their own screens, reached from the FABs
+# of their lists; a save pops back to the list, so the list's own FAB label
+# ("Cadastrar nova chave") and the new row are what prove the return trip.
 # A fresh account has no Pix key and the billing form would bounce to the key
 # screen, so the key is registered first — the e-mail type is the default and
 # the field already carries the account e-mail. Both platforms open a native
@@ -22,30 +25,42 @@ appId: dev.receivy.local
     direction: DOWN
 - tapOn: "Gerenciar chaves Pix"
 - extendedWaitUntil:
-    visible: "Suas chaves Pix"
+    visible: "Cadastrar nova chave"
+    timeout: 15000
+- tapOn: "Cadastrar nova chave"
+- extendedWaitUntil:
+    visible: "Salvar chave Pix"
+    timeout: 15000
+- tapOn: "E-mail"
+- assertVisible: ${EMAIL}
+- tapOn: "Salvar chave Pix"
+- extendedWaitUntil:
+    visible: "Cadastrar nova chave"
     timeout: 15000
 - assertVisible: ${EMAIL}
-- tapOn: "Salvar chave"
-- extendedWaitUntil:
-    visible: "Chaves Pix atualizadas."
-    timeout: 15000
 - tapOn: "Perfil"
 - extendedWaitUntil:
     visible: "Gerenciar contatos"
     timeout: 15000
 - tapOn: "Gerenciar contatos"
 - extendedWaitUntil:
-    visible: "Quem faz parte das suas contas?"
+    visible: "Novo contato"
+    timeout: 15000
+- tapOn: "Novo contato"
+- extendedWaitUntil:
+    visible: "Salvar contato"
     timeout: 15000
 - tapOn:
-    text: "Nome"
+    text: "Nome completo"
     index: 1
 - inputText: "Ana QA"
-- tapOn: "E-mail do contato"
+- tapOn:
+    text: "E-mail"
+    index: 1
 - inputText: "ana-qa@example.invalid"
 - tapOn: "Salvar contato"
 - extendedWaitUntil:
-    visible: "Contato salvo."
+    visible: "Contato Ana QA"
     timeout: 15000
 - tapOn: "Perfil"
 - extendedWaitUntil:

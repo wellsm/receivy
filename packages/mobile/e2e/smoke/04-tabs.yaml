@@ -15,7 +15,7 @@ appId: dev.receivy.local
     direction: UP
 - tapOn: "Gerenciar chaves Pix"
 - extendedWaitUntil:
-    visible: "Suas chaves Pix"
+    visible: "Cadastrar nova chave"
     timeout: 15000
 - assertVisible: ${EMAIL}
 # The Pix screen runs under the native stack header: its back button carries the

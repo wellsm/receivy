@@ -12,6 +12,9 @@ export const peopleClient = {
     const params = new URLSearchParams({ archived: String(archived), ...(cursor ? { cursor } : {}), ...(search ? { search } : {}), ...(sort ? { sort } : {}) });
     return (await request(`people?${params}`)).json();
   },
+  async get(id: string): Promise<Person> {
+    return (await request(`people/${id}`)).json();
+  },
   async save(input: PersonInput, id?: string): Promise<Person> {
     return (await request(id ? `people/${id}` : "people", { method: id ? "PATCH" : "POST", body: JSON.stringify(input) })).json();
   },

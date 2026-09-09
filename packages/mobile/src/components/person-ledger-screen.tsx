@@ -1,10 +1,43 @@
 import { formatMoney, type PersonLedger } from "@receivy/common";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "@/components/safe-area-view";
 import { PersonDetails } from "./person-details";
 import { financialClient, type FinancialClient } from "@/financial/client";
+
+const LEDGER_ERROR = "Não foi possível carregar o histórico.";
+
 export function PersonLedgerScreen({ id, client = financialClient, onOpenCharge, onNewCharge, onEdit }: { id: string; client?: Pick<FinancialClient, "ledger">; onOpenCharge?: (id: string) => void; onNewCharge?: () => void; onEdit?: () => void }) {
-  const [data, setData] = useState<PersonLedger | null>(null); const [error, setError] = useState(""); const [loading, setLoading] = useState(true); const load = useCallback(async (cursor?: string) => { setLoading(true); try { const page = await client.ledger(id, cursor); setData(old => cursor && old ? { ...page, charges: [...old.charges, ...page.charges] } : page); } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível carregar o histórico."); } finally { setLoading(false); } }, [client, id]); useEffect(() => { void client.ledger(id).then(setData).catch(reason => setError(reason instanceof Error ? reason.message : "Não foi possível carregar o histórico.")).finally(() => setLoading(false)); }, [client, id]);
+  const [data, setData] = useState<PersonLedger | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(
+    async (cursor?: string) => {
+      setLoading(true);
+
+      try {
+        const page = await client.ledger(id, cursor);
+
+        setData((old) => (cursor && old ? { ...page, charges: [...old.charges, ...page.charges] } : page));
+        setError("");
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : LEDGER_ERROR);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [client, id],
+  );
+
+  // The edit form leaves this screen mounted under the Stack, so the pop back has
+  // to reload: otherwise the detail keeps showing the data the form just replaced.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
   return <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}><ScrollView contentContainerClassName="gap-5 px-5 pb-12 pt-2">{data && <><PersonDetails person={data.person} changed={() => load()} onEdit={onEdit} onNewCharge={onNewCharge} /><View className="gap-4 rounded-3xl border border-outline bg-surface p-5"><View><Text className="text-sm text-muted">Saldo</Text><Text className="text-3xl font-extrabold text-ink">{formatMoney(data.balance)}</Text></View><View className="flex-row justify-between"><Text className="font-bold text-primary">A receber {formatMoney(data.receivable)}</Text><Text className="font-bold text-violet-900">A pagar {formatMoney(data.payable)}</Text></View></View>{data.charges.map(charge => <Pressable key={charge.id} accessibilityRole="button" accessibilityLabel={`Abrir cobrança ${charge.description}`} onPress={() => onOpenCharge?.(charge.id)} className="gap-2 rounded-2xl border border-outline bg-surface p-4"><Text className="text-xs font-bold text-primary">{charge.direction === "receivable" ? "A receber" : "A pagar"}</Text><Text className="text-lg font-bold text-ink">{charge.description}</Text><Text className="font-bold text-ink">{formatMoney(charge.amount)}</Text><Text className="text-sm text-muted">Vence {new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${charge.dueDate}T00:00:00Z`))} · parcela {charge.installment}/{charge.installmentCount} · {charge.state === "pending" ? "pendente" : charge.state === "paid" ? "paga" : "cancelada"}</Text></Pressable>)}</>}{loading && <ActivityIndicator accessibilityLabel="Carregando histórico" />}{error ? <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{error}</Text> : null}{data?.nextCursor && <Pressable accessibilityRole="button" onPress={() => void load(data.nextCursor ?? undefined)} className="min-h-12 items-center justify-center"><Text className="font-bold text-primary">Carregar mais</Text></Pressable>}</ScrollView></SafeAreaView>;
 }

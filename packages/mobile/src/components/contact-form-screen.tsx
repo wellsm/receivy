@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/safe-area-view";
 import { patchDraft } from "@/financial/draft-store";
-import { peopleClient } from "@/people/client";
+import { peopleClient, PeopleRequestError } from "@/people/client";
 import { MUTED_TINT } from "./tab-bar";
 
 type ContactFormClient = Pick<typeof peopleClient, "get" | "save">;
@@ -42,6 +42,24 @@ function Field({
       {hint ? <Text className="text-xs text-muted">{hint}</Text> : null}
     </View>
   );
+}
+
+/**
+ * The endpoint answers `409` for a duplicate e-mail and for an edit that touches
+ * more than the nickname of a linked contact, and the client cannot tell them
+ * apart — the envelope carries the stable `CONFLICT` code for both. The screen
+ * can: only a linked contact can provoke the second one.
+ */
+function saveError(reason: unknown, linked: boolean): string {
+  if (linked && reason instanceof PeopleRequestError && reason.status === 409) {
+    return LINKED_NOTE;
+  }
+
+  if (reason instanceof Error) {
+    return reason.message;
+  }
+
+  return SAVE_ERROR;
 }
 
 /** The contact form on its own screen: create from `/people/new`, edit from `/people/[id]/edit`. */
@@ -111,7 +129,7 @@ export function ContactFormScreen({ personId, client = peopleClient, returnTo, o
 
       onSaved?.(saved);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : SAVE_ERROR);
+      setError(saveError(reason, linked));
     } finally {
       setBusy(false);
     }

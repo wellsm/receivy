@@ -37,6 +37,7 @@ const KEYBOARDS = {
 const INTRO = "A chave aparece no link de pagamento. O pagamento acontece no banco.";
 const REQUIRED_NOTICE = "Você precisa de uma chave Pix para criar cobranças.";
 const SAVE_ERROR = "Não foi possível salvar a chave Pix.";
+const EMPTY_ERROR = "Informe a chave Pix.";
 
 const FIELD_CLASS = "min-h-12 flex-1 rounded-xl border border-outline/60 bg-surface px-3 text-ink";
 
@@ -131,9 +132,20 @@ export function PixKeyFormScreen({ client = financialClient, profile = profileSt
 
   async function save() {
     setError("");
+
+    const pixKey = spec.unformat(value);
+
+    // The web input carries `required`, so the browser blocks an empty submit.
+    // On mobile the guard has to be here, or the API answers with a generic
+    // failure that never names the real problem.
+    if (!pixKey) {
+      setError(EMPTY_ERROR);
+      return;
+    }
+
     setBusy(true);
 
-    const input: PaymentMethodInput = { pixKeyType: type, pixKey: spec.unformat(value), ...(label ? { label } : {}) };
+    const input: PaymentMethodInput = { pixKeyType: type, pixKey, ...(label ? { label } : {}) };
 
     try {
       const saved = await client.savePaymentMethod(input);

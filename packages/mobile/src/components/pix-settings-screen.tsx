@@ -77,8 +77,17 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
     setError("");
     setNotice("");
 
+    // `setStringAsync` reports a refused clipboard by resolving `false`, so the
+    // happy path has to check the answer: awaiting alone would announce a copy
+    // that never happened.
     try {
-      await Clipboard.setStringAsync(method.pixKey);
+      const copied = await Clipboard.setStringAsync(method.pixKey);
+
+      if (!copied) {
+        setError(COPY_ERROR);
+        return;
+      }
+
       setNotice("Chave copiada");
     } catch {
       setError(COPY_ERROR);

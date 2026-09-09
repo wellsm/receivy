@@ -160,6 +160,17 @@ describe("PixKeyFormScreen", () => {
     expect(takeDraft()?.pix).toBe("saved");
   });
 
+  it("refuses an empty key instead of letting the API answer for it", async () => {
+    const api = client();
+
+    await render(<PixKeyFormScreen client={api} profile={profile("")} />);
+
+    await fireEvent.press(screen.getByLabelText("Salvar chave Pix"));
+
+    expect(await screen.findByText("Informe a chave Pix.")).toBeOnTheScreen();
+    expect(api.savePaymentMethod).not.toHaveBeenCalled();
+  });
+
   it("keeps the typed key when the save fails", async () => {
     const api = client();
 

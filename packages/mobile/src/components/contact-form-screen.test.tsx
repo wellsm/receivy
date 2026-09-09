@@ -1,6 +1,7 @@
 import { EMPTY_BILLING_DRAFT, type Person } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
+import { PeopleRequestError } from "@/people/client";
 import { ContactFormScreen } from "./contact-form-screen";
 
 function person(overrides: Partial<Person> = {}): Person {
@@ -103,6 +104,22 @@ describe("ContactFormScreen", () => {
     expect(screen.getByLabelText("E-mail")).toBeDisabled();
     expect(screen.getByLabelText("WhatsApp / Celular")).toBeDisabled();
     expect(screen.getByLabelText("Apelido")).toBeEnabled();
+  });
+
+  it("blames the link, not a duplicate e-mail, when a linked contact conflicts", async () => {
+    const client = peopleApi(person({ hasAccount: true }));
+
+    client.save.mockRejectedValue(new PeopleRequestError("Já existe um contato ativo com esse e-mail.", 409));
+
+    await render(<ContactFormScreen personId="p1" client={client} />);
+
+    await screen.findByText("Contato vinculado a uma conta: só o apelido pode mudar.");
+    await fireEvent.changeText(screen.getByLabelText("Apelido"), "Aninha");
+    await fireEvent.press(screen.getByLabelText("Salvar contato"));
+
+    // Once as the standing note, once as the failure reason.
+    await waitFor(() => expect(screen.getAllByText("Contato vinculado a uma conta: só o apelido pode mudar.")).toHaveLength(2));
+    expect(screen.queryByText("Já existe um contato ativo com esse e-mail.")).toBeNull();
   });
 
   it("keeps the typed data when the save fails", async () => {

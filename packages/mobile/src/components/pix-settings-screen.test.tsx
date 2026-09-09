@@ -74,6 +74,17 @@ describe("PixSettingsScreen", () => {
     expect(await screen.findByText("Chave copiada")).toBeOnTheScreen();
   });
 
+  it("reports a refused clipboard instead of announcing a copy that never happened", async () => {
+    jest.mocked(Clipboard.setStringAsync).mockResolvedValue(false);
+
+    await render(<PixSettingsScreen client={client()} />);
+
+    await fireEvent.press(await screen.findByLabelText("Copiar chave"));
+
+    expect(await screen.findByText("Não foi possível copiar a chave.")).toBeOnTheScreen();
+    expect(screen.queryByText("Chave copiada")).toBeNull();
+  });
+
   it("promotes another key to the default one", async () => {
     const api = client([method({ isDefault: false })]);
 

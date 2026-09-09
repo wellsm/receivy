@@ -98,7 +98,6 @@ const sqlNull = null as unknown as undefined;
 const PAGE_SIZE = 50;
 const SEARCH_LIMIT = 80;
 const PREVIEW_DAYS = 90;
-const MATERIALIZATION_BUDGET = 100;
 
 function parseReminders(row: Pick<BillingRow, 'reminders'>): BillingReminder[] | undefined {
   return row.reminders ? (JSON.parse(row.reminders) as BillingReminder[]) : undefined;
@@ -710,7 +709,7 @@ export async function patchBilling(
         ? undefined
         : normalizeBillingInput({ ...billingInputFrom(row, split), reminders: patch.reminders }).reminders;
 
-    // Only newly introduced recipients/Pix need revalidation; materializeBillings re-checks the stored
+    // Only newly introduced recipients/Pix need revalidation; materializeNextOccurrence re-checks the stored
     // split at occurrence time, so an already-persisted split must not block unrelated edits (e.g. ending
     // a billing whose recipient was archived later).
     if (patch.split !== undefined || patch.paymentMethodId !== undefined || patch.clearPaymentMethod) {
@@ -767,92 +766,106 @@ function billingInputFrom(row: BillingRow, split: BillingSplit): BillingInput {
   };
 }
 
-/** Hourly job for `indefinite` billings until slice 2 moves it to the queue consumer. */
-export async function materializeBillings(
-  db: DbClient,
-  now = new Date(),
-  notice?: NoticeContext
-): Promise<{ materialized: number; failures: string[]; dueDeliveryIds: string[] }> {
-  const dueDeliveryIds: string[] = [];
+/** Occurrences already past their materialization date, oldest first. */
+function dueOccurrences(row: BillingRow, now: Date, limit: number): string[] {
+  if (row.state !== 'active' || row.type !== 'indefinite') {
+    return [];
+  }
 
+  const offsets = effectiveReminders(row)
+    .filter((reminder) => reminder.enabled)
+    .map((reminder) => reminder.offsetDays);
+  const today = calendarDate(now, row.timezone);
+  const latest = addCalendarDays(today, -(offsets.length ? Math.min(...offsets) : 0));
+  const cursor = row.processed_through ?? addCalendarDays(row.start_date, -1);
+
+  return billingDates(calendarRule(row), addCalendarDays(cursor, 1), latest, limit);
+}
+
+/** Billings the hourly cron has to hand to `BillingQueue`; it never materializes anything itself. */
+export async function dueIndefiniteBillings(db: DbClient, now = new Date()): Promise<string[]> {
   const candidates = (
     await db.billings.findMany({
-      select: { id: true, owner_id: true },
+      select: BILLING_SELECT,
       where: { type: 'indefinite', state: 'active' },
       order: { id: Order.Asc }
     })
   ).records;
-  const failures: string[] = [];
 
-  let materialized = 0;
-  let evaluated = 0;
+  return candidates.filter((row) => dueOccurrences(row, now, 1).length > 0).map((row) => row.id);
+}
 
-  for (const candidate of candidates) {
-    if (evaluated >= MATERIALIZATION_BUDGET) {
-      break;
-    }
+export type OccurrenceResult = {
+  materialized: boolean;
+  remaining: boolean;
+  skipped?: string;
+  dueDeliveryIds: string[];
+};
 
-    try {
-      const result = await db.transaction(async (tx) => {
-        await lockOwner(tx, candidate.owner_id);
+const IDLE_OCCURRENCE: OccurrenceResult = { materialized: false, remaining: false, dueDeliveryIds: [] };
 
-        const row = await billingRow(tx, candidate.owner_id, candidate.id, true);
+/** Materializes a single occurrence; the caller enqueues the notices once the transaction commits. */
+export async function materializeNextOccurrence(
+  db: DbClient,
+  billingId: string,
+  notice?: NoticeContext,
+  now = new Date()
+): Promise<OccurrenceResult> {
+  const owner = await db.billings.findOne({ select: { owner_id: true }, where: { id: billingId } });
 
-        if (row.state !== 'active' || row.type !== 'indefinite') {
-          return { created: 0, evaluated: 0 };
-        }
-
-        const reminders = effectiveReminders(row);
-        const offsets = reminders.filter((reminder) => reminder.enabled).map((reminder) => reminder.offsetDays);
-        const today = calendarDate(now, row.timezone);
-        const latest = addCalendarDays(today, -(offsets.length ? Math.min(...offsets) : 0));
-        const cursor = row.processed_through ?? addCalendarDays(row.start_date, -1);
-        const dates = billingDates(calendarRule(row), addCalendarDays(cursor, 1), latest, 1);
-
-        let created = 0;
-
-        for (const dueDate of dates) {
-          evaluated++;
-
-          const exists = await tx.charges.count({ where: { billing_id: row.id, due_date: dueDate } });
-
-          if (!exists) {
-            const { split } = await splitFor(tx, row.id);
-            const context = await prepareChargeMaterialization(tx, row.owner_id, personIds(split), row.payment_method_id);
-            const plan = planBillingCharges({
-              description: row.description,
-              totalCents: row.total_cents,
-              split,
-              dueDates: [dueDate],
-              numbered: false
-            });
-            const instant = now.toISOString();
-
-            const persisted = await persistChargePlan(tx, row.owner_id, plan, { id: row.id, type: 'indefinite' }, context, instant, notice);
-
-            dueDeliveryIds.push(...persisted.dueDeliveryIds);
-
-            await audit(tx, row.owner_id, row.id, 'billing.materialized', instant, { dueDate });
-
-            created++;
-          }
-
-          await tx.billings.updateOne({ where: { id: row.id }, data: { processed_through: dueDate, updated_at: now.toISOString() } });
-        }
-
-        return { created, evaluated: dates.length };
-      });
-
-      materialized += result.created;
-    } catch (error) {
-      // A stale archived recipient/Pix must not starve unrelated billings; its cursor stays put.
-      if (!(error instanceof HttpNotFoundError)) {
-        throw error;
-      }
-
-      failures.push(candidate.id);
-    }
+  if (!owner) {
+    return IDLE_OCCURRENCE;
   }
 
-  return { materialized, failures, dueDeliveryIds };
+  try {
+    return await db.transaction(async (tx) => {
+      await lockOwner(tx, owner.owner_id);
+
+      const row = await billingRow(tx, owner.owner_id, billingId, true);
+      const [dueDate, ...rest] = dueOccurrences(row, now, 2);
+
+      if (!dueDate) {
+        return IDLE_OCCURRENCE;
+      }
+
+      const instant = now.toISOString();
+      const dueDeliveryIds: string[] = [];
+      const exists = await tx.charges.count({ where: { billing_id: row.id, due_date: dueDate } });
+
+      if (!exists) {
+        const { split } = await splitFor(tx, row.id);
+        const context = await prepareChargeMaterialization(tx, row.owner_id, personIds(split), row.payment_method_id);
+        const plan = planBillingCharges({
+          description: row.description,
+          totalCents: row.total_cents,
+          split,
+          dueDates: [dueDate],
+          numbered: false
+        });
+
+        const persisted = await persistChargePlan(tx, row.owner_id, plan, { id: row.id, type: 'indefinite' }, context, instant, notice);
+
+        dueDeliveryIds.push(...persisted.dueDeliveryIds);
+
+        await audit(tx, row.owner_id, row.id, 'billing.materialized', instant, { dueDate });
+      }
+
+      await tx.billings.updateOne({ where: { id: row.id }, data: { processed_through: dueDate, updated_at: instant } });
+
+      return { materialized: !exists, remaining: rest.length > 0, dueDeliveryIds };
+    });
+  } catch (error) {
+    // An archived recipient/Pix is not transient: retrying it would only burn the queue attempts.
+    if (!(error instanceof HttpNotFoundError)) {
+      throw error;
+    }
+
+    const reason = error.message || 'unavailable';
+
+    await db.transaction(async (tx) => {
+      await audit(tx, owner.owner_id, billingId, 'billing.materialization_skipped', now.toISOString(), { reason });
+    });
+
+    return { ...IDLE_OCCURRENCE, skipped: reason };
+  }
 }

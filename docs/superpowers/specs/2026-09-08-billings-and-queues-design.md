@@ -226,7 +226,7 @@ backoff: Queue.UseBackoff<{ minDelay: 5; maxDelay: 300 }>;
 | Fila | Mensagem | Produtor | Consumidor |
 | --- | --- | --- | --- |
 | `NotificationQueue` | `{ deliveryId: uuid }` | `POST /billings` (aviso inicial), `POST /charges/{id}/reminder` (manual), `BillingQueue` (aviso da ocorrência), `NotificationCron` (lembretes do dia) | carrega a `delivery`, renderiza, envia por e-mail ou push, grava `accepted`/`uncertain`/`failed`/`suppressed` |
-| `BillingQueue` | `{ billingId: uuid }` | `BillingCron` | materializa **uma** ocorrência em transação (`charges` + `deliveries` pendentes), avança `processed_through`, enfileira os avisos |
+| `BillingQueue` | `{ billingId: uuid }` | `BillingCron` | materializa **uma** ocorrência em transação (`charges` + `deliveries` pendentes), avança `processed_through`, enfileira os avisos (implementado em 2026-09-09; uma ocorrência por mensagem, o consumidor reenvia `{ billingId }` enquanto sobrar ocorrência) |
 | `StorageQueue` | `{ objectKey: string; purpose: 'orphan' \| 'temporary' \| 'account' }` | rejeição/troca de comprovante, expiração de `upload_intents`, exclusão de conta, `StorageCron` (órfãos) | apaga o objeto no storage configurado |
 
 Contrato do produtor: a linha de banco (`delivery`, `charge`) é gravada e

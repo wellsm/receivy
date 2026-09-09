@@ -26,7 +26,8 @@ export default {
   projectName: 'receivy',
   sourceFiles: [
     './src/api.ts',
-    './src/billings/scheduler.ts',
+    './src/billings/queue.ts',
+    './src/billings/cron.ts',
     './src/notifications/queue.ts',
     './src/notifications/cron.ts',
     './src/proofs/cleanup-scheduler.ts',

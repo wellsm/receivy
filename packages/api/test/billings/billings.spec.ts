@@ -4,7 +4,14 @@ import { Order } from '@ez4/database';
 import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
 import type { BillingInput, BillingSplit } from '@receivy/common';
 import { billingDueLabel, DEFAULT_BILLING_REMINDERS, resolveBillingSplit } from '@receivy/common';
-import { createBilling, getBilling, listBillings, materializeBillings, patchBilling, previewBilling } from '../../src/billings/repository';
+import {
+  createBilling,
+  getBilling,
+  listBillings,
+  materializeNextOccurrence,
+  patchBilling,
+  previewBilling
+} from '../../src/billings/repository';
 import { getCharge } from '../../src/charges/repository';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { archivePerson, listPeople, savePerson } from '../../src/people/repository';
@@ -142,17 +149,20 @@ describe('billings on native PostgreSQL', () => {
         ),
       RangeError
     );
-    await Promise.all([materializeBillings(db, date('2026-01-31')), materializeBillings(db, date('2026-01-31'))]);
+    await Promise.all([
+      materializeNextOccurrence(db, created.id, undefined, date('2026-01-31')),
+      materializeNextOccurrence(db, created.id, undefined, date('2026-01-31'))
+    ]);
     const charges = await db.charges.findMany({ select: { due_date: true, installment: true }, where: { billing_id: created.id } });
     equal(charges.records.length, 1);
     equal(charges.records[0]!.due_date, '2026-01-31');
     ok(charges.records[0]!.installment == null);
     const paused = await patchBilling(db, OWNER, created.id, { state: 'paused' }, date('2026-02-01'));
     equal(paused.state, 'paused');
-    await materializeBillings(db, date('2026-03-31'));
+    await materializeNextOccurrence(db, created.id, undefined, date('2026-03-31'));
     equal(await db.charges.count({ where: { billing_id: created.id } }), 1);
     await patchBilling(db, OWNER, created.id, { state: 'active' }, date('2026-04-01'));
-    await materializeBillings(db, date('2026-04-30'));
+    await materializeNextOccurrence(db, created.id, undefined, date('2026-04-30'));
     deepEqual(
       (
         await db.charges.findMany({ select: { due_date: true }, where: { billing_id: created.id }, order: { due_date: Order.Asc } })
@@ -194,9 +204,10 @@ describe('billings on native PostgreSQL', () => {
       date('2026-01-01')
     );
     await archivePerson(db, OWNER, archived.id);
-    const result = await materializeBillings(db, date('2026-01-15'));
-    deepEqual(result.failures, [invalid.id]);
-    equal(result.materialized, 1);
+    const skipped = await materializeNextOccurrence(db, invalid.id, undefined, date('2026-01-15'));
+    const done = await materializeNextOccurrence(db, valid.id, undefined, date('2026-01-15'));
+    ok(skipped.skipped, 'an archived recipient never throws out of the consumer');
+    equal(done.materialized, true);
     equal((await db.billings.findOne({ select: { processed_through: true }, where: { id: invalid.id } }))?.processed_through, '2025-12-31');
     const edited = await patchBilling(
       db,
@@ -587,7 +598,7 @@ describe('billings on native PostgreSQL', () => {
     );
     const before = await getTimeline(db, OWNER, { type: 'indefinite', from: local });
     ok(before.items.some((item) => item.kind === 'billing_preview' && item.preview.billingId === rule.id));
-    await materializeBillings(db, now);
+    await materializeNextOccurrence(db, rule.id, undefined, now);
     const after = await getTimeline(db, OWNER, { type: 'indefinite', from: local });
     equal(after.summary.receivable.amountCents - before.summary.receivable.amountCents, 501);
     equal(

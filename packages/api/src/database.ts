@@ -5,6 +5,7 @@ import type { AppleCredentialSchema } from './schemas/apple-credential';
 import type { AuthIdentitySchema } from './schemas/auth-identity';
 import type { AllocationSchema, BillingSchema } from './schemas/billing';
 import type { ChargeSchema } from './schemas/charge';
+import type { BillingInviteSchema } from './schemas/invite';
 import type { LoginCodeSchema } from './schemas/login-code';
 import type { DeviceTokenSchema, NotificationDeliverySchema } from './schemas/notification';
 import type { OauthAttemptSchema } from './schemas/oauth-attempt';
@@ -109,6 +110,12 @@ export declare class Db extends Database.Service<PostgresEngine> {
       schema: PublicLinkSchema;
       relations: { 'charge_id@charge': 'charges:id' };
       indexes: { id: Index.Primary; public_id: Index.Unique; charge_id: Index.Unique };
+    }>,
+    Database.UseTable<{
+      name: 'billing_invites';
+      schema: BillingInviteSchema;
+      relations: { 'billing_id@billing': 'billings:id'; 'owner_id@owner': 'users:id' };
+      indexes: { id: Index.Primary; public_id: Index.Unique; billing_id: Index.Secondary };
     }>,
     Database.UseTable<{
       name: 'activity_events';

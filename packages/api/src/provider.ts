@@ -28,5 +28,6 @@ export declare class ApiProvider implements Http.Provider {
     APPLE_CREDENTIAL_ENCRYPTION_KEY_B64: Environment.VariableOrValue<'APPLE_CREDENTIAL_ENCRYPTION_KEY_B64', 'disabled'>;
     OAUTH_REDIRECT_ALLOW_LIST: Environment.Variable<'OAUTH_REDIRECT_ALLOW_LIST'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
+    PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
   };
 }

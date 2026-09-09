@@ -24,7 +24,8 @@ function response(row: { public_id: string; token_version: number; expires_at: s
       publicId: row.public_id,
       version: row.token_version,
       expiresAtSeconds: Math.floor(new Date(row.expires_at).getTime() / 1000),
-      secret
+      secret,
+      purpose: 'charge'
     }),
     expiresAt: row.expires_at
   };
@@ -184,7 +185,7 @@ export async function resolvePublicCharge(db: DbClient, token: string, secret: s
   if (!link || link.revoked_at) throw new HttpNotFoundError();
   let capability: { publicId: string; expiresAtSeconds: number };
   try {
-    capability = verifyPublicChargeToken(token, { version: link.token_version, nowSeconds, secret });
+    capability = verifyPublicChargeToken(token, { version: link.token_version, nowSeconds, secret, purpose: 'charge' });
   } catch {
     throw new HttpNotFoundError();
   }

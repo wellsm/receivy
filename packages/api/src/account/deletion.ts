@@ -27,6 +27,8 @@ export async function eraseAccount(
     if (families.records.length) await tx.refresh_tokens.deleteMany({ where: { family_id: { isIn: families.records.map((x) => x.id) } } });
     // Stop future generation before touching historical records. Existing amounts/state stay unchanged.
     const billings = await tx.billings.findMany({ select: { id: true }, where: { owner_id: userId }, lock: true });
+    // No surviving link may still add participants to an erased owner's billings.
+    await tx.billing_invites.updateMany({ where: { owner_id: userId }, data: { revoked_at: now } });
     for (const billing of billings.records) {
       await tx.billings.updateOne({
         where: { id: billing.id },
@@ -128,6 +130,7 @@ export async function eraseAccount(
     }
     for (const billing of billings.records)
       if (!(await tx.charges.count({ where: { billing_id: billing.id } }))) {
+        await tx.billing_invites.deleteMany({ where: { billing_id: billing.id } });
         await tx.allocations.deleteMany({ where: { billing_id: billing.id } });
         await tx.billings.deleteOne({ where: { id: billing.id } });
       }

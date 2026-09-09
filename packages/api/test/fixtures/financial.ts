@@ -43,6 +43,7 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
     await client.charges.deleteMany({ where: { id: { isIn: chargeIds } } });
   }
   if (billingIds.length) {
+    await client.billing_invites.deleteMany({ where: { billing_id: { isIn: billingIds } } });
     await client.allocations.deleteMany({ where: { billing_id: { isIn: billingIds } } });
     await client.activity_events.deleteMany({ where: { aggregate_id: { isIn: billingIds } } });
     await client.billings.deleteMany({ where: { id: { isIn: billingIds } } });

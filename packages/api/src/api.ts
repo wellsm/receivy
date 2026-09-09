@@ -5,6 +5,7 @@ import type { AuthRoutes } from './routes/auth';
 import type { BillingRoutes } from './routes/billings';
 import type { ChargeRoutes } from './routes/charges';
 import type { HealthRoutes } from './routes/health';
+import type { InviteRoutes } from './routes/invites';
 import type { NotificationRoutes } from './routes/notifications';
 import type { PaymentMethodRoutes } from './routes/payment-methods';
 import type { PeopleRoutes } from './routes/people';
@@ -33,6 +34,7 @@ export declare class Api extends Http.Service {
     ...BillingRoutes,
     ...ChargeRoutes,
     ...PublicRoutes,
+    ...InviteRoutes,
     ...TimelineRoutes,
     ...ProofRoutes,
     ...NotificationRoutes,

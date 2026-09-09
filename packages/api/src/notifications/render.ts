@@ -16,7 +16,8 @@ export function renderNotice(input: RenderInputs, template: 'initial' | 'reminde
     publicId: input.publicId,
     version: input.version,
     expiresAtSeconds: input.expires,
-    secret
+    secret,
+    purpose: 'charge'
   });
   const url = `${input.origin}/pay/${token}`;
   const subject = template === 'initial' ? 'Uma nova cobrança no Receivy' : 'Lembrete de cobrança no Receivy';

@@ -6211,6 +6211,262 @@
         }
       }
     },
+    "/billings/{id}/invite": {
+      "post": {
+        "operationId": "createInvite",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Sanitized API error; status remains meaningful. Monetary domain values must be safe integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokeInvite",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "description": "Sanitized API error; status remains meaningful. Monetary domain values must be safe integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/public/invites/{token}": {
+      "get": {
+        "operationId": "publicInvite",
+        "security": [],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "creditorFirstName": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "object",
+                      "properties": {
+                        "amountCents": {
+                          "type": "number"
+                        },
+                        "currency": {
+                          "type": "string",
+                          "const": "BRL"
+                        }
+                      },
+                      "required": [
+                        "amountCents",
+                        "currency"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "type": {
+                      "enum": [
+                        "once",
+                        "until",
+                        "indefinite"
+                      ]
+                    },
+                    "participantCount": {
+                      "type": "number"
+                    },
+                    "category": {
+                      "enum": [
+                        "food",
+                        "transport",
+                        "groceries",
+                        "subscription",
+                        "loan",
+                        "housing",
+                        "travel",
+                        "other"
+                      ]
+                    },
+                    "expired": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "creditorFirstName",
+                    "description",
+                    "amount",
+                    "type",
+                    "participantCount",
+                    "category",
+                    "expired"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Sanitized API error; status remains meaningful. Monetary domain values must be safe integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invites/{token}/accept": {
+      "post": {
+        "operationId": "acceptInvite",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "billingId": {
+                      "type": "string"
+                    },
+                    "chargeId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "joinedSplit": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "billingId",
+                    "chargeId",
+                    "joinedSplit"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Sanitized API error; status remains meaningful. Monetary domain values must be safe integer cents.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/timeline": {
       "get": {
         "operationId": "timeline",

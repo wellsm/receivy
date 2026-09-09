@@ -5,7 +5,7 @@ import type { Integer, String } from '@ez4/schema';
 import type { BillingDetail, BillingInput, BillingPatch, BillingPreview, BillingsPage } from '@receivy/common';
 import type { SessionIdentity } from '../authorizers/session';
 import type { ApiProvider } from '../provider';
-import { createBilling, getBilling, listBillings, patchBilling, previewBilling } from './repository';
+import { createBilling, getBilling, type InviteLinkContext, listBillings, patchBilling, previewBilling } from './repository';
 
 // Keep the arms explicit: EZ4 reflection cannot extract intersections out of a union.
 declare class SplitBody {
@@ -94,6 +94,10 @@ declare class PreviewResponse implements Http.Response {
   body: { previews: BillingPreview[] };
 }
 
+function inviteLink(context: Service.Context<ApiProvider>): InviteLinkContext {
+  return { secret: context.variables.PUBLIC_LINK_HMAC_SECRET, webOrigin: context.variables.PUBLIC_WEB_ORIGIN };
+}
+
 async function validation<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
@@ -108,7 +112,14 @@ async function validation<T>(operation: () => Promise<T>): Promise<T> {
 
 export async function createBillingHandler(request: CreateRequest, context: Service.Context<ApiProvider>): Promise<CreateResponse> {
   const body = await validation(() =>
-    createBilling(context.db, request.identity.userId, request.headers['idempotency-key'], request.body as BillingInput)
+    createBilling(
+      context.db,
+      request.identity.userId,
+      request.headers['idempotency-key'],
+      request.body as BillingInput,
+      new Date(),
+      inviteLink(context)
+    )
   );
 
   return { status: 201, body };
@@ -119,7 +130,10 @@ export async function listBillingsHandler(request: ListRequest, context: Service
 }
 
 export async function getBillingHandler(request: ReadRequest, context: Service.Context<ApiProvider>): Promise<DetailResponse> {
-  return { status: 200, body: await getBilling(context.db, request.identity.userId, request.parameters.id) };
+  return {
+    status: 200,
+    body: await getBilling(context.db, request.identity.userId, request.parameters.id, new Date(), inviteLink(context))
+  };
 }
 
 export async function previewBillingHandler(request: ReadRequest, context: Service.Context<ApiProvider>): Promise<PreviewResponse> {
@@ -128,7 +142,7 @@ export async function previewBillingHandler(request: ReadRequest, context: Servi
 
 export async function patchBillingHandler(request: PatchRequest, context: Service.Context<ApiProvider>): Promise<DetailResponse> {
   const body = await validation(() =>
-    patchBilling(context.db, request.identity.userId, request.parameters.id, request.body as BillingPatch)
+    patchBilling(context.db, request.identity.userId, request.parameters.id, request.body as BillingPatch, new Date(), inviteLink(context))
   );
 
   return { status: 200, body };

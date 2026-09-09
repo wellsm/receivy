@@ -26,6 +26,7 @@ import {
 import { lockOwner, persistChargePlan, prepareChargeMaterialization } from '../charges/materialize';
 import { CHARGE_SELECT, chargeDto } from '../charges/repository';
 import type { DbClient } from '../database';
+import { activeInvite } from '../invites/repository';
 import { closeProofs } from '../proofs/events';
 import { billingRequestFingerprint } from './request';
 
@@ -72,6 +73,9 @@ export type BillingRow = {
   updated_at: string;
 };
 
+/** Secret and web origin the detail needs to re-issue the active invite URL. */
+export type InviteLinkContext = { secret: string; webOrigin: string };
+
 export type BillingFilters = {
   type?: BillingType;
   state?: BillingState;
@@ -115,7 +119,7 @@ async function billingRow(db: DbClient, ownerId: string, id: string, lock = fals
   return row;
 }
 
-async function splitFor(db: DbClient, id: string): Promise<{ split: BillingSplit; allocations: BillingAllocation[] }> {
+export async function splitFor(db: DbClient, id: string): Promise<{ split: BillingSplit; allocations: BillingAllocation[] }> {
   const rows = (
     await db.allocations.findMany({
       select: {
@@ -284,7 +288,7 @@ async function summaryDto(db: DbClient, row: BillingRow, now: Date): Promise<Bil
   return summary(row, nextDueDate, { ...(await chargeCounters(db, row.id)), participantCount, shareChargeId }, installmentCountFor(row));
 }
 
-async function dto(db: DbClient, row: BillingRow, now: Date): Promise<BillingDetail> {
+async function dto(db: DbClient, row: BillingRow, now: Date, link?: InviteLinkContext): Promise<BillingDetail> {
   const reminders = effectiveReminders(row);
   const { split, allocations } = await splitFor(db, row.id);
   const charges = await db.charges.findMany({
@@ -309,7 +313,7 @@ async function dto(db: DbClient, row: BillingRow, now: Date): Promise<BillingDet
     nextDueDate: earliest?.due_date ?? previews[0]?.occurrenceDate ?? null,
     createdAt: row.created_at,
     category: row.category,
-    invite: null,
+    invite: link ? await activeInvite(db, row.id, link.secret, link.webOrigin, now) : null,
     updatedAt: row.updated_at,
     timezone: row.timezone,
     paymentMethodId: row.payment_method_id,
@@ -322,7 +326,7 @@ async function dto(db: DbClient, row: BillingRow, now: Date): Promise<BillingDet
   };
 }
 
-async function audit(db: DbClient, ownerId: string, id: string, type: string, now: string, payload: Record<string, unknown> = {}) {
+export async function audit(db: DbClient, ownerId: string, id: string, type: string, now: string, payload: Record<string, unknown> = {}) {
   await db.activity_events.insertOne({
     data: {
       id: crypto.randomUUID(),
@@ -337,7 +341,7 @@ async function audit(db: DbClient, ownerId: string, id: string, type: string, no
   });
 }
 
-async function saveAllocations(db: DbClient, id: string, totalCents: number, split: BillingSplit, now: string) {
+export async function saveAllocations(db: DbClient, id: string, totalCents: number, split: BillingSplit, now: string) {
   const resolved = resolveBillingSplit(totalCents, split);
 
   await db.allocations.deleteMany({ where: { billing_id: id } });
@@ -372,7 +376,8 @@ export async function createBilling(
   ownerId: string,
   key: string,
   raw: BillingInput,
-  now = new Date()
+  now = new Date(),
+  link?: InviteLinkContext
 ): Promise<BillingDetail> {
   if (!key.trim() || key.length > 200) {
     throw new RangeError('Idempotency-Key inválida.');
@@ -391,7 +396,7 @@ export async function createBilling(
         throw new HttpConflictError('Idempotency-Key já usada com outro conteúdo.');
       }
 
-      return dto(tx, existing, now);
+      return dto(tx, existing, now, link);
     }
 
     const today = calendarDate(now, input.timezone);
@@ -444,12 +449,18 @@ export async function createBilling(
 
     await audit(tx, ownerId, id, 'billing.created', instant, { type: input.type });
 
-    return dto(tx, row, now);
+    return dto(tx, row, now, link);
   });
 }
 
-export async function getBilling(db: DbClient, ownerId: string, id: string, now = new Date()): Promise<BillingDetail> {
-  return dto(db, await billingRow(db, ownerId, id), now);
+export async function getBilling(
+  db: DbClient,
+  ownerId: string,
+  id: string,
+  now = new Date(),
+  link?: InviteLinkContext
+): Promise<BillingDetail> {
+  return dto(db, await billingRow(db, ownerId, id), now, link);
 }
 
 function decodeCursor(cursor?: string): { createdAt: string; id: string } | undefined {
@@ -606,7 +617,8 @@ export async function patchBilling(
   ownerId: string,
   id: string,
   patch: BillingPatch,
-  now = new Date()
+  now = new Date(),
+  link?: InviteLinkContext
 ): Promise<BillingDetail> {
   return db.transaction(async (tx) => {
     await lockOwner(tx, ownerId);
@@ -664,7 +676,7 @@ export async function patchBilling(
 
     await audit(tx, ownerId, id, patch.state ? `billing.${patch.state}` : 'billing.edited', instant);
 
-    return dto(tx, await billingRow(tx, ownerId, id), now);
+    return dto(tx, await billingRow(tx, ownerId, id), now, link);
   });
 }
 

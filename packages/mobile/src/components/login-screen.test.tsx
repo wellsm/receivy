@@ -30,11 +30,13 @@ describe("LoginScreen", () => {
     expect(onCodeRequested).toHaveBeenCalledWith("ana@example.com");
   });
 
-  it("keeps provider buttons disabled until the API reports them available", async () => {
+  it("hides provider buttons and the e-mail divider while the API reports them disabled", async () => {
     await render(<LoginScreen client={{ requestEmailCode: jest.fn() }} onCodeRequested={jest.fn()} />);
 
-    expect(screen.getByRole("button", { name: "Continuar com Google" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Continuar com Apple" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Continuar com Google" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Continuar com Apple" })).toBeNull();
+    expect(screen.queryByText("ou continue com seu e-mail")).toBeNull();
+    expect(screen.getByRole("button", { name: "Continuar com E-mail" })).toBeOnTheScreen();
     expect(screen.queryByText(/WhatsApp/)).toBeNull();
   });
 

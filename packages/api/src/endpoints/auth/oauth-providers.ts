@@ -1,6 +1,6 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
-import { appleConfigurationAvailable, decodeOauthProviderConfig } from '../../auth/oauth-provider';
+import { appleConfigurationAvailable, oauthProviderConfigFrom } from '../../auth/oauth-provider';
 import type { ApiProvider } from '../../provider';
 
 declare class OauthProvidersRequest implements Http.Request {}
@@ -14,7 +14,7 @@ export async function oauthProvidersHandler(
   _request: OauthProvidersRequest,
   context: Service.Context<ApiProvider>
 ): Promise<OauthProvidersResponse> {
-  const config = decodeOauthProviderConfig(context.variables.OAUTH_PROVIDERS_CONFIG_B64);
+  const config = oauthProviderConfigFrom(context.variables);
   const apple = appleConfigurationAvailable(config.apple);
   return {
     status: 200,

@@ -27,6 +27,10 @@ API (`packages/api/dev.env.example` → `dev.env`, git-ignored; `prd.env` análo
 - `OAUTH_REDIRECT_ALLOW_LIST`: `<web>/auth/oauth/callback,receivy://auth/callback`.
 - `OAUTH_PROVIDERS_CONFIG_B64`: `callbackUri` dos provedores é `<web>/api/auth/<provedor>/callback`
   (ver `docs/oauth-setup.md`).
+- `OAUTH_GOOGLE_ENABLED` / `OAUTH_APPLE_ENABLED`: `true` liga o login social correspondente;
+  qualquer outro valor (padrão `false`) o mantém desligado mesmo com credenciais configuradas.
+  Desligado, a API não anuncia nem aceita o provedor e web/mobile escondem o botão; com os dois
+  desligados o login mostra só o e-mail.
 - `EMAIL_TRANSPORT=resend`, `NOTIFICATION_EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`,
   `RESEND_FROM_EMAIL`.
 - CORS da API e do bucket são declarações estáticas do EZ4 (`src/api.ts`,

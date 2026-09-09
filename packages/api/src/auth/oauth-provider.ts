@@ -199,3 +199,29 @@ export function createOauthProviderClient(
     }
   };
 }
+
+export type OauthProviderToggles = { google: boolean; apple: boolean };
+
+/** Reads an `OAUTH_<PROVIDER>_ENABLED` flag; anything but `true` keeps the provider off. */
+export function oauthProviderEnabled(value: string | undefined): boolean {
+  return value?.trim().toLowerCase() === 'true';
+}
+
+/** Drops providers that are configured but switched off, so every caller sees them as unavailable. */
+export function enabledOauthProviders(config: OauthProviderConfig, toggles: OauthProviderToggles): OauthProviderConfig {
+  return {
+    ...(toggles.google && config.google ? { google: config.google } : {}),
+    ...(toggles.apple && config.apple ? { apple: config.apple } : {})
+  };
+}
+
+export function oauthProviderConfigFrom(variables: {
+  OAUTH_PROVIDERS_CONFIG_B64: string;
+  OAUTH_GOOGLE_ENABLED: string;
+  OAUTH_APPLE_ENABLED: string;
+}): OauthProviderConfig {
+  return enabledOauthProviders(decodeOauthProviderConfig(variables.OAUTH_PROVIDERS_CONFIG_B64), {
+    google: oauthProviderEnabled(variables.OAUTH_GOOGLE_ENABLED),
+    apple: oauthProviderEnabled(variables.OAUTH_APPLE_ENABLED)
+  });
+}

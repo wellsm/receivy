@@ -57,12 +57,23 @@ describe("EmailLoginForm", () => {
     expect(typeof pending.sentAt).toBe("number");
   });
 
-  it("disables provider buttons the API reports as unavailable", async () => {
+  it("hides provider buttons and the e-mail divider when the API reports them disabled", async () => {
     vi.stubGlobal("fetch", fetchMock({ google: false, apple: false }));
     render(<EmailLoginForm nextPath="/" />);
 
-    expect(await screen.findByRole("button", { name: /Continuar com Google/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Continuar com Apple/ })).toBeDisabled();
+    await screen.findByRole("button", { name: /Continuar com E-mail/ });
+    expect(screen.queryByRole("button", { name: /Continuar com Google/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Continuar com Apple/ })).toBeNull();
+    expect(screen.queryByText("ou continue com seu e-mail")).toBeNull();
+  });
+
+  it("shows only the providers the API reports as enabled", async () => {
+    vi.stubGlobal("fetch", fetchMock({ google: true, apple: false }));
+    render(<EmailLoginForm nextPath="/" />);
+
+    expect(await screen.findByRole("button", { name: /Continuar com Google/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Continuar com Apple/ })).toBeNull();
+    expect(screen.getByText("ou continue com seu e-mail")).toBeInTheDocument();
   });
 
   it("shows the oauth error alert inside the card", async () => {

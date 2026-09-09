@@ -98,28 +98,36 @@ export function EmailLoginForm({ nextPath, oauthError = false }: EmailLoginFormP
       <p className="login-subtitle">Controle o que tem a receber e a pagar</p>
 
       <div className="login-card">
-        <div className="social-login-grid">
-          <button
-            type="button"
-            className="social-login-button"
-            disabled={busy || !providers.google}
-            onClick={() => void socialLogin("google")}
-          >
-            <GoogleMark />
-            Continuar com Google
-          </button>
-          <button
-            type="button"
-            className="social-login-button social-login-button--apple"
-            disabled={busy || !providers.apple}
-            onClick={() => void socialLogin("apple")}
-          >
-            <Apple aria-hidden="true" size={19} />
-            Continuar com Apple
-          </button>
-        </div>
+        {(providers.google || providers.apple) && (
+          <div className="social-login-grid">
+            {providers.google && (
+              <button
+                type="button"
+                className="social-login-button"
+                disabled={busy}
+                onClick={() => void socialLogin("google")}
+              >
+                <GoogleMark />
+                Continuar com Google
+              </button>
+            )}
+            {providers.apple && (
+              <button
+                type="button"
+                className="social-login-button social-login-button--apple"
+                disabled={busy}
+                onClick={() => void socialLogin("apple")}
+              >
+                <Apple aria-hidden="true" size={19} />
+                Continuar com Apple
+              </button>
+            )}
+          </div>
+        )}
 
-        <div className="login-divider"><span>ou continue com seu e-mail</span></div>
+        {(providers.google || providers.apple) && (
+          <div className="login-divider"><span>ou continue com seu e-mail</span></div>
+        )}
 
         <form className="login-form" onSubmit={sendCode}>
           <label className="sr-only" htmlFor="login-email">Seu e-mail</label>

@@ -104,19 +104,21 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
           </View>
 
           <View className="mt-8 gap-3 rounded-3xl border border-outline/60 bg-surface p-5">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Continuar com Google"
-              accessibilityState={{ disabled: busy || !providers.google }}
-              disabled={busy || !providers.google}
-              onPress={() => void socialLogin("google")}
-              className="h-14 flex-row items-center justify-center gap-3 rounded-2xl border border-outline bg-surface disabled:opacity-40"
-            >
-              <Image source={googleMark} style={{ width: 22, height: 22 }} />
-              <Text className="text-base font-bold text-ink">Continuar com Google</Text>
-            </Pressable>
+            {providers.google && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Continuar com Google"
+                accessibilityState={{ disabled: busy }}
+                disabled={busy}
+                onPress={() => void socialLogin("google")}
+                className="h-14 flex-row items-center justify-center gap-3 rounded-2xl border border-outline bg-surface disabled:opacity-40"
+              >
+                <Image source={googleMark} style={{ width: 22, height: 22 }} />
+                <Text className="text-base font-bold text-ink">Continuar com Google</Text>
+              </Pressable>
+            )}
 
-            {showNativeApple ? (
+            {!providers.apple ? null : showNativeApple ? (
               <View pointerEvents={busy ? "none" : "auto"}>
                 <AppleAuthentication.AppleAuthenticationButton
                   buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
@@ -130,8 +132,8 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Continuar com Apple"
-                accessibilityState={{ disabled: busy || !providers.apple || Platform.OS === "ios" }}
-                disabled={busy || !providers.apple || Platform.OS === "ios"}
+                accessibilityState={{ disabled: busy || Platform.OS === "ios" }}
+                disabled={busy || Platform.OS === "ios"}
                 onPress={() => void socialLogin("apple")}
                 className="h-14 flex-row items-center justify-center gap-3 rounded-2xl bg-black disabled:opacity-40"
               >
@@ -140,11 +142,13 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
               </Pressable>
             )}
 
-            <View className="my-2 flex-row items-center gap-3">
-              <View className="h-px flex-1 bg-outline/60" />
-              <Text className="text-xs text-muted">ou continue com seu e-mail</Text>
-              <View className="h-px flex-1 bg-outline/60" />
-            </View>
+            {(providers.google || providers.apple) && (
+              <View className="my-2 flex-row items-center gap-3">
+                <View className="h-px flex-1 bg-outline/60" />
+                <Text className="text-xs text-muted">ou continue com seu e-mail</Text>
+                <View className="h-px flex-1 bg-outline/60" />
+              </View>
+            )}
 
             <View className="h-14 flex-row items-center gap-3 rounded-2xl border border-outline bg-canvas px-4">
               <Image source={mailMark} style={{ width: 20, height: 20 }} />

@@ -1,7 +1,13 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createOauthProviderClient, decodeOauthProviderConfig } from './oauth-provider';
+import {
+  createOauthProviderClient,
+  decodeOauthProviderConfig,
+  enabledOauthProviders,
+  oauthProviderConfigFrom,
+  oauthProviderEnabled
+} from './oauth-provider';
 
 describe('OAuth provider configuration', () => {
   it.each(['google', 'apple', 'nativeApple'] as const)('exchanges and verifies a signed %s fixture', async (mode) => {
@@ -105,5 +111,37 @@ describe('OAuth provider configuration', () => {
     });
     expect(decodeOauthProviderConfig(Buffer.from('{}').toString('base64url'))).toEqual({});
     expect(decodeOauthProviderConfig('not-base64-json')).toEqual({});
+  });
+});
+
+describe('enabledOauthProviders', () => {
+  const google = {
+    callbackUri: 'https://api.receivy.example/auth/google/callback',
+    clientId: 'google-client',
+    clientSecret: 'google-secret'
+  };
+
+  it('keeps only the providers switched on, independently of each other', () => {
+    expect(enabledOauthProviders({ google }, { google: true, apple: true })).toEqual({ google });
+    expect(enabledOauthProviders({ google }, { google: false, apple: true })).toEqual({});
+  });
+
+  it('reads the flags as strict booleans with everything off by default', () => {
+    expect(oauthProviderEnabled('true')).toBe(true);
+    expect(oauthProviderEnabled(' TRUE ')).toBe(true);
+    expect(oauthProviderEnabled('false')).toBe(false);
+    expect(oauthProviderEnabled('1')).toBe(false);
+    expect(oauthProviderEnabled(undefined)).toBe(false);
+  });
+
+  it('builds the effective configuration from the environment', () => {
+    const encoded = Buffer.from(JSON.stringify({ google })).toString('base64url');
+
+    expect(
+      oauthProviderConfigFrom({ OAUTH_PROVIDERS_CONFIG_B64: encoded, OAUTH_GOOGLE_ENABLED: 'true', OAUTH_APPLE_ENABLED: 'false' })
+    ).toEqual({ google });
+    expect(
+      oauthProviderConfigFrom({ OAUTH_PROVIDERS_CONFIG_B64: encoded, OAUTH_GOOGLE_ENABLED: 'false', OAUTH_APPLE_ENABLED: 'false' })
+    ).toEqual({});
   });
 });

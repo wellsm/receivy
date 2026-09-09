@@ -29,6 +29,8 @@ export declare class ApiProvider implements Http.Provider {
     RESEND_API_KEY: Environment.Variable<'RESEND_API_KEY'>;
     RESEND_FROM_EMAIL: Environment.Variable<'RESEND_FROM_EMAIL'>;
     OAUTH_PROVIDERS_CONFIG_B64: Environment.Variable<'OAUTH_PROVIDERS_CONFIG_B64'>;
+    OAUTH_GOOGLE_ENABLED: Environment.VariableOrValue<'OAUTH_GOOGLE_ENABLED', 'false'>;
+    OAUTH_APPLE_ENABLED: Environment.VariableOrValue<'OAUTH_APPLE_ENABLED', 'false'>;
     OAUTH_REDIRECT_ALLOW_LIST: Environment.Variable<'OAUTH_REDIRECT_ALLOW_LIST'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
     PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;

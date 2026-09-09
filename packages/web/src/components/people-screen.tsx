@@ -1,108 +1,160 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { normalizePerson, type Person, type PeoplePage } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { patchDraft } from "@/lib/billing-draft";
+import { contactBadge, formatPhoneBR, initialsOf, type PeoplePage, type Person } from "@receivy/common";
+import { ChevronRight, Plus } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
+import { browserFetch } from "@/lib/auth/browser-fetch";
+
+const LIST_ERROR = "Não foi possível carregar os contatos.";
+
+/** Phone first because it is what a reminder uses; the e-mail is the fallback line. */
+function subtitleOf(person: Person): string {
+  if (person.phone) {
+    return formatPhoneBR(person.phone);
+  }
+
+  return person.email ?? "Sem contato";
+}
+
+function countLabel(total: number): string {
+  return `${total} ${total === 1 ? "contato" : "contatos"}`;
+}
 
 export function PeopleScreen({ returnTo }: { returnTo?: string }) {
-  const router = useRouter();
   const [people, setPeople] = useState<Person[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [archived, setArchived] = useState(false);
+  const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [editing, setEditing] = useState<Person | null>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const version = useRef(0);
-  const nameInput = useRef<HTMLInputElement>(null);
 
-  const load = useCallback((after?: string) => {
-    const requestVersion = ++version.current;
-    const query = new URLSearchParams({ archived: String(archived), ...(after ? { cursor: after } : {}), ...(search ? { search } : {}) });
-    return browserFetch(`/api/people?${query}`).then(async response => {
-      if (!response.ok) throw new Error("Não foi possível carregar os contatos.");
-      const data = await response.json() as PeoplePage;
-      if (requestVersion !== version.current) return;
-      setPeople(previous => after ? [...previous, ...data.people] : data.people);
-      setCursor(data.nextCursor);
-      setError("");
-    }).catch(reason => {
-      if (requestVersion === version.current) setError(reason instanceof Error ? reason.message : "Serviço indisponível.");
-    }).finally(() => { if (requestVersion === version.current) setLoading(false); });
-  }, [archived, search]);
+  // The form lives on its own screen, so a side trip from the billing draft has
+  // to keep travelling: the list hands its own return path to the new contact.
+  const newContactHref = returnTo ? `/people/new?returnTo=${encodeURIComponent(returnTo)}` : "/people/new";
 
-  const invalidate = useCallback(() => { version.current++; }, []);
-  useEffect(() => { void load(); return invalidate; }, [load, invalidate]);
-  function reload(after?: string) { setLoading(true); void load(after); }
+  const load = useCallback(
+    (after?: string) => {
+      const query = new URLSearchParams({ ...(search ? { search } : {}), ...(after ? { cursor: after } : {}) });
 
-  function reset() { setEditing(null); setName(""); setEmail(""); setPhone(""); }
+      return browserFetch(`/api/people?${query}`)
+        .then(async response => {
+          if (!response.ok) {
+            throw new Error(LIST_ERROR);
+          }
 
-  async function save(event: FormEvent) {
-    event.preventDefault(); setError(""); setNotice("");
-    let input;
-    try { input = normalizePerson({ name, email, phone }); }
-    catch (reason) { setError((reason as Error).message); return; }
-    setBusy(true);
-    try {
-      const response = await browserFetch(editing ? `/api/people/${editing.id}` : "/api/people", {
-        method: editing ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input),
-      });
-      if (!response.ok) throw new Error((await response.json()).message ?? "Não foi possível salvar.");
-      const saved = await response.json() as Person;
-      reset(); setNotice("Contato salvo.");
-      // Came from the billing form: hand the new contact back to the draft.
-      if (returnTo && !editing) { patchDraft({ selected: [saved.id] }); router.push(returnTo); return; }
-      await load();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível salvar."); }
-    finally { setBusy(false); }
-  }
+          const page = (await response.json()) as PeoplePage;
 
-  async function archive(person: Person) {
-    if (!window.confirm(`Arquivar ${person.name}? O histórico será preservado.`)) return;
-    setBusy(true); setError(""); setNotice("");
-    try {
-      const response = await browserFetch(`/api/people/${person.id}/archive`, { method: "POST" });
-      if (!response.ok) throw new Error("Não foi possível arquivar o contato.");
-      if (editing?.id === person.id) reset();
-      setNotice("Contato arquivado. O histórico foi preservado."); await load();
-    } catch (reason) { setError((reason as Error).message); } finally { setBusy(false); }
-  }
+          setPeople(previous => (after ? [...previous, ...page.people] : page.people));
+          setCursor(page.nextCursor);
+          setError("");
+        })
+        .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : LIST_ERROR))
+        .finally(() => setLoading(false));
+    },
+    [search],
+  );
 
-  return <section className="people-page">
-    <p className="login-eyebrow">Sua agenda</p><h1>Quem faz parte das suas contas?</h1>
-    <p className="people-intro">Cadastre pessoas para organizar suas cobranças. Elas não precisam ter uma conta no Receivy.</p>
-    <div className="people-layout">
-      <form className="people-editor login-form" onSubmit={save} aria-label={editing ? "Editar contato" : "Novo contato"}>
-        <h2>{editing ? "Editar contato" : "Novo contato"}</h2>
-        <label htmlFor="person-name">Nome</label><input ref={nameInput} id="person-name" maxLength={120} value={name} onChange={e => setName(e.target.value)} required autoComplete="name" />
-        <label htmlFor="person-email">E-mail <span>(opcional)</span></label><input id="person-email" type="email" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" />
-        <label htmlFor="person-phone">Telefone com DDD <span>(opcional)</span></label><input id="person-phone" type="tel" maxLength={40} value={phone} onChange={e => setPhone(e.target.value)} autoComplete="tel" />
-        <p className="people-hint">O e-mail permite que a pessoa encontre as cobranças ao entrar na própria conta.</p>
-        <button className="login-submit" disabled={busy} type="submit">{busy ? "Salvando…" : "Salvar contato"}</button>
-        {editing && <button className="login-text-button" disabled={busy} type="button" onClick={reset}>Cancelar edição</button>}
-      </form>
-      <div className="people-agenda">
-        <label htmlFor="people-search">Buscar contatos</label><input id="people-search" type="search" maxLength={254} value={search} onChange={event => { setLoading(true); setPeople([]); setCursor(null); setSearch(event.target.value); }} />
-        <div className="people-list-heading"><h2>Contatos</h2><label><input type="checkbox" checked={archived} disabled={busy || loading} onChange={e => { setLoading(true); setPeople([]); setArchived(e.target.checked); reset(); }} /> Ver arquivados</label></div>
-        {error && <p className="login-error" role="alert">{error} <button type="button" onClick={() => reload()} disabled={loading}>Tentar carregar novamente</button></p>}
-        {notice && <p role="status">{notice}</p>}
-        {loading && <p role="status">Carregando contatos…</p>}
-        {!loading && !error && people.length === 0 && <div className="people-empty"><h3>{archived ? "Nenhum contato arquivado" : "Sua agenda começa com uma pessoa"}</h3><p>{archived ? "Os contatos arquivados aparecerão aqui." : "Pode ser alguém com quem você dividiu uma compra ou combinou um pagamento."}</p></div>}
-        <ul className="people-list">{people.map(person => <li key={person.id}>
-          <span className="person-avatar" aria-hidden="true">{person.name.slice(0, 1).toLocaleUpperCase("pt-BR")}</span>
-          <div className="person-info"><strong>{person.name}</strong><span>{person.hasAccount ? "Com conta" : "Sem conta"}</span><span>{person.email ?? "Sem e-mail"}</span>{person.phone && <span>{person.phone}</span>}</div>
-          <div className="person-actions"><Link href={`/people/${person.id}`}>Histórico<span className="visually-hidden"> de {person.name}</span></Link>{!person.archivedAt && <><button disabled={busy} onClick={() => { setEditing(person); setName(person.name); setEmail(person.email ?? ""); setPhone(person.phone ?? ""); nameInput.current?.focus(); }}>Editar<span className="visually-hidden"> {person.name}</span></button><button disabled={busy} onClick={() => void archive(person)}>Arquivar<span className="visually-hidden"> {person.name}</span></button></>}</div>
-        </li>)}</ul>
-        {cursor && <button className="login-text-button" disabled={loading || busy} onClick={() => reload(cursor)}>Carregar mais contatos</button>}
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(term.trim()), 300);
+
+    return () => clearTimeout(timer);
+  }, [term]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <section className="financial-page people-page">
+      <header className="billings-header">
+        <div>
+          <h1>Meus Contatos</h1>
+          <p>Pessoas com quem você divide contas</p>
+        </div>
+        <Link className="primary-button billings-new" href={newContactHref}>
+          <Plus size={16} aria-hidden="true" />
+          Novo contato
+        </Link>
+      </header>
+
+      <input
+        className="billings-search"
+        type="search"
+        aria-label="Buscar contatos"
+        placeholder="Buscar por nome, telefone ou e-mail..."
+        maxLength={254}
+        value={term}
+        onChange={event => {
+          setLoading(true);
+          setTerm(event.target.value);
+        }}
+      />
+
+      <div className="people-list-heading">
+        <h2 className="profile-section-title">CONTATOS</h2>
+        <span className="people-count">{countLabel(people.length)}</span>
       </div>
-    </div>
-  </section>;
+
+      {error && (
+        <p role="alert" className="login-error">
+          {error} <button type="button" onClick={() => void load()}>Tentar novamente</button>
+        </p>
+      )}
+
+      {loading && !people.length && <p role="status">Carregando contatos…</p>}
+
+      {!loading && !error && !people.length && (
+        <section className="billings-empty">
+          <h3>Nenhum contato ainda</h3>
+          <p>Cadastre alguém para dividir despesas e lembrar pagamentos.</p>
+          <Link className="primary-button" href={newContactHref}>
+            Novo contato
+          </Link>
+        </section>
+      )}
+
+      <ul className="people-cards">
+        {people.map(person => {
+          const badge = contactBadge(person.activeCharges);
+
+          return (
+            <li key={person.id}>
+              <Link className="people-card" href={`/people/${person.id}`} aria-label={`Contato ${person.displayName}`}>
+                <span className="person-avatar" aria-hidden="true">
+                  {initialsOf(person.name)}
+                </span>
+                <span className="people-card-lines">
+                  <span className="people-card-top">
+                    <strong>{person.displayName}</strong>
+                    <span className={`feed-badge ${badge.tone}`}>{badge.label}</span>
+                  </span>
+                  <small>{subtitleOf(person)}</small>
+                </span>
+                <ChevronRight size={18} aria-hidden="true" />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+
+      {cursor && (
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={loading}
+          onClick={() => {
+            setLoading(true);
+            void load(cursor);
+          }}
+        >
+          Carregar mais
+        </button>
+      )}
+
+      <Link className="fab" href={newContactHref} aria-label="Novo contato">
+        <Plus size={22} aria-hidden="true" />
+      </Link>
+    </section>
+  );
 }

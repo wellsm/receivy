@@ -1,48 +1,233 @@
 "use client";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
-import type { PaymentMethod, PaymentMethodsPage, PixKeyType } from "@receivy/common";
-import { useRouter } from "next/navigation";
+
+import { pixKeyField, type PaymentMethod, type PaymentMethodsPage, type PixKeyType } from "@receivy/common";
+import { Building2, Copy, IdCard, KeyRound, Mail, MoreVertical, Plus, Smartphone } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { patchDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 
-const labels: Record<PixKeyType, string> = { cpf: "CPF", cnpj: "CNPJ", email: "E-mail", phone: "Telefone", random: "Chave aleatória" };
-export function PixSettingsScreen({ returnTo, required = false }: { returnTo?: string; required?: boolean }) {
-  const router = useRouter();
-  const [items, setItems] = useState<PaymentMethod[]>([]); const [type, setType] = useState<PixKeyType>("email"); const [key, setKey] = useState(""); const [label, setLabel] = useState(""); const [editing, setEditing] = useState<string | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [accountEmail, setAccountEmail] = useState(""); const [touched, setTouched] = useState(false);
-  const load = useCallback(async () => { const response = await browserFetch("/api/financial/payment-methods"); if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível carregar suas chaves Pix.")); setItems((await response.json() as PaymentMethodsPage).paymentMethods); }, []);
-  useEffect(() => { void browserFetch("/api/financial/payment-methods").then(async response => {
-    if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível carregar suas chaves Pix.")); return response.json() as Promise<PaymentMethodsPage>;
-  }).then(page => setItems(page.paymentMethods)).catch(reason => setError(reason instanceof Error ? reason.message : "Não foi possível carregar suas chaves Pix.")); }, []);
+type PixSettingsScreenProps = { returnTo?: string; required?: boolean };
 
-  useEffect(() => {
-    let live = true;
+const LABELS: Record<PixKeyType, string> = {
+  cpf: "CPF",
+  cnpj: "CNPJ",
+  phone: "Celular",
+  email: "E-mail",
+  random: "Chave aleatória",
+};
 
-    void browserFetch("/api/auth/me")
-      .then(response => (response.ok ? (response.json() as Promise<{ user: { email: string | null } }>) : null))
-      .then(payload => {
-        if (live && payload?.user?.email) setAccountEmail(payload.user.email);
+const ICONS: Record<PixKeyType, ComponentType<{ size?: number; "aria-hidden"?: boolean }>> = {
+  cpf: IdCard,
+  cnpj: Building2,
+  phone: Smartphone,
+  email: Mail,
+  random: KeyRound,
+};
+
+const LIST_ERROR = "Não foi possível carregar suas chaves Pix.";
+const SAFETY_NOTE = "Seus dados Pix ficam protegidos e nunca são compartilhados sem sua autorização.";
+
+function formHref({ returnTo, required }: PixSettingsScreenProps): string {
+  const query = new URLSearchParams({ ...(returnTo ? { returnTo } : {}), ...(required ? { required: "1" } : {}) });
+  const suffix = query.toString();
+
+  if (!suffix) {
+    return "/settings/pix/new";
+  }
+
+  return `/settings/pix/new?${suffix}`;
+}
+
+export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScreenProps) {
+  const [items, setItems] = useState<PaymentMethod[]>([]);
+  const [menu, setMenu] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<PaymentMethod | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  const newKeyHref = formHref({ returnTo, required });
+
+  const load = useCallback(() => {
+    return browserFetch("/api/financial/payment-methods")
+      .then(async response => {
+        if (!response.ok) {
+          throw new Error(await responseMessage(response, LIST_ERROR));
+        }
+
+        const page = (await response.json()) as PaymentMethodsPage;
+
+        setItems(page.paymentMethods.filter(method => !method.archivedAt));
+        setError("");
       })
-      .catch(() => undefined);
-
-    return () => { live = false; };
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : LIST_ERROR));
   }, []);
 
-  // Most people register their own e-mail as the Pix key, so an untouched e-mail
-  // field shows the account e-mail. It stays a normal editable field: typing —
-  // or clearing it — takes over, and picking another type starts over.
-  const pixKey = type === "email" && !key && !touched ? accountEmail : key;
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  async function request(path: string, method: string, body?: object) { setBusy(true); setError(""); setNotice(""); try { const response = await browserFetch(`/api/financial/payment-methods${path}`, { method, ...(body ? { headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}) }); if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível salvar a chave Pix.")); const saved = response.status === 204 ? true : await response.json() as PaymentMethod; await load(); setNotice("Chaves Pix atualizadas."); return saved; } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível salvar a chave Pix."); return null; } finally { setBusy(false); } }
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    const saved = await request(editing ? `/${editing}` : "", editing ? "PATCH" : "POST", { pixKeyType: type, pixKey, label: label || undefined });
-    if (!saved) return;
-    setEditing(null); setKey(""); setLabel(""); setTouched(false);
-    // Came from the billing form: hand the new key back to the draft.
-    if (!returnTo) return;
-    if (saved !== true) patchDraft({ pix: saved.id });
-    router.push(returnTo);
+  async function copy(method: PaymentMethod) {
+    setError("");
+    setNotice("");
+
+    try {
+      await navigator.clipboard?.writeText(method.pixKey);
+      setNotice("Chave copiada");
+    } catch {
+      setError("Não foi possível copiar a chave.");
+    }
   }
-  return <section className="financial-page"><header><p className="date-line">Perfil</p><h1>Suas chaves Pix</h1><p>O Receivy apenas exibe a chave nos links. O pagamento acontece no banco.</p></header>{required && <p className="pix-required-notice" role="status">Você precisa de uma chave Pix para criar cobranças.</p>}<div className="settings-layout"><form className="creation-form compact" onSubmit={save}><h2>{editing ? "Editar chave" : "Adicionar chave"}</h2><label htmlFor="key-type">Tipo</label><select id="key-type" value={type} onChange={event => { setType(event.target.value as PixKeyType); setTouched(false); }}>{Object.entries(labels).map(([value, name]) => <option value={value} key={value}>{name}</option>)}</select><label htmlFor="pix-key">Chave Pix</label><input id="pix-key" required maxLength={254} value={pixKey} onChange={event => { setTouched(true); setKey(event.target.value); }} /><label htmlFor="pix-label">Nome para identificar</label><input id="pix-label" maxLength={120} value={label} onChange={event => setLabel(event.target.value)} /><button className="primary-button" disabled={busy}>Salvar chave</button></form><div className="method-list"><h2>Chaves cadastradas</h2>{!items.length && <p>Nenhuma chave Pix cadastrada.</p>}{items.map(item => <article key={item.id}><div><strong>{item.label || labels[item.pixKeyType]}</strong><code>{item.pixKey}</code>{item.isDefault && <span className="direction-badge receivable">Principal</span>}</div><div className="action-row"><button onClick={() => { setEditing(item.id); setType(item.pixKeyType); setKey(item.pixKey); setLabel(item.label); }}>Editar</button>{!item.isDefault && <button disabled={busy} onClick={() => void request(`/${item.id}/default`, "POST")}>Tornar principal</button>}<button disabled={busy} onClick={() => void request(`/${item.id}/archive`, "POST")}>Arquivar</button></div></article>)}</div></div>{error && <p role="alert" className="login-error">{error}</p>}{notice && <p role="status">{notice}</p>}</section>;
+
+  async function act(method: PaymentMethod, action: "default" | "archive") {
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const response = await browserFetch(`/api/financial/payment-methods/${method.id}/${action}`, { method: "POST" });
+
+      if (!response.ok) {
+        throw new Error(await responseMessage(response, "Não foi possível atualizar suas chaves Pix."));
+      }
+
+      setMenu(null);
+      setConfirming(null);
+      setNotice(action === "default" ? "Chave principal atualizada." : "Chave excluída.");
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível atualizar suas chaves Pix.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="financial-page pix-page">
+      <header className="billings-header">
+        <div>
+          <h1>Minhas Chaves Pix</h1>
+          <p>Chaves usadas nos links de cobrança</p>
+        </div>
+        <Link className="primary-button billings-new" href={newKeyHref}>
+          <Plus size={16} aria-hidden="true" />
+          Cadastrar nova chave
+        </Link>
+      </header>
+
+      {required && (
+        <p className="pix-required-notice" role="status">
+          Você precisa de uma chave Pix para criar cobranças.
+        </p>
+      )}
+
+      <h2 className="profile-section-title">CHAVES ATIVAS ({items.length})</h2>
+
+      {error && (
+        <p role="alert" className="login-error">
+          {error}
+        </p>
+      )}
+
+      {notice && (
+        <p role="status" className="billings-notice">
+          {notice}
+        </p>
+      )}
+
+      {!items.length && !error && (
+        <section className="billings-empty">
+          <h3>Nenhuma chave ainda</h3>
+          <p>Cadastre uma chave para receber pelos links de cobrança.</p>
+          <Link className="primary-button" href={newKeyHref}>
+            Cadastrar nova chave
+          </Link>
+        </section>
+      )}
+
+      <div className="pix-key-list">
+        {items.map(method => {
+          const Icon = ICONS[method.pixKeyType];
+          const name = method.label || LABELS[method.pixKeyType];
+
+          return (
+            <article key={method.id} className={method.isDefault ? "pix-key-card is-default" : "pix-key-card"}>
+              <div className="pix-key-card-top">
+                <span className="billing-card-icon" aria-hidden="true">
+                  <Icon size={18} aria-hidden={true} />
+                </span>
+                <div className="pix-key-card-title">
+                  <strong>{LABELS[method.pixKeyType]}</strong>
+                  {method.label && <small>{method.label}</small>}
+                </div>
+                {method.isDefault && <span className="feed-badge success">Principal</span>}
+                <button
+                  type="button"
+                  className="billings-icon-button"
+                  aria-label={`Mais ações da chave ${name}`}
+                  aria-expanded={menu === method.id}
+                  onClick={() => setMenu(current => (current === method.id ? null : method.id))}
+                >
+                  <MoreVertical size={16} aria-hidden="true" />
+                </button>
+              </div>
+
+              <p className="pix-key-value">{pixKeyField(method.pixKeyType).format(method.pixKey)}</p>
+
+              <div className="pix-key-actions">
+                <button type="button" className="secondary-button" onClick={() => void copy(method)}>
+                  <Copy size={14} aria-hidden="true" />
+                  Copiar chave
+                </button>
+                {!method.isDefault && (
+                  <button type="button" className="secondary-button" disabled={busy} onClick={() => void act(method, "default")}>
+                    Tornar padrão
+                  </button>
+                )}
+              </div>
+
+              {menu === method.id && (
+                <div className="pix-key-menu">
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => {
+                      setMenu(null);
+                      setConfirming(method);
+                    }}
+                  >
+                    Excluir
+                  </button>
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+
+      <p className="form-hint pix-safety-note">{SAFETY_NOTE}</p>
+
+      <Link className="fab" href={newKeyHref} aria-label="Cadastrar nova chave">
+        <Plus size={22} aria-hidden="true" />
+      </Link>
+
+      {confirming && (
+        <div className="profile-backdrop">
+          <section className="profile-dialog" role="alertdialog" aria-label="Excluir chave Pix" aria-modal="true">
+            <h2>Excluir chave Pix</h2>
+            <p>A chave sai dos próximos links de cobrança. As cobranças já criadas não mudam.</p>
+            <div className="profile-dialog-actions">
+              <button type="button" className="danger-button" disabled={busy} onClick={() => void act(confirming, "archive")}>
+                Confirmar exclusão
+              </button>
+              <button type="button" className="secondary-button" disabled={busy} onClick={() => setConfirming(null)}>
+                Cancelar
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </section>
+  );
 }

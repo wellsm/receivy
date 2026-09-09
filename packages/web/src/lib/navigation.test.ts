@@ -8,6 +8,7 @@ describe("backLabelFor", () => {
     expect(backLabelFor("/charges/new")).toBe("Nova cobrança");
     expect(backLabelFor("/people")).toBe("Contatos");
     expect(backLabelFor("/settings")).toBe("Perfil");
+    expect(backLabelFor("/settings/pix")).toBe("Chaves Pix");
   });
 
   it("ignores the query string, the hash and a trailing slash", () => {

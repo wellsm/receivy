@@ -38,8 +38,8 @@ export function ContactCarousel({ people, selected, today, disabled, allowNew, o
           disabled={disabled}
           onClick={() => onToggle(person.id)}
         >
-          <span className="contact-avatar" aria-hidden="true">{initialOf(person.name)}</span>
-          <strong>{person.name}</strong>
+          <span className="contact-avatar" aria-hidden="true">{initialOf(person.displayName)}</span>
+          <strong>{person.displayName}</strong>
           <small>{lastBilledHint(person.lastBilledAt, today)}</small>
         </button>
       ))}

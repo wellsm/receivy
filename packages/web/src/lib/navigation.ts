@@ -9,6 +9,7 @@ const BACK_LABELS: Record<string, string> = {
   "/charges/new": "Nova cobrança",
   "/people": "Contatos",
   "/settings": "Perfil",
+  "/settings/pix": "Chaves Pix",
 };
 
 const FALLBACK_LABEL = "Voltar";

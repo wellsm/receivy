@@ -1,9 +1,7 @@
-import { EMPTY_BILLING_DRAFT } from "@receivy/common";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { saveDraft, takeDraft } from "@/lib/billing-draft";
 import { PixSettingsScreen } from "./pix-settings-screen";
 
 const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
@@ -14,91 +12,112 @@ vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+  vi.unstubAllGlobals();
   window.sessionStorage.clear();
 });
 
-const method = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, archivedAt: null };
+const main = { id: "pix-1", label: "Nubank", pixKey: "52998224725", pixKeyType: "cpf", isDefault: true, archivedAt: null };
+const other = { id: "pix-2", label: "", pixKey: "ana@example.com", pixKeyType: "email", isDefault: false, archivedAt: null };
 
-/** Serves the account e-mail, the (initially empty) key list and one creation. */
-function api() {
-  let created = false;
+function api(methods: unknown[] = [main, other]) {
+  const sent: { path: string; init: RequestInit }[] = [];
+  let list = methods;
 
   vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
-    if (path === "/api/auth/me") {
-      return Response.json({ user: { email: "conta@example.com" } });
+    sent.push({ path, init });
+
+    if (init.method === "POST" && path.endsWith("/archive")) {
+      list = list.filter(item => item !== other);
+
+      return new Response(null, { status: 204 });
     }
 
-    if (init.method === "POST" || init.method === "PATCH") {
-      created = true;
-
-      return Response.json(method, { status: 201 });
+    if (init.method === "POST") {
+      return new Response(null, { status: 204 });
     }
 
-    return Response.json({ paymentMethods: created ? [method] : [] });
+    return Response.json({ paymentMethods: list });
   });
+
+  return sent;
 }
 
-async function typedKey(value: string) {
-  const user = userEvent.setup();
-  const field = screen.getByLabelText("Chave Pix");
-
-  await vi.waitFor(() => expect(field).toHaveValue("conta@example.com"));
-  await user.clear(field);
-  await user.type(field, value);
-
-  return user;
-}
-
-it("prefills the e-mail key with the account e-mail and keeps it editable", async () => {
+it("lists the active keys with the type label, the masked key and the main badge", async () => {
   api();
   render(<PixSettingsScreen />);
 
-  const field = await screen.findByLabelText("Chave Pix");
-
-  await vi.waitFor(() => expect(field).toHaveValue("conta@example.com"));
-
-  await userEvent.setup().type(field, ".br");
-
-  expect(field).toHaveValue("conta@example.com.br");
+  expect(await screen.findByText("CHAVES ATIVAS (2)")).toBeInTheDocument();
+  expect(screen.getByText("529.982.247-25")).toBeInTheDocument();
+  expect(screen.getByText("CPF")).toBeInTheDocument();
+  expect(screen.getByText("E-mail")).toBeInTheDocument();
+  expect(screen.getByText("Principal")).toBeInTheDocument();
+  expect(screen.getByText("Nubank")).toBeInTheDocument();
+  expect(screen.getByText("Seus dados Pix ficam protegidos e nunca são compartilhados sem sua autorização.")).toBeInTheDocument();
 });
 
-it("announces why the Pix key is required when the billing form asked for it", async () => {
+it("copies a key to the clipboard and announces it", async () => {
   api();
-  render(<PixSettingsScreen required />);
+  render(<PixSettingsScreen />);
+
+  const user = userEvent.setup();
+  // `userEvent.setup()` installs its own clipboard stub, so the write is spied after it.
+  const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+
+  await user.click((await screen.findAllByRole("button", { name: "Copiar chave" }))[0]!);
+
+  expect(writeText).toHaveBeenCalledWith("52998224725");
+  expect(await screen.findByText("Chave copiada")).toBeInTheDocument();
+});
+
+it("promotes another key to the main one", async () => {
+  const sent = api();
+  render(<PixSettingsScreen />);
+
+  await userEvent.setup().click(await screen.findByRole("button", { name: "Tornar padrão" }));
+
+  await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pix-2/default")).toBe(true));
+});
+
+it("asks for confirmation before deleting a key", async () => {
+  const sent = api();
+  render(<PixSettingsScreen />);
+
+  const user = userEvent.setup();
+  await user.click((await screen.findAllByRole("button", { name: /Mais ações/ }))[1]!);
+  await user.click(screen.getByRole("button", { name: "Excluir" }));
+
+  expect(screen.getByRole("alertdialog", { name: "Excluir chave Pix" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
+
+  await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pix-2/archive")).toBe(true));
+});
+
+it("shows the empty state and no inline form", async () => {
+  api([]);
+  render(<PixSettingsScreen />);
+
+  expect(await screen.findByText("Nenhuma chave ainda")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Salvar chave Pix" })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("E-mail Pix")).not.toBeInTheDocument();
+});
+
+it("carries the return path and the required flag into the key form", async () => {
+  api([]);
+  render(<PixSettingsScreen returnTo="/charges/new" required />);
 
   expect(await screen.findByText("Você precisa de uma chave Pix para criar cobranças.")).toBeInTheDocument();
+  expect(screen.getAllByRole("link", { name: "Cadastrar nova chave" })[0]).toHaveAttribute(
+    "href",
+    "/settings/pix/new?returnTo=%2Fcharges%2Fnew&required=1",
+  );
 });
 
-it("hides the required notice on a plain visit", async () => {
-  api();
+it("links to the plain key form on a direct visit", async () => {
+  api([]);
   render(<PixSettingsScreen />);
 
-  await screen.findByLabelText("Chave Pix");
+  await screen.findByText("Nenhuma chave ainda");
 
-  expect(screen.queryByText("Você precisa de uma chave Pix para criar cobranças.")).not.toBeInTheDocument();
-});
-
-it("hands the new Pix key back to the billing draft and returns to the form", async () => {
-  saveDraft({ ...EMPTY_BILLING_DRAFT("America/Sao_Paulo", "2026-09-08"), selected: ["p1"] }, "/charges/new");
-  api();
-
-  render(<PixSettingsScreen returnTo="/charges/new" />);
-
-  const user = await typedKey("ana@example.com");
-  await user.click(screen.getByRole("button", { name: "Salvar chave" }));
-
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/charges/new"));
-  expect(takeDraft()?.draft.pix).toBe("pix-1");
-});
-
-it("stays on the settings screen when there is no return path", async () => {
-  api();
-
-  render(<PixSettingsScreen />);
-
-  const user = await typedKey("ana@example.com");
-  await user.click(screen.getByRole("button", { name: "Salvar chave" }));
-
-  expect(await screen.findByText("ana@example.com")).toBeInTheDocument();
-  expect(routerMock.push).not.toHaveBeenCalled();
+  expect(screen.getAllByRole("link", { name: "Cadastrar nova chave" })[0]).toHaveAttribute("href", "/settings/pix/new");
 });

@@ -47,7 +47,8 @@ type BillingFormProps = {
 };
 
 const RETURN_TO = "/charges/new";
-const PIX_SETUP = `/settings/pix?returnTo=${encodeURIComponent(RETURN_TO)}&required=1`;
+const PIX_SETUP = `/settings/pix/new?returnTo=${encodeURIComponent(RETURN_TO)}&required=1`;
+const NEW_CONTACT = `/people/new?returnTo=${encodeURIComponent(RETURN_TO)}`;
 const FROZEN_NOTE = "Cobranças já geradas só permitem categoria, Pix e lembretes.";
 const PIX_GATE_NOTE = "Cadastre uma chave Pix para criar cobranças.";
 const NO_VALUES: Record<string, string> = {};
@@ -191,7 +192,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
 }
 
 function unknownPerson(id: string): Person {
-  return { id, name: "Contato", email: null, phone: null, archivedAt: null, createdAt: "", hasAccount: false, lastBilledAt: null };
+  return { id, name: "Contato", nickname: null, displayName: "Contato", email: null, phone: null, archivedAt: null, createdAt: "", hasAccount: false, lastBilledAt: null, activeCharges: 0 };
 }
 
 function abbreviate(pixKey: string): string {
@@ -407,7 +408,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
       return "Eu";
     }
 
-    return directory.find(person => person.id === key)?.name ?? "Contato";
+    return directory.find(person => person.id === key)?.displayName ?? "Contato";
   }
 
   /** What the owner keeps on a fixed split: the preview's share, or the remainder of a half-typed screen. */
@@ -497,7 +498,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
           disabled={locked || frozen}
           allowNew={!editing}
           onToggle={toggle}
-          onNew={() => leaveTo(`/people?returnTo=${RETURN_TO}`)}
+          onNew={() => leaveTo(NEW_CONTACT)}
         />
         <button type="button" className="secondary-button" ref={seeAll} onClick={() => setPicker(true)}>
           Ver todos

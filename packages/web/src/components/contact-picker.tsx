@@ -113,8 +113,8 @@ export function ContactPicker({ selected, onToggle, onSeen, onClose, returnFocus
           <li key={person.id}>
             <label>
               <input type="checkbox" checked={selected.includes(person.id)} onChange={() => onToggle(person.id)} />
-              <span className="contact-avatar" aria-hidden="true">{initialOf(person.name)}</span>
-              {person.name}
+              <span className="contact-avatar" aria-hidden="true">{initialOf(person.displayName)}</span>
+              {person.displayName}
             </label>
           </li>
         ))}

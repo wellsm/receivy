@@ -21,10 +21,10 @@ afterEach(() => {
 const TIMEZONE = "America/Sao_Paulo";
 const today = () => calendarDate(new Date(), TIMEZONE);
 
-const ana = { id: "p1", name: "Ana", email: null, phone: null, archivedAt: null, createdAt: "2026-01-01", hasAccount: false, lastBilledAt: `${addCalendarDays(today(), -1)}T10:00:00.000Z` };
-const bruno = { id: "p2", name: "Bruno", email: null, phone: null, archivedAt: null, createdAt: "2026-01-01", hasAccount: false, lastBilledAt: null };
+const ana = { id: "p1", name: "Ana Souza", nickname: "Ana", displayName: "Ana", email: null, phone: null, archivedAt: null, createdAt: "2026-01-01", hasAccount: false, lastBilledAt: `${addCalendarDays(today(), -1)}T10:00:00.000Z`, activeCharges: 0 };
+const bruno = { id: "p2", name: "Bruno Lima", nickname: null, displayName: "Bruno Lima", email: null, phone: null, archivedAt: null, createdAt: "2026-01-01", hasAccount: false, lastBilledAt: null, activeCharges: 0 };
 const method = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, archivedAt: null };
-const PIX_SETUP = "/settings/pix?returnTo=%2Fcharges%2Fnew&required=1";
+const PIX_SETUP = "/settings/pix/new?returnTo=%2Fcharges%2Fnew&required=1";
 
 type Sent = { path: string; init: RequestInit };
 
@@ -103,10 +103,10 @@ it("opens the contact panel and searches the whole agenda", async () => {
   const panel = screen.getByRole("dialog", { name: "Contatos" });
   await user.type(within(panel).getByLabelText("Buscar contatos"), "ma");
 
-  expect(await within(panel).findByRole("checkbox", { name: "Bruno" })).toBeInTheDocument();
+  expect(await within(panel).findByRole("checkbox", { name: "Bruno Lima" })).toBeInTheDocument();
   expect(sent.some(entry => entry.path === "/api/people?search=ma")).toBe(true);
 
-  await user.click(within(panel).getByRole("checkbox", { name: "Bruno" }));
+  await user.click(within(panel).getByRole("checkbox", { name: "Bruno Lima" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
 
   expect(screen.queryByRole("dialog", { name: "Contatos" })).not.toBeInTheDocument();
@@ -304,7 +304,7 @@ it("saves the draft and navigates when the user creates a new contact", async ()
   await user.type(await screen.findByLabelText("Valor"), "70,00");
   await user.click(screen.getByRole("button", { name: "Novo contato" }));
 
-  expect(routerMock.push).toHaveBeenCalledWith("/people?returnTo=/charges/new");
+  expect(routerMock.push).toHaveBeenCalledWith("/people/new?returnTo=%2Fcharges%2Fnew");
   expect(JSON.parse(window.sessionStorage.getItem("receivy.billingDraft") ?? "{}")).toMatchObject({
     returnTo: "/charges/new",
     draft: { amount: "70,00" },

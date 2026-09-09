@@ -7,6 +7,9 @@ import { EmailLoginForm } from "@/components/email-login-form";
 import { CodeLoginForm } from "@/components/code-login-form";
 import { FeedScreen } from "@/components/feed-screen";
 import { PeopleScreen } from "@/components/people-screen";
+import { ContactForm } from "@/components/contact-form";
+import { PixSettingsScreen } from "@/components/pix-settings-screen";
+import { PixKeyForm } from "@/components/pix-key-form";
 import { ProfileScreen } from "@/components/profile-screen";
 import { BillingForm } from "@/components/billing-form";
 import { JoinInvite } from "@/components/join-invite";
@@ -30,7 +33,8 @@ async function expectNoViolations(container: HTMLElement) {
 
 const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { amountCents: 0, currency: "BRL" }, overdue: { amountCents: 0, currency: "BRL" }, pending: { amountCents: 0, currency: "BRL" }, proofsToReview: 0, receivableCount: 0, payableCount: 0 };
 const user = { id: "user", email: "fixture@example.com", name: "Ana", avatarUrl: null, locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
-const person = { id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01", hasAccount: false, lastBilledAt: null };
+const person = { id: "person-1", name: "Ana Souza", nickname: "Ana", displayName: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01", hasAccount: false, lastBilledAt: null, activeCharges: 1 };
+const pixMethod = { id: "pix-1", label: "Nubank", pixKey: "52998224725", pixKeyType: "cpf", isDefault: true, archivedAt: null };
 const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 12_000, currency: "BRL" as const }, type: "once" as const, participantCount: 3, category: "food" as const, expired: false };
 
 describe("accessibility of the main web screens", () => {
@@ -73,12 +77,39 @@ describe("accessibility of the main web screens", () => {
     await expectNoViolations(container);
   });
 
-  it("people screen has labelled inputs and no axe violations", async () => {
+  it("contact list has a labelled search, named cards and no axe violations", async () => {
     vi.mocked(browserFetch).mockResolvedValue(Response.json({ people: [person], nextCursor: null }));
     const { container } = render(<PeopleScreen />);
-    expect((await screen.findAllByText("Ana")).length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("Nome")).toBeInTheDocument();
-    expect(screen.getAllByRole("link").some(link => /Ana/.test(link.textContent ?? ""))).toBe(true);
+    expect(await screen.findByRole("link", { name: "Contato Ana" })).toHaveAttribute("href", "/people/person-1");
+    expect(screen.getByLabelText("Buscar contatos")).toBeInTheDocument();
+    await expectNoViolations(container);
+  });
+
+  it("contact form labels every field and has no axe violations", async () => {
+    vi.mocked(browserFetch).mockResolvedValue(Response.json(person));
+    const { container } = render(<ContactForm />);
+    for (const label of ["Nome completo", "Apelido", "WhatsApp / Celular", "E-mail"]) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Salvar contato" })).toBeInTheDocument();
+    await expectNoViolations(container);
+  });
+
+  it("Pix key list names its per-key actions and has no axe violations", async () => {
+    vi.mocked(browserFetch).mockResolvedValue(Response.json({ paymentMethods: [pixMethod] }));
+    const { container } = render(<PixSettingsScreen />);
+    expect(await screen.findByRole("button", { name: "Copiar chave" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mais ações da chave Nubank" })).toBeInTheDocument();
+    await expectNoViolations(container);
+  });
+
+  it("Pix key form exposes the type radiogroup and has no axe violations", async () => {
+    vi.mocked(browserFetch).mockImplementation(async path =>
+      String(path) === "/api/auth/me" ? Response.json({ user: { email: "ana@example.com" } }) : Response.json({ paymentMethods: [] }),
+    );
+    const { container } = render(<PixKeyForm />);
+    expect(await screen.findByRole("radiogroup", { name: "Tipo de chave" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "CPF" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByLabelText("Banco (opcional)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Salvar chave Pix" })).toBeInTheDocument();
     await expectNoViolations(container);
   });
 

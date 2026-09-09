@@ -68,6 +68,8 @@ export async function publicInviteHandler(
 }
 
 export async function acceptInviteHandler(request: AcceptRequest, context: Service.Context<ApiProvider>): Promise<AcceptResponse> {
+  await throttlePublicRead(context.db, request.parameters.token, request);
+
   const body = await acceptInvite(context.db, request.identity.userId, request.parameters.token, context.variables.PUBLIC_LINK_HMAC_SECRET);
 
   return { status: 200, body };

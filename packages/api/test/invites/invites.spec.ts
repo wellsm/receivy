@@ -4,6 +4,7 @@ import { Order } from '@ez4/database';
 import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import type { BillingInput } from '@receivy/common';
 import { createBilling, getBilling } from '../../src/billings/repository';
+import { acceptInviteHandler } from '../../src/invites/endpoints';
 import { acceptInvite, activeInvite, createInvite, getPublicInvite, revokeInvite } from '../../src/invites/repository';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { savePerson } from '../../src/people/repository';
@@ -449,5 +450,27 @@ describe('billing invites on native PostgreSQL', () => {
 
     equal(contact?.linked_user_id, STRANGER);
     equal(await db.people.count({ where: { owner_id: LINKED_OWNER, active_email: GUEST_EMAIL } }), 1);
+  });
+  it('rate-limits repeated acceptances of the same invite link', async () => {
+    const now = new Date('2026-10-09T12:00:00Z');
+    const billing = await createBilling(db, OWNER, 'invite-throttle', once(), now);
+    const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
+    const context = { db, variables: { PUBLIC_LINK_HMAC_SECRET: SECRET } } as Parameters<typeof acceptInviteHandler>[1];
+    const request = {
+      sourceIp: '203.0.113.11',
+      identity: { familyId: 'f1111111-1111-4111-8111-111111111111', userId: GUEST },
+      parameters: { token: tokenOf(invite.url) }
+    };
+
+    // The public-read token bucket allows 60 attempts per window; the 61st must be refused.
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await acceptInviteHandler(request, context);
+    }
+
+    await rejects(
+      () => acceptInviteHandler(request, context),
+      (error) => (error as { status: number }).status === 429
+    );
+    await db.proof_throttles.deleteMany({});
   });
 });

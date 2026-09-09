@@ -4,6 +4,7 @@ import {
   billingShareAction,
   calendarDate,
   formatMoney,
+  shortDayMonth,
   type BillingDetail,
   type BillingInvite,
   type BillingSummary,
@@ -36,10 +37,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 function dateText(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
-}
-
-function expiryText(value: string): string {
-  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
 }
 
 function listQuery(filters: BillingFiltersValue, search: string, cursor?: string): string {
@@ -308,7 +305,7 @@ export function BillingsScreen() {
         {invite && (
           <p className="billing-invite-line">
             <Link2 size={14} aria-hidden="true" />
-            Convite ativo até {expiryText(invite.expiresAt)}
+            Convite ativo até {shortDayMonth(invite.expiresAt)}
             <button className="feed-action" disabled={busy} onClick={() => void copy(invite.url)}>
               Copiar
             </button>

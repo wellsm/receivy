@@ -43,6 +43,12 @@ async function contactFor(db: DbClient, ownerId: string, user: { id: string; nam
     : await savePerson(db, ownerId, { name: user.name?.trim() || localPart(user.email), email: user.email });
   const personId = existing?.id ?? created!.id;
 
+  // The agenda matched this address to a contact that already belongs to another
+  // account; relinking would hand that contact's history to the wrong person.
+  if (existing?.linked_user_id && existing.linked_user_id !== user.id) {
+    throw new HttpConflictError('Este e-mail já pertence a outro contato.');
+  }
+
   if (existing?.linked_user_id !== user.id) {
     await db.people.updateOne({ where: { id: personId }, data: { linked_user: { id: user.id }, updated_at: now } });
   }

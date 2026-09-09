@@ -9,6 +9,7 @@ import {
   billingShareAction,
   calendarDate,
   formatMoney,
+  shortDayMonth,
 } from "@receivy/common";
 import { SafeAreaView } from "@/components/safe-area-view";
 import { financialClient, type FinancialClient } from "@/financial/client";
@@ -55,10 +56,6 @@ const plusMark = require("../../assets/images/auth/plus.svg");
 
 function dateText(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
-}
-
-function expiryText(value: string): string {
-  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
 }
 
 function listQuery(filters: BillingFiltersValue, search: string, cursor?: string): string {
@@ -322,7 +319,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenCharg
 
             {invite && selected.state === "active" && (
               <View className="gap-2 rounded-2xl border border-outline/40 bg-surface p-4">
-                <Text className="text-sm font-semibold text-ink">Convite ativo até {expiryText(invite.expiresAt)}</Text>
+                <Text className="text-sm font-semibold text-ink">Convite ativo até {shortDayMonth(invite.expiresAt)}</Text>
                 <Button label="Compartilhar convite" disabled={busy} onPress={() => void shareInvite(invite, selected.description)} />
                 <Button label="Revogar" disabled={busy} onPress={() => void revokeInvite()} />
               </View>

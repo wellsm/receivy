@@ -59,6 +59,20 @@ const deferred = () => {
 };
 
 describe("FeedScreen", () => {
+  it("shows the invite notice left by the join flow once and clears it", async () => {
+    window.sessionStorage.setItem("receivy.notice", "Você entrou como contato; o criador ajusta a divisão.");
+    vi.mocked(browserFetch).mockImplementation(async () => Response.json({ summary, items: [], nextCursor: null }));
+    render(<FeedScreen />);
+    const notice = await screen.findByText("Você entrou como contato; o criador ajusta a divisão.");
+    expect(notice).toHaveAttribute("role", "status");
+    expect(window.sessionStorage.getItem("receivy.notice")).toBeNull();
+
+    cleanup();
+    render(<FeedScreen />);
+    await screen.findByText("Sua timeline começa aqui");
+    expect(screen.queryByText("Você entrou como contato; o criador ajusta a divisão.")).not.toBeInTheDocument();
+  });
+
   it("renders persisted totals and pending counts", async () => {
     vi.mocked(browserFetch).mockResolvedValue(
       Response.json({

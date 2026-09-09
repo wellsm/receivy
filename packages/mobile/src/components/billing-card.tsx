@@ -67,7 +67,7 @@ type BillingCardProps = {
 export function BillingCard({ billing, today, onShare, onEdit, onOpen }: BillingCardProps) {
   const dueLabel = billingDueLabel(billing, today);
   const overdue = dueLabel.startsWith("Atrasado");
-  const badges = billingBadges(billing, today);
+  const badges = billingBadges(billing);
   const occurrence = occurrenceLine(billing);
   const canShare = billingShareAction(billing) !== null;
   const canEdit = billing.state !== "ended";

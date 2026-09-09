@@ -70,14 +70,15 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   // The invite page is public and renders no upload surface, so it only needs
-  // the private cache and the crawler opt-out.
+  // the private cache, the crawler opt-out and a clickjacking guard.
   if (pathname.startsWith("/join/")) {
     const response = NextResponse.next();
 
     response.headers.set("cache-control", "private, no-store");
     response.headers.set("referrer-policy", "no-referrer");
     response.headers.set("x-content-type-options", "nosniff");
-    response.headers.set("x-robots-tag", "noindex");
+    response.headers.set("x-robots-tag", "noindex, nofollow");
+    response.headers.set("content-security-policy", "frame-ancestors 'none'");
 
     return response;
   }

@@ -1,18 +1,10 @@
 import type { BillingSummary } from './billing';
+import { dayDiff } from './calendar-labels';
 import type { SplitMode } from './contracts';
 import type { BadgeTone } from './feed';
 import { formatMoney } from './money';
 
 export type BillingBadge = { label: string; tone: BadgeTone };
-
-function dayDiff(date: string, today: string): number {
-  const [year, month, day] = date.split('-').map(Number);
-  const [todayYear, todayMonth, todayDay] = today.split('-').map(Number);
-
-  const ms = Date.UTC(year!, month! - 1, day!) - Date.UTC(todayYear!, todayMonth! - 1, todayDay!);
-
-  return Math.round(ms / 86_400_000);
-}
 
 /** Human due date for a billing card: relative for the days around today, plural-aware when overdue. */
 export function billingDueLabel(billing: BillingSummary, today: string): string {
@@ -24,7 +16,7 @@ export function billingDueLabel(billing: BillingSummary, today: string): string 
     return 'Sem data';
   }
 
-  const diff = dayDiff(billing.nextDueDate, today);
+  const diff = dayDiff(today, billing.nextDueDate);
 
   if (diff < 0) {
     const days = -diff;
@@ -44,7 +36,7 @@ export function billingDueLabel(billing: BillingSummary, today: string): string 
 }
 
 /** Badges for a billing card: occurrence type, status and participant count. */
-export function billingBadges(billing: BillingSummary, _today: string): BillingBadge[] {
+export function billingBadges(billing: BillingSummary): BillingBadge[] {
   const badges: BillingBadge[] = [];
 
   if (billing.type === 'once') {
@@ -67,7 +59,7 @@ export function billingBadges(billing: BillingSummary, _today: string): BillingB
     badges.push({ label: 'Aguardando comprovante', tone: 'info' });
   }
 
-  if (billing.state === 'ended' && billing.paidCount === billing.chargeCount) {
+  if (billing.state === 'ended' && billing.paidCount === billing.chargeCount && billing.chargeCount > 0) {
     badges.push({ label: 'Liquidado', tone: 'success' });
   }
 

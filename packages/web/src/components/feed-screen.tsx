@@ -178,8 +178,28 @@ export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummar
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const generation = useRef(0);
   const today = calendarDate();
+
+  // The join flow leaves a one-shot notice behind. It is read after the first
+  // paint so the hydrated markup still matches the server, then consumed.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const stored = window.sessionStorage.getItem("receivy.notice");
+
+        if (stored) {
+          setNotice(stored);
+          window.sessionStorage.removeItem("receivy.notice");
+        }
+      } catch {
+        // Storage may be blocked; the notice is a courtesy.
+      }
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const load = useCallback(
     async (nextFilter = filter, cursor?: string) => {
@@ -266,6 +286,12 @@ export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummar
   return (
     <div className="feed-page financial-page">
       <p className="date-line">Sua visão de hoje</p>
+
+      {notice && (
+        <p role="status" className="feed-notice">
+          {notice}
+        </p>
+      )}
 
       <div className="feed-totals">
         <article className="feed-total receivable">

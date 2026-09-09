@@ -12,7 +12,7 @@ export default function NewChargePage() {
   const [created, setCreated] = useState<BillingDetail | null>(null);
 
   return (
-    <AppShell>
+    <AppShell activePath="/billings">
       {created ? <BillingCreated billing={created} /> : <BillingForm billing={null} onSaved={setCreated} onBack={() => router.back()} />}
     </AppShell>
   );

@@ -1205,6 +1205,17 @@ a {
 }
 
 /* Feed */
+.feed-notice {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-primary-soft);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-primary-soft) 45%, var(--color-surface));
+  color: var(--color-primary-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .feed-totals {
   display: grid;
   grid-template-columns: 1fr 1fr;

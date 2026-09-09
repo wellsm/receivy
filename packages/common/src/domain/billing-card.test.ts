@@ -52,7 +52,7 @@ describe('billingDueLabel', () => {
 
 describe('billingBadges', () => {
   it('badges a pending once billing with three people', () => {
-    expect(billingBadges(base, '2026-09-10')).toEqual([
+    expect(billingBadges(base)).toEqual([
       { label: 'Única', tone: 'neutral' },
       { label: '3 pessoas', tone: 'neutral' }
     ]);
@@ -68,7 +68,7 @@ describe('billingBadges', () => {
       participantCount: 1
     };
 
-    expect(billingBadges(summary, '2026-09-10')).toEqual([
+    expect(billingBadges(summary)).toEqual([
       { label: 'Parcela 2 de 4', tone: 'info' },
       { label: '1 pessoa', tone: 'neutral' }
     ]);
@@ -84,7 +84,7 @@ describe('billingBadges', () => {
       participantCount: 1
     };
 
-    expect(billingBadges(summary, '2026-09-10')).toEqual([
+    expect(billingBadges(summary)).toEqual([
       { label: '4 parcelas', tone: 'neutral' },
       { label: '1 pessoa', tone: 'neutral' }
     ]);
@@ -98,7 +98,7 @@ describe('billingBadges', () => {
       state: 'paused'
     };
 
-    expect(billingBadges(summary, '2026-09-10')).toEqual([
+    expect(billingBadges(summary)).toEqual([
       { label: 'Recorrente mensal', tone: 'info' },
       { label: 'Pausada', tone: 'neutral' },
       { label: '3 pessoas', tone: 'neutral' }
@@ -113,7 +113,7 @@ describe('billingBadges', () => {
       proofsPending: 1
     };
 
-    expect(billingBadges(summary, '2026-09-10')).toEqual([
+    expect(billingBadges(summary)).toEqual([
       { label: 'Recorrente anual', tone: 'info' },
       { label: 'Aguardando comprovante', tone: 'info' },
       { label: '3 pessoas', tone: 'neutral' }
@@ -128,9 +128,25 @@ describe('billingBadges', () => {
       paidCount: 4
     };
 
-    expect(billingBadges(summary, '2026-09-10')).toEqual([
+    expect(billingBadges(summary)).toEqual([
       { label: 'Única', tone: 'neutral' },
       { label: 'Liquidado', tone: 'success' },
+      { label: '3 pessoas', tone: 'neutral' }
+    ]);
+  });
+
+  it('never liquidates an ended billing that never produced a charge', () => {
+    const summary: BillingSummary = {
+      ...base,
+      state: 'ended',
+      nextDueDate: null,
+      chargeCount: 0,
+      paidCount: 0
+    };
+
+    expect(billingDueLabel(summary, '2026-09-10')).toBe('Encerrada');
+    expect(billingBadges(summary)).toEqual([
+      { label: 'Única', tone: 'neutral' },
       { label: '3 pessoas', tone: 'neutral' }
     ]);
   });

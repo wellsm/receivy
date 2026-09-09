@@ -13,6 +13,7 @@ const OWNER = 'c1111111-1111-4111-8111-111111111111';
 const OTHER_OWNER = 'c2222222-2222-4222-8222-222222222222';
 const GUEST = 'c3333333-3333-4333-8333-333333333333';
 const STRANGER = 'c4444444-4444-4444-8444-444444444444';
+const LINKED_OWNER = 'c5555555-5555-4555-8555-555555555555';
 const GUEST_EMAIL = 'invite-guest@example.com';
 const SECRET = 'invite-spec-capability-secret';
 const ORIGIN = 'http://localhost:3000';
@@ -60,6 +61,7 @@ describe('billing invites on native PostgreSQL', () => {
 
     await createUser(db, { id: OWNER, email: 'invite-owner@example.com', name: 'Lucas Andrade' });
     await createUser(db, { id: OTHER_OWNER, email: 'invite-other-owner@example.com', name: 'Marta' });
+    await createUser(db, { id: LINKED_OWNER, email: 'invite-linked-owner@example.com', name: 'Rita' });
     await createUser(db, { id: GUEST, email: GUEST_EMAIL, name: 'Bruna Lima' });
 
     // Unverified on purpose: joining a split requires a confirmed address.
@@ -84,7 +86,7 @@ describe('billing invites on native PostgreSQL', () => {
     pixId = (await savePaymentMethod(db, OWNER, { pixKeyType: 'cpf', pixKey: '52998224725', label: 'Principal' })).id;
   });
 
-  after(async () => cleanupUsers(db, [OWNER, OTHER_OWNER, GUEST, STRANGER]));
+  after(async () => cleanupUsers(db, [OWNER, OTHER_OWNER, LINKED_OWNER, GUEST, STRANGER]));
 
   it('issues a join link, exposes it on the detail and revokes the previous invite', async () => {
     const now = new Date('2026-10-01T12:00:00Z');
@@ -406,5 +408,46 @@ describe('billing invites on native PostgreSQL', () => {
         [linked!.id, 1, 2_000]
       ]
     );
+  });
+
+  it('refuses the acceptance when the matching contact already belongs to another account', async () => {
+    const now = new Date('2026-10-08T12:00:00Z');
+    const stamp = now.toISOString();
+    const debtorId = (await savePerson(db, LINKED_OWNER, { name: 'Caio', email: 'invite-linked-debtor@example.com' })).id;
+
+    await db.people.insertOne({
+      data: {
+        id: crypto.randomUUID(),
+        owner: { id: LINKED_OWNER },
+        linked_user: { id: STRANGER },
+        name: 'Bruna',
+        active_email: GUEST_EMAIL,
+        created_at: stamp,
+        updated_at: stamp
+      }
+    });
+
+    const billing = await createBilling(
+      db,
+      LINKED_OWNER,
+      'invite-linked-contact',
+      {
+        type: 'once',
+        description: 'Feira',
+        totalCents: 6_000,
+        startDate: '2026-11-20',
+        timezone: 'America/Sao_Paulo',
+        split: { mode: 'equal', parts: [{ kind: 'person', personId: debtorId }] }
+      },
+      now
+    );
+    const invite = await createInvite(db, LINKED_OWNER, billing.id, SECRET, ORIGIN, now);
+
+    await rejects(() => acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now), HttpConflictError);
+
+    const contact = await personFor(LINKED_OWNER, GUEST_EMAIL);
+
+    equal(contact?.linked_user_id, STRANGER);
+    equal(await db.people.count({ where: { owner_id: LINKED_OWNER, active_email: GUEST_EMAIL } }), 1);
   });
 });

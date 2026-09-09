@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type BillingDraft, buildBillingInput, EMPTY_BILLING_DRAFT } from './billing-draft';
+import { type BillingDraft, buildBillingInput, EMPTY_BILLING_DRAFT, EMPTY_SPLIT_VALUES } from './billing-draft';
 
 const base: BillingDraft = {
   type: 'once',
@@ -14,7 +14,7 @@ const base: BillingDraft = {
   timezone: 'America/Sao_Paulo',
   pix: '',
   mode: 'equal',
-  values: {},
+  values: EMPTY_SPLIT_VALUES(),
   category: 'other',
   reminders: [{ offsetDays: '-3', enabled: true }]
 };
@@ -44,15 +44,49 @@ describe('billing draft review', () => {
   });
 
   it('parses fixed money and percentages once at the review boundary', () => {
-    expect(buildBillingInput({ ...base, mode: 'fixed', values: { p1: '40,01' } }).split).toEqual({
+    expect(buildBillingInput({ ...base, mode: 'fixed', values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,01' } } }).split).toEqual({
       mode: 'fixed',
       parts: [{ kind: 'person', personId: 'p1', amountCents: 4001 }]
     });
-    expect(buildBillingInput({ ...base, mode: 'percentage', values: { p1: '33,33', owner: '66,67' } }).split).toEqual({
+    expect(
+      buildBillingInput({
+        ...base,
+        mode: 'percentage',
+        values: { ...EMPTY_SPLIT_VALUES(), percentage: { p1: '33,33', owner: '66,67' } }
+      }).split
+    ).toEqual({
       mode: 'percentage',
       parts: [
         { kind: 'person', personId: 'p1', basisPoints: 3333 },
         { kind: 'owner', basisPoints: 6667 }
+      ]
+    });
+  });
+
+  it("keeps each mode's values isolated: filling fixed does not leak into percentage", () => {
+    const values = { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00' } };
+
+    expect(buildBillingInput({ ...base, mode: 'percentage', values: { ...values, percentage: { p1: '50', owner: '50' } } }).split).toEqual({
+      mode: 'percentage',
+      parts: [
+        { kind: 'person', personId: 'p1', basisPoints: 5000 },
+        { kind: 'owner', basisPoints: 5000 }
+      ]
+    });
+  });
+
+  it('ignores values.fixed when the mode is shares', () => {
+    const draft = {
+      ...base,
+      mode: 'shares' as const,
+      values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '999,99' }, shares: { p1: '2' } }
+    };
+
+    expect(buildBillingInput(draft).split).toEqual({
+      mode: 'shares',
+      parts: [
+        { kind: 'person', personId: 'p1', shares: 2 },
+        { kind: 'owner', shares: 1 }
       ]
     });
   });
@@ -71,7 +105,7 @@ describe('billing draft review', () => {
       amount: '100,00',
       description: 'Churrasco',
       mode: 'shares' as const,
-      values: { p1: '2', owner: '1' },
+      values: { ...EMPTY_SPLIT_VALUES(), shares: { p1: '2', owner: '1' } },
       category: 'food' as const
     };
 
@@ -106,7 +140,7 @@ describe('EMPTY_BILLING_DRAFT', () => {
       timezone: 'America/Sao_Paulo',
       pix: '',
       mode: 'equal',
-      values: {},
+      values: { fixed: {}, percentage: {}, shares: {} },
       category: 'other',
       reminders: [{ offsetDays: '0', enabled: true }]
     });
@@ -115,9 +149,22 @@ describe('EMPTY_BILLING_DRAFT', () => {
   it('returns a distinct object on every call', () => {
     const first = EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-10');
     first.selected.push('p1');
+    first.values.fixed.p1 = '10,00';
 
     const second = EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-10');
 
     expect(second.selected).toEqual([]);
+    expect(second.values.fixed).toEqual({});
+  });
+});
+
+describe('EMPTY_SPLIT_VALUES', () => {
+  it('returns a fresh object per mode on every call', () => {
+    const first = EMPTY_SPLIT_VALUES();
+    first.fixed.p1 = '10,00';
+
+    const second = EMPTY_SPLIT_VALUES();
+
+    expect(second).toEqual({ fixed: {}, percentage: {}, shares: {} });
   });
 });

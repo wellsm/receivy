@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BillingDraft } from './billing-draft';
+import { type BillingDraft, EMPTY_SPLIT_VALUES } from './billing-draft';
 import { draftTotalCents, previewBillingSplit, splitParties, splitPartyKey } from './billing-preview';
 import { formatMoney } from './money';
 
@@ -16,7 +16,7 @@ const base: BillingDraft = {
   timezone: 'America/Sao_Paulo',
   pix: '',
   mode: 'equal',
-  values: {},
+  values: EMPTY_SPLIT_VALUES(),
   category: 'other',
   reminders: [{ offsetDays: '0', enabled: true }]
 };
@@ -42,33 +42,64 @@ describe('previewBillingSplit', () => {
   });
 
   it('defaults a missing share to one', () => {
-    expect(previewBillingSplit({ ...base, mode: 'shares', values: { p1: '2' } })).toEqual({
+    expect(previewBillingSplit({ ...base, mode: 'shares', values: { ...EMPTY_SPLIT_VALUES(), shares: { p1: '2' } } })).toEqual({
       amounts: { p1: 4500, p2: 2250, owner: 2250 },
       error: null
     });
   });
 
   it('reports the missing remainder of a fixed split', () => {
-    const preview = previewBillingSplit({ ...base, mode: 'fixed', values: { p1: '40,00', p2: '45,00' } });
+    const preview = previewBillingSplit({
+      ...base,
+      mode: 'fixed',
+      values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00', p2: '45,00' } }
+    });
 
     expect(preview.error).toBe(`Faltam ${formatMoney({ amountCents: 500, currency: 'BRL' })}`);
   });
 
   it('reports a percentage sum that is not 100%', () => {
-    const preview = previewBillingSplit({ ...base, owner: false, mode: 'percentage', values: { p1: '60', p2: '50' } });
+    const preview = previewBillingSplit({
+      ...base,
+      owner: false,
+      mode: 'percentage',
+      values: { ...EMPTY_SPLIT_VALUES(), percentage: { p1: '60', p2: '50' } }
+    });
 
     expect(preview.error).toBe('Soma 110%');
   });
 
   it('prices a valid percentage split without an error', () => {
-    expect(previewBillingSplit({ ...base, owner: false, mode: 'percentage', values: { p1: '60', p2: '40' } })).toEqual({
+    expect(
+      previewBillingSplit({
+        ...base,
+        owner: false,
+        mode: 'percentage',
+        values: { ...EMPTY_SPLIT_VALUES(), percentage: { p1: '60', p2: '40' } }
+      })
+    ).toEqual({
       amounts: { p1: 5400, p2: 3600 },
       error: null
     });
   });
 
+  it('keeps a fixed value in place when switching to percentage and back', () => {
+    const withFixed = { ...base, mode: 'fixed' as const, values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00' } } };
+    const switchedToPercentage = { ...withFixed, mode: 'percentage' as const };
+    const switchedBack = { ...switchedToPercentage, mode: 'fixed' as const };
+
+    expect(previewBillingSplit(switchedBack)).toEqual(previewBillingSplit(withFixed));
+  });
+
   it('stays silent while the amount is still being typed', () => {
-    expect(previewBillingSplit({ ...base, amount: '', mode: 'percentage', values: { p1: '60', p2: '50' } })).toEqual({
+    expect(
+      previewBillingSplit({
+        ...base,
+        amount: '',
+        mode: 'percentage',
+        values: { ...EMPTY_SPLIT_VALUES(), percentage: { p1: '60', p2: '50' } }
+      })
+    ).toEqual({
       amounts: {},
       error: null
     });

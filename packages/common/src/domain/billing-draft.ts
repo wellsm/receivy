@@ -6,6 +6,21 @@ import { parseBRLCents, parsePercentageBasisPoints } from './financial-form';
 
 export type ReminderDraft = Omit<BillingReminder, 'offsetDays'> & { offsetDays: string };
 
+/** Raw text split values, kept separate per mode so switching modes never loses what was typed. */
+export type SplitValues = {
+  /** `fixed`: amount text per person id. */
+  fixed: Record<string, string>;
+  /** `percentage`: percentage text per person id or `owner`. */
+  percentage: Record<string, string>;
+  /** `shares`: share count text per person id or `owner`. */
+  shares: Record<string, string>;
+};
+
+/** Fresh split values for a new draft. Returns a new object on every call. */
+export function EMPTY_SPLIT_VALUES(): SplitValues {
+  return { fixed: {}, percentage: {}, shares: {} };
+}
+
 export type BillingDraft = {
   type: BillingType;
   selected: string[];
@@ -20,8 +35,8 @@ export type BillingDraft = {
   timezone: string;
   pix: string;
   mode: SplitMode;
-  /** For `fixed`/`percentage`, the raw text amount per key; for `shares`, the raw text share count per key. */
-  values: Record<string, string>;
+  /** Raw text split values, one bucket per mode; `equal` reads none of them. */
+  values: SplitValues;
   category: BillingCategory;
   reminders: ReminderDraft[];
 };
@@ -41,7 +56,7 @@ export function EMPTY_BILLING_DRAFT(timezone: string, today: string): BillingDra
     timezone,
     pix: '',
     mode: 'equal',
-    values: {},
+    values: EMPTY_SPLIT_VALUES(),
     category: 'other',
     reminders: [{ offsetDays: '0', enabled: true }]
   };
@@ -85,31 +100,37 @@ function buildSplit(draft: BillingDraft, parties: ({ kind: 'owner' } | { kind: '
   }
 
   if (draft.mode === 'fixed') {
+    const values = draft.values.fixed;
+
     return {
       mode: draft.mode,
       parts: draft.selected.map((personId) => ({
         kind: 'person' as const,
         personId,
-        amountCents: parseBRLCents(draft.values[personId] ?? '')
+        amountCents: parseBRLCents(values[personId] ?? '')
       }))
     };
   }
 
   if (draft.mode === 'shares') {
+    const values = draft.values.shares;
+
     return {
       mode: draft.mode,
       parts: parties.map((party) => ({
         ...party,
-        shares: integer(draft.values[party.kind === 'owner' ? 'owner' : party.personId] || '1', 'Informe cotas inteiras de 1 a 1000.')
+        shares: integer(values[party.kind === 'owner' ? 'owner' : party.personId] || '1', 'Informe cotas inteiras de 1 a 1000.')
       }))
     };
   }
+
+  const values = draft.values.percentage;
 
   return {
     mode: draft.mode,
     parts: parties.map((party) => ({
       ...party,
-      basisPoints: parsePercentageBasisPoints(draft.values[party.kind === 'owner' ? 'owner' : party.personId] ?? '')
+      basisPoints: parsePercentageBasisPoints(values[party.kind === 'owner' ? 'owner' : party.personId] ?? '')
     }))
   };
 }

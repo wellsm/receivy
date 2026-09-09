@@ -31,24 +31,30 @@ function previewSplit(draft: BillingDraft): BillingSplit {
   const parties = splitParties(draft);
 
   if (draft.mode === 'fixed') {
+    const values = draft.values.fixed;
+
     return {
       mode: 'fixed',
       parts: draft.selected.map((personId) => ({
         kind: 'person',
         personId,
-        amountCents: parseBRLCents(draft.values[personId] ?? '')
+        amountCents: parseBRLCents(values[personId] ?? '')
       }))
     };
   }
 
   if (draft.mode === 'shares') {
-    return { mode: 'shares', parts: parties.map((party) => ({ ...party, shares: Number(draft.values[splitPartyKey(party)] || '1') })) };
+    const values = draft.values.shares;
+
+    return { mode: 'shares', parts: parties.map((party) => ({ ...party, shares: Number(values[splitPartyKey(party)] || '1') })) };
   }
 
   if (draft.mode === 'percentage') {
+    const values = draft.values.percentage;
+
     return {
       mode: 'percentage',
-      parts: parties.map((party) => ({ ...party, basisPoints: parsePercentageBasisPoints(draft.values[splitPartyKey(party)] ?? '') }))
+      parts: parties.map((party) => ({ ...party, basisPoints: parsePercentageBasisPoints(values[splitPartyKey(party)] ?? '') }))
     };
   }
 
@@ -58,10 +64,8 @@ function previewSplit(draft: BillingDraft): BillingSplit {
 function remainderHint(draft: BillingDraft, totalCents: number): string {
   if (draft.mode === 'percentage') {
     try {
-      const sum = splitParties(draft).reduce(
-        (total, party) => total + parsePercentageBasisPoints(draft.values[splitPartyKey(party)] ?? ''),
-        0
-      );
+      const values = draft.values.percentage;
+      const sum = splitParties(draft).reduce((total, party) => total + parsePercentageBasisPoints(values[splitPartyKey(party)] ?? ''), 0);
 
       return sum === 10_000 ? '' : `Soma ${(sum / 100).toLocaleString('pt-BR')}%`;
     } catch {
@@ -71,7 +75,8 @@ function remainderHint(draft: BillingDraft, totalCents: number): string {
 
   if (draft.mode === 'fixed') {
     try {
-      const used = draft.selected.reduce((total, personId) => total + parseBRLCents(draft.values[personId] ?? ''), 0);
+      const values = draft.values.fixed;
+      const used = draft.selected.reduce((total, personId) => total + parseBRLCents(values[personId] ?? ''), 0);
 
       return used < totalCents ? `Faltam ${formatMoney({ amountCents: totalCents - used, currency: 'BRL' })}` : '';
     } catch {

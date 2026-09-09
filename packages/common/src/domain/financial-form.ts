@@ -15,6 +15,44 @@ export function parseBRLCents(input: string): number {
   return Number(cents);
 }
 
+/** Strips everything but digits, then drops leading zeros (keeps `''` when nothing is left). */
+export function amountInputToDigits(input: string): string {
+  const digits = input.replaceAll(/\D/g, '');
+
+  return digits.replace(/^0+/, '');
+}
+
+/** Bank-style keypad rendering of raw amount digits: the last two digits are always the cents. */
+export function amountDigitsToInput(digits: string): string {
+  const clean = amountInputToDigits(digits) || '0';
+  const padded = clean.padStart(3, '0');
+  const whole = String(Number(padded.slice(0, -2)));
+  const cents = padded.slice(-2);
+
+  return `${whole},${cents}`;
+}
+
+/** Same as `amountDigitsToInput`, with pt-BR thousand separators on the whole part. */
+export function formatAmountDigits(digits: string): string {
+  const [whole, cents] = amountDigitsToInput(digits).split(',') as [string, string];
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  return `${grouped},${cents}`;
+}
+
+/** Adds `cents` to a bank-style amount string, tolerant of an empty or unparsable amount. */
+export function addCentsToAmount(input: string, cents: number): string {
+  let currentCents = 0;
+
+  try {
+    currentCents = parseBRLCents(input);
+  } catch {
+    currentCents = 0;
+  }
+
+  return amountDigitsToInput(String(currentCents + cents));
+}
+
 const PERCENTAGE_INPUT = /^(\d{1,3})(?:[,.](\d{1,2}))?$/;
 
 export function parsePercentageBasisPoints(input: string): number {

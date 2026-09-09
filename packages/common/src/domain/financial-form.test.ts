@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { calendarDate, parseBRLCents, parsePercentageBasisPoints } from './financial-form';
+import {
+  addCentsToAmount,
+  amountDigitsToInput,
+  amountInputToDigits,
+  calendarDate,
+  formatAmountDigits,
+  parseBRLCents,
+  parsePercentageBasisPoints
+} from './financial-form';
 
 describe('parseBRLCents', () => {
   it.each([
     ['1.234,56', 123_456],
+    ['1234,56', 123_456],
     ['1234,5', 123_450],
     ['0,01', 1],
     [' 25 ', 2_500]
@@ -45,4 +54,49 @@ describe('parsePercentageBasisPoints', () => {
       expect(() => parsePercentageBasisPoints(input)).toThrow('percentual');
     }
   );
+});
+
+describe('amountInputToDigits', () => {
+  it.each([
+    ['1.234,56', '123456'],
+    ['1234,56', '123456'],
+    ['0,00', ''],
+    ['', ''],
+    ['00', '']
+  ])('strips formatting from %s down to raw digits', (input, expected) => {
+    expect(amountInputToDigits(input)).toBe(expected);
+  });
+});
+
+describe('amountDigitsToInput', () => {
+  it.each([
+    ['', '0,00'],
+    ['0', '0,00'],
+    ['5', '0,05'],
+    ['100', '1,00'],
+    ['123456', '1234,56']
+  ])('turns the digits %s into the bank-style amount %s', (digits, expected) => {
+    expect(amountDigitsToInput(digits)).toBe(expected);
+  });
+});
+
+describe('formatAmountDigits', () => {
+  it.each([
+    ['', '0,00'],
+    ['100', '1,00'],
+    ['123456', '1.234,56']
+  ])('formats the digits %s with pt-BR thousand grouping as %s', (digits, expected) => {
+    expect(formatAmountDigits(digits)).toBe(expected);
+  });
+});
+
+describe('addCentsToAmount', () => {
+  it('adds cents to an already formatted amount', () => {
+    expect(addCentsToAmount('1,00', 1000)).toBe('11,00');
+  });
+
+  it('is tolerant of an empty or zeroed amount', () => {
+    expect(addCentsToAmount('', 1000)).toBe('10,00');
+    expect(addCentsToAmount('0,00', 1000)).toBe('10,00');
+  });
 });

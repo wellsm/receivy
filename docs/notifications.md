@@ -163,21 +163,22 @@ committed proofs are retained. Unknown temporary objects with no remaining inten
 are conservatively retained; known expired/finalized temporary objects can be
 queued. No bucket-wide expiration is applied to retained proofs.
 
-`enqueueStorageDeletion(tx, { key, chargeId, purpose }, now)` writes a unique
-durable journal row inside a caller-owned transaction. Purpose is `orphan`,
-`temporary`, or `account`. Task 6 must acquire the charge lock and remove only
-eligible proof references/invalidate intents in its account-deletion transaction
-before enqueueing. The deletion worker always blocks referenced/in-flight
-objects, including purpose `account`; it does not make retention-policy decisions.
+`reconcileProofStorage(db, storage, send, clock)` is the body of `StorageCron`
+(`src/proofs/cron.ts`). It expires stale intents and scans the bucket page by page
+(20 pages per run, no persisted cursor), sending one `StorageQueue` message
+(`{ objectKey, chargeId?, purpose }`, purpose `orphan`, `temporary` or `account`)
+per candidate. Every send happens **after** its transaction commits; a failed send
+leaves the intent `expired` and the next orphan scan finds the object again.
+Account erasure produces the `account` messages the same way.
 
-`drainStorageDeletions(db, storage, clock)` claims up to 100 rows with a 60-second
-lease, rechecks references, commits, then deletes externally. Delete is idempotent;
-unknown acknowledgement can safely retry. Failures back off 1/2/4/8 minutes and
-become observable `blocked` after five attempts. Enqueueing an existing blocked
-row re-arms it; a later reconciliation can therefore retry old orphan failures.
-The journal has **no user/charge foreign key** and continues after the charge or
-account is removed. Confirmed missing charge is allowed; failed DB reads abort
-without external deletion. No test resets the normal Receivy database.
+`deleteStoredObject` (`src/proofs/queue.ts`) is the consumer. It rejects a key that
+does not match `^(temporary|proofs)/<uuid>/<uuid>$`, locks the charge when the
+message carries one (a missing charge row is allowed, since erasure removes it),
+revalidates references and in-flight intents, then deletes. A referenced object is
+skipped, not failed. A storage error is rethrown so SQS retries with backoff and,
+after five attempts, moves the message to the dead letter queue. There is no
+deletion journal: deleting an absent object succeeds, which makes redelivery safe.
+No test resets the normal Receivy database.
 
 Task 6 must also disable/delete devices and recipient delivery render inputs,
 and suppress supported pending outbox/delivery events before removing public-link

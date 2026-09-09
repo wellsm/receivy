@@ -30,7 +30,8 @@ export default {
     './src/billings/cron.ts',
     './src/notifications/queue.ts',
     './src/notifications/cron.ts',
-    './src/proofs/cleanup-scheduler.ts',
+    './src/proofs/queue.ts',
+    './src/proofs/cron.ts',
     './src/auth/apple-revocation-scheduler.ts'
   ],
   stateFile: {

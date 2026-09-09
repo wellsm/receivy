@@ -1,22 +1,28 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Cron } from '@ez4/scheduler';
 import type { Db } from '../database';
-import type { ProofFiles } from '../storage';
-import { drainStorageDeletions, reconcileProofStorage } from './cleanup';
+import { reconcileProofStorage } from './cleanup';
 import { configuredProofStorage } from './configured-storage';
-export declare class ProofCleanupScheduler extends Cron.Service {
+import type { StorageQueue } from './queue';
+
+export declare class StorageCron extends Cron.Service {
   expression: 'cron(15 * * * ? *)';
+
   timezone: 'UTC';
-  maxRetries: 3;
+
+  maxRetries: 1;
+
   target: Cron.UseTarget<{
-    handler: typeof proofCleanupJobHandler;
+    handler: typeof storageCronHandler;
     timeout: 300;
   }>;
+
   services: {
     db: Environment.Service<Db>;
-    proofFiles: Environment.Service<ProofFiles>;
+    storageQueue: Environment.Service<StorageQueue>;
     variables: Environment.ServiceVariables;
   };
+
   variables: {
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
     PROOF_STORAGE_MODE: Environment.VariableOrValue<'PROOF_STORAGE_MODE', 'disabled'>;
@@ -26,16 +32,19 @@ export declare class ProofCleanupScheduler extends Cron.Service {
     PROOF_LOCAL_SECRET: Environment.VariableOrValue<'PROOF_LOCAL_SECRET', 'disabled'>;
   };
 }
-export async function proofCleanupJobHandler(
-  _request: Cron.Incoming<null>,
-  context: Service.Context<ProofCleanupScheduler>
-): Promise<void> {
+
+/** Only finds and enqueues candidates; `StorageQueue` performs every deletion. */
+export async function storageCronHandler(_request: Cron.Incoming<null>, context: Service.Context<StorageCron>): Promise<void> {
   if (context.variables.PROOF_STORAGE_MODE === 'disabled') {
-    console.info('Proof cleanup', { status: 'disabled' });
+    console.info('Storage cron', { status: 'disabled' });
+
     return;
   }
+
   const storage = configuredProofStorage(context.variables);
-  const reconciliation = await reconcileProofStorage(context.db, storage);
-  const deletions = await drainStorageDeletions(context.db, storage);
-  console.info('Proof cleanup', { ...reconciliation, ...deletions });
+
+  const result = await reconcileProofStorage(context.db, storage, (message) => context.storageQueue.sendMessage(message));
+
+  // Counts only; never object keys or owners.
+  console.info('Storage cron', result);
 }

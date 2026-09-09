@@ -78,9 +78,11 @@ server; native-device QA needs an explicitly approved reachable private adapter.
   under this lock before committing. Expire the stale intent under that lock,
   then release it before bounded deletion; never delete on missing/failed DB
   reads. Grace age must exceed the upload intent's five-minute lifetime plus
-  clock skew. That worker (`reconcileProofStorage` / `drainStorageDeletions` in
-  `src/proofs/cleanup.ts`) and its race tests (`test/proofs/cleanup.spec.ts`) were
-  delivered in Task 5; see "Durable proof cleanup" in `docs/notifications.md`.
+  clock skew. That work is split between `reconcileProofStorage`
+  (`src/proofs/cleanup.ts`, driven by `StorageCron`) and the `StorageQueue`
+  consumer `deleteStoredObject` (`src/proofs/queue.ts`); its race tests live in
+  `test/proofs/cleanup.spec.ts`. See "Durable proof cleanup" in
+  `docs/notifications.md`.
 - Stock EZ4 0.52 discards trusted gateway `sourceIp`; the pinned vendor patches
   (`docs/ez4-vendor-patches.md`) restore it for both the AWS and local gateways,
   and `trustedClientIp` only accepts that provider field (never forwarded headers).

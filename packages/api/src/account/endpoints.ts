@@ -26,5 +26,14 @@ export async function profileHandler(request: ProfileRequest, context: Service.C
   return { status: 200, body: { user: await updateProfile(context.db, request.identity.userId, request.body) } };
 }
 export async function deleteHandler(request: DeleteRequest, context: Service.Context<ApiProvider>): Promise<DeleteResponse> {
-  return { status: 200, body: await eraseAccount(context.db, request.identity.userId, request.body.confirmation) };
+  const { storageMessages, ...body } = await eraseAccount(context.db, request.identity.userId, request.body.confirmation);
+  // The erasure is already committed; a lost message only defers the file to the orphan scan.
+  for (const message of storageMessages) {
+    try {
+      await context.storageQueue.sendMessage(message);
+    } catch {
+      console.error('Account file deletion enqueue failed', { purpose: message.purpose });
+    }
+  }
+  return { status: 200, body };
 }

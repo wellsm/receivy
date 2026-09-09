@@ -75,10 +75,11 @@ ordering and do not insert cross-account user references.
   account. Clear payment proof references and preserve the payment fact. Keep anonymous
   capability uploads and counterparty-owned proofs: no authenticated evidence assigns
   those files to the deleting account. Clear the erased reviewer reference/reason.
-- File-reference removal and enqueueStorageDeletion(...purpose: account) commit
-  together under the charge lock. The Task5 journal survives account erasure and
-  retries failed storage operations; it never deletes a still-referenced file. The
-  transaction rolls back completely if an object cannot be safely journaled.
+- File-reference removal happens under the charge lock, and the erasure returns one
+  StorageQueue message (purpose: account) per removed file. The endpoint sends them
+  only after the transaction commits, so a failed send never blocks the erasure: the
+  hourly orphan scan re-queues the object. The consumer revalidates the reference
+  before deleting and never removes a still-referenced file.
 
 No statutory retention period is invented. This is the MVP's technical boundary,
 not a promise to recall already delivered provider messages or erase third-party

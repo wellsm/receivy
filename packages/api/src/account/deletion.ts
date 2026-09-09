@@ -1,7 +1,7 @@
 import { HttpBadRequestError, HttpUnauthorizedError } from '@ez4/gateway';
 import { detachAppleCredentials, type ProviderRevocation } from '../auth/apple-credentials';
 import type { DbClient } from '../database';
-import { enqueueStorageDeletion } from '../proofs/cleanup';
+import type { StorageMessage } from '../proofs/queue';
 import { lockAccountReferences } from './locking';
 import { disableSessionDevices } from './sessions';
 
@@ -12,15 +12,16 @@ export async function eraseAccount(
   db: DbClient,
   userId: string,
   confirmation: string
-): Promise<{ deleted: boolean; providerRevocation: ProviderRevocation }> {
+): Promise<{ deleted: boolean; providerRevocation: ProviderRevocation; storageMessages: StorageMessage[] }> {
   if (confirmation !== 'EXCLUIR') throw new HttpBadRequestError('Confirme digitando EXCLUIR.');
   return db.transaction(async (tx) => {
+    // Built inside the transaction so a retried erasure never reports files twice.
+    const storageMessages: StorageMessage[] = [];
     await lockAccountReferences(tx, 'erase');
     const user = await tx.users.findOne({ select: { id: true, email: true, deleted_at: true }, where: { id: userId }, lock: true });
     if (!user) throw new HttpUnauthorizedError();
-    if (user.deleted_at) return { deleted: true, providerRevocation: 'unknown' as const };
-    const stamp = Date.now();
-    const now = new Date(stamp).toISOString();
+    if (user.deleted_at) return { deleted: true, providerRevocation: 'unknown' as const, storageMessages };
+    const now = new Date().toISOString();
     const providerRevocation = await detachAppleCredentials(tx, userId, now);
     await tx.session_families.updateMany({ where: { user_id: userId }, data: { revoked_at: now, device_name: sqlNull } });
     const families = await tx.session_families.findMany({ select: { id: true }, where: { user_id: userId } });
@@ -93,7 +94,7 @@ export async function eraseAccount(
       for (const proof of proofs.records) {
         await tx.payments.updateMany({ where: { proof_id: proof.id }, data: { ...{ proof_id: sqlNull }, currency: 'BRL' } });
         await tx.payment_proofs.deleteOne({ where: { id: proof.id } });
-        await enqueueStorageDeletion(tx, { key: proof.object_key, chargeId, purpose: 'account' }, stamp);
+        storageMessages.push({ objectKey: proof.object_key, chargeId, purpose: 'account' });
       }
       const intents = await tx.upload_intents.findMany({
         select: { id: true, object_key: true },
@@ -101,7 +102,7 @@ export async function eraseAccount(
       });
       for (const intent of intents.records) {
         await tx.upload_intents.deleteOne({ where: { id: intent.id } });
-        await enqueueStorageDeletion(tx, { key: intent.object_key, chargeId, purpose: 'account' }, stamp);
+        storageMessages.push({ objectKey: intent.object_key, chargeId, purpose: 'account' });
       }
       await tx.payment_proofs.updateMany({
         where: { charge_id: chargeId, reviewer_id: userId },
@@ -158,6 +159,7 @@ export async function eraseAccount(
         created_at: now
       }
     });
-    return { deleted: true, providerRevocation };
+    // The caller sends these only after this transaction commits.
+    return { deleted: true, providerRevocation, storageMessages };
   });
 }

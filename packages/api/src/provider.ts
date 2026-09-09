@@ -3,6 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { Db } from './database';
 import type { EmailService } from './email/service';
 import type { NotificationQueue } from './notifications/queue';
+import type { StorageQueue } from './proofs/queue';
 import type { ProofFiles } from './storage';
 
 export declare class ApiProvider implements Http.Provider {
@@ -11,6 +12,7 @@ export declare class ApiProvider implements Http.Provider {
     email: Environment.Service<EmailService>;
     proofFiles: Environment.Service<ProofFiles>;
     notificationQueue: Environment.Service<NotificationQueue>;
+    storageQueue: Environment.Service<StorageQueue>;
     variables: Environment.ServiceVariables;
   };
 

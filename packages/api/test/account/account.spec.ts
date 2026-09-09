@@ -2,7 +2,9 @@ import { deepEqual, equal, notEqual, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Service } from '@ez4/common';
 import { HttpForbiddenError, HttpUnauthorizedError } from '@ez4/gateway';
+import { QueueTester } from '@ez4/local-queue/test';
 import { BucketTester } from '@ez4/local-storage/test';
+import { deleteHandler } from '../../src/account/endpoints';
 import { eraseAccount, revokeSession, updateProfile } from '../../src/account/repository';
 import { issueAccessToken } from '../../src/auth/session';
 import { sessionAuthorizer } from '../../src/authorizers/session';
@@ -10,8 +12,7 @@ import { getCharge, recordManualPayment } from '../../src/charges/repository';
 import { registerDevice } from '../../src/notifications/repository';
 import { savePaymentMethod } from '../../src/payment-methods/repository';
 import { savePerson } from '../../src/people/repository';
-import { drainStorageDeletions } from '../../src/proofs/cleanup';
-import type { ProofStorage } from '../../src/proofs/storage';
+import type { StorageQueue } from '../../src/proofs/queue';
 import type { ApiProvider } from '../../src/provider';
 import { createOrRotatePublicLink, getPublicCharge } from '../../src/public/repository';
 import { createAuthRepository } from '../../src/repositories/auth-repository';
@@ -24,13 +25,9 @@ const context = { db, variables: { AUTH_JWT_SECRET: secret } } as Service.Contex
 const repository = createAuthRepository(db);
 const ids = [owner, debtor];
 const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
-const storage: ProofStorage = {
-  uploadUrl: (key, mime) => bucket.getWriteUrl(key, { expiresIn: 300, contentType: mime }),
-  downloadUrl: (key) => bucket.getReadUrl(key, { expiresIn: 60 }),
-  read: (key) => bucket.read(key),
-  write: (key, bytes) => bucket.write(key, bytes),
-  delete: (key) => bucket.delete(key)
-};
+QueueTester.setClientMock<StorageQueue>('StorageQueue');
+const storageQueue = QueueTester.getClientMock<StorageQueue>('StorageQueue');
+const deleteContext = { ...context, storageQueue } as Service.Context<ApiProvider>;
 async function session(userId: string) {
   const value = await repository.issueSession(userId, 'Test installation');
   return { ...value, userId, access: issueAccessToken({ ...value, userId, secret }) };
@@ -99,7 +96,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     await rejects(() => authorize(second.access), HttpUnauthorizedError);
     equal((await db.device_tokens.findOne({ select: { active: true }, where: { id: b.id } }))?.active, false);
   });
-  it('rolls back all identity and session changes if durable file enqueue fails', async () => {
+  it('erases the account and still reports a legacy proof key the consumer will refuse', async () => {
     const id = crypto.randomUUID();
     ids.push(id);
     await createUser(db, { id, email: 'rollback-account@example.com', name: 'Rollback fixture' });
@@ -125,11 +122,12 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
         created_at: new Date().toISOString()
       }
     });
-    await rejects(() => eraseAccount(db, id, 'EXCLUIR'), RangeError);
-    equal((await authorize(auth.access)).identity.userId, id);
-    equal((await getCharge(db, owner, rollbackChargeId)).recipient.email, 'rollback-account@example.com');
-    equal(await db.payment_proofs.count({ where: { id: proofId } }), 1);
-    await db.payment_proofs.deleteOne({ where: { id: proofId } });
+    // An unroutable key can no longer make an account undeletable: the consumer rejects it.
+    const { storageMessages } = await eraseAccount(db, id, 'EXCLUIR');
+    deepEqual(storageMessages, [{ objectKey: 'invalid-legacy-key', chargeId: rollbackChargeId, purpose: 'account' }]);
+    await rejects(() => authorize(auth.access), HttpUnauthorizedError);
+    equal((await getCharge(db, owner, rollbackChargeId)).recipient.email, null);
+    equal(await db.payment_proofs.count({ where: { id: proofId } }), 0);
   });
   it('validates profile', async () => {
     await updateProfile(db, owner, { name: '  Ana  ', locale: 'pt-BR', timezone: 'America/Manaus', country: 'BR' });
@@ -179,7 +177,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     );
     // Exactly one erasure performs the work (no Apple identity => not_required); the loser observes an already-deleted row.
     deepEqual(concurrent.map((result) => result.providerRevocation).sort(), ['not_required', 'unknown']);
-    deepEqual(await eraseAccount(db, debtor, 'EXCLUIR'), { deleted: true, providerRevocation: 'unknown' });
+    deepEqual(await eraseAccount(db, debtor, 'EXCLUIR'), { deleted: true, providerRevocation: 'unknown', storageMessages: [] });
     await rejects(() => authorize(current.access), HttpUnauthorizedError);
     const injectedFamily = crypto.randomUUID();
     await db.session_families.insertOne({
@@ -201,23 +199,12 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     equal(await db.payment_proofs.count({ where: { id: ownedProofId } }), 0);
     equal(await db.payment_proofs.count({ where: { id: anonymousId } }), 1);
     equal((await db.payments.findOne({ select: { proof_id: true }, where: { charge_id: chargeId } }))?.proof_id, null);
-    equal(await db.storage_deletions.count({ where: { object_key: ownKey } }), 1, 'idempotent retries enqueue once');
-    const stamp = Date.now();
-    await drainStorageDeletions(
-      db,
-      {
-        ...storage,
-        delete: async () => {
-          throw new Error('fixture unavailable');
-        }
-      },
-      () => stamp
+    // Only the erasure that did the work reports files, and only the ones it owned.
+    deepEqual(
+      concurrent.flatMap((result) => result.storageMessages),
+      [{ objectKey: ownKey, chargeId, purpose: 'account' }]
     );
-    equal((await db.storage_deletions.findOne({ select: { state: true }, where: { object_key: ownKey } }))?.state, 'pending');
-    await drainStorageDeletions(db, storage, () => stamp + 61_000);
-    equal((await db.storage_deletions.findOne({ select: { state: true }, where: { object_key: ownKey } }))?.state, 'deleted');
     ok(await bucket.read(anonymousKey), 'unattributed counterparty file preserved');
-    await db.storage_deletions.deleteMany({ where: { charge_id: chargeId } });
     const replacement = await repository.findOrCreateUserByEmail('account-debtor@example.com');
     ids.push(replacement.id);
     notEqual(replacement.id, debtor);
@@ -228,5 +215,42 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
       'a pre-authorized request cannot recreate contacts after erasure'
     );
     await rejects(() => savePaymentMethod(db, debtor, { pixKeyType: 'email', pixKey: 'stale@example.com' }), HttpUnauthorizedError);
+  });
+  it('sends every erased file to the storage queue after the transaction commits', async () => {
+    const id = crypto.randomUUID();
+    ids.push(id);
+    await createUser(db, { id, email: 'queued-account@example.com', name: 'Queued fixture' });
+    const person = await savePerson(db, owner, { name: 'Queued fixture', email: 'queued-account@example.com' });
+    const { chargeId } = await createOnceCharge(db, owner, 'account-queued', {
+      personId: person.id,
+      amountCents: 70,
+      dueDate: '2026-10-01'
+    });
+    const proofId = crypto.randomUUID();
+    const objectKey = `proofs/${chargeId}/${proofId}`;
+    await bucket.write(objectKey, Buffer.from('%PDF-1.7\nfixture'));
+    await db.payment_proofs.insertOne({
+      data: {
+        id: proofId,
+        charge: { id: chargeId },
+        sender_user: { id },
+        object_key: objectKey,
+        original_name: 'fixture.pdf',
+        mime: 'application/pdf',
+        size: 16,
+        sha256: '0'.repeat(64),
+        state: 'accepted',
+        created_at: new Date().toISOString()
+      }
+    });
+    storageQueue.sendMessage.mock.resetCalls();
+    const request = { identity: { userId: id }, body: { confirmation: 'EXCLUIR' } } as Parameters<typeof deleteHandler>[0];
+    const response = await deleteHandler(request, deleteContext);
+    deepEqual(response.body, { deleted: true, providerRevocation: 'not_required' });
+    deepEqual(
+      storageQueue.sendMessage.mock.calls.map((call) => call.arguments[0]),
+      [{ objectKey, chargeId, purpose: 'account' }]
+    );
+    equal(await db.payment_proofs.count({ where: { id: proofId } }), 0);
   });
 });

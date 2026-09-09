@@ -18,7 +18,6 @@ import type { PersonContactSchema } from './schemas/person-contact';
 import type { PublicLinkSchema } from './schemas/public-link';
 import type { RefreshTokenSchema } from './schemas/refresh-token';
 import type { SessionFamilySchema } from './schemas/session-family';
-import type { StorageCleanupCursorSchema, StorageDeletionSchema } from './schemas/storage-deletion';
 import type { UserSchema } from './schemas/user';
 
 export declare class Db extends Database.Service<PostgresEngine> {
@@ -31,12 +30,6 @@ export declare class Db extends Database.Service<PostgresEngine> {
       relations: { 'user_id@user': 'users:id' };
       indexes: { id: Index.Primary; user_id: Index.Secondary; fingerprint: Index.Secondary; 'state:available_at': Index.Secondary };
     }>,
-    Database.UseTable<{
-      name: 'storage_deletions';
-      schema: StorageDeletionSchema;
-      indexes: { id: Index.Primary; object_key: Index.Unique; charge_id: Index.Secondary; 'state:available_at': Index.Secondary };
-    }>,
-    Database.UseTable<{ name: 'storage_cleanup_cursors'; schema: StorageCleanupCursorSchema; indexes: { id: Index.Primary } }>,
     Database.UseTable<{
       name: 'device_tokens';
       schema: DeviceTokenSchema;

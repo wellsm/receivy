@@ -1,173 +1,210 @@
-import { equal, ok, rejects } from 'node:assert/strict';
+import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { BucketTester } from '@ez4/local-storage/test';
 import { savePerson } from '../../src/people/repository';
-import { drainStorageDeletions, enqueueStorageDeletion, reconcileProofStorage } from '../../src/proofs/cleanup';
+import { reconcileProofStorage } from '../../src/proofs/cleanup';
+import { deleteProofObject, type StorageMessage } from '../../src/proofs/queue';
 import { createUploadIntent, finalizeProof } from '../../src/proofs/repository';
 import type { ReconciliableProofStorage } from '../../src/proofs/storage';
 import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 
 const OWNER = 'd1111111-1111-4111-8111-111111111111';
+
+const HOUR = 3600_000;
+
+const upload = { filename: 'proof.pdf', mime: 'application/pdf' as const, size: 14 };
+
 const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
-const objects: { key: string; modifiedAt: string }[] = [];
-let clock = Date.now();
+
+let listing: { key: string; modifiedAt: string }[] = [];
+let pageSize = 100;
+
 const storage: ReconciliableProofStorage = {
   uploadUrl: (key, mime) => bucket.getWriteUrl(key, { contentType: mime, expiresIn: 300 }),
   read: (key) => bucket.read(key),
   write: (key, bytes, mime) => bucket.write(key, bytes, { contentType: mime }),
-  delete: (key) => bucket.delete(key),
   downloadUrl: (key) => bucket.getReadUrl(key, { expiresIn: 60 }),
-  list: async () => ({ objects, cursor: null })
+
+  // S3 and the local adapter both report success for an object that is already gone.
+  delete: async (key) => {
+    if (await bucket.exists(key)) {
+      await bucket.delete(key);
+    }
+  },
+
+  list: async (cursor) => {
+    const start = cursor ? Number(cursor) : 0;
+    const objects = listing.slice(start, start + pageSize);
+    const next = start + objects.length;
+
+    return { objects, cursor: next < listing.length ? String(next) : null };
+  }
 };
-let id: string;
-describe('durable proof storage cleanup', () => {
+
+const sent: StorageMessage[] = [];
+
+const send = async (message: StorageMessage) => {
+  sent.push(message);
+};
+
+const request = (message: StorageMessage, attempt = 1) => ({ message, attempt, maxAttempts: 5 });
+
+function reset() {
+  sent.length = 0;
+  listing = [];
+  pageSize = 100;
+}
+
+/** Other suites share the database, so only this charge's messages are asserted. */
+function queued(chargeId: string) {
+  return sent.filter((message) => message.chargeId === chargeId);
+}
+
+let personId: string;
+let counter = 0;
+
+async function charge() {
+  const created = await createOnceCharge(db, OWNER, `cleanup-${++counter}`, { personId, amountCents: 100, dueDate: '2027-01-01' });
+
+  return created.chargeId;
+}
+
+async function storedProof(chargeId: string) {
+  const intent = await createUploadIntent(db, storage, chargeId, { userId: OWNER }, upload);
+
+  await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from('%PDF-1.7\nproof'));
+
+  const proof = await finalizeProof(db, storage, chargeId, { userId: OWNER }, intent.id);
+  const row = await db.payment_proofs.findOne({ select: { object_key: true }, where: { id: proof.id } });
+
+  ok(row);
+
+  return row.object_key;
+}
+
+describe('proof storage cleanup through the queue', () => {
   before(async () => {
     const [row] = await db.rawQuery('SELECT current_database() AS name');
+
     equal(row?.['name'], 'receivy_tests');
-    await createUser(db, {
-      id: OWNER,
-      email: 'cleanup-owner@example.com',
-      name: 'Cleanup'
-    });
-    const person = await savePerson(db, OWNER, { name: 'Cleanup debtor' });
-    id = (await createOnceCharge(db, OWNER, 'cleanup-expense', { personId: person.id, amountCents: 100, dueDate: '2027-01-01' })).chargeId;
+
+    await createUser(db, { id: OWNER, email: 'cleanup-owner@example.com', name: 'Cleanup' });
+
+    personId = (await savePerson(db, OWNER, { name: 'Cleanup debtor' })).id;
   });
+
   after(async () => {
-    await db.storage_deletions.deleteMany({ where: { charge_id: id } });
-    await db.storage_cleanup_cursors.deleteMany({});
     await cleanupUsers(db, [OWNER]);
   });
-  it('deletes only old unreferenced objects, retries storage failures, and preserves pending/final proofs', async () => {
-    const old = `proofs/${id}/${crypto.randomUUID()}`;
-    const fresh = `proofs/${id}/${crypto.randomUUID()}`;
-    await bucket.write(old, Buffer.from('orphan'));
-    await bucket.write(fresh, Buffer.from('fresh'));
-    objects.push(
-      { key: old, modifiedAt: new Date(clock - 25 * 3600_000).toISOString() },
-      { key: fresh, modifiedAt: new Date(clock).toISOString() }
+
+  it('expires stale intents and queues their temporary object after the transaction commits', async () => {
+    reset();
+
+    const chargeId = await charge();
+    const intent = await createUploadIntent(db, storage, chargeId, { userId: OWNER }, upload);
+    const row = await db.upload_intents.findOne({ select: { object_key: true }, where: { id: intent.id } });
+
+    ok(row);
+
+    await reconcileProofStorage(db, storage, send, () => Date.now() + 25 * HOUR);
+
+    equal((await db.upload_intents.findOne({ select: { state: true }, where: { id: intent.id } }))?.state, 'expired');
+    deepEqual(queued(chargeId), [{ objectKey: row.object_key, chargeId, purpose: 'temporary' }]);
+  });
+
+  it('queues objects older than the grace period and keeps recent ones', async () => {
+    reset();
+
+    const chargeId = await charge();
+    const now = Date.now();
+    const aged = `proofs/${chargeId}/${crypto.randomUUID()}`;
+    const recent = `proofs/${chargeId}/${crypto.randomUUID()}`;
+
+    listing = [
+      { key: aged, modifiedAt: new Date(now - 25 * HOUR).toISOString() },
+      { key: recent, modifiedAt: new Date(now - HOUR).toISOString() }
+    ];
+
+    const result = await reconcileProofStorage(db, storage, send, () => now);
+
+    equal(result.scanned, 2);
+    deepEqual(queued(chargeId), [{ objectKey: aged, chargeId, purpose: 'orphan' }]);
+  });
+
+  it('never queues an object a stored proof still references', async () => {
+    reset();
+
+    const chargeId = await charge();
+    const objectKey = await storedProof(chargeId);
+    const now = Date.now();
+
+    listing = [{ key: objectKey, modifiedAt: new Date(now - 25 * HOUR).toISOString() }];
+
+    await reconcileProofStorage(db, storage, send, () => now);
+
+    deepEqual(queued(chargeId), []);
+  });
+
+  it('scans every listing page within the run budget', async () => {
+    reset();
+
+    const chargeId = await charge();
+    const now = Date.now();
+    const first = `proofs/${chargeId}/${crypto.randomUUID()}`;
+    const second = `proofs/${chargeId}/${crypto.randomUUID()}`;
+
+    pageSize = 1;
+    listing = [
+      { key: first, modifiedAt: new Date(now - 25 * HOUR).toISOString() },
+      { key: second, modifiedAt: new Date(now - 25 * HOUR).toISOString() }
+    ];
+
+    const result = await reconcileProofStorage(db, storage, send, () => now);
+
+    equal(result.scanned, 2);
+    deepEqual(
+      queued(chargeId).map((message) => message.objectKey),
+      [first, second]
     );
-    const intent = await createUploadIntent(
-      db,
-      storage,
-      id,
-      { userId: OWNER },
-      { filename: 'proof.pdf', mime: 'application/pdf', size: 14 }
-    );
-    await reconcileProofStorage(db, storage, () => clock);
-    equal(await db.storage_deletions.count({ where: { charge_id: id } }), 0);
-    await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from('%PDF-1.7\nproof'));
-    const proof = await finalizeProof(db, storage, id, { userId: OWNER }, intent.id);
-    const final = await db.payment_proofs.findOne({
-      select: { object_key: true },
-      where: { id: proof.id }
-    });
-    ok(final);
-    objects.push({
-      key: final.object_key,
-      modifiedAt: new Date(clock - 25 * 3600_000).toISOString()
-    });
-    await reconcileProofStorage(db, storage, () => clock);
-    await drainStorageDeletions(
-      db,
-      {
-        ...storage,
-        delete: async () => {
-          throw new Error('storage offline');
-        }
-      },
-      () => clock
-    );
+  });
+
+  it('refuses to delete a referenced object and rejects an unroutable key', async () => {
+    const chargeId = await charge();
+    const objectKey = await storedProof(chargeId);
+
+    equal(await deleteProofObject(db, storage, request({ objectKey, chargeId, purpose: 'account' })), 'skipped');
+    equal(await bucket.exists(objectKey), true);
+    equal(await deleteProofObject(db, storage, request({ objectKey: 'invalid-legacy-key', chargeId, purpose: 'account' })), 'rejected');
+  });
+
+  it('deletes an unreferenced object, tolerates a missing one and survives a removed charge', async () => {
+    const chargeId = await charge();
+    const present = `proofs/${chargeId}/${crypto.randomUUID()}`;
+    const absent = `proofs/${chargeId}/${crypto.randomUUID()}`;
+    const orphanCharge = crypto.randomUUID();
+
+    await bucket.write(present, Buffer.from('orphan'));
+
+    equal(await deleteProofObject(db, storage, request({ objectKey: present, chargeId, purpose: 'orphan' })), 'deleted');
+    equal(await bucket.exists(present), false);
+    equal(await deleteProofObject(db, storage, request({ objectKey: absent, chargeId, purpose: 'account' })), 'deleted');
     equal(
-      (
-        await db.storage_deletions.findOne({
-          select: { state: true, attempts: true },
-          where: { object_key: old }
-        })
-      )?.attempts,
-      1
-    );
-    clock += 61_000;
-    await Promise.all([drainStorageDeletions(db, storage, () => clock), drainStorageDeletions(db, storage, () => clock)]);
-    equal(
-      (
-        await db.storage_deletions.findOne({
-          select: { state: true },
-          where: { object_key: old }
-        })
-      )?.state,
+      await deleteProofObject(db, storage, request({ objectKey: `proofs/${orphanCharge}/${crypto.randomUUID()}`, purpose: 'account' })),
       'deleted'
     );
-    await rejects(() => bucket.read(old));
-    equal((await bucket.read(fresh)).toString(), 'fresh');
-    equal((await bucket.read(final.object_key)).length, 14);
   });
-  it('refuses account deletion jobs while a proof is referenced and keeps retry journal durable', async () => {
-    const proof = (
-      await db.payment_proofs.findMany({
-        select: { object_key: true },
-        where: { charge_id: id }
-      })
-    ).records[0]!;
-    await db.transaction((tx) => enqueueStorageDeletion(tx, { key: proof.object_key, chargeId: id, purpose: 'account' }, clock));
-    await drainStorageDeletions(db, storage, () => clock);
-    equal(
-      (
-        await db.storage_deletions.findOne({
-          select: { state: true },
-          where: { object_key: proof.object_key }
-        })
-      )?.state,
-      'blocked'
-    );
-    equal((await bucket.read(proof.object_key)).length, 14);
-  });
-  it('drains durable account deletion after the charge row has already been removed', async () => {
-    const missingCharge = crypto.randomUUID();
-    const key = `proofs/${missingCharge}/${crypto.randomUUID()}`;
-    await bucket.write(key, Buffer.from('account file'));
-    await db.transaction((tx) => enqueueStorageDeletion(tx, { key, chargeId: missingCharge, purpose: 'account' }, clock));
-    await drainStorageDeletions(db, storage, () => clock);
-    equal(
-      (
-        await db.storage_deletions.findOne({
-          select: { state: true },
-          where: { object_key: key }
-        })
-      )?.state,
-      'deleted'
-    );
-    await rejects(() => bucket.read(key));
-    await db.storage_deletions.deleteMany({
-      where: { charge_id: missingCharge }
-    });
-  });
-  it('never treats a failed listing as successful reconciliation or advances its durable cursor', async () => {
-    const beforeCursor = await db.storage_cleanup_cursors.findOne({
-      select: { cursor: true, updated_at: true },
-      where: { id: 'proof-objects' }
-    });
-    await rejects(
-      () =>
-        reconcileProofStorage(
-          db,
-          {
-            ...storage,
-            list: async () => {
-              throw new Error('listing unavailable');
-            }
-          },
-          () => clock + 1000
-        ),
-      /listing unavailable/
-    );
-    equal(
-      (
-        await db.storage_cleanup_cursors.findOne({
-          select: { updated_at: true },
-          where: { id: 'proof-objects' }
-        })
-      )?.updated_at,
-      beforeCursor?.updated_at
-    );
+
+  it('throws when the storage delete fails so the queue can retry it', async () => {
+    const chargeId = await charge();
+    const objectKey = `proofs/${chargeId}/${crypto.randomUUID()}`;
+
+    const offline = {
+      ...storage,
+      delete: async () => {
+        throw new Error('storage offline');
+      }
+    };
+
+    await rejects(() => deleteProofObject(db, offline, request({ objectKey, chargeId, purpose: 'orphan' }, 5)), /storage offline/);
   });
 });

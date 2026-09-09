@@ -12,14 +12,14 @@ import {
 import { ACTIVE_TINT, MUTED_TINT } from "./tab-bar";
 
 const CATEGORY_ICONS = {
-  food: require("../../assets/images/auth/category-food.svg"),
-  transport: require("../../assets/images/auth/category-transport.svg"),
-  groceries: require("../../assets/images/auth/category-groceries.svg"),
-  subscription: require("../../assets/images/auth/category-subscription.svg"),
-  loan: require("../../assets/images/auth/category-loan.svg"),
-  housing: require("../../assets/images/auth/category-housing.svg"),
-  travel: require("../../assets/images/auth/category-travel.svg"),
-  other: require("../../assets/images/auth/category-other.svg"),
+  food: require("../../assets/images/categories/food.svg"),
+  transport: require("../../assets/images/categories/transport.svg"),
+  groceries: require("../../assets/images/categories/groceries.svg"),
+  subscription: require("../../assets/images/categories/subscription.svg"),
+  loan: require("../../assets/images/categories/loan.svg"),
+  housing: require("../../assets/images/categories/housing.svg"),
+  travel: require("../../assets/images/categories/travel.svg"),
+  other: require("../../assets/images/categories/other.svg"),
 } satisfies Record<BillingCategory, unknown>;
 
 const shareMark = require("../../assets/images/auth/share.svg");

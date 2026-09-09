@@ -36,7 +36,7 @@ const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: {
 describe("accessibility of the main web screens", () => {
   it("email login form has labelled fields, reachable submit and no axe violations", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
-    const { container } = render(<EmailLoginForm nextPath="/" />);
+    const { container } = render(<EmailLoginForm nextPath="/" providers={{ google: true, apple: true }} />);
     const email = screen.getByLabelText("Seu e-mail");
     const tab = userEvent.setup();
     let reachedEmail = false, reachedSubmit = false;

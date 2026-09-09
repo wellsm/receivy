@@ -9,13 +9,12 @@ const router = { push };
 
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
-function fetchMock(providers: { google: boolean; apple: boolean } = { google: true, apple: true }) {
+const ALL = { google: true, apple: true };
+const NONE = { google: false, apple: false };
+
+function fetchMock() {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-
-    if (url.includes("oauth/providers")) {
-      return Response.json(providers);
-    }
 
     if (url.includes("email/code")) {
       return new Response(null, { status: 204 });
@@ -35,7 +34,7 @@ afterEach(() => {
 describe("EmailLoginForm", () => {
   it("uses only an e-mail field and never asks for a password", async () => {
     vi.stubGlobal("fetch", fetchMock());
-    render(<EmailLoginForm nextPath="/" />);
+    render(<EmailLoginForm nextPath="/" providers={ALL} />);
 
     expect(await screen.findByLabelText("Seu e-mail")).toBeInTheDocument();
     expect(screen.queryByLabelText(/senha/i)).not.toBeInTheDocument();
@@ -44,7 +43,7 @@ describe("EmailLoginForm", () => {
   it("stores the pending login and navigates to the code screen on success", async () => {
     vi.stubGlobal("fetch", fetchMock());
     const user = userEvent.setup();
-    render(<EmailLoginForm nextPath="/charges" />);
+    render(<EmailLoginForm nextPath="/charges" providers={ALL} />);
 
     await user.type(screen.getByLabelText("Seu e-mail"), "ana@example.com");
     await user.click(screen.getByRole("button", { name: "Continuar com E-mail" }));
@@ -57,28 +56,30 @@ describe("EmailLoginForm", () => {
     expect(typeof pending.sentAt).toBe("number");
   });
 
-  it("hides provider buttons and the e-mail divider when the API reports them disabled", async () => {
-    vi.stubGlobal("fetch", fetchMock({ google: false, apple: false }));
-    render(<EmailLoginForm nextPath="/" />);
+  it("hides provider buttons and the e-mail divider when both providers are disabled, without fetching", async () => {
+    const fetchSpy = fetchMock();
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<EmailLoginForm nextPath="/" providers={NONE} />);
 
-    await screen.findByRole("button", { name: /Continuar com E-mail/ });
+    expect(screen.getByRole("button", { name: /Continuar com E-mail/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Continuar com Google/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Continuar com Apple/ })).toBeNull();
     expect(screen.queryByText("ou continue com seu e-mail")).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("shows only the providers the API reports as enabled", async () => {
-    vi.stubGlobal("fetch", fetchMock({ google: true, apple: false }));
-    render(<EmailLoginForm nextPath="/" />);
+  it("shows only the providers resolved on the server", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    render(<EmailLoginForm nextPath="/" providers={{ google: true, apple: false }} />);
 
-    expect(await screen.findByRole("button", { name: /Continuar com Google/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Continuar com Google/ })).toBeEnabled();
     expect(screen.queryByRole("button", { name: /Continuar com Apple/ })).toBeNull();
     expect(screen.getByText("ou continue com seu e-mail")).toBeInTheDocument();
   });
 
   it("shows the oauth error alert inside the card", async () => {
     vi.stubGlobal("fetch", fetchMock());
-    render(<EmailLoginForm nextPath="/" oauthError />);
+    render(<EmailLoginForm nextPath="/" providers={ALL} oauthError />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Não foi possível concluir o login. Tente novamente ou use seu e-mail.",

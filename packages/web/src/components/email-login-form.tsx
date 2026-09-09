@@ -3,35 +3,26 @@
 import { Apple, ArrowRight, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { GoogleMark } from "@/components/brand-marks";
+import type { LoginProviders } from "@/lib/auth/login-providers";
 import { isProviderAuthorizationUrl } from "@/lib/auth/oauth";
 import { writePendingLogin } from "@/lib/auth/pending-login";
 import { responseMessage } from "@/lib/financial-response";
 
 type EmailLoginFormProps = {
   nextPath: string;
+  /** Resolved on the server so the browser never asks the API which providers are on. */
+  providers: LoginProviders;
   oauthError?: boolean;
 };
 
-export function EmailLoginForm({ nextPath, oauthError = false }: EmailLoginFormProps) {
+export function EmailLoginForm({ nextPath, providers, oauthError = false }: EmailLoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(oauthError
     ? "Não foi possível concluir o login. Tente novamente ou use seu e-mail." : null);
-  const [providers, setProviders] = useState({ google: false, apple: false });
-
-  useEffect(() => {
-    void fetch("/api/auth/oauth/providers").then(async (response) => {
-      if (!response.ok) {
-        return;
-      }
-
-      const data = await response.json();
-      setProviders({ google: data.google === true, apple: data.apple === true });
-    }).catch(() => {});
-  }, []);
 
   async function socialLogin(provider: "google" | "apple") {
     setBusy(true);

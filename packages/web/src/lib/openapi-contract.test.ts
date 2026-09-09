@@ -28,6 +28,7 @@ const covers = (template: string, path: string) => {
 // Reached through dedicated Next routes instead of the financial proxy.
 const DEDICATED_BFF = [
   "POST auth/email/code", "POST auth/email/confirm", "POST auth/logout", "GET auth/me",
+  // The login page resolves the providers server-side with authApiFetch; the browser never calls it.
   "GET auth/oauth/providers", "POST auth/oauth/start", "POST auth/oauth/exchange", "POST auth/refresh",
   "GET people", "POST people", "GET people/{p}", "PATCH people/{p}", "POST people/{p}/archive",
   // The invite landing page (/join/[token]) is a server component and reads it with authApiFetch, like /pay.

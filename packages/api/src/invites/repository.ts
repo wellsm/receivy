@@ -292,7 +292,12 @@ async function reshapeOccurrences(
     for (const charge of group) {
       const amountCents = resolved.get(charge.debtor_person_id);
 
-      if (amountCents !== undefined && amountCents !== charge.amount_cents) {
+      // Reshaping must never leave a stale amount behind; the whole acceptance rolls back instead.
+      if (amountCents === undefined) {
+        throw new Error('Occurrence charge without a resolved allocation.');
+      }
+
+      if (amountCents !== charge.amount_cents) {
         await db.charges.updateOne({ where: { id: charge.id }, data: { amount_cents: amountCents, updated_at: now } });
       }
     }

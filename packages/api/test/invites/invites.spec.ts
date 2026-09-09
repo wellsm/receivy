@@ -197,6 +197,80 @@ describe('billing invites on native PostgreSQL', () => {
     equal(await db.allocations.count({ where: { billing_id: billing.id } }), 2);
   });
 
+  it('reprices every installment and numbers the guest charges like the originals', async () => {
+    const now = new Date('2026-10-03T18:00:00Z');
+    const billing = await createBilling(
+      db,
+      OWNER,
+      'invite-until',
+      once({ type: 'until', frequency: 'monthly', totalCents: 9_000, startDate: '2026-11-20', endDate: '2027-01-20' }),
+      now
+    );
+    const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
+    const before = await chargesOf(billing.id);
+
+    equal(billing.installmentCount, 3);
+    deepEqual(
+      before.map((charge) => [charge.due_date, charge.amount_cents, charge.installment, charge.installment_count]),
+      [
+        ['2026-11-20', 9_000, 1, 3],
+        ['2026-12-20', 9_000, 2, 3],
+        ['2027-01-20', 9_000, 3, 3]
+      ]
+    );
+
+    const result = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
+    const guestPerson = (await personFor(OWNER, GUEST_EMAIL))!;
+
+    equal(result.joinedSplit, true);
+
+    const after = await chargesOf(billing.id);
+
+    equal(after.length, 6);
+
+    // Each occurrence still adds up to the billing total, on both sides of the split.
+    for (const dueDate of ['2026-11-20', '2026-12-20', '2027-01-20']) {
+      const occurrence = after.filter((charge) => charge.due_date === dueDate);
+
+      equal(occurrence.length, 2);
+      equal(
+        occurrence.reduce((sum, charge) => sum + charge.amount_cents, 0),
+        9_000
+      );
+    }
+
+    const guestCharges = after.filter((charge) => charge.debtor_person_id === guestPerson.id);
+    const ownerContactCharges = after.filter((charge) => charge.debtor_person_id === personId);
+
+    deepEqual(
+      guestCharges.map((charge) => [charge.due_date, charge.amount_cents, charge.installment, charge.installment_count]),
+      [
+        ['2026-11-20', 4_500, 1, 3],
+        ['2026-12-20', 4_500, 2, 3],
+        ['2027-01-20', 4_500, 3, 3]
+      ]
+    );
+    deepEqual(
+      ownerContactCharges.map((charge) => [charge.due_date, charge.amount_cents, charge.installment, charge.installment_count]),
+      [
+        ['2026-11-20', 4_500, 1, 3],
+        ['2026-12-20', 4_500, 2, 3],
+        ['2027-01-20', 4_500, 3, 3]
+      ]
+    );
+
+    // One announcement per inserted charge; the repriced originals keep the single event they had.
+    for (const charge of guestCharges) {
+      equal(await db.outbox_events.count({ where: { aggregate_id: charge.id, type: 'charge.created' } }), 1);
+    }
+
+    for (const charge of before) {
+      equal(await db.outbox_events.count({ where: { aggregate_id: charge.id, type: 'charge.created' } }), 1);
+    }
+
+    equal(result.chargeId, guestCharges[0]!.id);
+  });
+
   it('refuses to reshape a split that already moved', async () => {
     const now = new Date('2026-10-04T12:00:00Z');
     const paid = await createBilling(db, OWNER, 'invite-paid', once(), now);

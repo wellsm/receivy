@@ -1,5 +1,5 @@
 import { Order } from '@ez4/database';
-import { HttpConflictError, HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
+import { HttpBadRequestError, HttpConflictError, HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import type { PeoplePage, Person, PersonInput } from '@receivy/common';
 import { lockAccountReferences } from '../account/locking';
 import type { DbClient } from '../database';
@@ -7,6 +7,7 @@ import type { DbClient } from '../database';
 const SELECT = { id: true, name: true, linked_user_id: true, archived_at: true, created_at: true } as const;
 const sqlNull = null as unknown as string | undefined;
 const PAGE_SIZE = 50;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function lockOwner(db: DbClient, ownerId: string) {
   await lockAccountReferences(db, 'write');
@@ -64,21 +65,24 @@ function decodeRecentCursor(cursor?: string): RecentCursor | undefined {
     return undefined;
   }
 
+  let parsed: Partial<RecentCursor> | null = null;
+
   try {
-    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<RecentCursor>;
-
-    if (typeof parsed.name !== 'string' || typeof parsed.id !== 'string') {
-      return undefined;
-    }
-
-    if (parsed.last !== null && typeof parsed.last !== 'string') {
-      return undefined;
-    }
-
-    return { last: parsed.last, name: parsed.name, id: parsed.id };
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<RecentCursor>;
   } catch {
-    return undefined;
+    throw new HttpBadRequestError('Cursor inválido.');
   }
+
+  if (!parsed || typeof parsed !== 'object' || typeof parsed.name !== 'string' || !UUID.test(String(parsed.id))) {
+    throw new HttpBadRequestError('Cursor inválido.');
+  }
+
+  // An empty `last` is neither a timestamp nor the never-billed tail; it would silently widen the page.
+  if (parsed.last !== null && (typeof parsed.last !== 'string' || !parsed.last)) {
+    throw new HttpBadRequestError('Cursor inválido.');
+  }
+
+  return { last: parsed.last, name: parsed.name, id: parsed.id! };
 }
 
 /**
@@ -86,7 +90,8 @@ function decodeRecentCursor(cursor?: string): RecentCursor | undefined {
  * `(last DESC NULLS LAST, name ASC, id ASC)`; the clause is only spliced in when there is a cursor
  * because an empty uuid/date variable has no type the driver can infer. The comparison runs on the
  * raw timestamp instead of its rendered text: the driver types a date-looking parameter as a date,
- * and casting that back to text would not match the format the cursor carries.
+ * and casting that back to text would not match the format the cursor carries. The cursor itself is
+ * rendered `AT TIME ZONE 'UTC'` so a non-UTC session cannot shift the instant it round-trips.
  */
 async function recentPeople(db: DbClient, ownerId: string, query: string, archived: boolean, cursor?: string): Promise<PeoplePage> {
   const position = decodeRecentCursor(cursor);
@@ -95,12 +100,12 @@ async function recentPeople(db: DbClient, ownerId: string, query: string, archiv
     ? ''
     : position.last === null
       ? `WHERE ranked.last_at IS NULL AND ${after}`
-      : `WHERE (ranked.last_at IS NULL OR ranked.last_at < :cursorLast
-        OR (ranked.last_at = :cursorLast AND ${after}))`;
+      : `WHERE (ranked.last_at IS NULL OR ranked.last_at < :cursorLast::timestamptz
+        OR (ranked.last_at = :cursorLast::timestamptz AND ${after}))`;
   const rows = await db.rawQuery(
     `SELECT ranked.id, ranked.name, ranked.last FROM (
       SELECT p.id, p.name, MAX(a.created_at) AS last_at,
-        to_char(MAX(a.created_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS last
+        to_char(MAX(a.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS last
       FROM people p LEFT JOIN allocations a ON a.person_id = p.id
       WHERE p.owner_id = :ownerId::uuid AND (p.archived_at IS NOT NULL) = :archived::boolean
       AND (:query::text = '' OR position(:query::text in lower(p.name)) > 0 OR EXISTS
@@ -114,7 +119,7 @@ async function recentPeople(db: DbClient, ownerId: string, query: string, archiv
       archived,
       query,
       ...(position ? { cursorName: position.name, cursorId: position.id } : {}),
-      ...(position?.last ? { cursorLast: position.last } : {})
+      ...(position && position.last !== null ? { cursorLast: position.last } : {})
     }
   );
   const page = rows.slice(0, PAGE_SIZE);
@@ -143,6 +148,9 @@ export async function listPeople(
 ): Promise<PeoplePage> {
   const query = search.normalize('NFC').trim().toLocaleLowerCase('pt-BR').slice(0, 254);
   if (sort === 'recent') return recentPeople(db, ownerId, query, archived, cursor);
+  // The parameter is wide enough to carry the `recent` keyset cursor; the default order still reads
+  // it as a bare id, so anything else has to be refused before it reaches a uuid comparison.
+  if (cursor && !UUID.test(cursor)) throw new HttpBadRequestError('Cursor inválido.');
   let matchingIds: string[] | undefined;
   if (query) {
     const rows = await db.rawQuery(

@@ -463,8 +463,8 @@ describe('billing invites on native PostgreSQL', () => {
       parameters: { token: tokenOf(invite.url) }
     };
 
-    // The public-read token bucket allows 60 attempts per window; the 61st must be refused.
-    for (let attempt = 0; attempt < 60; attempt++) {
+    // Accepting has its own bucket, wider than the preview read: 120 per window, so the 121st is refused.
+    for (let attempt = 0; attempt < 120; attempt++) {
       await acceptInviteHandler(request, context);
     }
 

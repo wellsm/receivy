@@ -1,7 +1,7 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
-import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
+import { HttpBadRequestError, HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
 import type { BillingSplit } from '@receivy/common';
 import { normalizePerson } from '@receivy/common';
 import { confirmEmailCode } from '../../src/auth/email-login';
@@ -186,5 +186,31 @@ describe('auth and people repositories on dedicated PostgreSQL', () => {
     ok(listed.slice(0, 45).every((person) => person.lastBilledAt?.startsWith('2026-02-10')));
     ok(listed.slice(45, 55).every((person) => person.lastBilledAt?.startsWith('2026-01-10')));
     ok(listed.slice(55).every((person) => person.lastBilledAt === null));
+  });
+  it('refuses a cursor the requested order cannot read instead of failing on the comparison', async () => {
+    const encode = (payload: unknown) => Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const keyset = encode({ last: null, name: 'Recent 049', id: randomUUID() });
+
+    // Both default-order paths compare the cursor as an id: the paged read and the searched one.
+    for (const search of ['', 'recent 0']) {
+      await rejects(() => listPeople(db, paged, 'abc', false, search), HttpBadRequestError);
+      // A keyset cursor replayed without `sort=recent` is not an id either.
+      await rejects(() => listPeople(db, paged, keyset, false, search), HttpBadRequestError);
+    }
+
+    // The `recent` order refuses a bare id, an unreadable payload and an empty `last` the same way.
+    await rejects(() => listPeople(db, paged, 'abc', false, '', 'recent'), HttpBadRequestError);
+    await rejects(() => listPeople(db, paged, randomUUID(), false, '', 'recent'), HttpBadRequestError);
+    await rejects(
+      () => listPeople(db, paged, encode({ last: '', name: 'Recent 049', id: randomUUID() }), false, '', 'recent'),
+      HttpBadRequestError
+    );
+
+    // The cursors each order does issue keep working.
+    const byId = await listPeople(db, paged);
+    const byRecent = await listPeople(db, paged, undefined, false, '', 'recent');
+
+    equal((await listPeople(db, paged, byId.nextCursor!)).people.length, 50);
+    equal((await listPeople(db, paged, byRecent.nextCursor!, false, '', 'recent')).people.length, 50);
   });
 });

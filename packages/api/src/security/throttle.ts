@@ -32,7 +32,15 @@ export async function enforceQuota(db: DbClient, scope: string, limit: number, n
   if (!(await consumeQuota(db, scope, limit, now))) throw new HttpError(429, 'Too many requests.');
 }
 
-export async function throttlePublicRead(db: DbClient, token: string, request: object) {
+/** Per-capability budget of an anonymous read. Writers that reuse the same token get their own. */
+export type TokenBucket = { scope: string; limit: number };
+
+const PUBLIC_READ: TokenBucket = { scope: 'public-read-token', limit: 60 };
+
+/** Accepting is idempotent and legitimately retried, so it gets a wider bucket of its own. */
+export const INVITE_ACCEPT: TokenBucket = { scope: 'invite-accept', limit: 120 };
+
+export async function throttlePublicRead(db: DbClient, token: string, request: object, bucket = PUBLIC_READ) {
   await enforceQuota(db, `public-read-ip:${trustedClientIp(request)}`, 240);
-  await enforceQuota(db, `public-read-token:${token}`, 60);
+  await enforceQuota(db, `${bucket.scope}:${token}`, bucket.limit);
 }

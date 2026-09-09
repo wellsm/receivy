@@ -70,6 +70,7 @@ export function BillingCard({ billing, today, onShare, onEdit, onOpen }: Billing
   const badges = billingBadges(billing, today);
   const occurrence = occurrenceLine(billing);
   const canShare = billingShareAction(billing) !== null;
+  const canEdit = billing.state !== "ended";
 
   return (
     <Pressable
@@ -122,15 +123,17 @@ export function BillingCard({ billing, today, onShare, onEdit, onOpen }: Billing
             </Pressable>
           )}
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Editar"
-            onPress={() => onEdit(billing)}
-            className="min-h-10 flex-row items-center gap-1.5 rounded-lg bg-surface-muted px-3"
-          >
-            <Image source={editMark} tintColor={MUTED_TINT} style={{ width: 14, height: 14 }} />
-            <Text className="text-xs font-bold text-ink">Editar</Text>
-          </Pressable>
+          {canEdit && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Editar"
+              onPress={() => onEdit(billing)}
+              className="min-h-10 flex-row items-center gap-1.5 rounded-lg bg-surface-muted px-3"
+            >
+              <Image source={editMark} tintColor={MUTED_TINT} style={{ width: 14, height: 14 }} />
+              <Text className="text-xs font-bold text-ink">Editar</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </Pressable>

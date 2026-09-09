@@ -96,7 +96,11 @@ describe("BillingsScreen", () => {
   it("renders one card per billing with badges, due label, amount and next due date", async () => {
     const client = makeClient({
       billings: jest.fn().mockResolvedValue({
-        billings: [summary(), summary({ id: "b2", description: "Aluguel", category: "housing", participantCount: 1, nextDueDate: shiftDays(-1) })],
+        billings: [
+          summary(),
+          summary({ id: "b2", description: "Aluguel", category: "housing", participantCount: 1, nextDueDate: shiftDays(-1) }),
+          summary({ id: "b3", description: "Netflix", state: "ended", chargeCount: 2, paidCount: 2 }),
+        ],
         nextCursor: null,
       }),
     });
@@ -114,6 +118,13 @@ describe("BillingsScreen", () => {
 
     expect(within(overdue).getByText("Atrasado 1 dia")).toBeOnTheScreen();
     expect(within(overdue).getByText("1 pessoa")).toBeOnTheScreen();
+    expect(within(card).getByRole("button", { name: "Editar" })).toBeOnTheScreen();
+
+    const ended = screen.getByRole("button", { name: "Cobrança Netflix" });
+
+    expect(within(ended).getByText("Última 20/out")).toBeOnTheScreen();
+    expect(within(ended).queryByRole("button", { name: "Editar" })).toBeNull();
+    expect(within(ended).queryByRole("button", { name: "Compartilhar" })).toBeNull();
     expect(queries(client)[0]).toBe("state=active");
   });
 
@@ -232,8 +243,26 @@ describe("BillingsScreen", () => {
     );
   });
 
-  it("ends only after confirmation and hides edit afterwards", async () => {
-    const client = makeClient({ billing: jest.fn().mockResolvedValue(detail({ type: "indefinite", description: "Internet" })) });
+  it("hides the invite actions on a billing that is no longer active", async () => {
+    const client = makeClient({
+      billing: jest.fn().mockResolvedValue(detail({ state: "paused", invite: { url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" } })),
+    });
+
+    await render(<BillingsScreen client={client} />);
+    await fireEvent.press(await screen.findByRole("button", { name: "Cobrança Churrasco" }));
+
+    expect(await screen.findByText("Cobranças geradas")).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Convidar" })).toBeNull();
+    expect(screen.queryByText("Convite ativo até 08/10")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compartilhar convite" })).toBeNull();
+  });
+
+  it("ends only after confirmation, revokes the invite and hides edit afterwards", async () => {
+    const client = makeClient({
+      billing: jest.fn().mockResolvedValue(
+        detail({ type: "indefinite", invite: { url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" } }),
+      ),
+    });
 
     await render(<BillingsScreen client={client} />);
     await fireEvent.press(await screen.findByRole("button", { name: "Cobrança Churrasco" }));
@@ -244,8 +273,10 @@ describe("BillingsScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Confirmar encerramento" }));
 
     await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: "ended" }));
+    await waitFor(() => expect(client.revokeInvite).toHaveBeenCalledWith("b1"));
     expect(await screen.findByText(/Encerrada/)).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+    expect(screen.queryByText("Convite ativo até 08/10")).toBeNull();
   });
 
   it("offers the FAB and the empty state to create a billing", async () => {

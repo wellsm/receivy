@@ -252,6 +252,13 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenCharg
     try {
       setSelected(await client.patchBilling(selected.id, { state }));
       setConfirm(false);
+
+      // The server keeps the invite alive after the billing ends, so drop it here; a failure must not block the transition.
+      if (state === "ended" && invite) {
+        await client.revokeInvite(selected.id).catch(() => undefined);
+        setInvite(null);
+      }
+
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível atualizar a cobrança.");
@@ -313,7 +320,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenCharg
               </View>
             )}
 
-            {invite && (
+            {invite && selected.state === "active" && (
               <View className="gap-2 rounded-2xl border border-outline/40 bg-surface p-4">
                 <Text className="text-sm font-semibold text-ink">Convite ativo até {expiryText(invite.expiresAt)}</Text>
                 <Button label="Compartilhar convite" disabled={busy} onPress={() => void shareInvite(invite, selected.description)} />

@@ -54,10 +54,18 @@ appId: dev.receivy.local
     text: "Nome completo"
     index: 1
 - inputText: "Ana QA"
+# The keyboard covers the lower fields; tapping the intro text dismisses it and
+# the scroll brings the e-mail field into view before it is focused.
+- tapOn: "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento."
+- scrollUntilVisible:
+    element:
+      text: "Usado para enviar avisos."
+    direction: DOWN
 - tapOn:
     text: "E-mail"
     index: 1
 - inputText: "ana-qa@example.invalid"
+- tapOn: "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento."
 - tapOn: "Salvar contato"
 - extendedWaitUntil:
     visible: "Contato Ana QA"

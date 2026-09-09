@@ -86,6 +86,8 @@ const onceBilling: BillingDetail = {
   charges: [],
   previews: [],
   nextMaterialization: null,
+  category: "other",
+  invite: null,
 };
 
 it("edits a once billing by sending only reminders and Pix, never the frozen fields", async () => {

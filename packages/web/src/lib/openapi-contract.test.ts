@@ -30,6 +30,8 @@ const DEDICATED_BFF = [
   "POST auth/email/code", "POST auth/email/confirm", "POST auth/logout", "GET auth/me",
   "GET auth/oauth/providers", "POST auth/oauth/start", "POST auth/oauth/exchange", "POST auth/refresh",
   "GET people", "POST people", "GET people/{p}", "PATCH people/{p}", "POST people/{p}/archive",
+  // The invite landing page (/join/[token]) is a server component and reads it with authApiFetch, like /pay.
+  "GET public/invites/{p}",
   "GET public/charges/{p}", "POST public/charges/{p}/proofs/uploads",
   "POST public/charges/{p}/proofs/uploads/{p}/finalize", "GET public/charges/{p}/proofs/uploads/{p}",
   // Provider callbacks land on the web domain and are bridged to the API (lib/auth/provider-callback.ts).
@@ -45,6 +47,8 @@ const WEB_EXCLUSIONS: Record<string, string> = {
 // Authenticated paths the native app deliberately does not call yet.
 const NATIVE_DEFERRED: Record<string, string> = {
   "billings/{p}/preview": "native reads previews from the billing detail payload",
+  "billings/{p}/invite": "native invite sharing lands with the mobile billings list",
+  "invites/{p}/accept": "an invite link always opens in the browser; there is no native join flow",
 };
 
 describe("OpenAPI × BFF", () => {

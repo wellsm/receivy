@@ -130,7 +130,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
     setError("");
 
     try {
-      setReview(buildBillingInput({ type, selected, owner, amount, description, frequency, start, end, occurrences, timezone, pix, mode, values, reminders }));
+      setReview(buildBillingInput({ type, selected, owner, amount, description, category: billing?.category ?? "other", frequency, start, end, occurrences, timezone, pix, mode, values, reminders }));
     } catch (e) {
       setReview(null);
       setError((e as Error).message);

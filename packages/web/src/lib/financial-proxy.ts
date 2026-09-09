@@ -12,6 +12,8 @@ export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["GET", new RegExp(`^charges/${ID}/deliveries$`)], ["POST", new RegExp(`^charges/${ID}/reminders$`)],
   ["GET", /^billings(?:\?.*)?$/], ["POST", /^billings$/], ["GET", new RegExp(`^billings/${ID}(?:/preview)?$`)],
   ["PATCH", new RegExp(`^billings/${ID}$`)],
+  ["POST", new RegExp(`^billings/${ID}/invite$`)], ["DELETE", new RegExp(`^billings/${ID}/invite$`)],
+  ["POST", /^invites\/[^/]+\/accept$/],
   ["GET", /^timeline$/],
   ["GET", /^payment-methods$/], ["POST", /^payment-methods$/], ["PATCH", new RegExp(`^payment-methods/${ID}$`)],
   ["POST", new RegExp(`^payment-methods/${ID}/(?:default|archive)$`)],

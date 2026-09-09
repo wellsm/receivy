@@ -6,20 +6,20 @@ import {
   billingSummaryLine,
   buildBillingInput,
   calendarDate,
+  draftTotalCents,
   EMPTY_BILLING_DRAFT,
   formatMoney,
   parseBRLCents,
-  parsePercentageBasisPoints,
-  resolveBillingSplit,
+  previewBillingSplit,
+  splitPartyKey,
+  splitParties,
   type BillingDetail,
   type BillingDraft,
   type BillingFrequency,
   type BillingInput,
-  type BillingSplit,
   type BillingType,
   type PaymentMethod,
   type Person,
-  type ResolvedAllocation,
   type SplitMode,
   type SplitParty,
 } from "@receivy/common";
@@ -165,87 +165,6 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     category: billing.category,
     reminders: billing.reminders.map(reminder => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
   };
-}
-
-function keyOf(party: SplitParty): string {
-  return party.kind === "owner" ? "owner" : party.personId;
-}
-
-function partiesOf(draft: BillingDraft): SplitParty[] {
-  return [
-    ...draft.selected.map(personId => ({ kind: "person" as const, personId })),
-    ...(draft.owner ? [{ kind: "owner" as const }] : []),
-  ];
-}
-
-/**
- * Mirrors `buildBillingInput`'s split for the live preview only: the form has to
- * price a half-typed screen, where the shared builder is allowed to throw.
- */
-function previewSplit(draft: BillingDraft): BillingSplit {
-  const parties = partiesOf(draft);
-
-  if (draft.mode === "fixed") {
-    return {
-      mode: "fixed",
-      parts: draft.selected.map(personId => ({ kind: "person", personId, amountCents: parseBRLCents(draft.values[personId] ?? "") })),
-    };
-  }
-
-  if (draft.mode === "shares") {
-    return { mode: "shares", parts: parties.map(party => ({ ...party, shares: Number(draft.values[keyOf(party)] || "1") })) };
-  }
-
-  if (draft.mode === "percentage") {
-    return { mode: "percentage", parts: parties.map(party => ({ ...party, basisPoints: parsePercentageBasisPoints(draft.values[keyOf(party)] ?? "") })) };
-  }
-
-  return { mode: "equal", parts: parties };
-}
-
-function remainderHint(draft: BillingDraft, totalCents: number): string {
-  if (draft.mode === "percentage") {
-    try {
-      const sum = partiesOf(draft).reduce((total, party) => total + parsePercentageBasisPoints(draft.values[keyOf(party)] ?? ""), 0);
-
-      return sum === 10_000 ? "" : `Soma ${(sum / 100).toLocaleString("pt-BR")}%`;
-    } catch {
-      return "";
-    }
-  }
-
-  if (draft.mode === "fixed") {
-    try {
-      const used = draft.selected.reduce((total, personId) => total + parseBRLCents(draft.values[personId] ?? ""), 0);
-
-      return used < totalCents ? `Faltam ${money(totalCents - used)}` : "";
-    } catch {
-      return "";
-    }
-  }
-
-  return "";
-}
-
-function splitPreview(draft: BillingDraft): { totalCents: number; allocations: ResolvedAllocation[]; hint: string } {
-  let totalCents = 0;
-
-  try {
-    totalCents = parseBRLCents(draft.amount);
-  } catch {
-    return { totalCents: 0, allocations: [], hint: "" };
-  }
-
-  let allocations: ResolvedAllocation[] = [];
-  let hint = "";
-
-  try {
-    allocations = resolveBillingSplit(totalCents, previewSplit(draft));
-  } catch (reason) {
-    hint = reason instanceof RangeError ? reason.message : "";
-  }
-
-  return { totalCents, allocations, hint: remainderHint(draft, totalCents) || hint };
 }
 
 function unknownPerson(id: string): Person {
@@ -424,8 +343,8 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   }
 
   const today = todayIn(draft.timezone);
-  const { totalCents, allocations, hint } = splitPreview(draft);
-  const amountByKey = new Map(allocations.map(allocation => [keyOf(allocation), allocation.amountCents]));
+  const totalCents = draftTotalCents(draft);
+  const { amounts, error: hint } = previewBillingSplit(draft);
   const carousel = [
     ...recent,
     ...draft.selected
@@ -441,10 +360,10 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
     return directory.find(person => person.id === key)?.name ?? "Contato";
   }
 
-  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map(personId => ({ kind: "person", personId })) : partiesOf(draft);
+  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map(personId => ({ kind: "person", personId })) : splitParties(draft);
   const rows: SplitRow[] = rowParties.map(party => {
-    const key = keyOf(party);
-    const cents = amountByKey.get(key);
+    const key = splitPartyKey(party);
+    const cents = amounts[key];
     const amount = cents === undefined ? "" : money(cents);
     const shares = draft.values[key] || "1";
 
@@ -457,7 +376,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   });
 
   const people = draft.selected.length + (draft.owner ? 1 : 0);
-  const perPerson = draft.mode === "equal" ? (allocations[0]?.amountCents ?? 0) : totalCents;
+  const perPerson = draft.mode === "equal" ? (Object.values(amounts)[0] ?? 0) : totalCents;
   const summary =
     people && totalCents
       ? billingSummaryLine({ people, amountCents: perPerson, mode: draft.mode, dueLabel: dueText(draft.start, today) })
@@ -594,7 +513,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
             </label>
           ))}
         </div>
-        <SplitEditor mode={draft.mode} rows={rows} hint={hint} disabled={locked || frozen} onChange={(key, value) => update({ values: { ...draft.values, [key]: value } })} />
+        <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={(key, value) => update({ values: { ...draft.values, [key]: value } })} />
       </fieldset>
 
       <fieldset className="form-step" disabled={locked || scheduled}>

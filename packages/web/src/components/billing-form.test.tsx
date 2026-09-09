@@ -1,6 +1,7 @@
 import { addCalendarDays, calendarDate, EMPTY_BILLING_DRAFT, type BillingDetail } from "@receivy/common";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft } from "@/lib/billing-draft";
@@ -200,6 +201,32 @@ it("saves the draft and navigates when the user registers a Pix key", async () =
   expect(window.sessionStorage.getItem("receivy.billingDraft")).toContain("70,00");
 });
 
+it("returns focus to Ver todos when the contact panel closes", async () => {
+  api();
+  const { user } = renderForm();
+
+  const opener = await screen.findByRole("button", { name: "Ver todos" });
+  await user.click(opener);
+  expect(screen.getByLabelText("Buscar contatos")).toHaveFocus();
+
+  await user.click(screen.getByRole("button", { name: "Concluir" }));
+
+  expect(screen.queryByRole("dialog", { name: "Contatos" })).not.toBeInTheDocument();
+  expect(document.activeElement).toBe(opener);
+});
+
+it("closes the contact panel with Escape and gives the focus back", async () => {
+  api();
+  const { user } = renderForm();
+
+  const opener = await screen.findByRole("button", { name: "Ver todos" });
+  await user.click(opener);
+  await user.keyboard("{Escape}");
+
+  expect(screen.queryByRole("dialog", { name: "Contatos" })).not.toBeInTheDocument();
+  expect(document.activeElement).toBe(opener);
+});
+
 it("restores the stored draft when the form mounts", async () => {
   api();
   saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), selected: ["p1"], amount: "80,00", pix: "pix-1" }, "/charges/new");
@@ -209,6 +236,20 @@ it("restores the stored draft when the form mounts", async () => {
   expect(screen.getByRole("button", { name: /Ana/ })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("button", { name: /Nubank/ })).toHaveAttribute("aria-pressed", "true");
   expect(window.sessionStorage.getItem("receivy.billingDraft")).toBeNull();
+});
+
+it("keeps the restored draft when StrictMode runs the mount effect twice", async () => {
+  api();
+  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), selected: ["p1"], amount: "80,00" }, "/charges/new");
+
+  render(
+    <StrictMode>
+      <BillingForm billing={null} onSaved={vi.fn()} onBack={vi.fn()} />
+    </StrictMode>,
+  );
+
+  expect(await screen.findByLabelText("Valor")).toHaveValue("80,00");
+  expect(screen.getByRole("button", { name: /Ana/ })).toHaveAttribute("aria-pressed", "true");
 });
 
 it("creates the billing in one step, with category, shares and an idempotency key", async () => {
@@ -321,4 +362,22 @@ it("freezes a finite billing and patches only category, Pix and reminders", asyn
     reminders: [{ offsetDays: -3, enabled: true }],
     category: "other",
   });
+});
+
+const indefiniteBilling: BillingDetail = { ...onceBilling, id: "b2", type: "indefinite", frequency: "monthly", nextDueDate: null };
+
+it("keeps the schedule read-only while editing an open-ended billing", async () => {
+  api();
+  renderForm(indefiniteBilling);
+
+  expect(await screen.findByRole("button", { name: /Nubank/ })).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "Parcelado" })).toBeDisabled();
+  expect(screen.getByLabelText("Frequência")).toBeDisabled();
+  expect(screen.getByLabelText("Vencimento")).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Amanhã" })).toBeDisabled();
+
+  expect(screen.getByLabelText("Valor por ocorrência")).toBeEnabled();
+  expect(screen.getByLabelText("Descrição")).toBeEnabled();
+  expect(screen.getByRole("radio", { name: "Cotas" })).toBeEnabled();
+  expect(screen.queryByText("Cobranças já geradas só permitem categoria, Pix e lembretes.")).not.toBeInTheDocument();
 });

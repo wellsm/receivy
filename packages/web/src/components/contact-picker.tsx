@@ -1,7 +1,7 @@
 "use client";
 
 import type { Person } from "@receivy/common";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { initialOf } from "./contact-carousel";
 
@@ -22,6 +22,8 @@ export function ContactPicker({ selected, onToggle, onSeen, onClose }: ContactPi
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const searchField = useRef<HTMLInputElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
 
   const load = useCallback(
     (after?: string) => {
@@ -56,11 +58,38 @@ export function ContactPicker({ selected, onToggle, onSeen, onClose }: ContactPi
     void load();
   }, [load]);
 
+  // The panel takes focus when it opens and hands it back to whatever opened it
+  // (the "Ver todos" button) when it closes, so the keyboard never falls to the
+  // top of the page.
+  useEffect(() => {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    searchField.current?.focus();
+  }, []);
+
+  function close() {
+    opener.current?.focus();
+    onClose();
+  }
+
   return (
-    <div className="contact-panel" role="dialog" aria-label="Contatos" aria-modal="false">
+    <div
+      className="contact-panel"
+      role="dialog"
+      aria-label="Contatos"
+      aria-modal="false"
+      onKeyDown={event => {
+        if (event.key !== "Escape") {
+          return;
+        }
+
+        event.stopPropagation();
+        close();
+      }}
+    >
       <label htmlFor="contact-panel-search">Buscar contatos</label>
       <input
         id="contact-panel-search"
+        ref={searchField}
         type="search"
         maxLength={254}
         value={term}
@@ -97,7 +126,7 @@ export function ContactPicker({ selected, onToggle, onSeen, onClose }: ContactPi
             Carregar mais
           </button>
         )}
-        <button type="button" className="primary-button" onClick={onClose}>
+        <button type="button" className="primary-button" onClick={close}>
           Concluir
         </button>
       </div>

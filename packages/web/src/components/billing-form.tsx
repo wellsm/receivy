@@ -24,9 +24,9 @@ import {
   type SplitParty,
 } from "@receivy/common";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { saveDraft, takeDraft } from "@/lib/billing-draft";
+import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 import { ContactCarousel } from "./contact-carousel";
 import { ContactPicker } from "./contact-picker";
@@ -269,15 +269,23 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const restored = useRef<StoredDraft | null>(null);
 
   const editing = Boolean(billing);
   const locked = Boolean(attempt);
   const frozen = editing && billing?.type !== "indefinite";
+  // `BillingPatch` carries no type, frequency or dates, so the schedule is
+  // read-only in every edit — otherwise Salvar would silently drop the change.
+  const scheduled = editing;
 
   useEffect(() => {
-    // Read (and clear) the side-trip draft here, but only apply it once the
-    // remote data lands, so the form never re-renders twice on mount.
-    const stored = billing ? null : takeDraft();
+    // Reading the side-trip draft empties the storage, and StrictMode runs this
+    // effect twice in dev: the ref survives the cleanup, so the second pass gets
+    // the same draft back instead of `null`. It is applied only once the remote
+    // data lands, so the form never re-renders twice on mount.
+    const stored = billing ? null : (takeDraft() ?? restored.current);
+
+    restored.current = stored;
 
     let live = true;
 
@@ -526,7 +534,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
         </div>
       </fieldset>
 
-      <fieldset className="form-step" disabled={locked || frozen}>
+      <fieldset className="form-step" disabled={locked || scheduled}>
         <legend>4. Modalidade</legend>
         <div className="segmented" role="radiogroup" aria-label="Modalidade">
           {TYPES.map(option => (
@@ -580,7 +588,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
         <SplitEditor mode={draft.mode} rows={rows} hint={hint} disabled={locked || frozen} onChange={(key, value) => update({ values: { ...draft.values, [key]: value } })} />
       </fieldset>
 
-      <fieldset className="form-step" disabled={locked || frozen}>
+      <fieldset className="form-step" disabled={locked || scheduled}>
         <legend>6. Vencimento</legend>
         <div className="chip-row">
           {QUICK_DUE.map(option => (

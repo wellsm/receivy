@@ -76,7 +76,7 @@ export function JoinInvite({ token, view, authenticated }: JoinInviteProps) {
         </dl>
         {view.expired && <p className="invite-expired">{EXPIRED}</p>}
         {!view.expired && !authenticated && (
-          <Link className="primary-button" href={`/login?next=/join/${token}`}>
+          <Link className="primary-button" href={`/login?next=${encodeURIComponent(`/join/${token}`)}`}>
             Entrar para participar
           </Link>
         )}

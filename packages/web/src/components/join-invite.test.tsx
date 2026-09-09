@@ -36,7 +36,7 @@ it("shows the invite summary and sends a signed out visitor to the login with th
   expect(screen.getByText("R$ 120,00")).toBeInTheDocument();
   expect(screen.getByText("3 pessoas")).toBeInTheDocument();
   expect(screen.getByText("À vista")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Entrar para participar" })).toHaveAttribute("href", "/login?next=/join/tok-1");
+  expect(screen.getByRole("link", { name: "Entrar para participar" })).toHaveAttribute("href", "/login?next=%2Fjoin%2Ftok-1");
   expect(screen.queryByRole("button", { name: "Participar" })).not.toBeInTheDocument();
 });
 

@@ -75,6 +75,8 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     const response = NextResponse.next();
 
     response.headers.set("cache-control", "private, no-store");
+    response.headers.set("referrer-policy", "no-referrer");
+    response.headers.set("x-content-type-options", "nosniff");
     response.headers.set("x-robots-tag", "noindex");
 
     return response;

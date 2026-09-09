@@ -9,6 +9,7 @@ import { FeedScreen } from "@/components/feed-screen";
 import { PeopleScreen } from "@/components/people-screen";
 import { ProfileScreen } from "@/components/profile-screen";
 import { BillingForm } from "@/components/billing-form";
+import { JoinInvite } from "@/components/join-invite";
 import { OnboardingForm } from "@/components/onboarding-form";
 import { writePendingLogin } from "@/lib/auth/pending-login";
 
@@ -29,7 +30,8 @@ async function expectNoViolations(container: HTMLElement) {
 
 const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { amountCents: 0, currency: "BRL" }, overdue: { amountCents: 0, currency: "BRL" }, pending: { amountCents: 0, currency: "BRL" }, proofsToReview: 0, receivableCount: 0, payableCount: 0 };
 const user = { id: "user", email: "fixture@example.com", name: "Ana", avatarUrl: null, locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
-const person = { id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01", hasAccount: false };
+const person = { id: "person-1", name: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01", hasAccount: false, lastBilledAt: null };
+const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 12_000, currency: "BRL" as const }, type: "once" as const, participantCount: 3, category: "food" as const, expired: false };
 
 describe("accessibility of the main web screens", () => {
   it("email login form has labelled fields, reachable submit and no axe violations", async () => {
@@ -98,12 +100,24 @@ describe("accessibility of the main web screens", () => {
       throw new Error(`unexpected ${path}`);
     });
     const { container } = render(<BillingForm billing={null} onSaved={vi.fn()} onBack={vi.fn()} />);
-    const checkbox = await screen.findByRole("checkbox", { name: /Ana/ });
+    const contact = await screen.findByRole("button", { name: /Ana/ });
     const keyboard = userEvent.setup();
-    checkbox.focus();
+    contact.focus();
     await keyboard.keyboard(" ");
-    expect(checkbox).toBeChecked();
-    expect(screen.getByRole("radiogroup", { name: "Tipo de cobrança" })).toBeInTheDocument();
+    expect(contact).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("radiogroup", { name: "Modalidade" })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Divisão" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Valor")).toBeInTheDocument();
+    expect(screen.getByLabelText("Descrição")).toBeInTheDocument();
+    expect(screen.getByLabelText("Vencimento")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Novo contato" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Criar cobrança" })).toBeInTheDocument();
+    await expectNoViolations(container);
+  });
+
+  it("invite page labels its action and has no axe violations", async () => {
+    const { container } = render(<JoinInvite token="tok-1" view={invite} authenticated />);
+    expect(screen.getByRole("button", { name: "Participar" })).toBeEnabled();
     await expectNoViolations(container);
   });
 });

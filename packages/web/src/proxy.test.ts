@@ -22,6 +22,14 @@ describe("public charge proxy headers", () => {
     expect(csp).not.toContain("unsafe-eval");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
   });
+
+  it("lets an anonymous visitor reach an invite page without indexing it", async () => {
+    const response = await proxy(request("/join/token"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-robots-tag")).toBe("noindex");
+    expect(response.headers.get("content-security-policy")).toBeNull();
+  });
 });
 
 describe("session gate", () => {

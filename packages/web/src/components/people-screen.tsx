@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { normalizePerson, type Person, type PeoplePage } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
+import { patchDraft } from "@/lib/billing-draft";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-export function PeopleScreen() {
+export function PeopleScreen({ returnTo }: { returnTo?: string }) {
+  const router = useRouter();
   const [people, setPeople] = useState<Person[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [archived, setArchived] = useState(false);
@@ -53,7 +56,11 @@ export function PeopleScreen() {
         method: editing ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input),
       });
       if (!response.ok) throw new Error((await response.json()).message ?? "Não foi possível salvar.");
-      reset(); setNotice("Contato salvo."); await load();
+      const saved = await response.json() as Person;
+      reset(); setNotice("Contato salvo.");
+      // Came from the billing form: hand the new contact back to the draft.
+      if (returnTo && !editing) { patchDraft({ selected: [saved.id] }); router.push(returnTo); return; }
+      await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível salvar."); }
     finally { setBusy(false); }
   }

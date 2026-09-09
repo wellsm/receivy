@@ -69,6 +69,17 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return response;
   }
 
+  // The invite page is public and renders no upload surface, so it only needs
+  // the private cache and the crawler opt-out.
+  if (pathname.startsWith("/join/")) {
+    const response = NextResponse.next();
+
+    response.headers.set("cache-control", "private, no-store");
+    response.headers.set("x-robots-tag", "noindex");
+
+    return response;
+  }
+
   if (pathname === "/login" || pathname === "/login/code") {
     if (hasSession) {
       return NextResponse.redirect(appUrl(request, "/"));
@@ -88,5 +99,5 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/login/code", "/onboarding", "/charges/:path*", "/pay/:path*", "/people/:path*", "/billings/:path*", "/settings/:path*"],
+  matcher: ["/", "/login", "/login/code", "/onboarding", "/charges/:path*", "/pay/:path*", "/join/:path*", "/people/:path*", "/billings/:path*", "/settings/:path*"],
 };

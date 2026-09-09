@@ -1,23 +1,36 @@
 "use client";
 
 import {
+  addCalendarDays,
+  BILLING_CATEGORIES,
+  billingSummaryLine,
   buildBillingInput,
   calendarDate,
-  DEFAULT_BILLING_REMINDERS,
+  EMPTY_BILLING_DRAFT,
   formatMoney,
+  parseBRLCents,
+  parsePercentageBasisPoints,
   resolveBillingSplit,
   type BillingDetail,
+  type BillingDraft,
   type BillingFrequency,
   type BillingInput,
+  type BillingSplit,
   type BillingType,
   type PaymentMethod,
   type Person,
-  type ReminderDraft,
+  type ResolvedAllocation,
   type SplitMode,
+  type SplitParty,
 } from "@receivy/common";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
+import { saveDraft, takeDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
+import { ContactCarousel } from "./contact-carousel";
+import { ContactPicker } from "./contact-picker";
+import { SplitEditor, type SplitRow } from "./split-editor";
 
 type Attempt = { input: BillingInput; key: string; uncertain: boolean };
 
@@ -27,10 +40,38 @@ type BillingFormProps = {
   onBack: () => void;
 };
 
-const TYPES: { value: BillingType; label: string; hint: string }[] = [
-  { value: "once", label: "Uma vez", hint: "Uma cobrança por pessoa no vencimento." },
-  { value: "until", label: "Até uma data", hint: "Repete até a data final ou N vezes." },
-  { value: "indefinite", label: "Sem fim", hint: "Repete até você encerrar." },
+const RETURN_TO = "/charges/new";
+const FROZEN_NOTE = "Cobranças já geradas só permitem categoria, Pix e lembretes.";
+
+const TYPES: { value: BillingType; label: string }[] = [
+  { value: "once", label: "À vista" },
+  { value: "until", label: "Parcelado" },
+  { value: "indefinite", label: "Sem fim" },
+];
+
+const AMOUNT_LABELS: Record<BillingType, string> = {
+  once: "Valor",
+  until: "Valor por parcela",
+  indefinite: "Valor por ocorrência",
+};
+
+const SPLIT_MODES: { value: SplitMode; label: string }[] = [
+  { value: "equal", label: "Igual" },
+  { value: "shares", label: "Cotas" },
+  { value: "fixed", label: "Valor fixo" },
+  { value: "percentage", label: "Porcentagem" },
+];
+
+const QUICK_DUE: { label: string; days: number }[] = [
+  { label: "Hoje", days: 0 },
+  { label: "Amanhã", days: 1 },
+  { label: "Em 7 dias", days: 7 },
+];
+
+const QUICK_AMOUNTS: { cents: number; label: string }[] = [
+  { cents: 1_000, label: "+ R$ 10" },
+  { cents: 5_000, label: "+ R$ 50" },
+  { cents: 10_000, label: "+ R$ 100" },
 ];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -48,34 +89,182 @@ function moneyText(amountCents: number): string {
   return formatMoney({ amountCents, currency: "BRL" }).replace(/[^\d,]/g, "");
 }
 
-export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
-  const [people, setPeople] = useState<Person[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [methods, setMethods] = useState<PaymentMethod[]>([]);
-  const [type, setType] = useState<BillingType>(billing?.type ?? "once");
-  const [selected, setSelected] = useState<string[]>(billing?.split.parts.flatMap((p) => (p.kind === "person" ? [p.personId] : [])) ?? []);
-  const [owner, setOwner] = useState(billing ? billing.split.parts.some((p) => p.kind === "owner") || billing.split.mode === "fixed" : true);
-  const [amount, setAmount] = useState(billing ? moneyText(billing.total.amountCents) : "");
-  const [description, setDescription] = useState(billing?.description ?? "");
-  const [frequency, setFrequency] = useState<BillingFrequency>(billing?.frequency ?? "monthly");
-  const [start, setStart] = useState(billing?.startDate ?? calendarDate());
-  const [end, setEnd] = useState(billing?.endDate ?? "");
-  const [occurrences, setOccurrences] = useState("");
-  const [timezone, setTimezone] = useState(billing?.timezone ?? "America/Sao_Paulo");
-  const [pix, setPix] = useState(billing?.paymentMethodId ?? "");
-  const [mode, setMode] = useState<SplitMode>(billing?.split.mode ?? "equal");
-  const [values, setValues] = useState<Record<string, string>>(
-    Object.fromEntries(
-      billing?.split.parts.map((p) => [
-        p.kind === "owner" ? "owner" : p.personId,
-        "amountCents" in p ? moneyText(p.amountCents) : "basisPoints" in p ? String(p.basisPoints / 100).replace(".", ",") : "",
-      ]) ?? [],
+function money(amountCents: number): string {
+  return formatMoney({ amountCents, currency: "BRL" });
+}
+
+function todayIn(timezone: string): string {
+  try {
+    return calendarDate(new Date(), timezone);
+  } catch {
+    return calendarDate();
+  }
+}
+
+function daysUntil(date: string, today: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) {
+    return null;
+  }
+
+  const [year, month, day] = date.split("-").map(Number);
+  const [todayYear, todayMonth, todayDay] = today.split("-").map(Number);
+
+  return Math.round((Date.UTC(year!, month! - 1, day!) - Date.UTC(todayYear!, todayMonth! - 1, todayDay!)) / 86_400_000);
+}
+
+function dueText(start: string, today: string): string {
+  const diff = daysUntil(start, today);
+
+  if (diff === null) {
+    return "Sem data";
+  }
+
+  if (diff === 0) {
+    return "Hoje";
+  }
+
+  if (diff === 1) {
+    return "Amanhã";
+  }
+
+  if (diff > 1 && diff <= 60) {
+    return `em ${diff} dias`;
+  }
+
+  return `${start.slice(8, 10)}/${start.slice(5, 7)}`;
+}
+
+function draftFromBilling(billing: BillingDetail): BillingDraft {
+  const parts = billing.split.parts;
+
+  return {
+    type: billing.type,
+    selected: parts.flatMap(part => (part.kind === "person" ? [part.personId] : [])),
+    owner: parts.some(part => part.kind === "owner") || billing.split.mode === "fixed",
+    amount: moneyText(billing.total.amountCents),
+    description: billing.description,
+    frequency: billing.frequency ?? "monthly",
+    start: billing.startDate,
+    end: billing.endDate ?? "",
+    occurrences: "",
+    timezone: billing.timezone,
+    pix: billing.paymentMethodId ?? "",
+    mode: billing.split.mode,
+    values: Object.fromEntries(
+      parts.map(part => [
+        part.kind === "owner" ? "owner" : part.personId,
+        "amountCents" in part
+          ? moneyText(part.amountCents)
+          : "basisPoints" in part
+            ? String(part.basisPoints / 100).replace(".", ",")
+            : "shares" in part
+              ? String(part.shares)
+              : "",
+      ]),
     ),
+    category: billing.category,
+    reminders: billing.reminders.map(reminder => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
+  };
+}
+
+function keyOf(party: SplitParty): string {
+  return party.kind === "owner" ? "owner" : party.personId;
+}
+
+function partiesOf(draft: BillingDraft): SplitParty[] {
+  return [
+    ...draft.selected.map(personId => ({ kind: "person" as const, personId })),
+    ...(draft.owner ? [{ kind: "owner" as const }] : []),
+  ];
+}
+
+/**
+ * Mirrors `buildBillingInput`'s split for the live preview only: the form has to
+ * price a half-typed screen, where the shared builder is allowed to throw.
+ */
+function previewSplit(draft: BillingDraft): BillingSplit {
+  const parties = partiesOf(draft);
+
+  if (draft.mode === "fixed") {
+    return {
+      mode: "fixed",
+      parts: draft.selected.map(personId => ({ kind: "person", personId, amountCents: parseBRLCents(draft.values[personId] ?? "") })),
+    };
+  }
+
+  if (draft.mode === "shares") {
+    return { mode: "shares", parts: parties.map(party => ({ ...party, shares: Number(draft.values[keyOf(party)] || "1") })) };
+  }
+
+  if (draft.mode === "percentage") {
+    return { mode: "percentage", parts: parties.map(party => ({ ...party, basisPoints: parsePercentageBasisPoints(draft.values[keyOf(party)] ?? "") })) };
+  }
+
+  return { mode: "equal", parts: parties };
+}
+
+function remainderHint(draft: BillingDraft, totalCents: number): string {
+  if (draft.mode === "percentage") {
+    try {
+      const sum = partiesOf(draft).reduce((total, party) => total + parsePercentageBasisPoints(draft.values[keyOf(party)] ?? ""), 0);
+
+      return sum === 10_000 ? "" : `Soma ${(sum / 100).toLocaleString("pt-BR")}%`;
+    } catch {
+      return "";
+    }
+  }
+
+  if (draft.mode === "fixed") {
+    try {
+      const used = draft.selected.reduce((total, personId) => total + parseBRLCents(draft.values[personId] ?? ""), 0);
+
+      return used < totalCents ? `Faltam ${money(totalCents - used)}` : "";
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+function splitPreview(draft: BillingDraft): { totalCents: number; allocations: ResolvedAllocation[]; hint: string } {
+  let totalCents = 0;
+
+  try {
+    totalCents = parseBRLCents(draft.amount);
+  } catch {
+    return { totalCents: 0, allocations: [], hint: "" };
+  }
+
+  let allocations: ResolvedAllocation[] = [];
+  let hint = "";
+
+  try {
+    allocations = resolveBillingSplit(totalCents, previewSplit(draft));
+  } catch (reason) {
+    hint = reason instanceof RangeError ? reason.message : "";
+  }
+
+  return { totalCents, allocations, hint: remainderHint(draft, totalCents) || hint };
+}
+
+function unknownPerson(id: string): Person {
+  return { id, name: "Contato", email: null, phone: null, archivedAt: null, createdAt: "", hasAccount: false, lastBilledAt: null };
+}
+
+function abbreviate(pixKey: string): string {
+  return pixKey.length <= 18 ? pixKey : `${pixKey.slice(0, 7)}…${pixKey.slice(-7)}`;
+}
+
+export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
+  const router = useRouter();
+  const [draft, setDraft] = useState<BillingDraft>(() =>
+    billing ? draftFromBilling(billing) : EMPTY_BILLING_DRAFT("America/Sao_Paulo", calendarDate()),
   );
-  const [reminders, setReminders] = useState<ReminderDraft[]>(
-    (billing?.reminders ?? DEFAULT_BILLING_REMINDERS).map((r) => ({ ...r, offsetDays: String(r.offsetDays) })),
-  );
-  const [review, setReview] = useState<BillingInput | null>(null);
+  const [recent, setRecent] = useState<Person[]>([]);
+  const [directory, setDirectory] = useState<Person[]>([]);
+  const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [picker, setPicker] = useState(false);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -86,71 +275,84 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   const frozen = editing && billing?.type !== "indefinite";
 
   useEffect(() => {
+    // Read (and clear) the side-trip draft here, but only apply it once the
+    // remote data lands, so the form never re-renders twice on mount.
+    const stored = billing ? null : takeDraft();
+
+    let live = true;
+
     void Promise.all([
-      request<{ people: Person[]; nextCursor: string | null }>("/api/people?archived=false").then((page) => {
-        setPeople(page.people);
-        setCursor(page.nextCursor);
-      }),
-      request<{ paymentMethods: PaymentMethod[] }>("/api/financial/payment-methods").then((page) => {
-        setMethods(page.paymentMethods);
-        if (!billing) setPix(page.paymentMethods.find((m) => m.isDefault)?.id ?? "");
-      }),
-      billing
-        ? Promise.resolve()
-        : request<{ user: { timezone: string } }>("/api/auth/me").then(({ user }) => {
-            setTimezone(user.timezone);
-            setStart(calendarDate(new Date(), user.timezone));
-          }),
+      request<{ people: Person[]; nextCursor: string | null }>("/api/people?sort=recent"),
+      request<{ paymentMethods: PaymentMethod[] }>("/api/financial/payment-methods"),
+      billing || stored ? Promise.resolve(null) : request<{ user: { timezone: string } }>("/api/auth/me"),
     ])
-      .then(() => setReady(true))
-      .catch((e) => setError((e as Error).message));
+      .then(([agenda, wallet, me]) => {
+        if (!live) {
+          return;
+        }
+
+        const active = wallet.paymentMethods.filter(method => !method.archivedAt);
+
+        setRecent(agenda.people.slice(0, 12));
+        setDirectory(agenda.people);
+        setMethods(active);
+        setDraft(current => {
+          const base = stored ? stored.draft : current;
+          const pix = billing || stored ? base.pix : (active.find(method => method.isDefault)?.id ?? base.pix);
+
+          return { ...base, pix, ...(me ? { timezone: me.user.timezone, start: todayIn(me.user.timezone) } : {}) };
+        });
+        setReady(true);
+      })
+      .catch(reason => {
+        if (!live) {
+          return;
+        }
+
+        setDraft(current => (stored ? stored.draft : current));
+        setError((reason as Error).message);
+      });
+
+    return () => {
+      live = false;
+    };
   }, [billing]);
 
-  async function loadMore() {
-    if (!cursor) return;
-
-    try {
-      const page = await request<{ people: Person[]; nextCursor: string | null }>(`/api/people?archived=false&cursor=${encodeURIComponent(cursor)}`);
-      setPeople((old) => [...old, ...page.people.filter((p) => !old.some((a) => a.id === p.id))]);
-      setCursor(page.nextCursor);
-    } catch (e) {
-      setError((e as Error).message);
+  function update(patch: Partial<BillingDraft>) {
+    if (locked) {
+      return;
     }
-  }
 
-  function change<T>(setter: (value: T) => void) {
-    return (value: T) => {
-      if (locked) return;
-      setter(value);
-      setReview(null);
-    };
-  }
-
-  function prepare() {
     setError("");
+    setDraft(current => ({ ...current, ...patch }));
+  }
+
+  function toggle(personId: string) {
+    update({ selected: draft.selected.includes(personId) ? draft.selected.filter(id => id !== personId) : [...draft.selected, personId] });
+  }
+
+  const remember = useCallback((people: Person[]) => {
+    setDirectory(current => [...current, ...people.filter(person => !current.some(known => known.id === person.id))]);
+  }, []);
+
+  function leaveTo(path: string) {
+    saveDraft(draft, RETURN_TO);
+    router.push(path);
+  }
+
+  function addAmount(cents: number) {
+    let current = 0;
 
     try {
-      setReview(buildBillingInput({ type, selected, owner, amount, description, category: billing?.category ?? "other", frequency, start, end, occurrences, timezone, pix, mode, values, reminders }));
-    } catch (e) {
-      setReview(null);
-      setError((e as Error).message);
-    }
-  }
-
-  function patchBody(input: BillingInput) {
-    const editable = { paymentMethodId: input.paymentMethodId, clearPaymentMethod: !input.paymentMethodId, reminders: input.reminders };
-
-    if (billing && billing.type !== "indefinite") {
-      return editable;
+      current = parseBRLCents(draft.amount);
+    } catch {
+      current = 0;
     }
 
-    return { description: input.description, totalCents: input.totalCents, split: input.split, ...editable };
+    update({ amount: moneyText(current + cents) });
   }
 
-  async function save(retry = attempt) {
-    if (!review && !retry) return;
-
-    const sent = retry ?? { input: review!, key: crypto.randomUUID(), uncertain: false };
+  async function save(sent: Attempt) {
     setAttempt(sent);
     setBusy(true);
     setError("");
@@ -167,165 +369,305 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
             headers: { "content-type": "application/json", "idempotency-key": sent.key },
             body: JSON.stringify(sent.input),
           });
+
       setAttempt(null);
       onSaved(saved);
-    } catch (e) {
-      const status = (e as { status?: number }).status;
+    } catch (reason) {
+      const status = (reason as { status?: number }).status;
       const uncertain = sent.uncertain || !status || status >= 500;
+
       setAttempt(uncertain ? { ...sent, uncertain: true } : null);
-      setError((e as Error).message);
+      setError((reason as Error).message);
     } finally {
       setBusy(false);
     }
   }
 
-  const selectable = [...people, ...selected.filter((id) => !people.some((p) => p.id === id)).map((id, i) => ({ id, name: `Contato indisponível ${i + 1}` }))];
-  const allocations = review ? resolveBillingSplit(review.totalCents, review.split) : [];
-  const disabled = locked || !ready;
-  const nameOf = (id: string) => (id === "owner" ? "Minha parte" : (people.find((p) => p.id === id)?.name ?? "Contato indisponível"));
+  function patchBody(input: BillingInput) {
+    const editable = {
+      paymentMethodId: input.paymentMethodId,
+      clearPaymentMethod: !input.paymentMethodId,
+      reminders: input.reminders,
+      category: input.category,
+    };
+
+    if (billing && billing.type !== "indefinite") {
+      return editable;
+    }
+
+    return { description: input.description, totalCents: input.totalCents, split: input.split, ...editable };
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+
+    if (locked && attempt) {
+      void save(attempt);
+      return;
+    }
+
+    try {
+      void save({ input: buildBillingInput(draft), key: crypto.randomUUID(), uncertain: false });
+    } catch (reason) {
+      setError((reason as Error).message);
+    }
+  }
+
+  const today = todayIn(draft.timezone);
+  const { totalCents, allocations, hint } = splitPreview(draft);
+  const amountByKey = new Map(allocations.map(allocation => [keyOf(allocation), allocation.amountCents]));
+  const carousel = [
+    ...recent,
+    ...draft.selected
+      .filter(id => !recent.some(person => person.id === id))
+      .map(id => directory.find(person => person.id === id) ?? unknownPerson(id)),
+  ];
+
+  function nameOf(key: string): string {
+    if (key === "owner") {
+      return "Eu";
+    }
+
+    return directory.find(person => person.id === key)?.name ?? "Contato";
+  }
+
+  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map(personId => ({ kind: "person", personId })) : partiesOf(draft);
+  const rows: SplitRow[] = rowParties.map(party => {
+    const key = keyOf(party);
+    const cents = amountByKey.get(key);
+    const amount = cents === undefined ? "" : money(cents);
+    const shares = draft.values[key] || "1";
+
+    return {
+      key,
+      name: nameOf(key),
+      value: draft.values[key] ?? "",
+      amountText: draft.mode === "shares" && amount ? `${shares} cota${shares === "1" ? "" : "s"} · ${amount}` : amount,
+    };
+  });
+
+  const people = draft.selected.length + (draft.owner ? 1 : 0);
+  const perPerson = draft.mode === "equal" ? (allocations[0]?.amountCents ?? 0) : totalCents;
+  const summary =
+    people && totalCents
+      ? billingSummaryLine({ people, amountCents: perPerson, mode: draft.mode, dueLabel: dueText(draft.start, today) })
+      : "Escolha os contatos e informe o valor.";
 
   return (
-    <section className="financial-page">
-      <header>
+    <form className="billing-form" onSubmit={submit}>
+      <header className="billing-form-header">
+        <button type="button" className="back-link" onClick={onBack}>
+          ← Voltar
+        </button>
         <p className="date-line">{editing ? "Editar cobrança" : "Nova cobrança"}</p>
-        <h1>Divida com clareza antes de cobrar.</h1>
-        <p>{editing ? "Edições valem só para ocorrências ainda não geradas." : "Seu rascunho permanece aqui se a rede falhar."}</p>
       </header>
+      {frozen && <p className="billing-frozen-note">{FROZEN_NOTE}</p>}
       {!ready && !error && <p role="status">Carregando dados…</p>}
-      <div className="creation-layout">
-        <form className="creation-form" onSubmit={(event) => { event.preventDefault(); prepare(); }}>
-          <fieldset disabled={disabled || editing}>
-            <legend>Como cobrar</legend>
-            <div className="type-picker" role="radiogroup" aria-label="Tipo de cobrança">
-              {TYPES.map((option) => (
-                <label key={option.value} className={type === option.value ? "is-active" : ""} aria-label={option.label}>
-                  <input type="radio" name="billing-type" value={option.value} checked={type === option.value} onChange={() => change(setType)(option.value)} />
-                  <strong>{option.label}</strong>
-                  <small>{option.hint}</small>
-                </label>
-              ))}
-            </div>
-          </fieldset>
 
-          <fieldset disabled={disabled || frozen}>
-            <legend>Pessoas</legend>
-            <div className="person-picker">
-              {selectable.map((person) => (
-                <label key={person.id}>
-                  <input type="checkbox" checked={selected.includes(person.id)} onChange={() => change(setSelected)(selected.includes(person.id) ? selected.filter((id) => id !== person.id) : [...selected, person.id])} />
-                  {person.name}
-                </label>
-              ))}
-            </div>
-            {cursor && <button type="button" className="secondary-button" onClick={() => void loadMore()}>Carregar mais contatos</button>}
-            <label className="owner-toggle">
-              <input type="checkbox" checked={owner} onChange={(e) => change(setOwner)(e.target.checked)} /> Incluir minha parte
+      <fieldset className="form-step" disabled={locked || frozen}>
+        <legend>1. Para quem?</legend>
+        <ContactCarousel
+          people={carousel}
+          selected={draft.selected}
+          today={today}
+          disabled={locked || frozen}
+          allowNew={!editing}
+          onToggle={toggle}
+          onNew={() => leaveTo(`/people?returnTo=${RETURN_TO}`)}
+        />
+        <button type="button" className="secondary-button" onClick={() => setPicker(true)}>
+          Ver todos
+        </button>
+        {picker && <ContactPicker selected={draft.selected} onToggle={toggle} onSeen={remember} onClose={() => setPicker(false)} />}
+        <label className="owner-toggle">
+          <input type="checkbox" checked={draft.owner} onChange={event => update({ owner: event.target.checked })} /> Eu também participo
+        </label>
+      </fieldset>
+
+      <fieldset className="form-step" disabled={locked || frozen}>
+        <legend>2. Qual o valor?</legend>
+        <label htmlFor="billing-amount">{AMOUNT_LABELS[draft.type]}</label>
+        <div className="amount-hero">
+          <span aria-hidden="true">R$</span>
+          <input id="billing-amount" inputMode="decimal" placeholder="0,00" value={draft.amount} onChange={event => update({ amount: event.target.value })} />
+        </div>
+        <div className="chip-row">
+          {QUICK_AMOUNTS.map(option => (
+            <button key={option.cents} type="button" className="chip" onClick={() => addAmount(option.cents)}>
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="form-step" disabled={locked}>
+        <legend>3. Descrição</legend>
+        <label htmlFor="billing-description">Descrição</label>
+        <input
+          id="billing-description"
+          maxLength={500}
+          disabled={frozen}
+          value={draft.description}
+          onChange={event => update({ description: event.target.value })}
+        />
+        <div className="chip-row" role="group" aria-label="Categoria">
+          {BILLING_CATEGORIES.map(category => (
+            <button
+              key={category.value}
+              type="button"
+              className={draft.category === category.value ? "chip is-active" : "chip"}
+              aria-pressed={draft.category === category.value}
+              onClick={() => update({ category: category.value, description: draft.description || category.label })}
+            >
+              {category.label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="form-step" disabled={locked || frozen}>
+        <legend>4. Modalidade</legend>
+        <div className="segmented" role="radiogroup" aria-label="Modalidade">
+          {TYPES.map(option => (
+            <label key={option.value} className={draft.type === option.value ? "is-active" : ""}>
+              <input
+                type="radio"
+                name="billing-type"
+                value={option.value}
+                checked={draft.type === option.value}
+                onChange={() => update({ type: option.value, frequency: option.value === "until" ? "monthly" : draft.frequency, end: "" })}
+              />
+              {option.label}
             </label>
-          </fieldset>
-
-          <fieldset disabled={disabled || frozen}>
-            <legend>Valor e rateio</legend>
-            <label htmlFor="billing-amount">Valor de cada cobrança</label>
-            <input id="billing-amount" inputMode="decimal" placeholder="0,00" value={amount} onChange={(e) => change(setAmount)(e.target.value)} />
-            <label htmlFor="billing-description">Descrição</label>
-            <input id="billing-description" maxLength={500} value={description} onChange={(e) => change(setDescription)(e.target.value)} placeholder="Opcional" />
-            <label htmlFor="billing-mode">Como dividir</label>
-            <select id="billing-mode" value={mode} onChange={(e) => change(setMode)(e.target.value as SplitMode)}>
-              <option value="equal">Partes iguais</option>
-              <option value="fixed">Valores fixos</option>
-              <option value="percentage">Percentuais</option>
+          ))}
+        </div>
+        {draft.type === "until" && (
+          <>
+            <label htmlFor="billing-occurrences">Parcelas</label>
+            <input
+              id="billing-occurrences"
+              type="number"
+              min={2}
+              max={120}
+              inputMode="numeric"
+              value={draft.occurrences}
+              onChange={event => update({ occurrences: event.target.value })}
+            />
+          </>
+        )}
+        {draft.type === "indefinite" && (
+          <>
+            <label htmlFor="billing-frequency">Frequência</label>
+            <select id="billing-frequency" value={draft.frequency} onChange={event => update({ frequency: event.target.value as BillingFrequency })}>
+              <option value="monthly">Mensal</option>
+              <option value="yearly">Anual</option>
             </select>
-            {mode !== "equal" &&
-              [...selected, ...(owner && mode === "percentage" ? ["owner"] : [])].map((id) => (
-                <label key={id}>
-                  {mode === "fixed" ? "Valor" : "Percentual"} de {nameOf(id)}
-                  <input inputMode="decimal" value={values[id] ?? ""} onChange={(e) => change(setValues)({ ...values, [id]: e.target.value })} />
-                </label>
-              ))}
-          </fieldset>
+          </>
+        )}
+      </fieldset>
 
-          <fieldset disabled={disabled || editing}>
-            <legend>Quando</legend>
-            <label htmlFor="billing-start">{type === "once" ? "Vencimento" : "Primeiro vencimento"}</label>
-            <input id="billing-start" type="date" value={start} onChange={(e) => change(setStart)(e.target.value)} />
-            {type !== "once" && (
-              <>
-                <label htmlFor="billing-frequency">Frequência</label>
-                <select id="billing-frequency" value={frequency} onChange={(e) => change(setFrequency)(e.target.value as BillingFrequency)}>
-                  <option value="monthly">Mensal</option>
-                  <option value="yearly">Anual</option>
-                </select>
-                <p>Dias inexistentes usam o último dia do mês.</p>
-              </>
-            )}
-            {type === "until" && (
-              <>
-                <label htmlFor="billing-occurrences">Quantas vezes</label>
-                <input id="billing-occurrences" inputMode="numeric" placeholder="ex.: 3" value={occurrences} onChange={(e) => change(setOccurrences)(e.target.value)} />
-                <label htmlFor="billing-end">Ou até a data</label>
-                <input id="billing-end" type="date" value={end} onChange={(e) => change(setEnd)(e.target.value)} />
-              </>
-            )}
-            <label htmlFor="billing-timezone">Fuso horário IANA</label>
-            <input id="billing-timezone" value={timezone} onChange={(e) => change(setTimezone)(e.target.value)} />
-          </fieldset>
+      <fieldset className="form-step" disabled={locked || frozen}>
+        <legend>5. Divisão</legend>
+        <div className="segmented" role="radiogroup" aria-label="Divisão">
+          {SPLIT_MODES.map(option => (
+            <label key={option.value} className={draft.mode === option.value ? "is-active" : ""}>
+              <input type="radio" name="billing-split" value={option.value} checked={draft.mode === option.value} onChange={() => update({ mode: option.value })} />
+              {option.label}
+            </label>
+          ))}
+        </div>
+        <SplitEditor mode={draft.mode} rows={rows} hint={hint} disabled={locked || frozen} onChange={(key, value) => update({ values: { ...draft.values, [key]: value } })} />
+      </fieldset>
 
-          <fieldset disabled={disabled}>
-            <legend>Pix e lembretes</legend>
-            <label htmlFor="billing-pix">Chave Pix nos links</label>
-            <select id="billing-pix" value={pix} onChange={(e) => change(setPix)(e.target.value)}>
-              <option value="">Usar chave principal, se houver</option>
-              {methods.map((m) => <option key={m.id} value={m.id}>{m.label || m.pixKey}</option>)}
-            </select>
-            {reminders.map((r, index) => (
-              <div key={index} className="reminder-row">
-                <label>
-                  <input type="checkbox" checked={r.enabled} onChange={(e) => change(setReminders)(reminders.map((a, i) => (i === index ? { ...a, enabled: e.target.checked } : a)))} />
-                  Lembrete {index + 1}
-                </label>
-                <label>
-                  Dias em relação ao vencimento
-                  <input type="text" inputMode="text" value={r.offsetDays} onChange={(e) => change(setReminders)(reminders.map((a, i) => (i === index ? { ...a, offsetDays: e.target.value } : a)))} />
-                </label>
-              </div>
-            ))}
-            <button type="button" className="secondary-button" disabled={reminders.length >= 10} onClick={() => change(setReminders)([...reminders, { offsetDays: "", enabled: true }])}>
-              Adicionar lembrete
+      <fieldset className="form-step" disabled={locked || frozen}>
+        <legend>6. Vencimento</legend>
+        <div className="chip-row">
+          {QUICK_DUE.map(option => (
+            <button
+              key={option.label}
+              type="button"
+              className={draft.start === addCalendarDays(today, option.days) ? "chip is-active" : "chip"}
+              aria-pressed={draft.start === addCalendarDays(today, option.days)}
+              onClick={() => update({ start: addCalendarDays(today, option.days) })}
+            >
+              {option.label}
             </button>
-          </fieldset>
+          ))}
+        </div>
+        <label htmlFor="billing-start">Vencimento</label>
+        <input id="billing-start" type="date" value={draft.start} onChange={event => update({ start: event.target.value })} />
+        <p className="form-hint">Lembrete no vencimento.</p>
+      </fieldset>
 
-          <button className="primary-button" type="submit" disabled={disabled}>Revisar cobrança</button>
-          <button className="secondary-button" type="button" disabled={locked} onClick={onBack}>Voltar</button>
-        </form>
-
-        <aside className="review-panel" aria-live="polite">
-          <h2>Revisão exata</h2>
-          {!review && <p>Preencha e revise antes de criar. Nada é salvo nesta etapa.</p>}
-          {review && (
-            <>
-              <p className="review-total">{formatMoney({ amountCents: review.totalCents, currency: "BRL" })} por cobrança</p>
-              <ul>
-                {allocations.map((a) => (
-                  <li key={a.kind === "owner" ? "owner" : a.personId}>
-                    <span>{nameOf(a.kind === "owner" ? "owner" : a.personId)}</span>
-                    <strong>{formatMoney({ amountCents: a.amountCents, currency: "BRL" })}</strong>
-                  </li>
-                ))}
-              </ul>
-              <button className="primary-button" type="button" disabled={busy || locked} onClick={() => void save(null)}>
-                {editing ? "Salvar cobrança" : "Criar cobrança"}
-              </button>
-            </>
-          )}
-          {busy && <p role="status">Salvando…</p>}
-          {error && <p className="login-error" role="alert">{error}</p>}
-          {attempt?.uncertain && (
-            <button className="secondary-button" type="button" disabled={busy} onClick={() => void save()}>
-              {editing ? "Tentar salvar novamente" : "Tentar criar novamente"}
+      <fieldset className="form-step" disabled={locked}>
+        <legend>7. Pix</legend>
+        <div className="chip-row" role="group" aria-label="Chave Pix">
+          {methods.map(method => (
+            <button
+              key={method.id}
+              type="button"
+              className={draft.pix === method.id ? "chip is-active" : "chip"}
+              aria-pressed={draft.pix === method.id}
+              onClick={() => update({ pix: method.id })}
+            >
+              <strong>{method.label || method.pixKey}</strong>
+              <small>{abbreviate(method.pixKey)}</small>
+            </button>
+          ))}
+          <button type="button" className={draft.pix ? "chip" : "chip is-active"} aria-pressed={!draft.pix} onClick={() => update({ pix: "" })}>
+            Nenhuma
+          </button>
+          {!editing && (
+            <button type="button" className="chip" onClick={() => leaveTo(`/settings/pix?returnTo=${RETURN_TO}`)}>
+              Cadastrar chave
             </button>
           )}
-        </aside>
-      </div>
-    </section>
+        </div>
+        {draft.reminders.map((reminder, index) => (
+          <div key={index} className="reminder-row">
+            <label>
+              <input
+                type="checkbox"
+                checked={reminder.enabled}
+                onChange={event => update({ reminders: draft.reminders.map((item, position) => (position === index ? { ...item, enabled: event.target.checked } : item)) })}
+              />
+              Lembrete {index + 1}
+            </label>
+            <label>
+              Dias em relação ao vencimento
+              <input
+                inputMode="text"
+                value={reminder.offsetDays}
+                onChange={event => update({ reminders: draft.reminders.map((item, position) => (position === index ? { ...item, offsetDays: event.target.value } : item)) })}
+              />
+            </label>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={draft.reminders.length >= 10}
+          onClick={() => update({ reminders: [...draft.reminders, { offsetDays: "", enabled: true }] })}
+        >
+          Adicionar lembrete
+        </button>
+      </fieldset>
+
+      <footer className="billing-form-footer">
+        <p className="billing-form-summary">{summary}</p>
+        {busy && <p role="status">Salvando…</p>}
+        {error && <p className="login-error" role="alert">{error}</p>}
+        {attempt?.uncertain ? (
+          <button type="submit" className="primary-button" disabled={busy}>
+            Tentar novamente
+          </button>
+        ) : (
+          <button type="submit" className="primary-button" disabled={busy}>
+            {editing ? "Salvar" : "Criar cobrança"}
+          </button>
+        )}
+      </footer>
+    </form>
   );
 }

@@ -20,11 +20,12 @@ import {
   type SplitParty,
 } from "@receivy/common";
 import * as Crypto from "expo-crypto";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/safe-area-view";
 import { financialClient, FinancialRequestError, type FinancialClient } from "@/financial/client";
-import { saveDraft, takeDraft } from "@/financial/draft-store";
+import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
 import { peopleClient } from "@/people/client";
 import { ContactCarousel } from "./contact-carousel";
 import { ContactPickerSheet } from "./contact-picker-sheet";
@@ -86,6 +87,17 @@ function money(amountCents: number): string {
 
 function moneyText(amountCents: number): string {
   return money(amountCents).replace(/[^\d,]/g, "");
+}
+
+/** The due date is typed by hand, so a real calendar day is checked before the shared builder sees it. */
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const time = Date.parse(`${value}T00:00:00.000Z`);
+
+  return !Number.isNaN(time) && new Date(time).toISOString().slice(0, 10) === value;
 }
 
 function todayIn(timezone: string): string {
@@ -211,8 +223,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
-  const restored = useRef<BillingDraft | null>(null);
-  const idempotencyKey = useRef("");
+  const loaded = useRef(false);
 
   const editing = Boolean(billing);
   const locked = Boolean(attempt);
@@ -221,51 +232,65 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   // read-only in every edit — otherwise Salvar would silently drop the change.
   const scheduled = editing;
 
-  useEffect(() => {
-    // Reading the parked draft empties the store, so the ref keeps it around in
-    // case the effect runs twice; it is applied once the remote data lands.
-    const stored = billing ? null : (takeDraft() ?? restored.current);
+  const load = useCallback(
+    (stored: BillingDraft | null) => {
+      let live = true;
 
-    restored.current = stored;
+      void Promise.all([
+        people.list(false, undefined, undefined, "recent"),
+        client.paymentMethods(),
+        billing || stored ? Promise.resolve(null) : client.profile(),
+      ])
+        .then(([agenda, wallet, me]) => {
+          if (!live) {
+            return;
+          }
 
-    let live = true;
+          const active = wallet.paymentMethods.filter((method) => !method.archivedAt);
 
-    void Promise.all([
-      people.list(false, undefined, undefined, "recent"),
-      client.paymentMethods(),
-      billing || stored ? Promise.resolve(null) : client.profile(),
-    ])
-      .then(([agenda, wallet, me]) => {
-        if (!live) {
-          return;
-        }
+          setRecent(agenda.people.slice(0, 12));
+          setDirectory(agenda.people);
+          setMethods(active);
+          setDraft((current) => {
+            const base = stored ?? current;
+            const pix = billing || stored ? base.pix : (active.find((method) => method.isDefault)?.id ?? base.pix);
 
-        const active = wallet.paymentMethods.filter((method) => !method.archivedAt);
+            return { ...base, pix, ...(me ? { timezone: me.user.timezone, start: todayIn(me.user.timezone) } : {}) };
+          });
+          setReady(true);
+        })
+        .catch((reason: unknown) => {
+          if (!live) {
+            return;
+          }
 
-        setRecent(agenda.people.slice(0, 12));
-        setDirectory(agenda.people);
-        setMethods(active);
-        setDraft((current) => {
-          const base = stored ?? current;
-          const pix = billing || stored ? base.pix : (active.find((method) => method.isDefault)?.id ?? base.pix);
-
-          return { ...base, pix, ...(me ? { timezone: me.user.timezone, start: todayIn(me.user.timezone) } : {}) };
+          setDraft((current) => stored ?? current);
+          setError(reason instanceof Error ? reason.message : LOAD_ERROR);
         });
-        setReady(true);
-      })
-      .catch((reason: unknown) => {
-        if (!live) {
-          return;
-        }
 
-        setDraft((current) => stored ?? current);
-        setError(reason instanceof Error ? reason.message : LOAD_ERROR);
-      });
+      return () => {
+        live = false;
+      };
+    },
+    [billing, client, people],
+  );
 
-    return () => {
-      live = false;
-    };
-  }, [billing, client, people]);
+  // The route stays mounted while the form takes a side trip to the contact or
+  // Pix screens, so the parked draft is picked up on every focus — not only on
+  // mount — and the agenda and wallet are refetched to show what was just created.
+  useFocusEffect(
+    useCallback(() => {
+      const stored = billing ? null : takeDraft();
+
+      if (loaded.current && !stored) {
+        return undefined;
+      }
+
+      loaded.current = true;
+
+      return load(stored);
+    }, [billing, load]),
+  );
 
   function update(patch: Partial<BillingDraft>) {
     if (locked) {
@@ -317,6 +342,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
       const saved = billing ? await client.patchBilling(billing.id, patchBody(sent.input)) : await client.createBilling(sent.input, sent.key);
 
       setAttempt(null);
+      clearDraft();
       onSaved(saved);
     } catch (reason) {
       const uncertain = sent.uncertain || !(reason instanceof FinancialRequestError) || reason.status >= 500;
@@ -336,11 +362,13 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
       return;
     }
 
-    try {
-      const input = buildBillingInput(draft);
+    if (!isCalendarDate(draft.start)) {
+      setError("Informe a data como AAAA-MM-DD.");
+      return;
+    }
 
-      idempotencyKey.current = Crypto.randomUUID();
-      void save({ input, key: idempotencyKey.current, uncertain: false });
+    try {
+      void save({ input: buildBillingInput(draft), key: Crypto.randomUUID(), uncertain: false });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Confira os dados informados.");
     }
@@ -385,7 +413,15 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
       <View className="flex-row items-center gap-3 px-5 pb-2 pt-2">
-        <Pressable accessibilityRole="button" accessibilityLabel="Voltar" disabled={locked} onPress={onBack} className="min-h-11 justify-center">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Voltar"
+          onPress={() => {
+            clearDraft();
+            onBack();
+          }}
+          className="min-h-11 justify-center"
+        >
           <Text className="font-bold text-primary">← Voltar</Text>
         </Pressable>
         <Text accessibilityRole="header" className="text-lg font-extrabold text-primary-strong">
@@ -561,6 +597,45 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
             {!editing && onCreatePix && <Chip label="Cadastrar chave" active={false} disabled={locked} onPress={() => leaveTo(onCreatePix)} />}
           </View>
         </Step>
+
+        {/* Reminders stay out of the seven quick steps: a new billing takes the
+            default policy, and only an edit is allowed to fine-tune it. */}
+        {editing && (
+          <Step index={8} title="Lembretes">
+            {draft.reminders.map((reminder, index) => (
+              <View key={index} className="gap-2">
+                <View className="flex-row items-center justify-between">
+                  <Text className="font-semibold text-ink">Lembrete {index + 1}</Text>
+                  <Switch
+                    accessibilityLabel={`Lembrete ${index + 1}`}
+                    disabled={locked}
+                    value={reminder.enabled}
+                    onValueChange={(value) =>
+                      update({ reminders: draft.reminders.map((item, position) => (position === index ? { ...item, enabled: value } : item)) })
+                    }
+                  />
+                </View>
+                <TextInput
+                  accessibilityLabel={`Dias do lembrete ${index + 1}`}
+                  editable={!locked}
+                  placeholder="0 no vencimento, -3 antes"
+                  placeholderTextColor={MUTED_TINT}
+                  value={reminder.offsetDays}
+                  onChangeText={(value) =>
+                    update({ reminders: draft.reminders.map((item, position) => (position === index ? { ...item, offsetDays: value } : item)) })
+                  }
+                  className="min-h-12 rounded-xl border border-outline bg-canvas px-3 text-ink"
+                />
+              </View>
+            ))}
+            <Chip
+              label="Adicionar lembrete"
+              active={false}
+              disabled={locked || draft.reminders.length >= 10}
+              onPress={() => update({ reminders: [...draft.reminders, { offsetDays: "", enabled: true }] })}
+            />
+          </Step>
+        )}
 
         {error ? (
           <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-4 text-red-700">

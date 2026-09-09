@@ -1,12 +1,34 @@
 import { EMPTY_BILLING_DRAFT, type BillingDetail, type Person } from "@receivy/common";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { FinancialRequestError } from "@/financial/client";
-import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
+import { clearDraft, patchDraft, saveDraft, takeDraft } from "@/financial/draft-store";
 import { BillingFormScreen } from "./billing-form-screen";
 
 let mockKeys = 0;
+let mockFocus: (() => void | (() => void)) | null = null;
 
 jest.mock("expo-crypto", () => ({ randomUUID: () => `key-${++mockKeys}` }));
+
+// The route stays mounted across the side trip, so the focus callback is kept
+// here and replayed by the test instead of remounting the screen.
+jest.mock("expo-router", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories cannot close over module imports
+  const react = require("react");
+
+  return {
+    useFocusEffect: (callback: () => void | (() => void)) => {
+      mockFocus = callback;
+      react.useEffect(() => callback(), [callback]);
+    },
+  };
+});
+
+/** Replays the screen's focus effect, the way expo-router does on `router.back()`. */
+async function refocus() {
+  await act(async () => {
+    mockFocus?.();
+  });
+}
 
 function person(id: string, name: string, lastBilledAt: string | null = null): Person {
   return { id, name, email: null, phone: null, archivedAt: null, createdAt: "2026-09-01T00:00:00Z", hasAccount: false, lastBilledAt };
@@ -259,11 +281,83 @@ describe("BillingFormScreen", () => {
     expect(takeDraft()).toMatchObject({ amount: "85,00" });
   });
 
+  it("selects the contact a side trip created without remounting the screen", async () => {
+    const carla = person("p-new", "Carla");
+    let fetches = 0;
+    const list = jest.fn(async () => ({ people: ++fetches > 1 ? [ana, bruno, carla] : [ana, bruno], nextCursor: null }));
+    const onCreateContact = jest.fn();
+
+    await quickForm(financialApi(), { list }, { onCreateContact });
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "85,00");
+    await fireEvent.press(screen.getByRole("button", { name: "Novo contato" }));
+
+    // The contact screen saved the new person and popped back to the still-mounted form.
+    patchDraft({ selected: ["p-new"] });
+    await refocus();
+
+    expect(await screen.findByRole("button", { name: "Carla" })).toBeSelected();
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText("Valor")).toHaveDisplayValue("85,00");
+    expect(takeDraft()).toBeNull();
+  });
+
+  it("keeps the screen as it is when a focus brings no draft back", async () => {
+    const { people } = await quickForm();
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "85,00");
+    await refocus();
+
+    expect(people.list).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Valor")).toHaveDisplayValue("85,00");
+  });
+
+  it("drops the parked draft when I leave the form", async () => {
+    const onBack = jest.fn();
+    const onCreateContact = jest.fn();
+
+    await quickForm(financialApi(), peopleApi(), { onBack, onCreateContact });
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "85,00");
+    await fireEvent.press(screen.getByRole("button", { name: "Novo contato" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Voltar" }));
+
+    expect(onBack).toHaveBeenCalled();
+    expect(takeDraft()).toBeNull();
+  });
+
+  it("drops the parked draft after creating the billing", async () => {
+    const onCreateContact = jest.fn();
+    const { client } = await quickForm(financialApi(), peopleApi(), { onCreateContact });
+
+    await fillQuickBilling();
+    await fireEvent.press(screen.getByRole("button", { name: "Novo contato" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(takeDraft()).toBeNull();
+  });
+
+  it("refuses a due date that is not a calendar day", async () => {
+    const { client } = await quickForm();
+
+    await fillQuickBilling();
+    await fireEvent.changeText(screen.getByLabelText("Vencimento"), "31/01/2026");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Informe a data como AAAA-MM-DD.");
+
+    await fireEvent.changeText(screen.getByLabelText("Vencimento"), "2026-02-31");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar cobrança" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Informe a data como AAAA-MM-DD.");
+    expect(client.createBilling).not.toHaveBeenCalled();
+  });
+
   it("hides the side trips when the screen cannot navigate", async () => {
     await quickForm();
 
     expect(screen.queryByRole("button", { name: "Novo contato" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cadastrar chave" })).toBeNull();
+    expect(screen.queryByLabelText("Dias do lembrete 1")).toBeNull();
   });
 
   it("restores the draft a side trip came back with", async () => {
@@ -306,6 +400,8 @@ describe("BillingFormScreen", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("A resposta não chegou.");
     expect(screen.getByLabelText("Descrição")).toBeDisabled();
+    // Leaving must stay possible: the billing may already exist on the server.
+    expect(screen.getByRole("button", { name: "Voltar" })).toBeEnabled();
 
     await fireEvent.press(screen.getByRole("button", { name: "Tentar criar novamente" }));
     await waitFor(() => expect(client.createBilling).toHaveBeenCalledTimes(2));
@@ -345,6 +441,27 @@ describe("BillingFormScreen", () => {
       category: "transport",
     });
     expect(client.createBilling).not.toHaveBeenCalled();
+  });
+
+  it("edits the reminders of a finite billing", async () => {
+    const patchBilling = jest.fn().mockResolvedValue(onceBilling);
+
+    await render(
+      <BillingFormScreen client={financialApi({ patchBilling }) as never} people={peopleApi()} billing={onceBilling} onSaved={jest.fn()} onBack={jest.fn()} />,
+    );
+    await screen.findByText("Editar cobrança");
+
+    await fireEvent.changeText(screen.getByLabelText("Dias do lembrete 1"), "-3");
+    await fireEvent.press(screen.getByRole("button", { name: "Adicionar lembrete" }));
+    await fireEvent.changeText(screen.getByLabelText("Dias do lembrete 2"), "0");
+    await fireEvent(screen.getByLabelText("Lembrete 2"), "valueChange", false);
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
+    expect(patchBilling.mock.calls[0][1].reminders).toEqual([
+      { offsetDays: -3, enabled: true },
+      { offsetDays: 0, enabled: false },
+    ]);
   });
 
   it("keeps the schedule read-only on every edit", async () => {

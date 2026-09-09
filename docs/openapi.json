@@ -6322,67 +6322,85 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "creditorFirstName": {
-                      "type": "string"
-                    },
-                    "description": {
-                      "type": "string"
-                    },
-                    "amount": {
+                  "anyOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "amountCents": {
-                          "type": "number"
-                        },
-                        "currency": {
-                          "type": "string",
-                          "const": "BRL"
+                        "expired": {
+                          "type": "boolean",
+                          "const": true
                         }
                       },
                       "required": [
-                        "amountCents",
-                        "currency"
+                        "expired"
                       ],
                       "additionalProperties": false
                     },
-                    "type": {
-                      "enum": [
-                        "once",
-                        "until",
-                        "indefinite"
-                      ]
-                    },
-                    "participantCount": {
-                      "type": "number"
-                    },
-                    "category": {
-                      "enum": [
-                        "food",
-                        "transport",
-                        "groceries",
-                        "subscription",
-                        "loan",
-                        "housing",
-                        "travel",
-                        "other"
-                      ]
-                    },
-                    "expired": {
-                      "type": "boolean"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "expired": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "creditorFirstName": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "amount": {
+                          "type": "object",
+                          "properties": {
+                            "amountCents": {
+                              "type": "number"
+                            },
+                            "currency": {
+                              "type": "string",
+                              "const": "BRL"
+                            }
+                          },
+                          "required": [
+                            "amountCents",
+                            "currency"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "type": {
+                          "enum": [
+                            "once",
+                            "until",
+                            "indefinite"
+                          ]
+                        },
+                        "participantCount": {
+                          "type": "number"
+                        },
+                        "category": {
+                          "enum": [
+                            "food",
+                            "transport",
+                            "groceries",
+                            "subscription",
+                            "loan",
+                            "housing",
+                            "travel",
+                            "other"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "expired",
+                        "creditorFirstName",
+                        "description",
+                        "amount",
+                        "type",
+                        "participantCount",
+                        "category"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "creditorFirstName",
-                    "description",
-                    "amount",
-                    "type",
-                    "participantCount",
-                    "category",
-                    "expired"
-                  ],
-                  "additionalProperties": false
+                  ]
                 }
               }
             }

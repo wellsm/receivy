@@ -86,9 +86,12 @@ it("shows the expired copy when the invite is gone", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Convite expirado. Peça um novo link.");
 });
 
-it("hides the action for an expired invite", () => {
-  render(<JoinInvite token="tok-1" view={{ ...view, expired: true }} authenticated />);
+it("exposes nothing but the expired notice for an unusable invite", () => {
+  render(<JoinInvite token="tok-1" view={{ expired: true }} authenticated />);
 
   expect(screen.getByText("Convite expirado. Peça um novo link.")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Participar" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Churrasco")).not.toBeInTheDocument();
+  expect(screen.queryByText("R$ 120,00")).not.toBeInTheDocument();
+  expect(screen.queryByText("Lucas")).not.toBeInTheDocument();
 });

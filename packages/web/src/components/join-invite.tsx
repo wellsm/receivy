@@ -51,6 +51,18 @@ export function JoinInvite({ token, view, authenticated }: JoinInviteProps) {
     }
   }
 
+  if (view.expired) {
+    return (
+      <main className="public-charge public-invite">
+        <div className="public-brand">Receivy</div>
+        <section>
+          <h1>Convite indisponível</h1>
+          <p className="invite-expired">{EXPIRED}</p>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="public-charge public-invite">
       <div className="public-brand">Receivy</div>
@@ -74,13 +86,12 @@ export function JoinInvite({ token, view, authenticated }: JoinInviteProps) {
             <dd>{TYPE_LABELS[view.type]}</dd>
           </div>
         </dl>
-        {view.expired && <p className="invite-expired">{EXPIRED}</p>}
-        {!view.expired && !authenticated && (
+        {!authenticated && (
           <Link className="primary-button" href={`/login?next=${encodeURIComponent(`/join/${token}`)}`}>
             Entrar para participar
           </Link>
         )}
-        {!view.expired && authenticated && (
+        {authenticated && (
           <button type="button" className="primary-button" disabled={busy} onClick={() => void join()}>
             Participar
           </button>

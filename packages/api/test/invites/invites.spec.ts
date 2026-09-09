@@ -104,14 +104,15 @@ describe('billing invites on native PostgreSQL', () => {
     const second = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
 
     ok(second.url !== first.url);
-    equal((await getPublicInvite(db, tokenOf(first.url), SECRET, now)).expired, true);
+    // A revoked link answers with the flag alone: no description, amount or participant count leaks.
+    deepEqual(await getPublicInvite(db, tokenOf(first.url), SECRET, now), { expired: true });
     equal((await getPublicInvite(db, tokenOf(second.url), SECRET, now)).expired, false);
     deepEqual(await activeInvite(db, billing.id, SECRET, ORIGIN, now), second);
 
     await revokeInvite(db, OWNER, billing.id, now);
 
     equal(await activeInvite(db, billing.id, SECRET, ORIGIN, now), null);
-    equal((await getPublicInvite(db, tokenOf(second.url), SECRET, now)).expired, true);
+    deepEqual(await getPublicInvite(db, tokenOf(second.url), SECRET, now), { expired: true });
     await rejects(() => createInvite(db, OTHER_OWNER, billing.id, SECRET, ORIGIN, now), HttpNotFoundError);
   });
 
@@ -357,7 +358,7 @@ describe('billing invites on native PostgreSQL', () => {
 
     const stale = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, new Date(now.getTime() - 31 * DAY));
 
-    equal((await getPublicInvite(db, tokenOf(stale.url), SECRET, now)).expired, true);
+    deepEqual(await getPublicInvite(db, tokenOf(stale.url), SECRET, now), { expired: true });
     await rejects(() => acceptInvite(db, GUEST, tokenOf(stale.url), SECRET, now), HttpNotFoundError);
   });
 

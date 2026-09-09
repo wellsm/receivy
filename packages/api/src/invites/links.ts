@@ -212,15 +212,21 @@ export async function getPublicInvite(db: DbClient, token: string, secret: strin
     throw new HttpNotFoundError();
   }
 
+  const expired = !!invite.revoked_at || new Date(invite.expires_at) <= now || billing.state !== 'active';
+
+  if (expired) {
+    return { expired: true };
+  }
+
   const owner = await db.users.findOne({ select: { name: true }, where: { id: invite.owner_id } });
 
   return {
+    expired: false,
     creditorFirstName: owner?.name?.trim().split(/\s+/)[0] || 'Pessoa',
     description: billing.description,
     amount: { amountCents: billing.total_cents, currency: billing.currency },
     type: billing.type,
     participantCount: await db.allocations.count({ where: { billing_id: billing.id, kind: 'person' } }),
-    category: billing.category,
-    expired: !!invite.revoked_at || new Date(invite.expires_at) <= now || billing.state !== 'active'
+    category: billing.category
   };
 }

@@ -108,15 +108,18 @@ export type BillingsPage = { billings: BillingSummary[]; nextCursor: string | nu
 
 export type BillingInvite = { url: string; expiresAt: string };
 
-export type PublicInviteView = {
-  creditorFirstName: string;
-  description: string;
-  amount: Money;
-  type: BillingType;
-  participantCount: number;
-  category: BillingCategory;
-  expired: boolean;
-};
+/** An unusable invite answers with the flag alone; the billing headline stays private. */
+export type PublicInviteView =
+  | { expired: true }
+  | {
+      expired: false;
+      creditorFirstName: string;
+      description: string;
+      amount: Money;
+      type: BillingType;
+      participantCount: number;
+      category: BillingCategory;
+    };
 
 export type InviteAcceptResult = {
   billingId: string;

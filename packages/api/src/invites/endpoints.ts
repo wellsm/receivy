@@ -1,7 +1,7 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import type { BillingInvite, InviteAcceptResult, PublicInviteView } from '@receivy/common';
+import type { BillingCategory, BillingInvite, BillingType, InviteAcceptResult } from '@receivy/common';
 import type { SessionIdentity } from '../authorizers/session';
 import type { ApiProvider } from '../provider';
 import { throttlePublicRead } from '../security/throttle';
@@ -30,9 +30,23 @@ declare class EmptyResponse implements Http.Response {
   status: 204;
 }
 
+/**
+ * The union is written out so reflection publishes both shapes: an unusable invite answers
+ * `{ expired: true }` and nothing else, while a live one carries the billing headline.
+ */
 declare class PublicInviteResponse implements Http.Response {
   status: 200;
-  body: PublicInviteView;
+  body:
+    | { expired: true }
+    | {
+        expired: false;
+        creditorFirstName: string;
+        description: string;
+        amount: { amountCents: number; currency: 'BRL' };
+        type: BillingType;
+        participantCount: number;
+        category: BillingCategory;
+      };
 }
 
 declare class AcceptResponse implements Http.Response {

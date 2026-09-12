@@ -45,6 +45,7 @@ catalogs:
 
 overrides:
   '@ez4/aws-common': file:./vendor/ez4-aws-common-0.52.0.tgz
+  '@ez4/project': file:./vendor/ez4-project-0.52.0.tgz
   '@ez4/raw-pg': file:./vendor/ez4-raw-pg-0.52.0.tgz
 
 importers:
@@ -79,8 +80,8 @@ importers:
         specifier: 0.52.0
         version: 0.52.0
       '@ez4/project':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: file:../../vendor/ez4-project-0.52.0.tgz
+        version: file:vendor/ez4-project-0.52.0.tgz
       '@ez4/queue':
         specifier: 0.52.0
         version: 0.52.0
@@ -1564,7 +1565,7 @@ packages:
     engines: {node: '>=22.7'}
 
   '@ez4/aws-common@file:vendor/ez4-aws-common-0.52.0.tgz':
-    resolution: {integrity: sha512-fyEDdLKkorkv/R7f4leLZQUdVtW4LlukvqT98b2YR6usPjh00HFFZ4KN4H6gQi2YHHKd2CYE2YfXTqdalYF+Pg==, tarball: file:vendor/ez4-aws-common-0.52.0.tgz}
+    resolution: {integrity: sha512-oFvlOv2LyZsKVavuFaL115PslipGb0XfsKl273WViGOz/68grNWf1C9fx4Cx4pTWU6QAf9UWtTL1mZKxgRkbMQ==, tarball: file:vendor/ez4-aws-common-0.52.0.tgz}
     version: 0.52.0
     engines: {node: '>=22.7'}
 
@@ -1660,8 +1661,9 @@ packages:
     resolution: {integrity: sha512-oBhNJs68fb38LQsE5Gg5zY2vDk6zeMnnEM2nNAQ6UHOT2E1DyvTBwtZ23gMGYkNdUQW/4/i3mC4VsSw5hDmeDg==}
     engines: {node: '>=22.7'}
 
-  '@ez4/project@0.52.0':
-    resolution: {integrity: sha512-k0V8U8Hi9oZf+lg/KQLb3apXhNvd39uGOuwGWZtuvXD3fK2VMVAWOMldogOKDtefzqoDFmyAJqYwxw2IV/vGAQ==}
+  '@ez4/project@file:vendor/ez4-project-0.52.0.tgz':
+    resolution: {integrity: sha512-HGiMZ46u7GFyqMsZQ4bEcnqOddCs1xJh/GRjeOLMoN4F9SH8JGZw8BjCrKoqnwpUeJOTQL0JRlNq/4WcnoMpRg==, tarball: file:vendor/ez4-project-0.52.0.tgz}
+    version: 0.52.0
     engines: {node: '>=22.7'}
     hasBin: true
 
@@ -8789,7 +8791,7 @@ snapshots:
       '@ez4/aws-identity': 0.52.0
       '@ez4/aws-logs': 0.52.0
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/state': 0.52.0
       '@ez4/storage': 0.52.0
       '@ez4/utils': 0.52.0
@@ -8802,7 +8804,7 @@ snapshots:
       '@aws-sdk/client-sts': 3.1126.0
       '@aws-sdk/lib-dynamodb': 3.1126.0(@aws-sdk/client-dynamodb@3.1126.0)
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/reflection': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
@@ -8816,7 +8818,7 @@ snapshots:
       '@ez4/aws-logs': 0.52.0
       '@ez4/aws-vpc': 0.52.0
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
       '@types/adm-zip': 0.5.8
@@ -8833,7 +8835,7 @@ snapshots:
       '@ez4/common': 0.52.0
       '@ez4/gateway': 0.52.0
       '@ez4/http': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/schema': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/transform': 0.52.0
@@ -8845,7 +8847,7 @@ snapshots:
       '@aws-sdk/client-iam': 3.1126.0
       '@aws-sdk/client-sts': 3.1126.0
       '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -8854,7 +8856,7 @@ snapshots:
       '@aws-sdk/client-cloudwatch-logs': 3.1126.0
       '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
       '@ez4/aws-identity': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -8866,7 +8868,7 @@ snapshots:
       '@ez4/aws-identity': 0.52.0
       '@ez4/aws-logs': 0.52.0
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/queue': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/state': 0.52.0
@@ -8882,7 +8884,7 @@ snapshots:
       '@ez4/aws-identity': 0.52.0
       '@ez4/aws-logs': 0.52.0
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/scheduler': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/state': 0.52.0
@@ -8892,11 +8894,11 @@ snapshots:
     dependencies:
       '@aws-sdk/client-ec2': 3.1126.0
       '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
 
   '@ez4/common@0.52.0':
     dependencies:
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/reflection': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
@@ -8904,7 +8906,7 @@ snapshots:
   '@ez4/database@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/reflection': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
@@ -8913,14 +8915,14 @@ snapshots:
     dependencies:
       '@ez4/gateway': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
 
   '@ez4/factory@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/reflection': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -8928,7 +8930,7 @@ snapshots:
     dependencies:
       '@ez4/common': 0.52.0
       '@ez4/http': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/reflection': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/transform': 0.52.0
@@ -8945,7 +8947,7 @@ snapshots:
     dependencies:
       '@ez4/common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/utils': 0.52.0
 
   '@ez4/local-database@0.52.0':
@@ -8953,7 +8955,7 @@ snapshots:
       '@ez4/database': 0.52.0
       '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/utils': 0.52.0
 
   '@ez4/local-gateway@0.52.0':
@@ -8963,7 +8965,7 @@ snapshots:
       '@ez4/http': 0.52.0
       '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
       '@ez4/validator': 0.52.0
@@ -8973,7 +8975,7 @@ snapshots:
       '@ez4/common': 0.52.0
       '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/queue': 0.52.0
       '@ez4/utils': 0.52.0
       '@ez4/validator': 0.52.0
@@ -8983,7 +8985,7 @@ snapshots:
       '@ez4/common': 0.52.0
       '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/scheduler': 0.52.0
       '@ez4/utils': 0.52.0
       cron-parser: 5.10.0
@@ -8993,7 +8995,7 @@ snapshots:
       '@ez4/common': 0.52.0
       '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/storage': 0.52.0
       '@ez4/utils': 0.52.0
       file-type: 21.3.4
@@ -9009,7 +9011,7 @@ snapshots:
       '@ez4/common': 0.52.0
       '@ez4/database': 0.52.0
       '@ez4/pgsql': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/schema': 0.52.0
       '@ez4/transform': 0.52.0
       '@ez4/utils': 0.52.0
@@ -9035,7 +9037,7 @@ snapshots:
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
 
-  '@ez4/project@0.52.0':
+  '@ez4/project@file:vendor/ez4-project-0.52.0.tgz':
     dependencies:
       '@ez4/logger': 0.52.0
       '@ez4/reflection': 0.52.0
@@ -9045,7 +9047,7 @@ snapshots:
   '@ez4/queue@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/reflection': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/transform': 0.52.0
@@ -9059,7 +9061,7 @@ snapshots:
       '@ez4/database': 0.52.0
       '@ez4/pgclient': 0.52.0
       '@ez4/pgmigration': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
     transitivePeerDependencies:
@@ -9072,7 +9074,7 @@ snapshots:
   '@ez4/scheduler@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/reflection': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/transform': 0.52.0
@@ -9082,7 +9084,7 @@ snapshots:
   '@ez4/schema@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/reflection': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -9093,7 +9095,7 @@ snapshots:
   '@ez4/storage@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/reflection': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -9106,7 +9108,7 @@ snapshots:
 
   '@ez4/validator@0.52.0':
     dependencies:
-      '@ez4/project': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
 

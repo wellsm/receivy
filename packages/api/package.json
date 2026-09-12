@@ -25,7 +25,8 @@
     "check-types:test": "tsc -p tsconfig.test.json --noEmit",
     "output:dev": "APP_STAGE=dev ez4 output -e dev.env",
     "deploy:dev": "tsc -p tsconfig.json --noEmit && APP_STAGE=dev ez4 deploy -e dev.env",
-    "deploy:prd": "tsc -p tsconfig.json --noEmit && APP_STAGE=prd ez4 deploy -e prd.env"
+    "deploy:prd": "tsc -p tsconfig.json --noEmit && APP_STAGE=prd ez4 deploy -e prd.env",
+    "destroy:dev": "tsc -p tsconfig.json --noEmit && APP_STAGE=dev ez4 destroy -e dev.env"
   },
   "dependencies": {
     "@ez4/common": "0.52.0",

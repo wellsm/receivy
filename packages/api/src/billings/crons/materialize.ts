@@ -20,7 +20,7 @@ export declare class BillingCron extends Cron.Service {
   maxRetries: 1;
 
   target: Cron.UseTarget<{
-    handler: typeof billingCronHandler;
+    handler: typeof handler;
     timeout: 300;
   }>;
 
@@ -43,7 +43,7 @@ export declare class BillingCron extends Cron.Service {
   };
 }
 
-export async function billingCronHandler(_request: Cron.Incoming<null>, context: Service.Context<BillingCron>): Promise<void> {
+export async function handler(_request: Cron.Incoming<null>, context: Service.Context<BillingCron>): Promise<void> {
   const now = new Date();
   const notice = {
     config: notificationConfigFrom(context.variables),

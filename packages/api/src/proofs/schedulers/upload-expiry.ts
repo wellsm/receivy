@@ -22,7 +22,7 @@ export declare class UploadExpiryScheduler extends Cron.Service<UploadExpirySche
   maxRetries: 3;
 
   target: Cron.UseTarget<{
-    handler: typeof uploadExpiryHandler;
+    handler: typeof handler;
     timeout: 60;
   }>;
 
@@ -34,7 +34,7 @@ export declare class UploadExpiryScheduler extends Cron.Service<UploadExpirySche
 
 export const uploadExpiryIdentifier = (chargeId: string) => `charge:${chargeId}:upload-expiry`;
 
-export async function uploadExpiryHandler(
+export async function handler(
   request: Cron.Incoming<UploadExpirySchedule>,
   context: Service.Context<UploadExpiryScheduler>
 ): Promise<void> {

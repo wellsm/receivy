@@ -17,7 +17,7 @@ export declare class ChargeNotificationCron extends Cron.Service {
   maxRetries: 1;
 
   target: Cron.UseTarget<{
-    handler: typeof chargeNotificationCronHandler;
+    handler: typeof handler;
     timeout: 300;
   }>;
 
@@ -27,10 +27,7 @@ export declare class ChargeNotificationCron extends Cron.Service {
   };
 }
 
-export async function chargeNotificationCronHandler(
-  _request: Cron.Incoming<null>,
-  context: Service.Context<ChargeNotificationCron>
-): Promise<void> {
+export async function handler(_request: Cron.Incoming<null>, context: Service.Context<ChargeNotificationCron>): Promise<void> {
   const planned = await planReminders(context.db, context.chargeNotifyScheduler, Date.now());
 
   // Counts only; never owner or recipient data.

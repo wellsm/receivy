@@ -18,10 +18,10 @@ catalog:
 
 overrides:
   "@ez4/aws-common": "file:./vendor/ez4-aws-common-0.52.0.tgz"
+  "@ez4/project": "file:./vendor/ez4-project-0.52.0.tgz"
   "@ez4/raw-pg": "file:./vendor/ez4-raw-pg-0.52.0.tgz"
 
 allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
-

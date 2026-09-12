@@ -28,7 +28,7 @@ export declare class ChargeNotifyScheduler extends Cron.Service<ChargeNotifySche
   maxRetries: 3;
 
   target: Cron.UseTarget<{
-    handler: typeof chargeNotifyHandler;
+    handler: typeof handler;
     timeout: 60;
   }>;
 
@@ -51,7 +51,7 @@ export declare class ChargeNotifyScheduler extends Cron.Service<ChargeNotifySche
   };
 }
 
-export async function chargeNotifyHandler(
+export async function handler(
   request: Cron.Incoming<ChargeNotifySchedule>,
   context: Service.Context<ChargeNotifyScheduler>
 ): Promise<void> {

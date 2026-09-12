@@ -80,6 +80,30 @@ describe('email factory service', () => {
     }
   });
 
+  it('writes both alternatives as multipart when the message carries HTML', async () => {
+    const directory = createTempDirectory();
+    const client = createEmailClient({ APP_STAGE: 'local', EMAIL_FILE_DIRECTORY: directory });
+
+    const result = await client.send('file', { ...message, html: '<!doctype html><html><body><p>Olá</p></body></html>' });
+
+    expect(result.status).toBe('accepted');
+
+    const [file] = readdirSync(directory);
+    const content = readFileSync(join(directory, file!), 'utf8');
+    const boundary = content.match(/boundary="(receivy-[a-f0-9]{16})"/)?.[1];
+
+    expect(boundary).toBeTruthy();
+    expect(content).toContain('MIME-Version: 1.0');
+    expect(content).toContain(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+    expect(content).toContain('Content-Type: text/plain; charset=utf-8');
+    expect(content).toContain('Content-Type: text/html; charset=utf-8');
+    expect(content).toContain('Seu código de acesso é 123456.');
+    expect(content).toContain('<p>Olá</p>');
+    // The text part comes first so a client that renders HTML still picks the last alternative.
+    expect(content.indexOf('text/plain')).toBeLessThan(content.indexOf('text/html'));
+    expect(content.endsWith(`--${boundary}--\n`)).toBe(true);
+  });
+
   it('maps Resend outcomes without exposing provider bodies', async () => {
     const outcomes: [Response, string][] = [
       [Response.json({ id: 'abc' }), 'accepted'],
@@ -120,5 +144,80 @@ describe('email factory service', () => {
     expect(log).not.toHaveBeenCalled();
 
     log.mockRestore();
+  });
+
+  it('posts to the Mailpit API, splitting the sender into name and address', async () => {
+    const request = vi.fn().mockResolvedValue(Response.json({ ID: 'mailpit-1' }));
+    const client = createEmailClient({ APP_STAGE: 'local', MAILPIT_API_URL: 'http://127.0.0.1:8025/' }, request);
+
+    const result = await client.send('mailpit', { ...message, key: 'delivery-1' });
+
+    expect(result).toEqual({ status: 'accepted', id: 'mailpit-1' });
+
+    const [url, init] = request.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('http://127.0.0.1:8025/api/v1/send');
+    expect(JSON.parse(String(init.body))).toEqual({
+      from: { name: 'Receivy', email: 'login@receivy.local' },
+      to: [{ email: 'ana@example.com' }],
+      subject: message.subject,
+      text: message.text,
+      headers: { 'X-Receivy-Key': 'delivery-1' }
+    });
+  });
+
+  it('forwards the HTML alternative to Mailpit and to Resend when there is one', async () => {
+    const html = '<!doctype html><html><body><p>Olá</p></body></html>';
+
+    const mailpit = vi.fn().mockResolvedValue(Response.json({ ID: 'mailpit-3' }));
+    await createEmailClient({ APP_STAGE: 'local' }, mailpit).send('mailpit', { ...message, html });
+
+    const [, mailpitInit] = mailpit.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(mailpitInit.body))).toMatchObject({ text: message.text, html });
+
+    const resend = vi.fn().mockResolvedValue(Response.json({ id: 'resend-3' }));
+    await createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, resend).send('resend', { ...message, html });
+
+    const [, resendInit] = resend.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(resendInit.body))).toMatchObject({ text: message.text, html });
+  });
+
+  it('omits the HTML field entirely on a text-only message', async () => {
+    const resend = vi.fn().mockResolvedValue(Response.json({ id: 'resend-4' }));
+
+    await createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, resend).send('resend', message);
+
+    const [, init] = resend.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty('html');
+  });
+
+  it('keeps the Mailpit vendor out of every deployed stage', async () => {
+    const request = vi.fn().mockResolvedValue(Response.json({ ID: 'mailpit-2' }));
+
+    expect((await createEmailClient({ APP_STAGE: 'test' }, request).send('mailpit', message)).status).toBe('accepted');
+
+    for (const stage of ['dev', 'prd', undefined]) {
+      const remote = createEmailClient({ APP_STAGE: stage }, request);
+
+      expect(() => remote.send('mailpit', message)).toThrow(/local or test/);
+    }
+  });
+
+  it('maps Mailpit outcomes without exposing provider bodies', async () => {
+    const outcomes: [Response, string][] = [
+      [Response.json({}), 'uncertain'],
+      [new Response('boom', { status: 500 }), 'transient'],
+      [new Response('invalid To address: invalid@', { status: 400 }), 'permanent']
+    ];
+
+    for (const [response, status] of outcomes) {
+      const client = createEmailClient({ APP_STAGE: 'local' }, vi.fn().mockResolvedValue(response));
+
+      expect((await client.send('mailpit', message)).status).toBe(status);
+    }
+
+    const offline = createEmailClient({ APP_STAGE: 'local' }, vi.fn().mockRejectedValue(new Error('offline')));
+
+    expect(await offline.send('mailpit', message)).toEqual({ status: 'uncertain' });
   });
 });

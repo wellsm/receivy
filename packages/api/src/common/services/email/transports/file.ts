@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
-import type { EmailInputs, EmailProvider } from '../../client';
+import type { EmailInputs, EmailProvider } from '../client';
 
 /**
  * EZ4 keeps its local state under `.ez4/`, so local mail lands in `.ez4/emails/`.
@@ -70,11 +70,42 @@ const getSlug = (value: string) => {
 };
 
 const renderMessage = (message: EmailInputs.Message) => {
-  const headers = [`From: ${message.from}`, `To: ${message.to}`, `Subject: ${message.subject}`, `Date: ${new Date().toUTCString()}`];
+  const headers = [
+    'MIME-Version: 1.0',
+    `From: ${message.from}`,
+    `To: ${message.to}`,
+    `Subject: ${message.subject}`,
+    `Date: ${new Date().toUTCString()}`
+  ];
 
   if (message.key) {
     headers.push(`X-Receivy-Key: ${message.key}`);
   }
 
-  return [...headers, '', message.text, ''].join('\n');
+  if (!message.html) {
+    return [...headers, 'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', message.text, ''].join('\n');
+  }
+
+  // Text first, HTML second: a mail client shows the last alternative it can render.
+  const boundary = `receivy-${randomBytes(8).toString('hex')}`;
+
+  return [
+    ...headers,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    message.text,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    message.html,
+    '',
+    `--${boundary}--`,
+    ''
+  ].join('\n');
 };

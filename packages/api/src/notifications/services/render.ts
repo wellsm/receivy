@@ -1,4 +1,9 @@
-import { issuePublicChargeToken } from '../public/capability';
+import { chargeDateText } from '@receivy/common';
+import { buttonRow, chargeRow, emailDocument, noticeRow } from '../../common/services/email/layout';
+import { issuePublicChargeToken } from '../../public/services/capability';
+
+const CLOSING = 'Se já pagou, envie o comprovante para revisão. O Receivy não movimenta dinheiro.';
+
 export interface RenderInputs {
   email?: string;
   name: string;
@@ -10,8 +15,26 @@ export interface RenderInputs {
   expires: number;
   origin: string;
   from: string;
+  /** A conta a pagar reminding its own owner: no public link, no "you received a charge" framing. */
+  self?: boolean;
 }
+
+/**
+ * One notice, three shapes: the subject titles the push, the text is the mail alternative every
+ * client can read, and the HTML is what a mail client renders. A conta a pagar reminding its own
+ * owner never leaves as e-mail, so it renders no HTML.
+ */
 export function renderNotice(input: RenderInputs, template: 'initial' | 'reminder' | 'manual', secret: string) {
+  const amount = `${Math.floor(input.cents / 100)},${String(input.cents % 100).padStart(2, '0')}`;
+  const due = chargeDateText(input.dueDate);
+
+  if (input.self) {
+    const subject = 'Lembrete da sua conta no Receivy';
+    const text = `Sua conta «${input.description}» de R$ ${amount} vence em ${due}.\nAbra o Receivy para pagar e marcar como paga.`;
+
+    return { subject, text, url: '' };
+  }
+
   const token = issuePublicChargeToken({
     publicId: input.publicId,
     version: input.version,
@@ -19,9 +42,21 @@ export function renderNotice(input: RenderInputs, template: 'initial' | 'reminde
     secret,
     purpose: 'charge'
   });
+
   const url = `${input.origin}/pay/${token}`;
-  const subject = template === 'initial' ? 'Uma nova cobrança no Receivy' : 'Lembrete de cobrança no Receivy';
-  const amount = `${Math.floor(input.cents / 100)},${String(input.cents % 100).padStart(2, '0')}`;
-  const text = `${input.name}, ${template === 'initial' ? 'você recebeu uma cobrança' : 'há uma cobrança pendente'} de R$ ${amount}, com vencimento em ${input.dueDate}.\n${input.description}\nConfira os detalhes: ${url}\nSe já pagou, envie o comprovante para revisão. O Receivy não movimenta dinheiro.`;
-  return { subject, text, url };
+  const initial = template === 'initial';
+  const subject = initial ? 'Uma nova cobrança no Receivy' : 'Lembrete de cobrança no Receivy';
+  const opening = `${input.name}, ${initial ? 'você recebeu uma cobrança' : 'há uma cobrança pendente'} de R$ ${amount}, com vencimento em ${due}.`;
+  const text = `${opening}\n${input.description}\nConfira os detalhes: ${url}\n${CLOSING}`;
+
+  const html = emailDocument({
+    eyebrow: initial ? 'Nova cobrança' : 'Lembrete de pagamento',
+    heading: opening,
+    lead: initial ? 'Abra o link para ver os detalhes e pagar.' : 'Nada mudou desde o último aviso. O link de pagamento continua o mesmo.',
+    body: [chargeRow(input.description, `R$ ${amount}`, due), buttonRow(url, 'Confira os detalhes'), noticeRow(CLOSING)].join(''),
+    footnote: 'O pagamento acontece direto entre vocês, pela chave Pix de quem cobra.',
+    preheader: opening
+  });
+
+  return { subject, text, html, url };
 }

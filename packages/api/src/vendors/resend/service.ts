@@ -1,6 +1,6 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
-import type { EmailInputs, EmailOutputs, EmailProvider } from '../../client';
+import type { EmailInputs, EmailOutputs, EmailProvider } from '../../common/services/email/client';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
@@ -38,7 +38,8 @@ export function createService(context: Service.Context<ResendEmailService>, requ
             from: message.from,
             to: [message.to],
             subject: message.subject,
-            text: message.text
+            text: message.text,
+            ...(message.html ? { html: message.html } : {})
           }),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         });

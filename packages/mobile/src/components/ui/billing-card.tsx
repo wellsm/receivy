@@ -4,6 +4,7 @@ import {
   type BadgeTone,
   type BillingSummary,
   billingBadges,
+  billingCategoryColor,
   billingDueLabel,
   billingShareAction,
   formatMoney,
@@ -67,8 +68,8 @@ export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProp
       className="gap-3 rounded-2xl border border-outline/40 bg-surface p-4"
     >
       <View className="flex-row items-center gap-3">
-        <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft/50">
-          <CategoryIcon category={billing.category} tint={ACTIVE_TINT} />
+        <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: `${billingCategoryColor(billing.category)}1F` }}>
+          <CategoryIcon category={billing.category} />
         </View>
 
         <View className="flex-1 gap-1">

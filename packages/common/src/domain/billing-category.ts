@@ -24,3 +24,22 @@ export function billingCategoryLabel(category: BillingCategory): string {
 export function isBillingCategory(value: unknown): value is BillingCategory {
   return BILLING_CATEGORIES.some((entry) => entry.value === value);
 }
+
+/**
+ * One tint per category so lists and pickers do not read as a single green block.
+ * Hex (not Tailwind classes) because React Native tints icons with a raw colour.
+ */
+export const BILLING_CATEGORY_COLORS: Record<BillingCategory, string> = {
+  food: '#E8833A',
+  transport: '#3D7EC9',
+  groceries: '#2FA36B',
+  subscription: '#8257E6',
+  loan: '#0FA3A3',
+  housing: '#C2544D',
+  travel: '#D6538C',
+  other: '#64748B'
+};
+
+export function billingCategoryColor(category: BillingCategory): string {
+  return BILLING_CATEGORY_COLORS[category] ?? BILLING_CATEGORY_COLORS.other;
+}

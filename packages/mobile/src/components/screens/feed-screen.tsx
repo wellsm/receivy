@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import {
   type BadgeTone,
+  DEFAULT_FEED_FILTERS,
+  activeFeedFilterCount,
   calendarDate,
   chargeAction,
   chargeBadges,
@@ -9,30 +12,24 @@ import {
   type ChargeSummary,
   type Direction,
   feedDayLabel,
+  feedFilterQuery,
   formatMoney,
+  type FeedFilters,
   type TimelineItem,
   type TimelinePage,
 } from "@receivy/common";
+import { FeedFiltersSheet } from "@/components/app/feed-filters-sheet";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { notificationClient } from "@/notifications/client";
+import { ACTIVE_TINT } from "@/theme/colors";
 
 type FeedScreenProps = {
   client?: Pick<FinancialClient, "timeline">;
   notifications?: Pick<typeof notificationClient, "remind">;
   onOpenCharge?: (id: string) => void;
 };
-
-const FILTERS = [
-  ["Todos", ""],
-  ["A receber", "direction=receivable"],
-  ["A pagar", "direction=payable"],
-  ["Hoje", "today"],
-  ["Esta semana", "week"],
-  ["Sem fim", "type=indefinite"],
-  ["Pendentes", "status=pending"],
-] as const;
 
 
 const BADGE_CLASS: Record<BadgeTone, string> = {
@@ -43,22 +40,6 @@ const BADGE_CLASS: Record<BadgeTone, string> = {
   neutral: "bg-surface-muted text-muted",
 };
 
-function dateQuery(value: string) {
-  const today = new Date();
-
-  if (value === "today") {
-    return `from=${calendarDate(today)}&to=${calendarDate(today)}`;
-  }
-
-  if (value === "week") {
-    const end = new Date(today);
-    end.setDate(end.getDate() + 7);
-
-    return `from=${calendarDate(today)}&to=${calendarDate(end)}`;
-  }
-
-  return value;
-}
 
 function itemDate(item: TimelineItem): string {
   if (item.kind === "charge") {
@@ -70,7 +51,7 @@ function itemDate(item: TimelineItem): string {
   }
 
   if (item.kind === "proof") {
-    return item.proof.createdAt.slice(0, 10);
+    return item.proof.sentAt.slice(0, 10);
   }
 
   return item.payment.paidAt.slice(0, 10);
@@ -195,23 +176,31 @@ export function FeedScreen({
   const [data, setData] = useState<TimelinePage | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Read by `load` so the focus callback stays stable across filter changes and never double-fetches.
+  const filtersRef = useRef<FeedFilters>(DEFAULT_FEED_FILTERS);
   const [reminded, setReminded] = useState<Record<string, string>>({});
   const generation = useRef(0);
   const today = calendarDate();
 
   const load = useCallback(
-    async (nextFilter = filter, cursor?: string) => {
+    async (nextFilters = filtersRef.current, cursor?: string, quiet = false) => {
       const requestGeneration = cursor ? generation.current : ++generation.current;
 
-      setLoading(true);
       setError("");
 
-      if (!cursor) {
+      // A quiet load keeps the current items on screen while fresh ones arrive (focus and pull to refresh).
+      if (!quiet) {
+        setLoading(true);
+      }
+
+      if (!cursor && !quiet) {
         setData(null);
       }
 
-      const params = new URLSearchParams(dateQuery(nextFilter));
+      const params = feedFilterQuery(nextFilters);
 
       if (cursor) {
         params.set("cursor", cursor);
@@ -235,30 +224,32 @@ export function FeedScreen({
         }
       }
     },
-    [client, filter],
+    [client],
   );
 
-  useEffect(() => {
-    const requestGeneration = ++generation.current;
+  // The charge routes sit on top of the tabs: paid or cancelled items must be current when the feed comes back.
+  useFocusEffect(
+    useCallback(() => {
+      void load(undefined, undefined, true);
+    }, [load]),
+  );
 
-    void client
-      .timeline()
-      .then((page) => {
-        if (requestGeneration === generation.current) {
-          setData(page);
-        }
-      })
-      .catch((reason) => {
-        if (requestGeneration === generation.current) {
-          setError(reason instanceof Error ? reason.message : "Não foi possível carregar seu feed.");
-        }
-      })
-      .finally(() => {
-        if (requestGeneration === generation.current) {
-          setLoading(false);
-        }
-      });
-  }, [client]);
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    await load(undefined, undefined, true);
+    setRefreshing(false);
+  }, [load]);
+
+  function confirmRemind(charge: ChargeSummary) {
+    Alert.alert(
+      "Enviar lembrete?",
+      `Avisa ${charge.counterpartName} por notificação no app ou por e-mail, com o link de pagamento e a chave Pix. Só um lembrete a cada 24 horas.`,
+      [
+        { text: "Voltar", style: "cancel" },
+        { text: "Enviar lembrete", onPress: () => void remind(charge.id) },
+      ],
+    );
+  }
 
   async function remind(chargeId: string) {
     try {
@@ -270,51 +261,36 @@ export function FeedScreen({
   }
 
   const summary = data?.summary;
-  const totalCount = summary ? summary.receivableCount + summary.payableCount : 0;
-  const counts: Record<string, number | undefined> = {
-    "": summary ? totalCount : undefined,
-    "direction=receivable": summary?.receivableCount,
-    "direction=payable": summary?.payableCount,
-  };
+  const changedFilters = activeFeedFilterCount(filters);
 
   useTabHeader({ title: "Feed" });
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        testID="feed-list"
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={ACTIVE_TINT} />}
+      >
         <View className="gap-5 px-5 pt-2">
           <View className="flex-row gap-3">
             <TotalCard label="A RECEBER" amount={summary ? formatMoney(summary.receivable) : "—"} count={summary?.receivableCount ?? 0} tone="receivable" />
             <TotalCard label="A PAGAR" amount={summary ? formatMoney(summary.payable) : "—"} count={summary?.payableCount ?? 0} tone="payable" />
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="-mx-5" contentContainerClassName="gap-2 px-5">
-            {FILTERS.map(([label, value]) => {
-              const active = filter === value;
-              const count = counts[value];
-
-              return (
-                <Pressable
-                  key={label}
-                  accessibilityRole="button"
-                  accessibilityLabel={label}
-                  accessibilityState={{ selected: active }}
-                  onPress={() => {
-                    setFilter(value);
-                    void load(value);
-                  }}
-                  className={`min-h-10 flex-row items-center gap-1.5 rounded-full border px-4 ${active ? "border-primary bg-primary" : "border-outline bg-surface"}`}
-                >
-                  <Text className={`text-sm font-semibold ${active ? "text-white" : "text-ink"}`}>{label}</Text>
-                  {count !== undefined && (
-                    <Text className={`rounded-full px-1.5 text-[10px] font-bold ${active ? "bg-white/20 text-white" : "bg-surface-muted text-primary-strong"}`}>
-                      {count}
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Filtros"
+            onPress={() => setFiltersOpen(true)}
+            className={`min-h-11 flex-row items-center justify-center gap-2 rounded-full border px-4 ${changedFilters ? "border-primary bg-primary-soft/50" : "border-outline bg-surface"}`}
+          >
+            <Text className={`text-sm font-bold ${changedFilters ? "text-primary-strong" : "text-ink"}`}>Filtros</Text>
+            {changedFilters > 0 && (
+              <Text className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">{changedFilters}</Text>
+            )}
+          </Pressable>
 
           {loading && <ActivityIndicator accessibilityLabel="Carregando feed" className="my-6" color="#0B513D" />}
           {error ? (
@@ -331,7 +307,7 @@ export function FeedScreen({
           {!loading && !error && data?.items.length === 0 && (
             <View className="gap-2 rounded-2xl border border-outline/40 bg-surface p-5">
               <Text className="text-2xl font-extrabold text-primary-strong">Sua timeline começa aqui</Text>
-              <Text className="text-sm leading-6 text-muted">Crie uma cobrança na aba Cobranças ou entre com o e-mail em que recebeu uma.</Text>
+              <Text className="text-sm leading-6 text-muted">Crie uma conta na aba Contas ou entre com o e-mail em que recebeu uma.</Text>
             </View>
           )}
 
@@ -351,7 +327,7 @@ export function FeedScreen({
                       today={today}
                       reminded={reminded[item.charge.id] ?? null}
                       onOpen={() => onOpenCharge?.(item.charge.id)}
-                      onRemind={() => void remind(item.charge.id)}
+                      onRemind={() => confirmRemind(item.charge)}
                     />
                   );
                 }
@@ -366,7 +342,7 @@ export function FeedScreen({
                 }
 
                 return (
-                  <View key={`${item.kind}-${index}`} className="rounded-2xl bg-surface-muted px-4 py-3">
+                  <View key={`${item.kind}-${item.kind === "payment" ? item.payment.chargeId : item.proof.chargeId}`} className="rounded-2xl bg-surface-muted px-4 py-3">
                     <Text className="text-xs font-semibold text-muted">
                       {item.kind === "payment" ? `Pagamento registrado · ${formatMoney(item.payment.amount)}` : "Comprovante enviado"}
                     </Text>
@@ -381,7 +357,7 @@ export function FeedScreen({
               accessibilityRole="button"
               accessibilityLabel="Carregar mais"
               disabled={loading}
-              onPress={() => void load(filter, data.nextCursor ?? undefined)}
+              onPress={() => void load(filters, data.nextCursor ?? undefined)}
               className="min-h-12 items-center justify-center rounded-xl border border-outline"
             >
               <Text className="font-bold text-primary">Carregar mais</Text>
@@ -389,6 +365,19 @@ export function FeedScreen({
           )}
         </View>
       </ScrollView>
+
+      {filtersOpen && (
+        <FeedFiltersSheet
+          value={filters}
+          onClose={() => setFiltersOpen(false)}
+          onApply={(next) => {
+            setFiltersOpen(false);
+            setFilters(next);
+            filtersRef.current = next;
+            void load(next);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

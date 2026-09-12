@@ -4,20 +4,25 @@
     "slug": "receivy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/icons/ios-light.png",
     "scheme": "receivy",
-    "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": {
+        "light": "./assets/icons/ios-light.png",
+        "dark": "./assets/icons/ios-dark.png",
+        "tinted": "./assets/icons/ios-tinted.png"
+      },
+      "bundleIdentifier": "com.wellingtonsm.receivy",
+      "appleTeamId": "HU9JULKT2H"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#B0F0D6",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#2D5A45",
+        "foregroundImage": "./assets/icons/adaptative-icon.png",
+        "monochromeImage": "./assets/icons/adaptative-icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.wellingtonsm.receivy"
     },
     "web": {
       "output": "static",
@@ -28,13 +33,19 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B513D",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "image": "./assets/icons/splash-icon-light.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#faf8ff",
+          "dark": {
+            "image": "./assets/icons/splash-icon-dark.png",
+            "backgroundColor": "#0B513D"
+          }
         }
       ],
       "expo-secure-store",
-      "expo-notifications"
+      "expo-notifications",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

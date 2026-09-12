@@ -1,12 +1,11 @@
 import type { Http } from '@ez4/gateway';
-import type { sessionAuthorizer } from '../authorizers/session';
-import type {
-  createBillingHandler,
-  getBillingHandler,
-  listBillingsHandler,
-  patchBillingHandler,
-  previewBillingHandler
-} from '../billings/endpoints';
+import type { sessionAuthorizer } from '../common/authorizers/session';
+import type { createBillingHandler } from './endpoints/create';
+import type { getBillingHandler } from './endpoints/get';
+import type { listBillingsHandler } from './endpoints/list';
+import type { patchBillingHandler } from './endpoints/patch';
+import type { previewBillingHandler } from './endpoints/preview';
+import type { resolveGuestHandler } from './endpoints/resolve-guest';
 
 export type BillingRoutes = [
   Http.UseRoute<{
@@ -33,5 +32,11 @@ export type BillingRoutes = [
     path: 'PATCH /billings/{id}';
     authorizer: typeof sessionAuthorizer;
     handler: typeof patchBillingHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'resolveBillingGuest';
+    path: 'POST /billings/{id}/guests/{guestId}';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof resolveGuestHandler;
   }>
 ];

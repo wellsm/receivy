@@ -1,142 +1,232 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChargeState, ProofDetail, ProofUploadIntent } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { useEffect, useState } from "react";
+import { fileSizeText, type ChargeState, type ProofUploadTicket, type PublicProofState } from "@receivy/common";
 import { responseMessage } from "@/lib/financial-response";
-class ProofRequestError extends Error {
-  constructor(message: string, readonly status: number) { super(message); }
+import { CloudUpload, FileText, Receipt, Trash2 } from "lucide-react";
+
+const HINT = "m-0 text-sm leading-5 text-muted";
+const PRIMARY_BUTTON = "min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-white transition hover:bg-primary-strong disabled:opacity-50";
+const DANGER_BUTTON = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-200 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50";
+const FILE_INPUT_LABEL = "Comprovante JPG, PNG ou PDF";
+/** Only a flag: the API knows the slot by the payer, so a reload just asks it again. */
+const STARTED_KEY = "receivy-proof-upload";
+const POLL_INTERVAL_MS = 1000;
+const POLL_ATTEMPTS = 30;
+const UNCONFIRMED = "Não foi possível confirmar o envio. Atualize a página.";
+const NOT_STORED = "O envio anterior não foi concluído. Selecione o arquivo e envie novamente.";
+
+/** What the panel knows about the file on screen: the selection before sending, the sent one afterwards. */
+type ProofPreview = { name: string; size: number; mime: string; url: string | null };
+
+function objectUrl(file: File): string | null {
+  if (!file.type.startsWith("image/") || typeof URL.createObjectURL !== "function") {
+    return null;
+  }
+
+  return URL.createObjectURL(file);
 }
-type PublicProofStatus = Pick<ProofDetail, "state" | "reason" | "closureReason">;
-async function readPublicProofStatus(base: string, id: string): Promise<PublicProofStatus | null> {
+
+function revoke(preview: ProofPreview | null) {
+  if (preview?.url && typeof URL.revokeObjectURL === "function") {
+    URL.revokeObjectURL(preview.url);
+  }
+}
+
+/** Thumbnail for an image, a document mark otherwise; the name and size always read. */
+function PreviewCard({ preview, children }: { preview: ProofPreview; children?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-outline/30 bg-surface-muted/50 p-3">
+      {preview.url ? (
+        // A blob URL from the payer's own device: nothing for next/image to optimise or serve.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={preview.url} alt={`Prévia de ${preview.name}`} className="max-h-56 w-full rounded-lg object-contain" />
+      ) : (
+        <div className="flex h-24 items-center justify-center rounded-lg bg-surface">
+          <FileText size={32} aria-hidden="true" className="text-primary" />
+        </div>
+      )}
+
+      <p className="m-0 truncate text-sm font-semibold text-ink">
+        {preview.name} <span className="font-normal text-muted">· {fileSizeText(preview.size)}</span>
+      </p>
+
+      {children}
+    </div>
+  );
+}
+function uploadStarted(): boolean { try { return sessionStorage.getItem(STARTED_KEY) === "1"; } catch { return false; } }
+function rememberUpload() { try { sessionStorage.setItem(STARTED_KEY, "1"); } catch { /* A reload then reads the slot once instead of polling it. */ } }
+function forgetUpload() { try { sessionStorage.removeItem(STARTED_KEY); } catch { /* State still clears in memory. */ } }
+function sleep(ms: number) { return new Promise<void>(resolve => setTimeout(resolve, ms)); }
+/** `null` means the lookup itself failed; a `state: null` answer means there is no slot for this payer. */
+async function readStatus(base: string): Promise<PublicProofState | null> {
   try {
-    const response = await fetch(`${base}/uploads/${encodeURIComponent(id)}`, { cache: "no-store" });
+    const response = await fetch(`${base}/proof`, { cache: "no-store" });
     if (!response.ok) return null;
-    const status = await response.json() as PublicProofStatus;
-    return ["pending", "accepted", "rejected"].includes(status.state) ? status : null;
+    return await response.json() as PublicProofState;
   } catch { return null; }
 }
-function storedIntent(): string | null { try { return sessionStorage.getItem("receivy-proof-intent"); } catch { return null; } }
-
-export function ProofPanel({ base, state, creditor = false, publicView = false, uploadsEnabled = true, onChanged }: {
-  base: string; state: ChargeState; creditor?: boolean; publicView?: boolean; uploadsEnabled?: boolean; onChanged?: () => void;
-}) {
-  const [proofs, setProofs] = useState<ProofDetail[]>([]); const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [sent, setSent] = useState(false);
-  const [reason, setReason] = useState(""); const [intent, setIntent] = useState<ProofUploadIntent | null>(null);
-  const [selectionVersion, setSelectionVersion] = useState(0);
-  const [publicStatus, setPublicStatus] = useState<PublicProofStatus | null>(null);
-  const [recoveryId, setRecoveryId] = useState<string | null>(null);
-  const confirmedIntent = useRef<string | null>(null);
-  const activeUpload = useRef<string | null>(null);
-  const request = publicView ? fetch : browserFetch;
-  const showPublicStatus = useCallback((status: PublicProofStatus, id: string) => {
-    confirmedIntent.current = id;
-    setPublicStatus(status); setSent(status.state === "pending"); setError("");
-    if (activeUpload.current === id) {
-      activeUpload.current = null; setIntent(null); setFile(null);
-    }
-  }, []);
-  useEffect(() => {
-    if (!intent) return;
-    const timer = setTimeout(() => {
-      if (confirmedIntent.current === intent.id) return;
-      activeUpload.current = null;
-      setIntent(null); setFile(null); setSelectionVersion(version => version + 1);
-      setError("O envio expirou. Selecione o arquivo novamente ou escolha outro.");
-    }, Math.max(0, Date.parse(intent.expiresAt) - Date.now()));
-    return () => clearTimeout(timer);
-  }, [intent]);
-  useEffect(() => { if (!publicView) return; let stopped = false;
-    const check = async () => { const id = storedIntent(); if (!id) return;
-      const status = await readPublicProofStatus(base, id);
-      if (!stopped && storedIntent() === id) {
-        // Publish recovery state when the real external status lookup settles,
-        // including an unavailable lookup so manual verification stays possible.
-        setRecoveryId(id);
-        if (status) showPublicStatus(status, id);
-      }
-    }; void check(); const timer = setInterval(() => void check(), 15_000); return () => { stopped = true; clearInterval(timer); };
-  }, [base, publicView, showPublicStatus]);
-  useEffect(() => { if (!publicView) void browserFetch(base).then(async response => {
-    if (!response.ok) throw new Error("Não foi possível carregar os comprovantes.");
-    const data = await response.json() as { proofs?: ProofDetail[] }; setProofs(data.proofs ?? []);
-  }).catch(() => setError("Não foi possível carregar os comprovantes.")); }, [base, publicView, state]);
-  async function json(path: string, body?: object) {
-    const response = await request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body ?? {}) });
-    if (!response.ok) throw new ProofRequestError(await responseMessage(response, "Não foi possível processar o comprovante."), response.status);
-    return response.json();
+/** The API learns about the bytes from the bucket event; this waits for the slot to leave `uploading`. */
+async function settledStatus(base: string): Promise<PublicProofState | null> {
+  for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
+    if (attempt > 0) await sleep(POLL_INTERVAL_MS);
+    const status = await readStatus(base);
+    if (status && status.state !== "uploading") return status;
   }
+  return null;
+}
+
+export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
+  base: string; state: ChargeState; uploadsEnabled?: boolean; onChanged?: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const [selectionVersion, setSelectionVersion] = useState(0);
+  const [status, setStatus] = useState<PublicProofState | null>(null);
+  const [preview, setPreview] = useState<ProofPreview | null>(null);
+  const [uploaded, setUploaded] = useState<ProofPreview | null>(null);
+  useEffect(() => {
+    return () => {
+      revoke(preview);
+    };
+  }, [preview]);
+  useEffect(() => {
+    return () => {
+      revoke(uploaded);
+    };
+  }, [uploaded]);
+  function select(next: File | null) {
+    setFile(next);
+    setPreview(next ? { name: next.name, size: next.size, mime: next.type, url: objectUrl(next) } : null);
+  }
+  function showStatus(next: PublicProofState) {
+    setStatus(next); setError("");
+    // A reload lost the local bytes; the slot still names the file, so the card keeps reading.
+    if (next.file) setUploaded(previous => previous ?? { name: next.file!.name, size: next.file!.size, mime: next.file!.mime, url: null });
+  }
+  useEffect(() => { let stopped = false;
+    const check = async () => { const started = uploadStarted();
+      // A started upload keeps waiting for the bucket event; otherwise one read says where the payer's file stands.
+      const next = started ? await settledStatus(base) : await readStatus(base);
+      if (stopped) return;
+      if (!next) { if (started) setError(UNCONFIRMED); return; }
+      if (started) forgetUpload();
+      if (next.state === null) { if (started) setError(NOT_STORED); return; }
+      showStatus(next);
+    }; void check(); return () => { stopped = true; };
+  }, [base]);
   async function upload() {
     if (!file) return;
     setBusy(true); setError("");
-    let finalizing: ProofUploadIntent | null = null;
     try {
       if (!["image/jpeg", "image/png", "application/pdf"].includes(file.type) || file.size <= 0 || file.size > 10 * 1024 * 1024) throw new Error("Selecione JPG, PNG ou PDF de até 10 MB.");
-      const active = intent && Date.parse(intent.expiresAt) > Date.now() ? intent : await json(`${base}/uploads`, { filename: file.name, mime: file.type, size: file.size }) as ProofUploadIntent;
-      activeUpload.current = active.id;
-      setIntent(active);
-      if (publicView) {
-        // Persist only the opaque handle before the request can commit, never the capability or signed URL.
-        sessionStorage.setItem("receivy-proof-intent", active.id); setRecoveryId(active.id); setPublicStatus(null);
-      }
-      const response = await fetch(active.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" });
-      if (!response.ok) throw new Error("O arquivo não foi enviado. Tente novamente.");
-      finalizing = active;
-      const finalized = await json(`${base}/uploads/${active.id}/finalize`);
-      if (publicView) showPublicStatus({ state: "pending", reason: null, closureReason: null }, active.id);
-      activeUpload.current = null; setSent(true); setIntent(null); setFile(null); setError("");
-      if (!publicView) setProofs(previous => [...previous, finalized as ProofDetail]);
+      const response = await fetch(`${base}/proof`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: file.name, mime: file.type, size: file.size }) });
+      if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível iniciar o envio."));
+      const ticket = await response.json() as ProofUploadTicket;
+      const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" });
+      if (!put.ok) throw new Error("O arquivo não foi enviado. Tente novamente.");
+      // The bytes are up: from here only the confirmation can be lost, so a reload polls again instead of offering the dropzone.
+      rememberUpload();
+      const next = await settledStatus(base);
+      if (!next) throw new Error(UNCONFIRMED);
+      forgetUpload();
+      if (next.state === null) throw new Error(NOT_STORED);
+      // The selection becomes the sent file: its thumbnail stays on screen until the creditor answers.
+      setUploaded(preview); setPreview(null); setFile(null);
+      showStatus(next); onChanged?.();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Não foi possível enviar o comprovante.");
+    } finally { setBusy(false); }
+  }
+  /** The payer takes the pending file back; the dropzone returns so another one can go up. */
+  async function withdraw() {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`${base}/proof`, { method: "DELETE" });
+      if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível apagar o comprovante."));
+      forgetUpload();
+      setStatus(null); setUploaded(null); setSelectionVersion(version => version + 1);
       onChanged?.();
     } catch (failure) {
-      if (publicView && finalizing && confirmedIntent.current === finalizing.id) return;
-      if (failure instanceof ProofRequestError && failure.status === 422) {
-        activeUpload.current = null;
-        setIntent(null); setFile(null); setSelectionVersion(version => version + 1);
-        if (publicView && finalizing) {
-          if (storedIntent() === finalizing.id) { try { sessionStorage.removeItem("receivy-proof-intent"); } catch { /* State still clears in memory. */ } }
-          setRecoveryId(null);
-        }
-      } else if (publicView && finalizing) {
-        const status = await readPublicProofStatus(base, finalizing.id);
-        if (status) { showPublicStatus(status, finalizing.id); onChanged?.(); return; }
-        if (confirmedIntent.current === finalizing.id) return;
-        setError("Não foi possível confirmar o envio. Verifique a situação antes de tentar novamente.");
-        return;
-      }
-      setError(failure instanceof Error ? failure.message : "Não foi possível enviar o comprovante.");
-    }
-    finally { setBusy(false); }
+      setError(failure instanceof Error ? failure.message : "Não foi possível apagar o comprovante.");
+    } finally { setBusy(false); }
   }
-  async function verifyUpload() {
-    if (!recoveryId) return;
-    setBusy(true);
-    const status = await readPublicProofStatus(base, recoveryId);
-    if (status) showPublicStatus(status, recoveryId);
-    else setError("Não foi possível confirmar o envio. Verifique a situação antes de tentar novamente.");
-    setBusy(false);
-  }
-  async function review(proof: ProofDetail, decision: "accepted" | "rejected") {
-    setBusy(true); setError(""); try {
-      const updated = await json(`${base}/${proof.id}/review`, { decision, ...(reason.trim() ? { reason: reason.trim() } : {}) }) as ProofDetail;
-      setProofs(previous => previous.map(item => item.id === proof.id ? updated : item)); setReason(""); onChanged?.();
-    } catch (failure) { setError(failure instanceof Error ? failure.message : "Não foi possível revisar."); } finally { setBusy(false); }
-  }
-  async function download(id: string) {
-    setBusy(true); try { const result = await json(`${base}/${id}/download`) as { url: string }; window.location.assign(result.url); }
-    catch { setError("Não foi possível baixar o comprovante."); } finally { setBusy(false); }
-  }
-  const effectiveState = publicStatus?.state === "accepted" ? "paid" : publicStatus?.closureReason ?? state;
-  const pending = sent || proofs.some(proof => proof.state === "pending") || (!uploadsEnabled && publicStatus?.state !== "rejected");
-  return <section className="detail-section"><h2>Comprovantes</h2>
-    {publicView && recoveryId && !publicStatus && effectiveState === "pending" && <button type="button" disabled={busy} onClick={() => void verifyUpload()}>Verificar envio</button>}
-    {publicStatus?.state === "rejected" && !publicStatus.closureReason && <p>Comprovante rejeitado{publicStatus.reason ? `: ${publicStatus.reason}` : "."} Você pode enviar outro arquivo.</p>}
-    {effectiveState !== "pending" ? <p>Não pague nem envie outro comprovante: esta cobrança está {effectiveState === "paid" ? "paga" : "cancelada"}.</p>
-      : pending ? <p role="status">Comprovante enviado para revisão.</p>
-        : !creditor && <><p>Envie JPG, PNG ou PDF de até 10 MB. O credor confirmará o pagamento após revisar.</p><label>Comprovante JPG, PNG ou PDF<input key={selectionVersion} type="file" accept="image/jpeg,image/png,application/pdf" disabled={busy || !!intent} onChange={event => setFile(event.target.files?.[0] ?? null)} /></label><button type="button" disabled={busy || !file} onClick={() => void upload()}>Enviar comprovante</button></>}
-    {proofs.map(proof => <article key={proof.id}><p>{proof.originalName} · {proof.state === "pending" ? "Em revisão" : proof.state === "accepted" ? "Aceito" : "Encerrado"}</p>
-      {proof.closureReason ? <p>{proof.closureReason === "paid" ? "Encerrado porque a cobrança foi paga manualmente." : "Encerrado porque a cobrança foi cancelada."}</p> : proof.state === "rejected" && <p>Comprovante rejeitado{proof.reason ? `: ${proof.reason}` : "."} {state === "pending" && "Você pode enviar outro arquivo."}</p>}
-      <button disabled={busy} onClick={() => void download(proof.id)}>Baixar comprovante</button>
-      {creditor && state === "pending" && proof.state === "pending" && <><label>Motivo opcional<input maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></label><button disabled={busy} onClick={() => { if (window.confirm("Aceitar e registrar o pagamento integral?")) void review(proof, "accepted"); }}>Aceitar comprovante</button><button disabled={busy} onClick={() => void review(proof, "rejected")}>Rejeitar comprovante</button></>}
-    </article>)}{error && <p role="alert">{error}</p>}
-  </section>;
+  const effectiveState = status?.state === "accepted" ? "paid" : state;
+  const pending = status?.state === "pending" || (!uploadsEnabled && status?.state !== "rejected");
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4">
+      <div className="flex items-center gap-2">
+        <Receipt size={20} aria-hidden="true" className="text-primary-strong" />
+        <h2 className="m-0 text-base font-bold text-ink">Comprovantes</h2>
+      </div>
+
+      {status?.state === "rejected" && (
+        <p className={HINT}>Comprovante rejeitado{status.reason ? `: ${status.reason}` : "."} Você pode enviar outro arquivo.</p>
+      )}
+
+      {effectiveState !== "pending" ? (
+        <p className={HINT}>Não pague nem envie outro comprovante: esta cobrança está {effectiveState === "paid" ? "paga" : "cancelada"}.</p>
+      ) : pending ? (
+        <>
+          <p role="status" className="m-0 rounded-xl bg-primary-soft/40 p-3 text-sm font-semibold text-primary-strong">
+            Comprovante enviado para revisão.
+          </p>
+          {uploaded && (
+            <PreviewCard preview={uploaded}>
+              {status?.state === "pending" && (
+                <button type="button" disabled={busy} onClick={() => void withdraw()} className={DANGER_BUTTON}>
+                  <Trash2 size={16} aria-hidden="true" />
+                  Apagar e enviar outro
+                </button>
+              )}
+            </PreviewCard>
+          )}
+        </>
+      ) : (
+        <>
+          <p className={HINT}>Envie JPG, PNG ou PDF de até 10 MB. O credor confirmará o pagamento após revisar.</p>
+          {preview ? (
+            <PreviewCard preview={preview}>
+              <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-outline/50 bg-surface px-4 text-sm font-semibold text-ink transition hover:bg-surface-muted has-disabled:cursor-not-allowed has-disabled:opacity-50 has-focus-visible:ring-2 has-focus-visible:ring-primary">
+                <CloudUpload size={16} aria-hidden="true" className="text-primary" />
+                Trocar arquivo
+                <input
+                  key={selectionVersion}
+                  type="file"
+                  accept="image/jpeg,image/png,application/pdf"
+                  aria-label={FILE_INPUT_LABEL}
+                  disabled={busy}
+                  onChange={event => select(event.target.files?.[0] ?? null)}
+                  className="sr-only"
+                />
+              </label>
+            </PreviewCard>
+          ) : (
+            <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-outline/60 bg-surface-muted/50 px-4 text-sm font-semibold text-ink transition hover:border-primary has-disabled:cursor-not-allowed has-disabled:opacity-50 has-focus-visible:ring-2 has-focus-visible:ring-primary">
+              <CloudUpload size={20} aria-hidden="true" className="text-primary" />
+              {FILE_INPUT_LABEL}
+              <input
+                key={selectionVersion}
+                type="file"
+                accept="image/jpeg,image/png,application/pdf"
+                aria-label={FILE_INPUT_LABEL}
+                disabled={busy}
+                onChange={event => select(event.target.files?.[0] ?? null)}
+                className="sr-only"
+              />
+            </label>
+          )}
+          <button type="button" disabled={busy || !file} onClick={() => void upload()} className={PRIMARY_BUTTON}>
+            Enviar comprovante
+          </button>
+        </>
+      )}
+
+      {error && (
+        <p role="alert" className="m-0 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+    </section>
+  );
 }

@@ -1,20 +1,14 @@
-import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
-import { ContactForm } from "@/components/contact-form";
+import { AppShell } from "@/components/app/app-shell";
+import { ContactFormScreen } from "@/components/forms/contact-form-screen";
 import { safeNextPath } from "@/lib/auth/cookies";
-import { backLabelFor } from "@/lib/navigation";
 
-export default async function NewPersonPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
+export default async function NewContactPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
   const { returnTo } = await searchParams;
   const safeReturn = returnTo ? safeNextPath(returnTo) : undefined;
-  const back = safeReturn ?? "/people";
 
   return (
-    <AppShell activePath="/settings">
-      <Link className="back-link" href={back}>
-        ← {backLabelFor(back)}
-      </Link>
-      <ContactForm returnTo={safeReturn} />
+    <AppShell activePath="/settings" title="Novo contato" back={safeReturn ?? "/contacts"}>
+      <ContactFormScreen returnTo={safeReturn} />
     </AppShell>
   );
 }

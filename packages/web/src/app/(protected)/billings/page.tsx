@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/app-shell";
-import { BillingsScreen } from "@/components/billings-screen";
+import { AppShell } from "@/components/app/app-shell";
+import { BillingsScreen } from "@/components/screens/billings-screen";
 
 export default function BillingsPage() {
   return (

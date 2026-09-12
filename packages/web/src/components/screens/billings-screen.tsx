@@ -1,29 +1,29 @@
 "use client";
 
-import {
-  billingShareAction,
-  calendarDate,
-  formatMoney,
-  shortDayMonth,
-  type BillingDetail,
-  type BillingInvite,
-  type BillingSummary,
-  type BillingsPage,
-} from "@receivy/common";
-import { Link2, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { billingShareAction, calendarDate, type BillingState, type BillingSummary, type BillingsPage, type Direction } from "@receivy/common";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
-import { BillingCard } from "./billing-card";
-import { activeBillingChips, BillingFilters, DEFAULT_BILLING_FILTERS, type BillingFiltersValue } from "./billing-filters";
-import { BillingForm } from "./billing-form";
-
-const stateLabel = { active: "Ativa", paused: "Pausada", ended: "Encerrada" } as const;
-const typeLabel = { once: "Uma vez", until: "Até uma data", indefinite: "Sem fim" } as const;
+import { BillingCard } from "@/components/ui/billing-card";
 
 const LIST_ERROR = "Não foi possível carregar suas cobranças.";
+
+/** Client-side state filter over the loaded pages; ended billings stay out of the way by default. */
+const STATE_FILTERS: { value: BillingState; label: string; empty: string }[] = [
+  { value: "active", label: "Ativas", empty: "Nenhuma conta ativa." },
+  { value: "paused", label: "Pausadas", empty: "Nenhuma conta pausada." },
+  { value: "ended", label: "Encerradas", empty: "Nenhuma conta encerrada." },
+];
+
+/** Server-side direction filter: the API only returns the side asked for. */
+const DIRECTION_FILTERS: { value: Direction | ""; label: string }[] = [
+  { value: "", label: "Todas" },
+  { value: "receivable", label: "A receber" },
+  { value: "payable", label: "A pagar" },
+];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await browserFetch(path, init);
@@ -35,46 +35,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function dateText(value: string): string {
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
-}
-
-function listQuery(filters: BillingFiltersValue, search: string, cursor?: string): string {
-  const query = new URLSearchParams({ state: filters.state });
-
-  if (filters.type) {
-    query.set("type", filters.type);
-  }
-
-  if (filters.category) {
-    query.set("category", filters.category);
-  }
+/** No state filter on the request: active, paused and ended billings all come back and the chips split them here. */
+function listQuery(search: string, direction: Direction | "", cursor?: string): string {
+  const query = new URLSearchParams();
 
   if (search) {
     query.set("search", search);
+  }
+
+  if (direction) {
+    query.set("direction", direction);
   }
 
   if (cursor) {
     query.set("cursor", cursor);
   }
 
-  return `/api/financial/billings?${query}`;
+  const encoded = query.toString();
+
+  return `/api/financial/billings${encoded ? `?${encoded}` : ""}`;
 }
 
 export function BillingsScreen() {
   const router = useRouter();
   const [page, setPage] = useState<BillingsPage | null>(null);
-  const [filters, setFilters] = useState<BillingFiltersValue>(DEFAULT_BILLING_FILTERS);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<BillingDetail | null>(null);
-  const [invite, setInvite] = useState<BillingInvite | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [confirm, setConfirm] = useState(false);
+  const [stateFilter, setStateFilter] = useState<BillingState>("active");
+  const [direction, setDirection] = useState<Direction | "">("");
   const [notice, setNotice] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const requests = useRef(0);
   const today = calendarDate();
@@ -83,7 +72,7 @@ export function BillingsScreen() {
     (cursor?: string) => {
       const generation = cursor ? requests.current : ++requests.current;
 
-      return request<BillingsPage>(listQuery(filters, search, cursor))
+      return request<BillingsPage>(listQuery(search, direction, cursor))
         .then((next) => {
           if (generation !== requests.current) {
             return;
@@ -98,7 +87,7 @@ export function BillingsScreen() {
           }
         });
     },
-    [filters, search],
+    [search, direction],
   );
 
   useEffect(() => {
@@ -122,28 +111,15 @@ export function BillingsScreen() {
     }
   }
 
-  async function open(billingId: string) {
-    setError("");
-    setNotice("");
-
-    try {
-      const detail = await request<BillingDetail>(`/api/financial/billings/${billingId}`);
-      setSelected(detail);
-      setInvite(detail.invite);
-      setConfirm(false);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : LIST_ERROR);
-    }
-  }
-
   async function share(billing: BillingSummary) {
     setError("");
     setNotice("");
 
     const chargeId = billing.shareChargeId;
 
-    if (billingShareAction(billing) !== "share" || !chargeId) {
-      await open(billing.id);
+    // A conta a pagar has no public link: its action only opens the billing.
+    if (billing.direction === "payable" || billingShareAction(billing) !== "share" || !chargeId) {
+      router.push(`/billings/${billing.id}`);
       return;
     }
 
@@ -158,337 +134,136 @@ export function BillingsScreen() {
     await copy(`${window.location.origin}/pay/${link.token}`);
   }
 
-  async function edit(billing: BillingSummary) {
-    await open(billing.id);
-    setEditing(true);
-  }
-
-  async function createInvite() {
-    if (!selected) {
-      return;
-    }
-
-    setBusy(true);
-    setError("");
-
-    try {
-      const created = await request<BillingInvite>(`/api/financial/billings/${selected.id}/invite`, { method: "POST" });
-      setInvite(created);
-      await copy(created.url);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Não foi possível criar o convite.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function revokeInvite() {
-    if (!selected) {
-      return;
-    }
-
-    setBusy(true);
-    setError("");
-
-    try {
-      const response = await browserFetch(`/api/financial/billings/${selected.id}/invite`, { method: "DELETE" });
-
-      if (!response.ok) {
-        throw new Error(await responseMessage(response, "Não foi possível revogar o convite."));
-      }
-
-      setInvite(null);
-      setNotice("");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Não foi possível revogar o convite.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function transition(state: "active" | "paused" | "ended") {
-    if (!selected) {
-      return;
-    }
-
-    setBusy(true);
-    setError("");
-
-    try {
-      const saved = await request<BillingDetail>(`/api/financial/billings/${selected.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ state }),
-      });
-
-      setSelected(saved);
-      setConfirm(false);
-      await load();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Não foi possível atualizar a cobrança.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (editing) {
-    return (
-      <BillingForm
-        billing={selected}
-        onSaved={(saved) => {
-          setSelected(saved);
-          setEditing(false);
-          void load();
-        }}
-        onBack={() => setEditing(false)}
-      />
-    );
-  }
-
-  if (selected) {
-    const canPause = selected.type === "indefinite" && selected.state !== "ended";
-
-    return (
-      <section className="financial-page">
-        <button
-          className="secondary-button"
-          onClick={() => {
-            setSelected(null);
-            setConfirm(false);
-            setNotice("");
-          }}
-        >
-          Todas as cobranças
-        </button>
-
-        <h1>{selected.description}</h1>
-        <p className="billing-detail-meta">
-          <span>{typeLabel[selected.type]}</span>
-          <span aria-hidden="true"> · </span>
-          <span>{stateLabel[selected.state]}</span>
-          {selected.frequency && (
-            <>
-              <span aria-hidden="true"> · </span>
-              <span>{selected.frequency === "monthly" ? "Mensal" : "Anual"}</span>
-            </>
-          )}
-        </p>
-        <strong className="review-total">{formatMoney(selected.total)} por cobrança</strong>
-
-        {selected.state !== "ended" && (
-          <div className="filter-strip">
-            <button disabled={busy} onClick={() => setEditing(true)}>
-              Editar
-            </button>
-            {selected.state === "active" && (
-              <button disabled={busy} onClick={() => void createInvite()}>
-                Convidar
-              </button>
-            )}
-            {canPause && (
-              <button disabled={busy} onClick={() => void transition(selected.state === "active" ? "paused" : "active")}>
-                {selected.state === "active" ? "Pausar" : "Reativar"}
-              </button>
-            )}
-            <button disabled={busy} onClick={() => setConfirm(true)}>
-              Encerrar
-            </button>
-          </div>
-        )}
-
-        {notice && (
-          <p className="billings-notice" role="status">
-            {notice}
-          </p>
-        )}
-
-        {invite && (
-          <p className="billing-invite-line">
-            <Link2 size={14} aria-hidden="true" />
-            Convite ativo até {shortDayMonth(invite.expiresAt)}
-            <button className="feed-action" disabled={busy} onClick={() => void copy(invite.url)}>
-              Copiar
-            </button>
-            <button className="feed-action" disabled={busy} onClick={() => void revokeInvite()}>
-              Revogar
-            </button>
-          </p>
-        )}
-
-        {confirm && (
-          <section role="alertdialog" aria-label="Encerrar cobrança">
-            <p>Encerrar cancela as cobranças pendentes e impede novas ocorrências. Esta ação não pode ser desfeita.</p>
-            <button className="primary-button" disabled={busy} onClick={() => void transition("ended")}>
-              Confirmar encerramento
-            </button>
-            <button className="secondary-button" onClick={() => setConfirm(false)}>
-              Voltar
-            </button>
-          </section>
-        )}
-
-        {error && (
-          <p role="alert" className="login-error">
-            {error}
-          </p>
-        )}
-
-        <h2>Cobranças geradas</h2>
-        {!selected.charges.length && <p>Nenhuma cobrança gerada ainda.</p>}
-        <div className="timeline-list">
-          {selected.charges.map((charge) => (
-            <article className="timeline-entry" key={charge.id}>
-              <div className="timeline-dot" />
-              <div className="timeline-entry-main">
-                <h3>{charge.recipient.name}</h3>
-                <p>
-                  {dateText(charge.dueDate)}
-                  {charge.installmentCount && charge.installmentCount > 1 ? ` · ${charge.installment}/${charge.installmentCount}` : ""}
-                </p>
-              </div>
-              <strong className="money">{formatMoney(charge.amount)}</strong>
-              <span className={`state-label ${charge.state}`}>
-                {charge.state === "pending" ? "Pendente" : charge.state === "paid" ? "Pago" : "Cancelado"}
-              </span>
-              <Link className="entry-link" href={`/charges/${charge.id}`} aria-label={`Abrir cobrança de ${charge.recipient.name}`}>
-                Abrir
-              </Link>
-            </article>
-          ))}
-        </div>
-
-        {selected.type === "indefinite" && (
-          <>
-            <h2>Próximas ocorrências</h2>
-            <p>Ainda não são cobranças: projeções não entram no saldo nem permitem pagamento, comprovante ou link.</p>
-            {!selected.previews.length && <p>Nenhuma ocorrência futura nesta janela.</p>}
-            <ul>
-              {selected.previews.map((preview) => (
-                <li key={preview.occurrenceDate}>
-                  {dateText(preview.occurrenceDate)} · {formatMoney(preview.amount)}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
-    );
-  }
-
-  const chips = activeBillingChips(filters);
+  const visible = page?.billings.filter((billing) => billing.state === stateFilter) ?? [];
+  const filter = STATE_FILTERS.find((option) => option.value === stateFilter) ?? STATE_FILTERS[0]!;
 
   return (
-    <section className="financial-page billings-page">
-      <header className="billings-header">
-        <div>
-          <h1>Minhas Cobranças</h1>
-          <p>Cobranças cadastradas e links</p>
-        </div>
-        <div className="billings-header-actions">
-          <button
-            type="button"
-            className="billings-icon-button"
-            aria-expanded={searchOpen}
-            onClick={() => {
-              setSearchOpen((open) => !open);
-              setTerm("");
-            }}
+    <section className="flex min-h-full flex-col gap-3 pb-24 md:pb-0">
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-2">
+          <input
+            className="min-h-12 w-full min-w-0 flex-1 rounded-xl border border-outline bg-surface px-4 text-[14px] text-ink placeholder:text-muted"
+            type="search"
+            aria-label="Buscar por título ou descrição"
+            placeholder="Buscar por título ou descrição…"
+            value={term}
+            onChange={(event) => setTerm(event.target.value)}
+          />
+          <Link
+            className="hidden min-h-12 shrink-0 items-center gap-2 rounded-xl bg-primary-strong px-4 text-sm font-bold text-white md:inline-flex"
+            href="/billings/new"
+            aria-label="Nova conta"
           >
-            <Search size={16} aria-hidden="true" />
-            Buscar
-          </button>
-          <button
-            type="button"
-            className="billings-icon-button"
-            aria-expanded={filtersOpen}
-            onClick={() => setFiltersOpen((open) => !open)}
-          >
-            <SlidersHorizontal size={16} aria-hidden="true" />
-            Filtros
-          </button>
-          <Link className="primary-button billings-new" href="/charges/new">
-            <Plus size={16} aria-hidden="true" />
-            Nova cobrança
+            <Plus size={18} aria-hidden="true" className="text-white" />
+            Nova conta
           </Link>
         </div>
-      </header>
+        <div role="radiogroup" aria-label="Estado" className="flex gap-2">
+          {STATE_FILTERS.map((option) => {
+            const selected = option.value === stateFilter;
 
-      {searchOpen && (
-        <input
-          className="billings-search"
-          type="search"
-          aria-label="Buscar por título ou descrição"
-          placeholder="Buscar por título ou descrição…"
-          value={term}
-          onChange={(event) => setTerm(event.target.value)}
-        />
-      )}
-
-      {chips.length > 0 && (
-        <div className="billings-chip-row">
-          {chips.map((chip) => (
-            <button
-              key={chip.key}
-              type="button"
-              className="billings-chip is-active"
-              aria-label={`Remover filtro ${chip.label}`}
-              onClick={() => setFilters({ ...filters, [chip.key]: DEFAULT_BILLING_FILTERS[chip.key] })}
-            >
-              {chip.label} ×
-            </button>
-          ))}
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setStateFilter(option.value)}
+                className={`min-h-9 rounded-full border px-4 text-xs font-semibold transition ${
+                  selected ? "border-primary bg-primary-soft/60 text-primary-strong" : "border-outline/40 bg-surface text-muted hover:border-outline"
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
         </div>
-      )}
+        <div role="radiogroup" aria-label="Direção" className="flex gap-2">
+          {DIRECTION_FILTERS.map((option) => {
+            const selected = option.value === direction;
 
-      {filtersOpen && <BillingFilters value={filters} onChange={setFilters} />}
+            return (
+              <button
+                key={option.value || "all"}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setDirection(option.value)}
+                className={`min-h-9 rounded-full border px-4 text-xs font-semibold transition ${
+                  selected ? "border-primary bg-primary-soft/60 text-primary-strong" : "border-outline/40 bg-surface text-muted hover:border-outline"
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {notice && (
-        <p className="billings-notice" role="status">
+        <p className="m-0 rounded-xl bg-primary-soft/40 p-3 text-sm text-primary-strong" role="status">
           {notice}
         </p>
       )}
 
-      {!page && !error && <p role="status">Carregando cobranças…</p>}
-
-      {error && (
-        <p role="alert" className="login-error">
-          {error}{" "}
-          <button onClick={() => void load()}>Tentar novamente</button>
+      {!page && !error && (
+        <p className="m-0 py-6 text-center text-sm text-muted" role="status">
+          Carregando cobranças…
         </p>
       )}
 
+      {error && (
+        <div className="flex flex-col gap-2 rounded-xl bg-red-50 p-4">
+          <p role="alert" className="m-0 text-sm text-red-700">
+            {error}
+          </p>
+          <button type="button" className="self-start text-sm font-bold text-red-700" onClick={() => void load()}>
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
       {page && !page.billings.length && (
-        <section className="billings-empty">
-          <h2>Nenhuma cobrança ainda</h2>
-          <p>Crie a primeira para acompanhar os vencimentos.</p>
-          <Link className="primary-button" href="/charges/new">
-            Nova cobrança
+        <section className="flex flex-col gap-3 rounded-2xl border border-outline/40 bg-surface p-5">
+          <h2 className="m-0 text-2xl font-extrabold text-primary-strong">Nenhuma conta ainda</h2>
+          <p className="m-0 text-sm leading-6 text-muted">Crie a primeira para acompanhar os vencimentos.</p>
+          <Link className="inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 font-bold text-white" href="/billings/new">
+            Nova conta
           </Link>
         </section>
       )}
 
-      <div className="billings-list">
-        {page?.billings.map((billing) => (
+      {page && page.billings.length > 0 && !visible.length && <p className="m-0 py-6 text-center text-sm text-muted">{filter.empty}</p>}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {visible.map((billing) => (
           <BillingCard
             key={billing.id}
             billing={billing}
             today={today}
             onShare={(target) => void share(target)}
-            onEdit={(target) => void edit(target)}
-            onOpen={(target) => void open(target.id)}
+            onOpen={(target) => router.push(`/billings/${target.id}`)}
           />
         ))}
       </div>
 
       {page?.nextCursor && (
-        <button className="secondary-button" onClick={() => void load(page.nextCursor ?? undefined)}>
+        <button type="button" className="min-h-12 rounded-xl border border-outline font-bold text-primary" onClick={() => void load(page.nextCursor ?? undefined)}>
           Carregar mais
         </button>
       )}
 
-      <Link className="fab" href="/charges/new" aria-label="Nova cobrança">
-        <Plus size={22} aria-hidden="true" />
-      </Link>
+      {/* Narrow viewports keep the CTA pinned above the tab bar; wide ones show it beside the search. */}
+      <div className="fixed inset-x-0 bottom-[72px] z-[5] border-t border-outline/20 bg-canvas/95 px-5 pb-2 pt-3 backdrop-blur-md md:hidden">
+        <Link
+          className="flex h-13 items-center justify-center gap-2 rounded-xl bg-primary-strong text-base font-bold text-white"
+          href="/billings/new"
+          aria-label="Nova conta"
+        >
+          <Plus size={20} aria-hidden="true" className="text-white" />
+          <span className="text-base font-bold text-white">Cadastrar Nova Conta</span>
+        </Link>
+      </div>
     </section>
   );
 }

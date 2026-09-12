@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <g fill="none" stroke="#D6E5E6" stroke-width="112" transform="translate(8 -2)">
+    <path stroke-linejoin="miter" stroke-linecap="butt" d="M 348 380 L 348 303 L 620 303"/>
+    <path stroke-linejoin="round" stroke-linecap="round" d="
+      M 620 303
+      A 127 127 0 0 1 620 557
+      L 262 557
+      M 365 470
+      L 262 557
+      L 365 645"/>
+    <path stroke-linecap="round" d="M 585 557 L 745 740"/>
+  </g>
+</svg>

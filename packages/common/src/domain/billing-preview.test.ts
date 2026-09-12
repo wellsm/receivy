@@ -4,6 +4,9 @@ import { draftTotalCents, previewBillingSplit, splitParties, splitPartyKey } fro
 import { formatMoney } from './money';
 
 const base: BillingDraft = {
+  direction: 'receivable',
+  payee: '',
+  pixInline: { type: 'email', key: '', label: '' },
   type: 'once',
   selected: ['p1', 'p2'],
   owner: true,
@@ -138,11 +141,11 @@ describe('previewBillingSplit', () => {
 
 describe('splitParties', () => {
   it('lists the selected people and the owner last', () => {
-    expect(splitParties(base)).toEqual([{ kind: 'person', personId: 'p1' }, { kind: 'person', personId: 'p2' }, { kind: 'owner' }]);
+    expect(splitParties(base)).toEqual([{ kind: 'user', userId: 'p1' }, { kind: 'user', userId: 'p2' }, { kind: 'owner' }]);
   });
 
   it('keys a party by person id or owner', () => {
-    expect(splitPartyKey({ kind: 'person', personId: 'p1' })).toBe('p1');
+    expect(splitPartyKey({ kind: 'user', userId: 'p1' })).toBe('p1');
     expect(splitPartyKey({ kind: 'owner' })).toBe('owner');
   });
 });

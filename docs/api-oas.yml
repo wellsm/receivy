@@ -1,0 +1,6156 @@
+# Auto-generated Open API specification, any manual modifications will be lost during regeneration.
+openapi: 3.1.0
+info:
+  title: Receivy API
+  version: 1.0.0
+
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/healthHandler'
+  /auth/apple/native/start:
+    post:
+      operationId: nativeAppleStart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/nativeAppleStartHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/nativeAppleStartHandler'
+  /auth/apple/native/exchange:
+    post:
+      operationId: nativeAppleExchange
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/nativeAppleExchangeHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/nativeAppleExchangeHandler'
+  /auth/email/code:
+    post:
+      operationId: requestEmailCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/emailCodeHandler'
+      responses:
+        204:
+          description: "Successful response."
+  /auth/email/confirm:
+    post:
+      operationId: confirmEmailCode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/emailConfirmHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/emailConfirmHandler'
+  /auth/oauth/providers:
+    get:
+      operationId: oauthProviders
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/oauthProvidersHandler'
+  /auth/oauth/start:
+    post:
+      operationId: oauthStart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/oauthStartHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/oauthStartHandler'
+  /auth/google/callback:
+    get:
+      operationId: googleOauthCallback
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 2048
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 512
+      responses:
+        302:
+          description: "Successful response."
+  /auth/apple/callback:
+    post:
+      operationId: appleOauthCallback
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/appleCallbackHandler'
+      responses:
+        302:
+          description: "Successful response."
+  /auth/oauth/exchange:
+    post:
+      operationId: oauthExchange
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/oauthExchangeHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/oauthExchangeHandler'
+  /auth/refresh:
+    post:
+      operationId: refreshSession
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/refreshHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/refreshHandler'
+  /auth/logout:
+    post:
+      operationId: logout
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/logoutHandler'
+      responses:
+        204:
+          description: "Successful response."
+  /auth/me:
+    get:
+      operationId: me
+      security:
+        - sessionAuthorizer: []
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/meHandler'
+  /account/profile:
+    patch:
+      operationId: updateProfile
+      security:
+        - sessionAuthorizer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/profileHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/profileHandler'
+  /account:
+    delete:
+      operationId: deleteAccount
+      security:
+        - sessionAuthorizer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/deleteHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/deleteHandler'
+  /contacts/{id}:
+    get:
+      operationId: getContact
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/getContactHandler'
+    patch:
+      operationId: updateContact
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/updateContactHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/updateContactHandler'
+  /contacts:
+    get:
+      operationId: listContacts
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+        - name: archived
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 254
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["recent"]
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/listContactsHandler'
+    post:
+      operationId: createContact
+      security:
+        - sessionAuthorizer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/createContactHandler'
+      responses:
+        201:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/createContactHandler'
+  /contacts/{id}/archive:
+    post:
+      operationId: archiveContact
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        204:
+          description: "Successful response."
+  /payment-methods:
+    get:
+      operationId: listPaymentMethods
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: archived
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/listPaymentMethodsHandler'
+    post:
+      operationId: createPaymentMethod
+      security:
+        - sessionAuthorizer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/createPaymentMethodHandler'
+      responses:
+        201:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/createPaymentMethodHandler'
+  /payment-methods/{id}:
+    patch:
+      operationId: editPaymentMethod
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/editPaymentMethodHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/editPaymentMethodHandler'
+  /payment-methods/{id}/default:
+    post:
+      operationId: defaultPaymentMethod
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/defaultPaymentMethodHandler'
+  /payment-methods/{id}/archive:
+    post:
+      operationId: archivePaymentMethod
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        204:
+          description: "Successful response."
+  /billings:
+    post:
+      operationId: createBilling
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/createBillingHandler'
+      responses:
+        201:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/createBillingHandler'
+    get:
+      operationId: listBillings
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            enum: 
+              - 'once'
+              - 'until'
+              - 'indefinite'
+        - name: state
+          in: query
+          required: false
+          schema:
+            enum: 
+              - 'active'
+              - 'paused'
+              - 'ended'
+        - name: direction
+          in: query
+          required: false
+          schema:
+            enum: 
+              - 'receivable'
+              - 'payable'
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 80
+        - name: category
+          in: query
+          required: false
+          schema:
+            enum: 
+              - 'food'
+              - 'transport'
+              - 'groceries'
+              - 'subscription'
+              - 'loan'
+              - 'housing'
+              - 'travel'
+              - 'other'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/listBillingsHandler'
+  /billings/{id}:
+    get:
+      operationId: getBilling
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/getBillingHandler'
+    patch:
+      operationId: patchBilling
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/patchBillingHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/patchBillingHandler'
+  /billings/{id}/preview:
+    get:
+      operationId: previewBilling
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/previewBillingHandler'
+  /billings/{id}/guests/{guestId}:
+    post:
+      operationId: resolveBillingGuest
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: guestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/resolveGuestHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/resolveGuestHandler'
+  /charges/{id}:
+    get:
+      operationId: getCharge
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/getChargeHandler'
+  /charges/{id}/cancel:
+    post:
+      operationId: cancelCharge
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/cancelChargeHandler'
+  /charges/{id}/pay:
+    post:
+      operationId: payCharge
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/payChargeHandler'
+  /charges/{id}/reopen:
+    post:
+      operationId: reopenCharge
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/reopenChargeHandler'
+  /charges/{id}/public-link:
+    post:
+      operationId: createPublicLink
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/createPublicLinkHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/createPublicLinkHandler'
+    delete:
+      operationId: revokePublicLink
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        204:
+          description: "Successful response."
+  /charges/{id}/public-link/rotate:
+    post:
+      operationId: rotatePublicLink
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/rotatePublicLinkHandler'
+  /public/charges/{token}:
+    get:
+      operationId: publicCharge
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/publicChargeHandler'
+  /billings/{id}/invite:
+    post:
+      operationId: createInvite
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/createInviteHandler'
+    delete:
+      operationId: revokeInvite
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        204:
+          description: "Successful response."
+  /public/invites/{token}:
+    get:
+      operationId: publicInvite
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/publicInviteHandler'
+  /invites/{token}/accept:
+    post:
+      operationId: acceptInvite
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/acceptInviteHandler'
+  /timeline:
+    get:
+      operationId: timeline
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+        - name: direction
+          in: query
+          required: false
+          schema:
+            enum: 
+              - 'receivable'
+              - 'payable'
+        - name: status
+          in: query
+          required: false
+          schema:
+            enum: 
+              - 'pending'
+              - 'paid'
+              - 'cancelled'
+              - 'overdue'
+        - name: type
+          in: query
+          required: false
+          schema:
+            enum: 
+              - 'once'
+              - 'until'
+              - 'indefinite'
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/timelineHandler'
+  /contacts/{id}/ledger:
+    get:
+      operationId: contactLedger
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/contactLedgerHandler'
+  /charges/{id}/proof:
+    post:
+      operationId: startProofUpload
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/startProofUploadHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/startProofUploadHandler'
+    delete:
+      operationId: withdrawProof
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        204:
+          description: "Successful response."
+  /charges/{id}/proof/review:
+    post:
+      operationId: reviewProof
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/reviewProofHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/reviewProofHandler'
+  /charges/{id}/proof/download:
+    get:
+      operationId: downloadProof
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/downloadProofHandler'
+  /public/charges/{token}/proof:
+    post:
+      operationId: publicStartProofUpload
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/publicStartProofUploadHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/publicStartProofUploadHandler'
+    get:
+      operationId: publicProofState
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/publicProofStateHandler'
+    delete:
+      operationId: publicWithdrawProof
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        204:
+          description: "Successful response."
+  /devices:
+    post:
+      operationId: registerDevice
+      security:
+        - sessionAuthorizer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/registerDeviceHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/registerDeviceHandler'
+  /charges/{id}/reminders:
+    post:
+      operationId: manualReminder
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        202:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/manualReminderHandler'
+
+components:
+  securitySchemes:
+    sessionAuthorizer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  requestSchemes:
+    nativeAppleStartHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        clientChallenge:
+          type: string
+          maxLength: 43
+      required:
+        - clientChallenge
+    nativeAppleExchangeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          maxLength: 128
+        authorizationCode:
+          type: string
+          maxLength: 2048
+        codeVerifier:
+          type: string
+          maxLength: 128
+        profile:
+          type: string
+          maxLength: 1024
+        deviceName:
+          type: string
+          maxLength: 120
+      required:
+        - state
+        - authorizationCode
+        - codeVerifier
+    emailCodeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+        - email
+    emailConfirmHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+        deviceName:
+          type: string
+          maxLength: 120
+      required:
+        - email
+        - code
+    oauthStartHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        clientChallenge:
+          type: string
+          minLength: 43
+          maxLength: 43
+        provider:
+          enum: 
+            - 'apple'
+            - 'google'
+        destination:
+          type: string
+          maxLength: 512
+      required:
+        - clientChallenge
+        - provider
+        - destination
+    appleCallbackHandler:
+      type: string
+      maxLength: 16384
+    oauthExchangeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        codeVerifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+        code:
+          type: string
+          maxLength: 512
+        deviceName:
+          type: string
+          maxLength: 120
+      required:
+        - codeVerifier
+        - code
+    refreshHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+          maxLength: 256
+      required:
+        - refreshToken
+    logoutHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+          maxLength: 256
+      required:
+        - refreshToken
+    profileHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        phone:
+          type: string
+          maxLength: 40
+        locale:
+          type: string
+          enum: ["pt-BR"]
+        timezone:
+          type: string
+          maxLength: 64
+        country:
+          type: string
+          enum: ["BR"]
+      required:
+        - name
+        - locale
+        - timezone
+        - country
+    deleteHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        confirmation:
+          type: string
+          maxLength: 20
+      required:
+        - confirmation
+    createContactHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        nickname:
+          type: string
+          maxLength: 60
+        email:
+          type: string
+          maxLength: 254
+      required:
+        - name
+    updateContactHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        nickname:
+          type: string
+          maxLength: 60
+        email:
+          type: string
+          maxLength: 254
+      required:
+        - name
+    createPaymentMethodHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        pixKeyType:
+          enum: 
+            - 'cpf'
+            - 'cnpj'
+            - 'email'
+            - 'phone'
+            - 'random'
+        pixKey:
+          type: string
+          maxLength: 254
+        label:
+          type: string
+          maxLength: 120
+      required:
+        - pixKeyType
+        - pixKey
+    editPaymentMethodHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        pixKeyType:
+          enum: 
+            - 'cpf'
+            - 'cnpj'
+            - 'email'
+            - 'phone'
+            - 'random'
+        pixKey:
+          type: string
+          maxLength: 254
+        label:
+          type: string
+          maxLength: 120
+      required:
+        - pixKeyType
+        - pixKey
+    createBillingHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        frequency:
+          enum: 
+            - 'monthly'
+            - 'yearly'
+        description:
+          type: string
+          maxLength: 500
+        totalCents:
+          type: integer
+          minimum: 1
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        timezone:
+          type: string
+          maxLength: 100
+        paymentMethodId:
+          type: string
+          format: uuid
+        reminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: integer
+                minimum: -90
+                maximum: 90
+              enabled:
+                type: boolean
+            required:
+              - offsetDays
+              - enabled
+        split:
+          type: object
+          additionalProperties: false
+          properties:
+            mode:
+              enum: 
+                - 'fixed'
+                - 'equal'
+                - 'percentage'
+                - 'shares'
+            parts:
+              type: array
+              items:
+                anyOf:
+                - type: object
+                  additionalProperties: false
+                  properties:
+                    kind:
+                      type: string
+                      enum: ["owner"]
+                    basisPoints:
+                      type: number
+                    shares:
+                      type: integer
+                      minimum: 1
+                      maximum: 1000
+                  required:
+                    - kind
+                - type: object
+                  additionalProperties: false
+                  properties:
+                    kind:
+                      type: string
+                      enum: ["user"]
+                    userId:
+                      type: string
+                      format: uuid
+                    amountCents:
+                      type: number
+                    basisPoints:
+                      type: number
+                    shares:
+                      type: integer
+                      minimum: 1
+                      maximum: 1000
+                  required:
+                    - kind
+                    - userId
+          required:
+            - mode
+            - parts
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        payeeUserId:
+          type: string
+          format: uuid
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+              maxLength: 254
+            label:
+              type: string
+              maxLength: 120
+          required:
+            - keyType
+            - key
+        category:
+          enum: 
+            - 'food'
+            - 'transport'
+            - 'groceries'
+            - 'subscription'
+            - 'loan'
+            - 'housing'
+            - 'travel'
+            - 'other'
+      required:
+        - type
+        - totalCents
+        - startDate
+        - timezone
+    patchBillingHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+          maxLength: 500
+        totalCents:
+          type: integer
+          minimum: 1
+        split:
+          type: object
+          additionalProperties: false
+          properties:
+            mode:
+              enum: 
+                - 'fixed'
+                - 'equal'
+                - 'percentage'
+                - 'shares'
+            parts:
+              type: array
+              items:
+                anyOf:
+                - type: object
+                  additionalProperties: false
+                  properties:
+                    kind:
+                      type: string
+                      enum: ["owner"]
+                    basisPoints:
+                      type: number
+                    shares:
+                      type: integer
+                      minimum: 1
+                      maximum: 1000
+                  required:
+                    - kind
+                - type: object
+                  additionalProperties: false
+                  properties:
+                    kind:
+                      type: string
+                      enum: ["user"]
+                    userId:
+                      type: string
+                      format: uuid
+                    amountCents:
+                      type: number
+                    basisPoints:
+                      type: number
+                    shares:
+                      type: integer
+                      minimum: 1
+                      maximum: 1000
+                  required:
+                    - kind
+                    - userId
+          required:
+            - mode
+            - parts
+        paymentMethodId:
+          type: string
+          format: uuid
+        clearPaymentMethod:
+          type: boolean
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+              maxLength: 254
+            label:
+              type: string
+              maxLength: 120
+          required:
+            - keyType
+            - key
+        clearPix:
+          type: boolean
+        payeeUserId:
+          type: string
+          format: uuid
+        clearPayee:
+          type: boolean
+        startDate:
+          type: string
+          format: date
+        reminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: integer
+                minimum: -90
+                maximum: 90
+              enabled:
+                type: boolean
+            required:
+              - offsetDays
+              - enabled
+        state:
+          enum: 
+            - 'active'
+            - 'paused'
+            - 'ended'
+        category:
+          enum: 
+            - 'food'
+            - 'transport'
+            - 'groceries'
+            - 'subscription'
+            - 'loan'
+            - 'housing'
+            - 'travel'
+            - 'other'
+    resolveGuestHandler:
+      anyOf:
+      - type: object
+        additionalProperties: false
+        properties:
+          action:
+            type: string
+            enum: ["link"]
+          contactId:
+            type: string
+            format: uuid
+        required:
+          - action
+          - contactId
+      - type: object
+        additionalProperties: false
+        properties:
+          action:
+            type: string
+            enum: ["add"]
+        required:
+          - action
+      - type: object
+        additionalProperties: false
+        properties:
+          action:
+            type: string
+            enum: ["dismiss"]
+        required:
+          - action
+    createPublicLinkHandler:
+      anyOf:
+      - type: object
+        additionalProperties: false
+        properties:
+          paymentMethodId:
+            type: string
+            format: uuid
+    startProofUploadHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 200
+        mime:
+          enum: 
+            - 'image/jpeg'
+            - 'image/png'
+            - 'application/pdf'
+        size:
+          type: number
+      required:
+        - filename
+        - mime
+        - size
+    reviewProofHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        decision:
+          enum: 
+            - 'accepted'
+            - 'rejected'
+        reason:
+          type: string
+          maxLength: 500
+      required:
+        - decision
+    publicStartProofUploadHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 200
+        mime:
+          enum: 
+            - 'image/jpeg'
+            - 'image/png'
+            - 'application/pdf'
+        size:
+          type: number
+      required:
+        - filename
+        - mime
+        - size
+    registerDeviceHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+          maxLength: 300
+        installationId:
+          type: string
+          maxLength: 100
+        platform:
+          enum: 
+            - 'ios'
+            - 'android'
+      required:
+        - token
+        - installationId
+        - platform
+
+  responseSchemes:
+    healthHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: ["ok"]
+        service:
+          type: string
+          enum: ["receivy-api"]
+      required:
+        - status
+        - service
+    nativeAppleStartHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+        nonce:
+          type: string
+      required:
+        - state
+        - nonce
+    nativeAppleExchangeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: number
+        user:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            name:
+              type: string
+            phone:
+              type: string
+            avatarUrl:
+              type: string
+            status:
+              enum: 
+                - 'pending'
+                - 'active'
+                - 'removed'
+            locale:
+              type: string
+              enum: ["pt-BR"]
+            timezone:
+              type: string
+            country:
+              type: string
+              enum: ["BR"]
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - id
+            - email
+            - status
+            - locale
+            - timezone
+            - country
+            - currency
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+        - user
+    emailConfirmHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: number
+        user:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            name:
+              type: string
+            phone:
+              type: string
+            avatarUrl:
+              type: string
+            status:
+              enum: 
+                - 'pending'
+                - 'active'
+                - 'removed'
+            locale:
+              type: string
+              enum: ["pt-BR"]
+            timezone:
+              type: string
+            country:
+              type: string
+              enum: ["BR"]
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - id
+            - email
+            - status
+            - locale
+            - timezone
+            - country
+            - currency
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+        - user
+    oauthProvidersHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        apple:
+          type: boolean
+        appleNative:
+          type: boolean
+        google:
+          type: boolean
+      required:
+        - apple
+        - appleNative
+        - google
+    oauthStartHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        authorizationUrl:
+          type: string
+      required:
+        - authorizationUrl
+    oauthExchangeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: number
+        user:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            name:
+              type: string
+            phone:
+              type: string
+            avatarUrl:
+              type: string
+            status:
+              enum: 
+                - 'pending'
+                - 'active'
+                - 'removed'
+            locale:
+              type: string
+              enum: ["pt-BR"]
+            timezone:
+              type: string
+            country:
+              type: string
+              enum: ["BR"]
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - id
+            - email
+            - status
+            - locale
+            - timezone
+            - country
+            - currency
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+        - user
+    refreshHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: number
+      required:
+        - accessToken
+        - refreshToken
+        - expiresIn
+    meHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        user:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            name:
+              type: string
+            phone:
+              type: string
+            avatarUrl:
+              type: string
+            status:
+              enum: 
+                - 'pending'
+                - 'active'
+                - 'removed'
+            locale:
+              type: string
+              enum: ["pt-BR"]
+            timezone:
+              type: string
+            country:
+              type: string
+              enum: ["BR"]
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - id
+            - email
+            - status
+            - locale
+            - timezone
+            - country
+            - currency
+      required:
+        - user
+    profileHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        user:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            name:
+              type: string
+            phone:
+              type: string
+            avatarUrl:
+              type: string
+            status:
+              enum: 
+                - 'pending'
+                - 'active'
+                - 'removed'
+            locale:
+              type: string
+              enum: ["pt-BR"]
+            timezone:
+              type: string
+            country:
+              type: string
+              enum: ["BR"]
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - id
+            - email
+            - status
+            - locale
+            - timezone
+            - country
+            - currency
+      required:
+        - user
+    deleteHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        deleted:
+          type: boolean
+      required:
+        - deleted
+    getContactHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        nickname:
+          type: string
+        displayName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        status:
+          enum: 
+            - 'pending'
+            - 'active'
+            - 'removed'
+        archivedAt:
+          type: string
+        createdAt:
+          type: string
+        lastBilledAt:
+          type: string
+        activeCharges:
+          type: number
+      required:
+        - id
+        - userId
+        - name
+        - displayName
+        - email
+        - status
+        - createdAt
+        - activeCharges
+    listContactsHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        contacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              userId:
+                type: string
+              name:
+                type: string
+              nickname:
+                type: string
+              displayName:
+                type: string
+              email:
+                type: string
+              phone:
+                type: string
+              status:
+                enum: 
+                  - 'pending'
+                  - 'active'
+                  - 'removed'
+              archivedAt:
+                type: string
+              createdAt:
+                type: string
+              lastBilledAt:
+                type: string
+              activeCharges:
+                type: number
+            required:
+              - id
+              - userId
+              - name
+              - displayName
+              - email
+              - status
+              - createdAt
+              - activeCharges
+        nextCursor:
+          type: string
+      required:
+        - contacts
+    createContactHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        nickname:
+          type: string
+        displayName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        status:
+          enum: 
+            - 'pending'
+            - 'active'
+            - 'removed'
+        archivedAt:
+          type: string
+        createdAt:
+          type: string
+        lastBilledAt:
+          type: string
+        activeCharges:
+          type: number
+      required:
+        - id
+        - userId
+        - name
+        - displayName
+        - email
+        - status
+        - createdAt
+        - activeCharges
+    updateContactHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        nickname:
+          type: string
+        displayName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        status:
+          enum: 
+            - 'pending'
+            - 'active'
+            - 'removed'
+        archivedAt:
+          type: string
+        createdAt:
+          type: string
+        lastBilledAt:
+          type: string
+        activeCharges:
+          type: number
+      required:
+        - id
+        - userId
+        - name
+        - displayName
+        - email
+        - status
+        - createdAt
+        - activeCharges
+    listPaymentMethodsHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        paymentMethods:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                enum: ["pix"]
+              pixKeyType:
+                enum: 
+                  - 'cpf'
+                  - 'cnpj'
+                  - 'email'
+                  - 'phone'
+                  - 'random'
+              pixKey:
+                type: string
+              label:
+                type: string
+              isDefault:
+                type: boolean
+              archivedAt:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - type
+              - pixKeyType
+              - pixKey
+              - label
+              - isDefault
+              - createdAt
+      required:
+        - paymentMethods
+    createPaymentMethodHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: ["pix"]
+        pixKeyType:
+          enum: 
+            - 'cpf'
+            - 'cnpj'
+            - 'email'
+            - 'phone'
+            - 'random'
+        pixKey:
+          type: string
+        label:
+          type: string
+        isDefault:
+          type: boolean
+        archivedAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - type
+        - pixKeyType
+        - pixKey
+        - label
+        - isDefault
+        - createdAt
+    editPaymentMethodHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: ["pix"]
+        pixKeyType:
+          enum: 
+            - 'cpf'
+            - 'cnpj'
+            - 'email'
+            - 'phone'
+            - 'random'
+        pixKey:
+          type: string
+        label:
+          type: string
+        isDefault:
+          type: boolean
+        archivedAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - type
+        - pixKeyType
+        - pixKey
+        - label
+        - isDefault
+        - createdAt
+    defaultPaymentMethodHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: ["pix"]
+        pixKeyType:
+          enum: 
+            - 'cpf'
+            - 'cnpj'
+            - 'email'
+            - 'phone'
+            - 'random'
+        pixKey:
+          type: string
+        label:
+          type: string
+        isDefault:
+          type: boolean
+        archivedAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - type
+        - pixKeyType
+        - pixKey
+        - label
+        - isDefault
+        - createdAt
+    createBillingHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        payee:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+          required:
+            - userId
+            - name
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        frequency:
+          enum: 
+            - 'monthly'
+            - 'yearly'
+        description:
+          type: string
+        total:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        startDate:
+          type: string
+        endDate:
+          type: string
+        state:
+          enum: 
+            - 'active'
+            - 'paused'
+            - 'ended'
+        installmentCount:
+          type: number
+        nextDueDate:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        timezone:
+          type: string
+        paymentMethodId:
+          type: string
+        reminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+            required:
+              - offsetDays
+              - enabled
+        split:
+          anyOf:
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["equal"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                    required:
+                      - kind
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                    required:
+                      - kind
+                      - userId
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["percentage"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - basisPoints
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - basisPoints
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["fixed"]
+              parts:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    kind:
+                      type: string
+                      enum: ["user"]
+                    userId:
+                      type: string
+                    amountCents:
+                      type: number
+                  required:
+                    - kind
+                    - userId
+                    - amountCents
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["shares"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - shares
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - shares
+            required:
+              - mode
+              - parts
+        allocations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              kind:
+                enum: 
+                  - 'owner'
+                  - 'user'
+              userId:
+                type: string
+              splitMode:
+                enum: 
+                  - 'fixed'
+                  - 'equal'
+                  - 'percentage'
+                  - 'shares'
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              order:
+                type: number
+              shares:
+                type: number
+            required:
+              - kind
+              - splitMode
+              - amount
+              - order
+        charges:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              dueDate:
+                type: string
+              state:
+                enum: 
+                  - 'pending'
+                  - 'paid'
+                  - 'cancelled'
+              billingId:
+                type: string
+              billingType:
+                enum: 
+                  - 'once'
+                  - 'until'
+                  - 'indefinite'
+              installment:
+                type: number
+              installmentCount:
+                type: number
+              counterpartName:
+                type: string
+              proofState:
+                enum: 
+                  - 'pending'
+                  - 'accepted'
+                  - 'rejected'
+              payer:
+                enum: 
+                  - 'person'
+                  - 'owner'
+              ownedByViewer:
+                type: boolean
+              hasPix:
+                type: boolean
+              counterpartReachable:
+                type: boolean
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              recipient:
+                type: object
+                additionalProperties: false
+                properties:
+                  userId:
+                    type: string
+                  name:
+                    type: string
+                  email:
+                    type: string
+                required:
+                  - name
+              debtorUserId:
+                type: string
+              pix:
+                type: object
+                additionalProperties: false
+                properties:
+                  keyType:
+                    enum: 
+                      - 'cpf'
+                      - 'cnpj'
+                      - 'email'
+                      - 'phone'
+                      - 'random'
+                  key:
+                    type: string
+                  label:
+                    type: string
+                required:
+                  - keyType
+                  - key
+                  - label
+              sharingState:
+                enum: 
+                  - 'ready'
+                  - 'pix_required'
+                  - 'legacy_without_pix'
+                  - 'closed'
+              proof:
+                type: object
+                additionalProperties: false
+                properties:
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'accepted'
+                      - 'rejected'
+                  file:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      name:
+                        type: string
+                      mime:
+                        enum: 
+                          - 'image/jpeg'
+                          - 'image/png'
+                          - 'application/pdf'
+                      size:
+                        type: number
+                    required:
+                      - name
+                      - mime
+                      - size
+                  sentAt:
+                    type: string
+                  reviewedAt:
+                    type: string
+                  reason:
+                    type: string
+                  sentByViewer:
+                    type: boolean
+                required:
+                  - state
+                  - file
+                  - sentAt
+                  - sentByViewer
+              cancelledAt:
+                type: string
+              paidAt:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - description
+              - amount
+              - dueDate
+              - state
+              - billingId
+              - billingType
+              - counterpartName
+              - direction
+              - recipient
+              - sharingState
+              - createdAt
+        previews:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              billingId:
+                type: string
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              occurrenceDate:
+                type: string
+              materializationDate:
+                type: string
+            required:
+              - billingId
+              - direction
+              - description
+              - amount
+              - occurrenceDate
+        nextMaterialization:
+          type: string
+        category:
+          enum: 
+            - 'food'
+            - 'transport'
+            - 'groceries'
+            - 'subscription'
+            - 'loan'
+            - 'housing'
+            - 'travel'
+            - 'other'
+        invite:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            expiresAt:
+              type: string
+          required:
+            - url
+            - expiresAt
+        guests:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              userId:
+                type: string
+              name:
+                type: string
+              email:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - userId
+              - name
+              - email
+              - createdAt
+        linkableContacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              contactId:
+                type: string
+              displayName:
+                type: string
+            required:
+              - contactId
+              - displayName
+      required:
+        - id
+        - type
+        - direction
+        - description
+        - total
+        - startDate
+        - state
+        - createdAt
+        - updatedAt
+        - timezone
+        - reminders
+        - split
+        - allocations
+        - charges
+        - previews
+        - category
+        - guests
+        - linkableContacts
+    listBillingsHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        billings:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              type:
+                enum: 
+                  - 'once'
+                  - 'until'
+                  - 'indefinite'
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              payeeName:
+                type: string
+              frequency:
+                enum: 
+                  - 'monthly'
+                  - 'yearly'
+              description:
+                type: string
+              total:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              startDate:
+                type: string
+              endDate:
+                type: string
+              state:
+                enum: 
+                  - 'active'
+                  - 'paused'
+                  - 'ended'
+              installmentCount:
+                type: number
+              nextDueDate:
+                type: string
+              createdAt:
+                type: string
+              category:
+                enum: 
+                  - 'food'
+                  - 'transport'
+                  - 'groceries'
+                  - 'subscription'
+                  - 'loan'
+                  - 'housing'
+                  - 'travel'
+                  - 'other'
+              participantCount:
+                type: number
+              chargeCount:
+                type: number
+              paidCount:
+                type: number
+              proofsPending:
+                type: number
+              shareChargeId:
+                type: string
+            required:
+              - id
+              - type
+              - direction
+              - description
+              - total
+              - startDate
+              - state
+              - createdAt
+              - category
+              - participantCount
+              - chargeCount
+              - paidCount
+              - proofsPending
+        nextCursor:
+          type: string
+      required:
+        - billings
+    getBillingHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        payee:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+          required:
+            - userId
+            - name
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        frequency:
+          enum: 
+            - 'monthly'
+            - 'yearly'
+        description:
+          type: string
+        total:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        startDate:
+          type: string
+        endDate:
+          type: string
+        state:
+          enum: 
+            - 'active'
+            - 'paused'
+            - 'ended'
+        installmentCount:
+          type: number
+        nextDueDate:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        timezone:
+          type: string
+        paymentMethodId:
+          type: string
+        reminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+            required:
+              - offsetDays
+              - enabled
+        split:
+          anyOf:
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["equal"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                    required:
+                      - kind
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                    required:
+                      - kind
+                      - userId
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["percentage"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - basisPoints
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - basisPoints
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["fixed"]
+              parts:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    kind:
+                      type: string
+                      enum: ["user"]
+                    userId:
+                      type: string
+                    amountCents:
+                      type: number
+                  required:
+                    - kind
+                    - userId
+                    - amountCents
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["shares"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - shares
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - shares
+            required:
+              - mode
+              - parts
+        allocations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              kind:
+                enum: 
+                  - 'owner'
+                  - 'user'
+              userId:
+                type: string
+              splitMode:
+                enum: 
+                  - 'fixed'
+                  - 'equal'
+                  - 'percentage'
+                  - 'shares'
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              order:
+                type: number
+              shares:
+                type: number
+            required:
+              - kind
+              - splitMode
+              - amount
+              - order
+        charges:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              dueDate:
+                type: string
+              state:
+                enum: 
+                  - 'pending'
+                  - 'paid'
+                  - 'cancelled'
+              billingId:
+                type: string
+              billingType:
+                enum: 
+                  - 'once'
+                  - 'until'
+                  - 'indefinite'
+              installment:
+                type: number
+              installmentCount:
+                type: number
+              counterpartName:
+                type: string
+              proofState:
+                enum: 
+                  - 'pending'
+                  - 'accepted'
+                  - 'rejected'
+              payer:
+                enum: 
+                  - 'person'
+                  - 'owner'
+              ownedByViewer:
+                type: boolean
+              hasPix:
+                type: boolean
+              counterpartReachable:
+                type: boolean
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              recipient:
+                type: object
+                additionalProperties: false
+                properties:
+                  userId:
+                    type: string
+                  name:
+                    type: string
+                  email:
+                    type: string
+                required:
+                  - name
+              debtorUserId:
+                type: string
+              pix:
+                type: object
+                additionalProperties: false
+                properties:
+                  keyType:
+                    enum: 
+                      - 'cpf'
+                      - 'cnpj'
+                      - 'email'
+                      - 'phone'
+                      - 'random'
+                  key:
+                    type: string
+                  label:
+                    type: string
+                required:
+                  - keyType
+                  - key
+                  - label
+              sharingState:
+                enum: 
+                  - 'ready'
+                  - 'pix_required'
+                  - 'legacy_without_pix'
+                  - 'closed'
+              proof:
+                type: object
+                additionalProperties: false
+                properties:
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'accepted'
+                      - 'rejected'
+                  file:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      name:
+                        type: string
+                      mime:
+                        enum: 
+                          - 'image/jpeg'
+                          - 'image/png'
+                          - 'application/pdf'
+                      size:
+                        type: number
+                    required:
+                      - name
+                      - mime
+                      - size
+                  sentAt:
+                    type: string
+                  reviewedAt:
+                    type: string
+                  reason:
+                    type: string
+                  sentByViewer:
+                    type: boolean
+                required:
+                  - state
+                  - file
+                  - sentAt
+                  - sentByViewer
+              cancelledAt:
+                type: string
+              paidAt:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - description
+              - amount
+              - dueDate
+              - state
+              - billingId
+              - billingType
+              - counterpartName
+              - direction
+              - recipient
+              - sharingState
+              - createdAt
+        previews:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              billingId:
+                type: string
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              occurrenceDate:
+                type: string
+              materializationDate:
+                type: string
+            required:
+              - billingId
+              - direction
+              - description
+              - amount
+              - occurrenceDate
+        nextMaterialization:
+          type: string
+        category:
+          enum: 
+            - 'food'
+            - 'transport'
+            - 'groceries'
+            - 'subscription'
+            - 'loan'
+            - 'housing'
+            - 'travel'
+            - 'other'
+        invite:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            expiresAt:
+              type: string
+          required:
+            - url
+            - expiresAt
+        guests:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              userId:
+                type: string
+              name:
+                type: string
+              email:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - userId
+              - name
+              - email
+              - createdAt
+        linkableContacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              contactId:
+                type: string
+              displayName:
+                type: string
+            required:
+              - contactId
+              - displayName
+      required:
+        - id
+        - type
+        - direction
+        - description
+        - total
+        - startDate
+        - state
+        - createdAt
+        - updatedAt
+        - timezone
+        - reminders
+        - split
+        - allocations
+        - charges
+        - previews
+        - category
+        - guests
+        - linkableContacts
+    previewBillingHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        previews:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              billingId:
+                type: string
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              occurrenceDate:
+                type: string
+              materializationDate:
+                type: string
+            required:
+              - billingId
+              - direction
+              - description
+              - amount
+              - occurrenceDate
+      required:
+        - previews
+    patchBillingHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        payee:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+          required:
+            - userId
+            - name
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        frequency:
+          enum: 
+            - 'monthly'
+            - 'yearly'
+        description:
+          type: string
+        total:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        startDate:
+          type: string
+        endDate:
+          type: string
+        state:
+          enum: 
+            - 'active'
+            - 'paused'
+            - 'ended'
+        installmentCount:
+          type: number
+        nextDueDate:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        timezone:
+          type: string
+        paymentMethodId:
+          type: string
+        reminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+            required:
+              - offsetDays
+              - enabled
+        split:
+          anyOf:
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["equal"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                    required:
+                      - kind
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                    required:
+                      - kind
+                      - userId
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["percentage"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - basisPoints
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - basisPoints
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["fixed"]
+              parts:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    kind:
+                      type: string
+                      enum: ["user"]
+                    userId:
+                      type: string
+                    amountCents:
+                      type: number
+                  required:
+                    - kind
+                    - userId
+                    - amountCents
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["shares"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - shares
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - shares
+            required:
+              - mode
+              - parts
+        allocations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              kind:
+                enum: 
+                  - 'owner'
+                  - 'user'
+              userId:
+                type: string
+              splitMode:
+                enum: 
+                  - 'fixed'
+                  - 'equal'
+                  - 'percentage'
+                  - 'shares'
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              order:
+                type: number
+              shares:
+                type: number
+            required:
+              - kind
+              - splitMode
+              - amount
+              - order
+        charges:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              dueDate:
+                type: string
+              state:
+                enum: 
+                  - 'pending'
+                  - 'paid'
+                  - 'cancelled'
+              billingId:
+                type: string
+              billingType:
+                enum: 
+                  - 'once'
+                  - 'until'
+                  - 'indefinite'
+              installment:
+                type: number
+              installmentCount:
+                type: number
+              counterpartName:
+                type: string
+              proofState:
+                enum: 
+                  - 'pending'
+                  - 'accepted'
+                  - 'rejected'
+              payer:
+                enum: 
+                  - 'person'
+                  - 'owner'
+              ownedByViewer:
+                type: boolean
+              hasPix:
+                type: boolean
+              counterpartReachable:
+                type: boolean
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              recipient:
+                type: object
+                additionalProperties: false
+                properties:
+                  userId:
+                    type: string
+                  name:
+                    type: string
+                  email:
+                    type: string
+                required:
+                  - name
+              debtorUserId:
+                type: string
+              pix:
+                type: object
+                additionalProperties: false
+                properties:
+                  keyType:
+                    enum: 
+                      - 'cpf'
+                      - 'cnpj'
+                      - 'email'
+                      - 'phone'
+                      - 'random'
+                  key:
+                    type: string
+                  label:
+                    type: string
+                required:
+                  - keyType
+                  - key
+                  - label
+              sharingState:
+                enum: 
+                  - 'ready'
+                  - 'pix_required'
+                  - 'legacy_without_pix'
+                  - 'closed'
+              proof:
+                type: object
+                additionalProperties: false
+                properties:
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'accepted'
+                      - 'rejected'
+                  file:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      name:
+                        type: string
+                      mime:
+                        enum: 
+                          - 'image/jpeg'
+                          - 'image/png'
+                          - 'application/pdf'
+                      size:
+                        type: number
+                    required:
+                      - name
+                      - mime
+                      - size
+                  sentAt:
+                    type: string
+                  reviewedAt:
+                    type: string
+                  reason:
+                    type: string
+                  sentByViewer:
+                    type: boolean
+                required:
+                  - state
+                  - file
+                  - sentAt
+                  - sentByViewer
+              cancelledAt:
+                type: string
+              paidAt:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - description
+              - amount
+              - dueDate
+              - state
+              - billingId
+              - billingType
+              - counterpartName
+              - direction
+              - recipient
+              - sharingState
+              - createdAt
+        previews:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              billingId:
+                type: string
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              occurrenceDate:
+                type: string
+              materializationDate:
+                type: string
+            required:
+              - billingId
+              - direction
+              - description
+              - amount
+              - occurrenceDate
+        nextMaterialization:
+          type: string
+        category:
+          enum: 
+            - 'food'
+            - 'transport'
+            - 'groceries'
+            - 'subscription'
+            - 'loan'
+            - 'housing'
+            - 'travel'
+            - 'other'
+        invite:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            expiresAt:
+              type: string
+          required:
+            - url
+            - expiresAt
+        guests:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              userId:
+                type: string
+              name:
+                type: string
+              email:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - userId
+              - name
+              - email
+              - createdAt
+        linkableContacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              contactId:
+                type: string
+              displayName:
+                type: string
+            required:
+              - contactId
+              - displayName
+      required:
+        - id
+        - type
+        - direction
+        - description
+        - total
+        - startDate
+        - state
+        - createdAt
+        - updatedAt
+        - timezone
+        - reminders
+        - split
+        - allocations
+        - charges
+        - previews
+        - category
+        - guests
+        - linkableContacts
+    resolveGuestHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        payee:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+          required:
+            - userId
+            - name
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        frequency:
+          enum: 
+            - 'monthly'
+            - 'yearly'
+        description:
+          type: string
+        total:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        startDate:
+          type: string
+        endDate:
+          type: string
+        state:
+          enum: 
+            - 'active'
+            - 'paused'
+            - 'ended'
+        installmentCount:
+          type: number
+        nextDueDate:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        timezone:
+          type: string
+        paymentMethodId:
+          type: string
+        reminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+            required:
+              - offsetDays
+              - enabled
+        split:
+          anyOf:
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["equal"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                    required:
+                      - kind
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                    required:
+                      - kind
+                      - userId
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["percentage"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - basisPoints
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - basisPoints
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["fixed"]
+              parts:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    kind:
+                      type: string
+                      enum: ["user"]
+                    userId:
+                      type: string
+                    amountCents:
+                      type: number
+                  required:
+                    - kind
+                    - userId
+                    - amountCents
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["shares"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - shares
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - shares
+            required:
+              - mode
+              - parts
+        allocations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              kind:
+                enum: 
+                  - 'owner'
+                  - 'user'
+              userId:
+                type: string
+              splitMode:
+                enum: 
+                  - 'fixed'
+                  - 'equal'
+                  - 'percentage'
+                  - 'shares'
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              order:
+                type: number
+              shares:
+                type: number
+            required:
+              - kind
+              - splitMode
+              - amount
+              - order
+        charges:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              dueDate:
+                type: string
+              state:
+                enum: 
+                  - 'pending'
+                  - 'paid'
+                  - 'cancelled'
+              billingId:
+                type: string
+              billingType:
+                enum: 
+                  - 'once'
+                  - 'until'
+                  - 'indefinite'
+              installment:
+                type: number
+              installmentCount:
+                type: number
+              counterpartName:
+                type: string
+              proofState:
+                enum: 
+                  - 'pending'
+                  - 'accepted'
+                  - 'rejected'
+              payer:
+                enum: 
+                  - 'person'
+                  - 'owner'
+              ownedByViewer:
+                type: boolean
+              hasPix:
+                type: boolean
+              counterpartReachable:
+                type: boolean
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              recipient:
+                type: object
+                additionalProperties: false
+                properties:
+                  userId:
+                    type: string
+                  name:
+                    type: string
+                  email:
+                    type: string
+                required:
+                  - name
+              debtorUserId:
+                type: string
+              pix:
+                type: object
+                additionalProperties: false
+                properties:
+                  keyType:
+                    enum: 
+                      - 'cpf'
+                      - 'cnpj'
+                      - 'email'
+                      - 'phone'
+                      - 'random'
+                  key:
+                    type: string
+                  label:
+                    type: string
+                required:
+                  - keyType
+                  - key
+                  - label
+              sharingState:
+                enum: 
+                  - 'ready'
+                  - 'pix_required'
+                  - 'legacy_without_pix'
+                  - 'closed'
+              proof:
+                type: object
+                additionalProperties: false
+                properties:
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'accepted'
+                      - 'rejected'
+                  file:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      name:
+                        type: string
+                      mime:
+                        enum: 
+                          - 'image/jpeg'
+                          - 'image/png'
+                          - 'application/pdf'
+                      size:
+                        type: number
+                    required:
+                      - name
+                      - mime
+                      - size
+                  sentAt:
+                    type: string
+                  reviewedAt:
+                    type: string
+                  reason:
+                    type: string
+                  sentByViewer:
+                    type: boolean
+                required:
+                  - state
+                  - file
+                  - sentAt
+                  - sentByViewer
+              cancelledAt:
+                type: string
+              paidAt:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - description
+              - amount
+              - dueDate
+              - state
+              - billingId
+              - billingType
+              - counterpartName
+              - direction
+              - recipient
+              - sharingState
+              - createdAt
+        previews:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              billingId:
+                type: string
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              occurrenceDate:
+                type: string
+              materializationDate:
+                type: string
+            required:
+              - billingId
+              - direction
+              - description
+              - amount
+              - occurrenceDate
+        nextMaterialization:
+          type: string
+        category:
+          enum: 
+            - 'food'
+            - 'transport'
+            - 'groceries'
+            - 'subscription'
+            - 'loan'
+            - 'housing'
+            - 'travel'
+            - 'other'
+        invite:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            expiresAt:
+              type: string
+          required:
+            - url
+            - expiresAt
+        guests:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              userId:
+                type: string
+              name:
+                type: string
+              email:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - userId
+              - name
+              - email
+              - createdAt
+        linkableContacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              contactId:
+                type: string
+              displayName:
+                type: string
+            required:
+              - contactId
+              - displayName
+      required:
+        - id
+        - type
+        - direction
+        - description
+        - total
+        - startDate
+        - state
+        - createdAt
+        - updatedAt
+        - timezone
+        - reminders
+        - split
+        - allocations
+        - charges
+        - previews
+        - category
+        - guests
+        - linkableContacts
+    getChargeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        billingId:
+          type: string
+        billingType:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        installment:
+          type: number
+        installmentCount:
+          type: number
+        counterpartName:
+          type: string
+        proofState:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+        payer:
+          enum: 
+            - 'person'
+            - 'owner'
+        ownedByViewer:
+          type: boolean
+        hasPix:
+          type: boolean
+        counterpartReachable:
+          type: boolean
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        recipient:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+          required:
+            - name
+        debtorUserId:
+          type: string
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        sharingState:
+          enum: 
+            - 'ready'
+            - 'pix_required'
+            - 'legacy_without_pix'
+            - 'closed'
+        proof:
+          type: object
+          additionalProperties: false
+          properties:
+            state:
+              enum: 
+                - 'pending'
+                - 'accepted'
+                - 'rejected'
+            file:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                mime:
+                  enum: 
+                    - 'image/jpeg'
+                    - 'image/png'
+                    - 'application/pdf'
+                size:
+                  type: number
+              required:
+                - name
+                - mime
+                - size
+            sentAt:
+              type: string
+            reviewedAt:
+              type: string
+            reason:
+              type: string
+            sentByViewer:
+              type: boolean
+          required:
+            - state
+            - file
+            - sentAt
+            - sentByViewer
+        cancelledAt:
+          type: string
+        paidAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - description
+        - amount
+        - dueDate
+        - state
+        - billingId
+        - billingType
+        - counterpartName
+        - direction
+        - recipient
+        - sharingState
+        - createdAt
+    cancelChargeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        billingId:
+          type: string
+        billingType:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        installment:
+          type: number
+        installmentCount:
+          type: number
+        counterpartName:
+          type: string
+        proofState:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+        payer:
+          enum: 
+            - 'person'
+            - 'owner'
+        ownedByViewer:
+          type: boolean
+        hasPix:
+          type: boolean
+        counterpartReachable:
+          type: boolean
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        recipient:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+          required:
+            - name
+        debtorUserId:
+          type: string
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        sharingState:
+          enum: 
+            - 'ready'
+            - 'pix_required'
+            - 'legacy_without_pix'
+            - 'closed'
+        proof:
+          type: object
+          additionalProperties: false
+          properties:
+            state:
+              enum: 
+                - 'pending'
+                - 'accepted'
+                - 'rejected'
+            file:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                mime:
+                  enum: 
+                    - 'image/jpeg'
+                    - 'image/png'
+                    - 'application/pdf'
+                size:
+                  type: number
+              required:
+                - name
+                - mime
+                - size
+            sentAt:
+              type: string
+            reviewedAt:
+              type: string
+            reason:
+              type: string
+            sentByViewer:
+              type: boolean
+          required:
+            - state
+            - file
+            - sentAt
+            - sentByViewer
+        cancelledAt:
+          type: string
+        paidAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - description
+        - amount
+        - dueDate
+        - state
+        - billingId
+        - billingType
+        - counterpartName
+        - direction
+        - recipient
+        - sharingState
+        - createdAt
+    payChargeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        billingId:
+          type: string
+        billingType:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        installment:
+          type: number
+        installmentCount:
+          type: number
+        counterpartName:
+          type: string
+        proofState:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+        payer:
+          enum: 
+            - 'person'
+            - 'owner'
+        ownedByViewer:
+          type: boolean
+        hasPix:
+          type: boolean
+        counterpartReachable:
+          type: boolean
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        recipient:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+          required:
+            - name
+        debtorUserId:
+          type: string
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        sharingState:
+          enum: 
+            - 'ready'
+            - 'pix_required'
+            - 'legacy_without_pix'
+            - 'closed'
+        proof:
+          type: object
+          additionalProperties: false
+          properties:
+            state:
+              enum: 
+                - 'pending'
+                - 'accepted'
+                - 'rejected'
+            file:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                mime:
+                  enum: 
+                    - 'image/jpeg'
+                    - 'image/png'
+                    - 'application/pdf'
+                size:
+                  type: number
+              required:
+                - name
+                - mime
+                - size
+            sentAt:
+              type: string
+            reviewedAt:
+              type: string
+            reason:
+              type: string
+            sentByViewer:
+              type: boolean
+          required:
+            - state
+            - file
+            - sentAt
+            - sentByViewer
+        cancelledAt:
+          type: string
+        paidAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - description
+        - amount
+        - dueDate
+        - state
+        - billingId
+        - billingType
+        - counterpartName
+        - direction
+        - recipient
+        - sharingState
+        - createdAt
+    reopenChargeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        billingId:
+          type: string
+        billingType:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        installment:
+          type: number
+        installmentCount:
+          type: number
+        counterpartName:
+          type: string
+        proofState:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+        payer:
+          enum: 
+            - 'person'
+            - 'owner'
+        ownedByViewer:
+          type: boolean
+        hasPix:
+          type: boolean
+        counterpartReachable:
+          type: boolean
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        recipient:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+          required:
+            - name
+        debtorUserId:
+          type: string
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        sharingState:
+          enum: 
+            - 'ready'
+            - 'pix_required'
+            - 'legacy_without_pix'
+            - 'closed'
+        proof:
+          type: object
+          additionalProperties: false
+          properties:
+            state:
+              enum: 
+                - 'pending'
+                - 'accepted'
+                - 'rejected'
+            file:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                mime:
+                  enum: 
+                    - 'image/jpeg'
+                    - 'image/png'
+                    - 'application/pdf'
+                size:
+                  type: number
+              required:
+                - name
+                - mime
+                - size
+            sentAt:
+              type: string
+            reviewedAt:
+              type: string
+            reason:
+              type: string
+            sentByViewer:
+              type: boolean
+          required:
+            - state
+            - file
+            - sentAt
+            - sentByViewer
+        cancelledAt:
+          type: string
+        paidAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - description
+        - amount
+        - dueDate
+        - state
+        - billingId
+        - billingType
+        - counterpartName
+        - direction
+        - recipient
+        - sharingState
+        - createdAt
+    createPublicLinkHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+      required:
+        - token
+        - expiresAt
+    rotatePublicLinkHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+      required:
+        - token
+        - expiresAt
+    publicChargeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        creditorFirstName:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        uploadsEnabled:
+          type: boolean
+      required:
+        - creditorFirstName
+        - description
+        - amount
+        - dueDate
+        - state
+        - uploadsEnabled
+    createInviteHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+        expiresAt:
+          type: string
+      required:
+        - url
+        - expiresAt
+    publicInviteHandler:
+      anyOf:
+      - type: object
+        additionalProperties: false
+        properties:
+          expired:
+            type: boolean
+            enum: [true]
+        required:
+          - expired
+      - type: object
+        additionalProperties: false
+        properties:
+          expired:
+            type: boolean
+            enum: [false]
+          creditorFirstName:
+            type: string
+          description:
+            type: string
+          amount:
+            type: object
+            additionalProperties: false
+            properties:
+              amountCents:
+                type: number
+              currency:
+                type: string
+                enum: ["BRL"]
+            required:
+              - amountCents
+              - currency
+          type:
+            enum: 
+              - 'once'
+              - 'until'
+              - 'indefinite'
+          participantCount:
+            type: number
+          category:
+            enum: 
+              - 'food'
+              - 'transport'
+              - 'groceries'
+              - 'subscription'
+              - 'loan'
+              - 'housing'
+              - 'travel'
+              - 'other'
+        required:
+          - expired
+          - creditorFirstName
+          - description
+          - amount
+          - type
+          - participantCount
+          - category
+    acceptInviteHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        billingId:
+          type: string
+        chargeId:
+          type: string
+        joinedSplit:
+          type: boolean
+        awaitingOwner:
+          type: boolean
+      required:
+        - billingId
+        - joinedSplit
+        - awaitingOwner
+    timelineHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            anyOf:
+            - type: object
+              additionalProperties: false
+              properties:
+                kind:
+                  type: string
+                  enum: ["charge"]
+                direction:
+                  enum: 
+                    - 'receivable'
+                    - 'payable'
+                charge:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    id:
+                      type: string
+                    description:
+                      type: string
+                    amount:
+                      type: object
+                      additionalProperties: false
+                      properties:
+                        amountCents:
+                          type: number
+                        currency:
+                          type: string
+                          enum: ["BRL"]
+                      required:
+                        - amountCents
+                        - currency
+                    dueDate:
+                      type: string
+                    state:
+                      enum: 
+                        - 'pending'
+                        - 'paid'
+                        - 'cancelled'
+                    billingId:
+                      type: string
+                    billingType:
+                      enum: 
+                        - 'once'
+                        - 'until'
+                        - 'indefinite'
+                    installment:
+                      type: number
+                    installmentCount:
+                      type: number
+                    counterpartName:
+                      type: string
+                    proofState:
+                      enum: 
+                        - 'pending'
+                        - 'accepted'
+                        - 'rejected'
+                    payer:
+                      enum: 
+                        - 'person'
+                        - 'owner'
+                    ownedByViewer:
+                      type: boolean
+                    hasPix:
+                      type: boolean
+                    counterpartReachable:
+                      type: boolean
+                  required:
+                    - id
+                    - description
+                    - amount
+                    - dueDate
+                    - state
+                    - billingId
+                    - billingType
+                    - counterpartName
+              required:
+                - kind
+                - direction
+                - charge
+            - type: object
+              additionalProperties: false
+              properties:
+                kind:
+                  type: string
+                  enum: ["proof"]
+                direction:
+                  enum: 
+                    - 'receivable'
+                    - 'payable'
+                proof:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    chargeId:
+                      type: string
+                    state:
+                      enum: 
+                        - 'pending'
+                        - 'accepted'
+                        - 'rejected'
+                    sentAt:
+                      type: string
+                  required:
+                    - chargeId
+                    - state
+                    - sentAt
+              required:
+                - kind
+                - direction
+                - proof
+            - type: object
+              additionalProperties: false
+              properties:
+                kind:
+                  type: string
+                  enum: ["payment"]
+                direction:
+                  enum: 
+                    - 'receivable'
+                    - 'payable'
+                payment:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    chargeId:
+                      type: string
+                    amount:
+                      type: object
+                      additionalProperties: false
+                      properties:
+                        amountCents:
+                          type: number
+                        currency:
+                          type: string
+                          enum: ["BRL"]
+                      required:
+                        - amountCents
+                        - currency
+                    paidAt:
+                      type: string
+                  required:
+                    - chargeId
+                    - amount
+                    - paidAt
+              required:
+                - kind
+                - direction
+                - payment
+            - type: object
+              additionalProperties: false
+              properties:
+                kind:
+                  type: string
+                  enum: ["billing_preview"]
+                direction:
+                  enum: 
+                    - 'receivable'
+                    - 'payable'
+                preview:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    billingId:
+                      type: string
+                    direction:
+                      enum: 
+                        - 'receivable'
+                        - 'payable'
+                    description:
+                      type: string
+                    amount:
+                      type: object
+                      additionalProperties: false
+                      properties:
+                        amountCents:
+                          type: number
+                        currency:
+                          type: string
+                          enum: ["BRL"]
+                      required:
+                        - amountCents
+                        - currency
+                    occurrenceDate:
+                      type: string
+                    materializationDate:
+                      type: string
+                  required:
+                    - billingId
+                    - direction
+                    - description
+                    - amount
+                    - occurrenceDate
+              required:
+                - kind
+                - direction
+                - preview
+        summary:
+          type: object
+          additionalProperties: false
+          properties:
+            receivable:
+              type: object
+              additionalProperties: false
+              properties:
+                amountCents:
+                  type: number
+                currency:
+                  type: string
+                  enum: ["BRL"]
+              required:
+                - amountCents
+                - currency
+            payable:
+              type: object
+              additionalProperties: false
+              properties:
+                amountCents:
+                  type: number
+                currency:
+                  type: string
+                  enum: ["BRL"]
+              required:
+                - amountCents
+                - currency
+            overdue:
+              type: object
+              additionalProperties: false
+              properties:
+                amountCents:
+                  type: number
+                currency:
+                  type: string
+                  enum: ["BRL"]
+              required:
+                - amountCents
+                - currency
+            pending:
+              type: object
+              additionalProperties: false
+              properties:
+                amountCents:
+                  type: number
+                currency:
+                  type: string
+                  enum: ["BRL"]
+              required:
+                - amountCents
+                - currency
+            proofsToReview:
+              type: number
+            receivableCount:
+              type: number
+            payableCount:
+              type: number
+          required:
+            - receivable
+            - payable
+            - overdue
+            - pending
+            - proofsToReview
+            - receivableCount
+            - payableCount
+        nextCursor:
+          type: string
+      required:
+        - items
+        - summary
+    contactLedgerHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        contactId:
+          type: string
+        contact:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            userId:
+              type: string
+            name:
+              type: string
+            nickname:
+              type: string
+            displayName:
+              type: string
+            email:
+              type: string
+            phone:
+              type: string
+            status:
+              enum: 
+                - 'pending'
+                - 'active'
+                - 'removed'
+            archivedAt:
+              type: string
+            createdAt:
+              type: string
+            lastBilledAt:
+              type: string
+            activeCharges:
+              type: number
+          required:
+            - id
+            - userId
+            - name
+            - displayName
+            - email
+            - status
+            - createdAt
+            - activeCharges
+        balance:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        receivable:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        payable:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        charges:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              dueDate:
+                type: string
+              state:
+                enum: 
+                  - 'pending'
+                  - 'paid'
+                  - 'cancelled'
+              billingId:
+                type: string
+              billingType:
+                enum: 
+                  - 'once'
+                  - 'until'
+                  - 'indefinite'
+              installment:
+                type: number
+              installmentCount:
+                type: number
+              counterpartName:
+                type: string
+              proofState:
+                enum: 
+                  - 'pending'
+                  - 'accepted'
+                  - 'rejected'
+              payer:
+                enum: 
+                  - 'person'
+                  - 'owner'
+              ownedByViewer:
+                type: boolean
+              hasPix:
+                type: boolean
+              counterpartReachable:
+                type: boolean
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              recipient:
+                type: object
+                additionalProperties: false
+                properties:
+                  userId:
+                    type: string
+                  name:
+                    type: string
+                  email:
+                    type: string
+                required:
+                  - name
+              debtorUserId:
+                type: string
+              pix:
+                type: object
+                additionalProperties: false
+                properties:
+                  keyType:
+                    enum: 
+                      - 'cpf'
+                      - 'cnpj'
+                      - 'email'
+                      - 'phone'
+                      - 'random'
+                  key:
+                    type: string
+                  label:
+                    type: string
+                required:
+                  - keyType
+                  - key
+                  - label
+              sharingState:
+                enum: 
+                  - 'ready'
+                  - 'pix_required'
+                  - 'legacy_without_pix'
+                  - 'closed'
+              proof:
+                type: object
+                additionalProperties: false
+                properties:
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'accepted'
+                      - 'rejected'
+                  file:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      name:
+                        type: string
+                      mime:
+                        enum: 
+                          - 'image/jpeg'
+                          - 'image/png'
+                          - 'application/pdf'
+                      size:
+                        type: number
+                    required:
+                      - name
+                      - mime
+                      - size
+                  sentAt:
+                    type: string
+                  reviewedAt:
+                    type: string
+                  reason:
+                    type: string
+                  sentByViewer:
+                    type: boolean
+                required:
+                  - state
+                  - file
+                  - sentAt
+                  - sentByViewer
+              cancelledAt:
+                type: string
+              paidAt:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - description
+              - amount
+              - dueDate
+              - state
+              - billingId
+              - billingType
+              - counterpartName
+              - direction
+              - recipient
+              - sharingState
+              - createdAt
+        nextCursor:
+          type: string
+      required:
+        - contactId
+        - contact
+        - balance
+        - receivable
+        - payable
+        - charges
+    startProofUploadHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        uploadUrl:
+          type: string
+        expiresAt:
+          type: string
+      required:
+        - uploadUrl
+        - expiresAt
+    reviewProofHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        billingId:
+          type: string
+        billingType:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        installment:
+          type: number
+        installmentCount:
+          type: number
+        counterpartName:
+          type: string
+        proofState:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+        payer:
+          enum: 
+            - 'person'
+            - 'owner'
+        ownedByViewer:
+          type: boolean
+        hasPix:
+          type: boolean
+        counterpartReachable:
+          type: boolean
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        recipient:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+          required:
+            - name
+        debtorUserId:
+          type: string
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        sharingState:
+          enum: 
+            - 'ready'
+            - 'pix_required'
+            - 'legacy_without_pix'
+            - 'closed'
+        proof:
+          type: object
+          additionalProperties: false
+          properties:
+            state:
+              enum: 
+                - 'pending'
+                - 'accepted'
+                - 'rejected'
+            file:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                mime:
+                  enum: 
+                    - 'image/jpeg'
+                    - 'image/png'
+                    - 'application/pdf'
+                size:
+                  type: number
+              required:
+                - name
+                - mime
+                - size
+            sentAt:
+              type: string
+            reviewedAt:
+              type: string
+            reason:
+              type: string
+            sentByViewer:
+              type: boolean
+          required:
+            - state
+            - file
+            - sentAt
+            - sentByViewer
+        cancelledAt:
+          type: string
+        paidAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - description
+        - amount
+        - dueDate
+        - state
+        - billingId
+        - billingType
+        - counterpartName
+        - direction
+        - recipient
+        - sharingState
+        - createdAt
+    downloadProofHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+        expiresIn:
+          type: number
+      required:
+        - url
+        - expiresIn
+    publicStartProofUploadHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        uploadUrl:
+          type: string
+        expiresAt:
+          type: string
+      required:
+        - uploadUrl
+        - expiresAt
+    publicProofStateHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+            - 'uploading'
+        reason:
+          type: string
+        file:
+          type: object
+          additionalProperties: false
+          properties:
+            name:
+              type: string
+            mime:
+              enum: 
+                - 'image/jpeg'
+                - 'image/png'
+                - 'application/pdf'
+            size:
+              type: number
+          required:
+            - name
+            - mime
+            - size
+    registerDeviceHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        platform:
+          enum: 
+            - 'ios'
+            - 'android'
+        active:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - platform
+        - active
+        - createdAt
+    manualReminderHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        queued:
+          type: boolean
+      required:
+        - queued

@@ -61,9 +61,29 @@ describe('chargeStateLabel and chargeAction', () => {
 
   it('picks one action per situation and none for settled charges', () => {
     expect(chargeAction(base, 'receivable')).toEqual({ kind: 'remind', label: 'Lembrar' });
+    expect(chargeAction({ ...base, counterpartReachable: false }, 'receivable')).toEqual({ kind: 'open', label: 'Ver cobrança' });
     expect(chargeAction({ ...base, proofState: 'pending' }, 'receivable')).toEqual({ kind: 'open', label: 'Ver comprovante' });
     expect(chargeAction(base, 'payable')).toEqual({ kind: 'open', label: 'Pagar via Pix' });
     expect(chargeAction({ ...base, proofState: 'pending' }, 'payable')).toEqual({ kind: 'open', label: 'Ver cobrança' });
     expect(chargeAction({ ...base, state: 'paid' }, 'payable')).toBeNull();
+  });
+});
+
+describe('conta a pagar in the feed', () => {
+  const own: ChargeSummary = { ...base, payer: 'owner', ownedByViewer: true, hasPix: true };
+
+  it("badges the owner's own bill and offers Pix or a plain settle", () => {
+    expect(chargeBadges(own, '2026-01-01').map((badge) => badge.label)).toContain('Minha conta');
+    expect(chargeAction(own, 'payable')).toEqual({ kind: 'open', label: 'Pagar via Pix' });
+    expect(chargeAction({ ...own, hasPix: false }, 'payable')).toEqual({ kind: 'open', label: 'Marcar pago' });
+    expect(chargeAction({ ...own, proofState: 'pending' }, 'payable')).toEqual({ kind: 'open', label: 'Ver cobrança' });
+  });
+
+  it('never lets the payee remind: they only open or review', () => {
+    const payee: ChargeSummary = { ...base, payer: 'owner', ownedByViewer: false, hasPix: true };
+
+    expect(chargeBadges(payee, '2026-01-01').map((badge) => badge.label)).not.toContain('Minha conta');
+    expect(chargeAction(payee, 'receivable')).toEqual({ kind: 'open', label: 'Ver cobrança' });
+    expect(chargeAction({ ...payee, proofState: 'pending' }, 'receivable')).toEqual({ kind: 'open', label: 'Ver comprovante' });
   });
 });

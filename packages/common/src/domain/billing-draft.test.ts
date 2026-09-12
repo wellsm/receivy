@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { type BillingDraft, buildBillingInput, EMPTY_BILLING_DRAFT, EMPTY_SPLIT_VALUES } from './billing-draft';
 
 const base: BillingDraft = {
+  direction: 'receivable',
+  payee: '',
+  pixInline: { type: 'email', key: '', label: '' },
   type: 'once',
   selected: ['p1'],
   owner: true,
@@ -32,7 +35,10 @@ describe('billing draft review', () => {
       paymentMethodId: undefined,
       reminders: [{ offsetDays: -3, enabled: true }],
       category: 'other',
-      split: { mode: 'equal', parts: [{ kind: 'person', personId: 'p1' }, { kind: 'owner' }] }
+      split: { mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }, { kind: 'owner' }] },
+      direction: 'receivable',
+      payeeUserId: undefined,
+      pix: undefined
     });
   });
 
@@ -46,7 +52,7 @@ describe('billing draft review', () => {
   it('parses fixed money and percentages once at the review boundary', () => {
     expect(buildBillingInput({ ...base, mode: 'fixed', values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,01' } } }).split).toEqual({
       mode: 'fixed',
-      parts: [{ kind: 'person', personId: 'p1', amountCents: 4001 }]
+      parts: [{ kind: 'user', userId: 'p1', amountCents: 4001 }]
     });
     expect(
       buildBillingInput({
@@ -57,7 +63,7 @@ describe('billing draft review', () => {
     ).toEqual({
       mode: 'percentage',
       parts: [
-        { kind: 'person', personId: 'p1', basisPoints: 3333 },
+        { kind: 'user', userId: 'p1', basisPoints: 3333 },
         { kind: 'owner', basisPoints: 6667 }
       ]
     });
@@ -69,7 +75,7 @@ describe('billing draft review', () => {
     expect(buildBillingInput({ ...base, mode: 'percentage', values: { ...values, percentage: { p1: '50', owner: '50' } } }).split).toEqual({
       mode: 'percentage',
       parts: [
-        { kind: 'person', personId: 'p1', basisPoints: 5000 },
+        { kind: 'user', userId: 'p1', basisPoints: 5000 },
         { kind: 'owner', basisPoints: 5000 }
       ]
     });
@@ -85,7 +91,7 @@ describe('billing draft review', () => {
     expect(buildBillingInput(draft).split).toEqual({
       mode: 'shares',
       parts: [
-        { kind: 'person', personId: 'p1', shares: 2 },
+        { kind: 'user', userId: 'p1', shares: 2 },
         { kind: 'owner', shares: 1 }
       ]
     });
@@ -115,8 +121,8 @@ describe('billing draft review', () => {
     expect(input.split).toEqual({
       mode: 'shares',
       parts: [
-        { kind: 'person', personId: 'p1', shares: 2 },
-        { kind: 'person', personId: 'p2', shares: 1 },
+        { kind: 'user', userId: 'p1', shares: 2 },
+        { kind: 'user', userId: 'p2', shares: 1 },
         { kind: 'owner', shares: 1 }
       ]
     });
@@ -128,6 +134,9 @@ describe('EMPTY_BILLING_DRAFT', () => {
     const draft = EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-10');
 
     expect(draft).toEqual({
+      direction: 'receivable',
+      payee: '',
+      pixInline: { type: 'email', key: '', label: '' },
       type: 'once',
       selected: [],
       owner: true,
@@ -166,5 +175,49 @@ describe('EMPTY_SPLIT_VALUES', () => {
     const second = EMPTY_SPLIT_VALUES();
 
     expect(second).toEqual({ fixed: {}, percentage: {}, shares: {} });
+  });
+});
+
+describe('conta a pagar draft', () => {
+  const payable: BillingDraft = {
+    ...base,
+    direction: 'payable',
+    selected: [],
+    payee: 'p9',
+    pixInline: { type: 'cpf', key: '529.982.247-25', label: ' Aluguel ' }
+  };
+
+  it('needs no contact, drops the wallet key and normalizes the typed Pix', () => {
+    const input = buildBillingInput(payable);
+
+    expect(input.direction).toBe('payable');
+    expect(input.payeeUserId).toBe('p9');
+    expect(input.paymentMethodId).toBeUndefined();
+    expect(input.pix).toEqual({ keyType: 'cpf', key: '52998224725', label: 'Aluguel' });
+    expect(input.split).toEqual({ mode: 'equal', parts: [{ kind: 'owner' }] });
+  });
+
+  it('accepts a bill that is the owner alone, without payee or Pix', () => {
+    const input = buildBillingInput({ ...payable, payee: '', pixInline: { type: 'email', key: '', label: '' } });
+
+    expect(input.payeeUserId).toBeUndefined();
+    expect(input.pix).toBeUndefined();
+  });
+
+  it('rejects an invalid typed key', () => {
+    expect(() => buildBillingInput({ ...payable, pixInline: { type: 'cpf', key: '123', label: '' } })).toThrow(/Chave Pix inválida/);
+  });
+});
+
+describe('typed phone key', () => {
+  it('accepts the masked national number and sends it as E.164', () => {
+    const input = buildBillingInput({
+      ...base,
+      direction: 'payable',
+      selected: [],
+      pixInline: { type: 'phone', key: '(11) 98765-4321', label: '' }
+    });
+
+    expect(input.pix).toEqual({ keyType: 'phone', key: '+5511987654321', label: undefined });
   });
 });

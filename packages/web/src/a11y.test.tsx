@@ -1,19 +1,19 @@
 import axe from "axe-core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { EmailLoginForm } from "@/components/email-login-form";
-import { CodeLoginForm } from "@/components/code-login-form";
-import { FeedScreen } from "@/components/feed-screen";
-import { PeopleScreen } from "@/components/people-screen";
-import { ContactForm } from "@/components/contact-form";
-import { PixSettingsScreen } from "@/components/pix-settings-screen";
-import { PixKeyForm } from "@/components/pix-key-form";
-import { ProfileScreen } from "@/components/profile-screen";
-import { BillingForm } from "@/components/billing-form";
-import { JoinInvite } from "@/components/join-invite";
-import { OnboardingForm } from "@/components/onboarding-form";
+import { LoginScreen } from "@/components/screens/login-screen";
+import { CodeScreen } from "@/components/screens/code-screen";
+import { FeedScreen } from "@/components/screens/feed-screen";
+import { ContactsScreen } from "@/components/screens/contacts-screen";
+import { ContactFormScreen } from "@/components/forms/contact-form-screen";
+import { PixSettingsScreen } from "@/components/screens/pix-settings-screen";
+import { PixKeyFormScreen } from "@/components/forms/pix-key-form-screen";
+import { ProfileScreen } from "@/components/screens/profile-screen";
+import { BillingFormScreen } from "@/components/forms/billing-form-screen";
+import { JoinInviteScreen } from "@/components/screens/join-invite-screen";
+import { OnboardingScreen } from "@/components/screens/onboarding-screen";
 import { writePendingLogin } from "@/lib/auth/pending-login";
 
 const routerMock = { replace: vi.fn(), push: vi.fn() };
@@ -32,15 +32,15 @@ async function expectNoViolations(container: HTMLElement) {
 }
 
 const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { amountCents: 0, currency: "BRL" }, overdue: { amountCents: 0, currency: "BRL" }, pending: { amountCents: 0, currency: "BRL" }, proofsToReview: 0, receivableCount: 0, payableCount: 0 };
-const user = { id: "user", email: "fixture@example.com", name: "Ana", avatarUrl: null, locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
-const person = { id: "person-1", name: "Ana Souza", nickname: "Ana", displayName: "Ana", email: "ana@example.com", phone: null, archivedAt: null, createdAt: "2026-09-01", hasAccount: false, lastBilledAt: null, activeCharges: 1 };
+const user = { id: "user", email: "fixture@example.com", name: "Ana", phone: null, avatarUrl: null, status: "active", locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
+const contact = { id: "contact-1", userId: "user-1", name: "Ana Souza", nickname: "Ana", displayName: "Ana", email: "ana@example.com", phone: null, status: "pending", archivedAt: null, createdAt: "2026-09-01", lastBilledAt: null, activeCharges: 1 };
 const pixMethod = { id: "pix-1", label: "Nubank", pixKey: "52998224725", pixKeyType: "cpf", isDefault: true, archivedAt: null };
 const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 12_000, currency: "BRL" as const }, type: "once" as const, participantCount: 3, category: "food" as const, expired: false };
 
 describe("accessibility of the main web screens", () => {
   it("email login form has labelled fields, reachable submit and no axe violations", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
-    const { container } = render(<EmailLoginForm nextPath="/" providers={{ google: true, apple: true }} />);
+    const { container } = render(<LoginScreen nextPath="/" providers={{ google: true, apple: true }} />);
     const email = screen.getByLabelText("Seu e-mail");
     const tab = userEvent.setup();
     let reachedEmail = false, reachedSubmit = false;
@@ -56,39 +56,39 @@ describe("accessibility of the main web screens", () => {
 
   it("code confirmation form has a labelled code field and no axe violations", async () => {
     writePendingLogin({ email: "ana@example.com", sentAt: Date.now(), nextPath: "/" });
-    const { container } = render(<CodeLoginForm />);
+    const { container } = render(<CodeScreen />);
     expect(await screen.findByLabelText("Código de 6 dígitos")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirmar e Entrar/ })).toBeDisabled();
     await expectNoViolations(container);
   });
 
   it("onboarding form labels its single field and keeps Continuar disabled until a name exists", async () => {
-    const { container } = render(<OnboardingForm />);
+    const { container } = render(<OnboardingScreen />);
     expect(screen.getByLabelText("Nome")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
     await expectNoViolations(container);
   });
 
-  it("feed (empty) has no axe violations and its filters are keyboard buttons", async () => {
+  it("feed (empty) has no axe violations and names every filter group", async () => {
     vi.mocked(browserFetch).mockResolvedValue(Response.json({ summary, items: [], nextCursor: null }));
     const { container } = render(<FeedScreen />);
     await screen.findByText("Sua timeline começa aqui");
-    for (const name of ["A receber", "A pagar"]) expect(screen.getByRole("button", { name })).toBeEnabled();
+    for (const name of ["Direção", "Status", "Modalidade", "Período"]) expect(screen.getByRole("combobox", { name })).toBeEnabled();
     await expectNoViolations(container);
   });
 
   it("contact list has a labelled search, named cards and no axe violations", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ people: [person], nextCursor: null }));
-    const { container } = render(<PeopleScreen />);
-    expect(await screen.findByRole("link", { name: "Contato Ana" })).toHaveAttribute("href", "/people/person-1");
+    vi.mocked(browserFetch).mockResolvedValue(Response.json({ contacts: [contact], nextCursor: null }));
+    const { container } = render(<ContactsScreen />);
+    expect(await screen.findByRole("link", { name: "Contato Ana" })).toHaveAttribute("href", "/contacts/contact-1");
     expect(screen.getByLabelText("Buscar contatos")).toBeInTheDocument();
     await expectNoViolations(container);
   });
 
   it("contact form labels every field and has no axe violations", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json(person));
-    const { container } = render(<ContactForm />);
-    for (const label of ["Nome completo", "Apelido", "WhatsApp / Celular", "E-mail"]) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    vi.mocked(browserFetch).mockResolvedValue(Response.json(contact));
+    const { container } = render(<ContactFormScreen />);
+    for (const label of ["Nome completo", "Apelido", "E-mail (opcional)"]) expect(screen.getByLabelText(label)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Salvar contato" })).toBeInTheDocument();
     await expectNoViolations(container);
   });
@@ -97,7 +97,8 @@ describe("accessibility of the main web screens", () => {
     vi.mocked(browserFetch).mockResolvedValue(Response.json({ paymentMethods: [pixMethod] }));
     const { container } = render(<PixSettingsScreen />);
     expect(await screen.findByRole("button", { name: "Copiar chave" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Mais ações da chave Nubank" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Excluir" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cadastrar nova chave" })).toBeInTheDocument();
     await expectNoViolations(container);
   });
 
@@ -105,10 +106,9 @@ describe("accessibility of the main web screens", () => {
     vi.mocked(browserFetch).mockImplementation(async path =>
       String(path) === "/api/auth/me" ? Response.json({ user: { email: "ana@example.com" } }) : Response.json({ paymentMethods: [] }),
     );
-    const { container } = render(<PixKeyForm />);
+    const { container } = render(<PixKeyFormScreen />);
     expect(await screen.findByRole("radiogroup", { name: "Tipo de chave" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "CPF" })).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByLabelText("Banco (opcional)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Salvar chave Pix" })).toBeInTheDocument();
     await expectNoViolations(container);
   });
@@ -118,36 +118,54 @@ describe("accessibility of the main web screens", () => {
       if (String(path) === "/api/auth/me") return Response.json({ user });
       throw new Error(`unexpected ${String(path)}`);
     });
-    const { container } = render(<ProfileScreen version="1.0.0" />);
+    const { container } = render(<ProfileScreen />);
     expect(await screen.findByRole("button", { name: "Excluir conta" })).toBeInTheDocument();
     await expectNoViolations(container);
   });
 
   it("billing creation form is operable by keyboard and has no axe violations", async () => {
     vi.mocked(browserFetch).mockImplementation(async path => {
-      if (path.startsWith("/api/people")) return Response.json({ people: [person], nextCursor: null });
-      if (path.includes("payment-methods")) return Response.json({ paymentMethods: [] });
+      if (path.startsWith("/api/contacts")) return Response.json({ contacts: [contact], nextCursor: null });
+      if (path.includes("payment-methods")) return Response.json({ paymentMethods: [pixMethod] });
       if (path.includes("auth/me")) return Response.json({ user: { timezone: "America/Sao_Paulo" } });
       throw new Error(`unexpected ${path}`);
     });
-    const { container } = render(<BillingForm billing={null} onSaved={vi.fn()} onBack={vi.fn()} />);
-    const contact = await screen.findByRole("button", { name: /Ana/ });
+    const { container } = render(<BillingFormScreen billing={null} onSaved={vi.fn()} />);
     const keyboard = userEvent.setup();
-    contact.focus();
+
+    // Contacts enter through the agenda dialog, all by keyboard.
+    const add = await screen.findByRole("button", { name: "Adicionar" });
+    add.focus();
     await keyboard.keyboard(" ");
-    expect(contact).toHaveAttribute("aria-pressed", "true");
+    const panel = await screen.findByRole("dialog", { name: "Contatos" });
+    expect(within(panel).getByRole("button", { name: "+ Novo contato" })).toBeInTheDocument();
+    const option = await within(panel).findByRole("checkbox", { name: "Ana" });
+    option.focus();
+    await keyboard.keyboard(" ");
+    expect(option).toBeChecked();
+    await keyboard.click(within(panel).getByRole("button", { name: "Concluir" }));
+    expect(screen.getByRole("button", { name: /Ana/ })).toHaveAttribute("aria-pressed", "true");
+
     expect(screen.getByRole("radiogroup", { name: "Modalidade" })).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: "Divisão" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Valor")).toBeInTheDocument();
+    expect(screen.getByLabelText("Valor total")).toBeInTheDocument();
     expect(screen.getByLabelText("Título")).toBeInTheDocument();
     expect(screen.getByLabelText("Vencimento")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Novo contato" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Criar cobrança" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Criar conta" })).toBeInTheDocument();
+    await expectNoViolations(container);
+
+    // A conta a pagar swaps the participants and the wallet for a payee and an inline key.
+    await keyboard.click(screen.getByRole("radio", { name: "Vou pagar" }));
+    expect(screen.getByRole("radiogroup", { name: "Direção" })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Tipo de chave" })).toBeInTheDocument();
+    expect(screen.getByLabelText("E-mail Pix")).toBeInTheDocument();
+    expect(screen.getByLabelText("Apelido da chave (opcional)")).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Divisão" })).not.toBeInTheDocument();
     await expectNoViolations(container);
   });
 
   it("invite page labels its action and has no axe violations", async () => {
-    const { container } = render(<JoinInvite token="tok-1" view={invite} authenticated />);
+    const { container } = render(<JoinInviteScreen token="tok-1" view={invite} authenticated />);
     expect(screen.getByRole("button", { name: "Participar" })).toBeEnabled();
     await expectNoViolations(container);
   });

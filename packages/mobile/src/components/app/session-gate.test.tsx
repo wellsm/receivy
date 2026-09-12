@@ -14,10 +14,10 @@ jest.mock("@/notifications/register", () => ({
   registerPushDevice: (...args: unknown[]) => mockRegisterPushDevice(...args),
 }));
 
-const named = { name: "Ana" };
-const unnamed = { name: null };
+const active = { name: "Ana", status: "active" as const };
+const pending = { name: null, status: "pending" as const };
 
-function deps(user: { name: string | null }, token: string | null = "token") {
+function deps(user: { name: string | null; status: "pending" | "active" }, token: string | null = "token") {
   const client = { getAccessToken: () => token, refresh: jest.fn().mockResolvedValue({}) };
   const store = { load: jest.fn().mockResolvedValue(user) };
 
@@ -31,9 +31,9 @@ beforeEach(() => {
 });
 
 describe("SessionGate", () => {
-  it("routes to onboarding before rendering the home tabs when the name is missing", async () => {
+  it("routes to onboarding before rendering the home tabs while the account is pending", async () => {
     await render(
-      <SessionGate {...deps(unnamed)}>
+      <SessionGate {...deps(pending)}>
         <Text>Home tabs</Text>
       </SessionGate>,
     );
@@ -42,9 +42,9 @@ describe("SessionGate", () => {
     expect(screen.queryByText("Home tabs")).toBeNull();
   });
 
-  it("renders the home tabs once the profile has a name", async () => {
+  it("renders the home tabs once the account is active", async () => {
     await render(
-      <SessionGate {...deps(named)}>
+      <SessionGate {...deps(active)}>
         <Text>Home tabs</Text>
       </SessionGate>,
     );
@@ -57,7 +57,7 @@ describe("SessionGate", () => {
     mockRegisterPushDevice.mockRejectedValue(new Error("permission denied"));
 
     await render(
-      <SessionGate {...deps(named)}>
+      <SessionGate {...deps(active)}>
         <Text>Home tabs</Text>
       </SessionGate>,
     );
@@ -68,7 +68,7 @@ describe("SessionGate", () => {
 
   it("does not register the push device before the profile is ready", async () => {
     await render(
-      <SessionGate {...deps(unnamed)}>
+      <SessionGate {...deps(pending)}>
         <Text>Home tabs</Text>
       </SessionGate>,
     );
@@ -78,7 +78,7 @@ describe("SessionGate", () => {
   });
 
   it("refreshes a stored session first and falls back to login when that fails", async () => {
-    const { client, store } = deps(named, null);
+    const { client, store } = deps(active, null);
     client.refresh.mockRejectedValue(new Error("expired"));
 
     await render(

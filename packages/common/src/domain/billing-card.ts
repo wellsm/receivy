@@ -52,7 +52,7 @@ export function billingBadges(billing: BillingSummary): BillingBadge[] {
   }
 
   if (billing.state === 'paused') {
-    badges.push({ label: 'Pausada', tone: 'neutral' });
+    badges.push({ label: 'Pausada', tone: 'warning' });
   }
 
   if (billing.proofsPending > 0) {
@@ -61,6 +61,13 @@ export function billingBadges(billing: BillingSummary): BillingBadge[] {
 
   if (billing.state === 'ended' && billing.paidCount === billing.chargeCount && billing.chargeCount > 0) {
     badges.push({ label: 'Liquidado', tone: 'success' });
+  }
+
+  if (billing.direction === 'payable') {
+    badges.push({ label: 'A pagar', tone: 'warning' });
+    badges.push({ label: billing.payeeName ?? 'Só comigo', tone: 'neutral' });
+
+    return badges;
   }
 
   badges.push({ label: `${billing.participantCount} pessoa${billing.participantCount === 1 ? '' : 's'}`, tone: 'neutral' });

@@ -1,59 +1,43 @@
 import type { Http } from '@ez4/gateway';
-import type { sessionAuthorizer } from '../authorizers/session';
-import type {
-  downloadProofHandler,
-  finalizeProofHandler,
-  listProofsHandler,
-  publicFinalizeProofHandler,
-  publicProofStatusHandler,
-  publicUploadProofHandler,
-  reviewProofHandler,
-  uploadProofHandler
-} from '../proofs/endpoints';
+import type { sessionAuthorizer } from '../common/authorizers/session';
+import type { downloadProofHandler } from './endpoints/download';
+import type { publicStartProofUploadHandler } from './endpoints/public-start-upload';
+import type { publicProofStateHandler } from './endpoints/public-state';
+import type { publicWithdrawProofHandler } from './endpoints/public-withdraw';
+import type { reviewProofHandler } from './endpoints/review';
+import type { startProofUploadHandler } from './endpoints/start-upload';
+import type { withdrawProofHandler } from './endpoints/withdraw';
+
 export type ProofRoutes = [
   Http.UseRoute<{
-    name: 'publicProofStatus';
-    path: 'GET /public/charges/{token}/proofs/uploads/{intentId}';
-    handler: typeof publicProofStatusHandler;
+    name: 'startProofUpload';
+    path: 'POST /charges/{id}/proof';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof startProofUploadHandler;
   }>,
   Http.UseRoute<{
-    name: 'uploadProof';
-    path: 'POST /charges/{id}/proofs/uploads';
+    name: 'withdrawProof';
+    path: 'DELETE /charges/{id}/proof';
     authorizer: typeof sessionAuthorizer;
-    handler: typeof uploadProofHandler;
-  }>,
-  Http.UseRoute<{
-    name: 'finalizeProof';
-    path: 'POST /charges/{id}/proofs/uploads/{intentId}/finalize';
-    authorizer: typeof sessionAuthorizer;
-    handler: typeof finalizeProofHandler;
-  }>,
-  Http.UseRoute<{
-    name: 'listProofs';
-    path: 'GET /charges/{id}/proofs';
-    authorizer: typeof sessionAuthorizer;
-    handler: typeof listProofsHandler;
+    handler: typeof withdrawProofHandler;
   }>,
   Http.UseRoute<{
     name: 'reviewProof';
-    path: 'POST /charges/{id}/proofs/{proofId}/review';
+    path: 'POST /charges/{id}/proof/review';
     authorizer: typeof sessionAuthorizer;
     handler: typeof reviewProofHandler;
   }>,
   Http.UseRoute<{
     name: 'downloadProof';
-    path: 'POST /charges/{id}/proofs/{proofId}/download';
+    path: 'GET /charges/{id}/proof/download';
     authorizer: typeof sessionAuthorizer;
     handler: typeof downloadProofHandler;
   }>,
   Http.UseRoute<{
-    name: 'publicUploadProof';
-    path: 'POST /public/charges/{token}/proofs/uploads';
-    handler: typeof publicUploadProofHandler;
+    name: 'publicStartProofUpload';
+    path: 'POST /public/charges/{token}/proof';
+    handler: typeof publicStartProofUploadHandler;
   }>,
-  Http.UseRoute<{
-    name: 'publicFinalizeProof';
-    path: 'POST /public/charges/{token}/proofs/uploads/{intentId}/finalize';
-    handler: typeof publicFinalizeProofHandler;
-  }>
+  Http.UseRoute<{ name: 'publicProofState'; path: 'GET /public/charges/{token}/proof'; handler: typeof publicProofStateHandler }>,
+  Http.UseRoute<{ name: 'publicWithdrawProof'; path: 'DELETE /public/charges/{token}/proof'; handler: typeof publicWithdrawProofHandler }>
 ];

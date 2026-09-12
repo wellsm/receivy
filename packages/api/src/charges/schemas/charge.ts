@@ -1,13 +1,22 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
 
+export interface ProofFileSchema {
+  key: String.Max<300>;
+  name: String.Max<200>;
+  mime: 'image/jpeg' | 'image/png' | 'application/pdf';
+  size: number;
+  sha256?: String.Max<64>;
+}
+
 export interface ChargeSchema extends Database.Schema {
   id: String.UUID;
+  /** The billing owner, whichever side of the money they are on. */
   creditor_id: String.UUID;
-  debtor_person_id: String.UUID;
-  recipient_user_id?: String.UUID;
-  recipient_name_snapshot: String.Max<120>;
-  recipient_email_snapshot?: String.Max<254>;
+  /** The person on the other side (users.id); null only on a conta a pagar without a payee. Name and e-mail are read live. */
+  debtor_user_id?: String.UUID;
+  /** Who pays: null or 'person' (the contact) on a conta a receber, 'owner' on a conta a pagar. */
+  payer?: 'person' | 'owner';
   billing_id: String.UUID;
   billing_type: 'once' | 'until' | 'indefinite';
   description: String.Max<500>;
@@ -22,6 +31,26 @@ export interface ChargeSchema extends Database.Schema {
   state: 'pending' | 'paid' | 'cancelled';
   cancelled_at?: String.DateTime;
   paid_at?: String.DateTime;
+  /**
+   * The single file attached to the charge. `uploading` is a reserved slot waiting for the bucket
+   * event; the earlier files' history lives in `events`.
+   */
+  proof_state?: 'uploading' | 'pending' | 'accepted' | 'rejected';
+  proof_file?: ProofFileSchema;
+  /** Who sent it: a signed-in debtor, or nobody when it came through the public link. */
+  proof_sender_user_id?: String.UUID;
+  /** Hash of the sender (user id or public token) so the same actor may replace or withdraw it. */
+  proof_actor_hash?: String.Max<64>;
+  /** Only while `uploading`: when the reserved slot expires. */
+  proof_expires_at?: String.DateTime;
+  proof_sent_at?: String.DateTime;
+  proof_reviewed_at?: String.DateTime;
+  proof_reason?: String.Max<500>;
+  /** The public payment link, versioned: rotating bumps the version and kills the previous token. */
+  public_id?: String.Max<64>;
+  link_version?: number;
+  link_expires_at?: String.DateTime;
+  link_revoked_at?: String.DateTime;
   created_at: String.DateTime;
   updated_at: String.DateTime;
 }

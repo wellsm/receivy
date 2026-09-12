@@ -47,10 +47,12 @@ Neon, um projeto com dois branches:
    `postgresql://user:senha@host/db?sslmode=require`) → `EZ4_RAW_PG_DB_URL` do
    respectivo env.
 
-Neon suspende o compute sem atividade; o `NotificationCron` roda a cada 5
-minutos (`cron(0/5 * * * ? *)`) e toca o banco, então o compute fica acordado
-sem depender de tráfego. Os demais crons são horários (`BillingCron` no minuto
-0, `StorageCron` no minuto 15). `GET /health` não toca o banco e não serve como
+Neon suspende o compute sem atividade. Há dois crons diários, `BillingCron`
+(05:00 UTC, materializa assinaturas) e `ChargeNotificationCron` (05:30 UTC, arma os
+lembretes do dia); o resto são schedules
+dinâmicos do EventBridge (`charge:<id>:notify`, `charge:<id>:upload-expiry`) que
+acordam o banco só quando têm algo a fazer. A primeira requisição depois de uma
+pausa paga o cold start do Neon. `GET /health` não toca o banco e não serve como
 sonda.
 
 ## 3. Segredos gerados localmente
@@ -77,9 +79,8 @@ Preencha agora só o que já existe: AWS (passo 1), `EZ4_RAW_PG_DB_URL` (passo 2
 os três segredos (passo 3), `PUBLIC_WEB_ORIGIN=https://receivy.wellsm.dev` e
 `OAUTH_REDIRECT_ALLOW_LIST=https://receivy.wellsm.dev/auth/oauth/callback,receivy://auth/callback`.
 Deixe `OAUTH_PROVIDERS_CONFIG_B64=disabled`, `EMAIL_TRANSPORT=disabled`,
-`NOTIFICATION_EMAIL_TRANSPORT=disabled`, `NOTIFICATION_PUSH_TRANSPORT=disabled`
-e `PROOF_STORAGE_MODE=disabled` neste primeiro deploy: são ativados nos passos
-seguintes, quando os valores existirem.
+e `NOTIFICATION_PUSH_TRANSPORT=disabled` neste primeiro deploy: são ativados nos
+passos seguintes, quando os valores existirem.
 
 ## 5. Primeiro `deploy:dev`
 
@@ -93,15 +94,14 @@ O comando compila (`tsc --noEmit`) e sobe o stage. Anote da saída:
 | Saída do EZ4 | Vai para |
 | --- | --- |
 | URL do API Gateway, `https://<id>.execute-api.<região>.amazonaws.com/dev-receivy-api` | `EZ4_API_URL` (web) e `EXPO_PUBLIC_EZ4_API_URL` (mobile) |
-| Nome do bucket `ProofFiles` (`dev-receivy-proof-files-<sufixo>`) | `PROOF_S3_BUCKET` (API) |
+| Nome do bucket `ProofFiles` (`dev-receivy-proof-files-<sufixo>`) | `PROOF_UPLOAD_ORIGIN` (web, passo 7) |
 
 `pnpm output:dev` reimprime esses valores. O state fica em S3
 (`stateFile.remote`), não em arquivo local; mesmo assim, não rode dois deploys
 do mesmo stage em paralelo.
 
-Complete o `dev.env` com `PROOF_STORAGE_MODE=s3` e `PROOF_S3_BUCKET=<nome exato>`
-e rode `pnpm deploy:dev` de novo. O validador recusa nome ausente ou de outro
-projeto. O bucket é privado, sem expiração global; a única lifecycle rule
+A API usa o bucket pelo serviço `ProofFiles` ligado ao provider; nenhuma variável
+de storage é necessária. O bucket é privado, sem expiração global; a única lifecycle rule
 permitida é em `temporary/` (`docs/proof-storage.md`).
 
 Verifique: `curl https://<url-da-api>/health` responde 200.
@@ -115,8 +115,7 @@ Domínio de envio verificado por stage. Passos detalhados em
 2. Cloudflare, registros sem proxy: DKIM (`resend._domainkey`), MX + SPF em
    `send.<domínio>`, DMARC `p=none`.
 3. API key restrita a envio e ao domínio → `RESEND_API_KEY`.
-4. `RESEND_FROM_EMAIL=Receivy <login@receivy.wellsm.dev>`,
-   `EMAIL_TRANSPORT=resend`, `NOTIFICATION_EMAIL_TRANSPORT=resend`.
+4. `RESEND_FROM_EMAIL=Receivy <login@receivy.wellsm.dev>` e `EMAIL_TRANSPORT=resend`.
 5. `pnpm deploy:dev` e teste `POST /auth/email/code` com um endereço seu; o
    e-mail deve chegar com DKIM/SPF `pass`.
 
@@ -131,7 +130,7 @@ casos as variáveis são de **runtime do servidor**, nunca argumentos de build.
 | --- | --- |
 | `EZ4_API_URL` | URL do API Gateway do passo 5 |
 | `WEB_APP_URL` | `https://receivy.wellsm.dev` (origem pública do próprio web; obrigatória atrás de proxy) |
-| `PROOF_UPLOAD_ORIGIN` | `https://<PROOF_S3_BUCKET>.s3.<AWS_REGION>.amazonaws.com` (o presign usa URL virtual-hosted) |
+| `PROOF_UPLOAD_ORIGIN` | `https://<nome do bucket ProofFiles>.s3.<AWS_REGION>.amazonaws.com` (o presign usa URL virtual-hosted) |
 | `NEXT_PUBLIC_OPERATOR_CONTACT` | e-mail de contato exibido nas páginas legais |
 
 DNS: registro do host `receivy.wellsm.dev` apontando para o provedor do web,
@@ -241,30 +240,16 @@ domínio real às listas estáticas de CORS em `packages/api/src/api.ts` e
 `packages/api/src/storage.ts`. Não existe `destroy` de prd por script; derrubar
 produção é `ez4 destroy` manual e consciente.
 
-## Filas e DLQ
+## Schedulers
 
-O EZ4 nomeia todo recurso como `<prefix>-<projectName>-<serviço em kebab-case>`
-(`prefix` é o `APP_STAGE` e `projectName` é `receivy`, ambos em
-`packages/api/ez4.project.js`). A DLQ de cada fila recebe o sufixo
-`-deadletter`. No stage `dev`:
-
-| Serviço             | Fila SQS                       | DLQ                                       |
-| ------------------- | ------------------------------ | ----------------------------------------- |
-| `NotificationQueue` | `dev-receivy-notification-queue` | `dev-receivy-notification-queue-deadletter` |
-| `BillingQueue`      | `dev-receivy-billing-queue`      | `dev-receivy-billing-queue-deadletter`      |
-| `StorageQueue`      | `dev-receivy-storage-queue`      | `dev-receivy-storage-queue-deadletter`      |
-
-Em `prd` troque o prefixo por `prd`. As três filas usam `maxAttempts: 5` e
-retenção de 20160 minutos (14 dias), com backoff de 5s a 300s.
-
-Crie um alarme no CloudWatch sobre
-`AWS/SQS → ApproximateNumberOfMessagesVisible` de **cada DLQ**, com limiar
-`>= 1` por 5 minutos (estatística `Maximum`) e uma ação de notificação. Uma DLQ
-não vazia é sempre trabalho perdido: aviso não entregue, ocorrência não
-materializada ou arquivo não apagado.
-
-`NotificationCron` roda a cada 5 minutos e, além de reenfileirar entregas
-pendentes, mantém o compute do Neon acordado — ver o passo 2.
+Não há filas SQS. Dois crons diários (`BillingCron` 05:00 UTC, `ChargeNotificationCron`
+05:30 UTC, `maxRetries: 1`) e dois
+schedulers dinâmicos (`expression: 'dynamic'`, grupos `charge-notify` e
+`upload-expiry`) que recebem um evento por entidade, com `maxRetries: 3` e
+`ActionAfterCompletion: DELETE` (a schedule some depois de rodar). Os handlers reconferem o estado antes de agir, então uma
+reentrega nunca duplica cobrança, lembrete ou limpeza. Falha esgotada aparece nos
+logs do Lambda do scheduler; crie um alarme sobre `Errors` de cada função de
+scheduler no CloudWatch.
 
 ## Migração 2026-09-09
 
@@ -277,7 +262,7 @@ ALTER TABLE notification_deliveries ALTER COLUMN event_id TYPE varchar(200);
 O EZ4 não encurta nem alarga colunas existentes; sem esse `ALTER` as chaves de
 evento novas estouram o tamanho antigo.
 
-A coluna `billings.category` é obrigatória no schema (`schemas/billing.ts`), então
+A coluna `billings.category` é obrigatória no schema (`billings/schemas/billing.ts`), então
 o EZ4 emite `NOT NULL` e a sincronização falha em tabela povoada. Crie e preencha a
 coluna antes do deploy:
 
@@ -289,6 +274,24 @@ ALTER TABLE billings ALTER COLUMN category SET DEFAULT 'other';
 
 O alargamento do check de `template` em `notification_deliveries` não pede passo
 manual: o EZ4 recria as constraints `_ck` no deploy.
+
+Contas a pagar (2026-09) acrescentam colunas opcionais (`billings.direction`,
+`billings.payee_person_id`, `billings.pix_key_type|pix_key|pix_label`,
+`charges.payer`), que o EZ4 cria nullable sem passo manual. Já
+`charges.debtor_person_id` deixou de ser obrigatória (uma conta a pagar sem
+credor não tem contato do outro lado) e o EZ4 não relaxa `NOT NULL` em tabela
+povoada; rode antes do deploy:
+
+```sql
+ALTER TABLE charges ALTER COLUMN debtor_person_id DROP NOT NULL;
+```
+
+Agenda por conta (2026-09): `people`/`person_contacts` deixaram de existir; `contacts`
+liga `owner_id` → `user_id`, `users` ganhou `status` (`pending|active|removed`, NOT NULL)
+e `phone`, `charges.debtor_user_id` substitui `debtor_person_id` e os três `recipient_*`,
+`allocations.user_id` substitui `person_id` e `billings.payee_user_id` substitui
+`payee_person_id`. Nada em produção antes desta versão: recrie o banco
+(`serve --local --reset`) em vez de migrar dados.
 
 `people.nickname` é opcional no schema, então o EZ4 adiciona a coluna nullable
 sem passo manual.
@@ -322,7 +325,7 @@ guardado. Remova a variável dos envs de dev e prd depois do deploy.
   se existir, `local-dev.env` por cima (por exemplo `OAUTH_REDIRECT_ALLOW_LIST`
   com `localhost`, que nunca deve ir para a AWS).
 - Logs: CloudWatch, retenção de 30 dias, sem corpos nem segredos por desenho
-  (`src/security/listener.ts`).
+  (`src/common/services/listener.ts`).
 
 ## Custos
 

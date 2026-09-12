@@ -1,11 +1,11 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import { requestEmailCode } from '../../auth/email-login';
-import { createLoginCodeMailer } from '../../email/login-code';
-import type { ApiProvider } from '../../provider';
-import { createAuthRepository } from '../../repositories/auth-repository';
-import { allowEmailCode } from '../../security/throttle';
+import { allowEmailCode } from '../../common/utils/throttle';
+import type { UserProvider } from '../provider';
+import { createAuthRepository } from '../repositories/auth';
+import { requestEmailCode } from '../services/email-login';
+import { createLoginCodeMailer } from '../services/login-code-email';
 
 declare class EmailCodeRequest implements Http.Request {
   body: { email: String.Email };
@@ -15,10 +15,10 @@ declare class EmailCodeResponse implements Http.Response {
   status: 204;
 }
 
-export async function emailCodeHandler(request: EmailCodeRequest, context: Service.Context<ApiProvider>): Promise<EmailCodeResponse> {
+export async function emailCodeHandler(request: EmailCodeRequest, context: Service.Context<UserProvider>): Promise<EmailCodeResponse> {
   const { db, email, variables } = context;
 
-  const allowed = await allowEmailCode(db, request.body.email, variables.LOGIN_CODE_HASH_KEY, request);
+  const allowed = await allowEmailCode(db, request.body.email, variables.LOGIN_CODE_HASH_KEY);
 
   if (!allowed) {
     return { status: 204 };

@@ -1,144 +1,136 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ProofPanel } from "./proof-panel";
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: (...args: unknown[]) => fetch(...args as Parameters<typeof fetch>) }));
+import { ProofPanel } from "@/components/app/proof-panel";
+const BASE = "/api/public-proof/token";
+const STATUS = `${BASE}/proof`;
+const ticket = () => Response.json({ uploadUrl: "https://upload.test/file", expiresAt: new Date(Date.now() + 300_000).toISOString() });
+const empty = () => Response.json({ state: null, reason: null, file: null });
+const pending = (name = "recibo.pdf") => Response.json({ state: "pending", reason: null, file: { name, mime: "application/pdf", size: 14 } });
+const uploading = () => Response.json({ state: "uploading", reason: null, file: null });
+function pdf(name = "recibo.pdf") { return new File(["%PDF-1.7\nproof"], name, { type: "application/pdf" }); }
 beforeEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
-it("keeps a selected replacement through repeated polls of the previous rejected proof", async () => {
-  vi.useFakeTimers();
-  sessionStorage.setItem("receivy-proof-intent", "rejected-intent");
-  let uploaded: BodyInit | null | undefined;
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
-    if (url === "https://upload.test/replacement") { uploaded = init?.body; return new Response(null, { status: 204 }); }
-    if (String(url).endsWith("/finalize")) return Response.json({ state: "pending" });
-    if (init?.method === "POST") return Response.json({ id: "replacement", uploadUrl: "https://upload.test/replacement", expiresAt: new Date(Date.now() + 300_000).toISOString() });
-    return Response.json({ state: "rejected", reason: "Ilegível", closureReason: null });
+it("shows the selected file in place of the dropzone, then lets the payer delete the sent proof and pick another", async () => {
+  let stored = false;
+  const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (init?.method === "DELETE") { stored = false; return new Response(null, { status: 204 }); }
+    if (init?.method === "PUT") { stored = true; return new Response(null, { status: 204 }); }
+    if (init?.method === "POST") return ticket();
+    expect(url).toBe(STATUS);
+    return stored ? pending() : empty();
   });
-  await act(async () => { render(<ProofPanel base="/api/public-proof/token" state="pending" publicView />); });
-  expect(screen.getByText(/Comprovante rejeitado/)).toBeTruthy();
-  const replacement = new File(["%PDF-1.7\nreplacement"], "replacement.pdf", { type: "application/pdf" });
-  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [replacement] } });
-  expect(screen.getByRole("button", { name: "Enviar comprovante" })).toBeEnabled();
-  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
-  expect(screen.getByRole("button", { name: "Enviar comprovante" })).toBeEnabled();
-  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" })); });
-  expect(uploaded).toBe(replacement);
-  expect(screen.getByText("Comprovante enviado para revisão.")).toBeTruthy();
-});
-it("uploads the selected bytes then finalizes and shows pending review", async () => {
-  const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ id: "intent", uploadUrl: "https://upload.test/file", expiresAt: "2027-01-01" }))
-    .mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(Response.json({ state: "pending" }));
-  render(<ProofPanel base="/api/public-proof/token" state="pending" publicView uploadsEnabled />);
-  const file = new File(["%PDF-1.7\nproof"], "recibo.pdf", { type: "application/pdf" });
+  render(<ProofPanel base={BASE} state="pending" />);
+  const file = pdf();
   fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [file] } });
+  expect(screen.getByText("recibo.pdf")).toBeTruthy();
+  expect(screen.getByText("Trocar arquivo")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
   await screen.findByText("Comprovante enviado para revisão.");
-  expect(fetcher.mock.calls[1]?.[1]?.body).toBe(file);
-  expect(fetcher.mock.calls[2]?.[0]).toBe("/api/public-proof/token/uploads/intent/finalize");
+  expect(screen.getByText("recibo.pdf")).toBeTruthy();
+  const reserve = fetcher.mock.calls.find(([, init]) => init?.method === "POST");
+  expect(reserve?.[0]).toBe(STATUS);
+  expect(JSON.parse(reserve?.[1]?.body as string)).toEqual({ filename: "recibo.pdf", mime: "application/pdf", size: 14 });
+  expect(fetcher.mock.calls.find(([, init]) => init?.method === "PUT")?.[1]?.body).toBe(file);
+  fireEvent.click(screen.getByRole("button", { name: "Apagar e enviar outro" }));
+  await waitFor(() => expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeEnabled());
+  expect(fetcher.mock.calls.at(-1)?.[0]).toBe(STATUS);
+  expect(fetcher.mock.calls.at(-1)?.[1]?.method).toBe("DELETE");
+  expect(sessionStorage.getItem("receivy-proof-upload")).toBeNull();
+  expect(screen.queryByText("Comprovante enviado para revisão.")).toBeNull();
+});
+it("polls the slot after the PUT until the bucket event turns it into a proof", async () => {
+  vi.useFakeTimers();
+  let reads = 0;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    if (init?.method === "PUT") return new Response(null, { status: 204 });
+    if (init?.method === "POST") return ticket();
+    reads += 1;
+    if (reads === 1) return empty();
+    return reads < 4 ? uploading() : pending();
+  });
+  await act(async () => { render(<ProofPanel base={BASE} state="pending" />); });
+  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [pdf()] } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" })); });
+  expect(screen.queryByText("Comprovante enviado para revisão.")).toBeNull();
+  expect(sessionStorage.getItem("receivy-proof-upload")).toBe("1");
+  await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+  expect(screen.getByText("Comprovante enviado para revisão.")).toBeTruthy();
+  expect(sessionStorage.getItem("receivy-proof-upload")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+it("gives up after thirty seconds but keeps the flag so a reload asks again", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    if (init?.method === "PUT") return new Response(null, { status: 204 });
+    if (init?.method === "POST") return ticket();
+    return uploading();
+  });
+  await act(async () => { render(<ProofPanel base={BASE} state="pending" />); });
+  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [pdf()] } });
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" })); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(screen.getByRole("alert").textContent).toBe("Não foi possível confirmar o envio. Atualize a página.");
+  expect(sessionStorage.getItem("receivy-proof-upload")).toBe("1");
+});
+it("re-polls a started upload after a reload and names the sent file", async () => {
+  vi.useFakeTimers();
+  sessionStorage.setItem("receivy-proof-upload", "1");
+  let reads = 0;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async () => (++reads < 2 ? uploading() : pending("foto.pdf")));
+  await act(async () => { render(<ProofPanel base={BASE} state="pending" />); });
+  expect(screen.queryByText("Comprovante enviado para revisão.")).toBeNull();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+  expect(screen.getByText("Comprovante enviado para revisão.")).toBeTruthy();
+  expect(screen.getByText("foto.pdf")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Apagar e enviar outro" })).toBeEnabled();
+  expect(sessionStorage.getItem("receivy-proof-upload")).toBeNull();
+});
+it("lets the payer send another file after a rejection", async () => {
+  let stored = false;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    if (init?.method === "PUT") { stored = true; return new Response(null, { status: 204 }); }
+    if (init?.method === "POST") return ticket();
+    return stored ? pending() : Response.json({ state: "rejected", reason: "Ilegível", file: { name: "antigo.pdf", mime: "application/pdf", size: 14 } });
+  });
+  render(<ProofPanel base={BASE} state="pending" />);
+  await screen.findByText(/Comprovante rejeitado: Ilegível/);
+  expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeEnabled();
+  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [pdf("novo.pdf")] } });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
+  await screen.findByText("Comprovante enviado para revisão.");
+  expect(screen.queryByText(/Comprovante rejeitado/)).toBeNull();
+  expect(screen.getByText("novo.pdf")).toBeTruthy();
 });
 it("does not offer another upload on terminal charges", () => {
-  render(<ProofPanel base="/api/public-proof/token" state="paid" publicView uploadsEnabled={false} />);
+  render(<ProofPanel base={BASE} state="paid" uploadsEnabled={false} />);
   expect(screen.queryByRole("button", { name: "Enviar comprovante" })).toBeNull();
   expect(screen.getByText(/Não pague nem envie/)).toBeTruthy();
 });
-it("closes the upload action after an accepted public status arrives on a stale page", async () => {
-  sessionStorage.setItem("receivy-proof-intent", "intent");
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ state: "accepted", reason: null, closureReason: null }));
-  render(<ProofPanel base="/api/public-proof/token" state="pending" publicView uploadsEnabled />);
+it("closes the upload action after an accepted status arrives on a stale page", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ state: "accepted", reason: null, file: { name: "recibo.pdf", mime: "application/pdf", size: 14 } }));
+  render(<ProofPanel base={BASE} state="pending" />);
   await screen.findByText(/Não pague nem envie/);
   expect(screen.queryByRole("button", { name: "Enviar comprovante" })).toBeNull();
 });
-it("allows creditor review only while charge and proof are pending", async () => {
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ proofs: [{ id: "p", originalName: "recibo.pdf", state: "rejected", closureReason: "paid", reason: "system" }] }));
-  render(<ProofPanel base="/api/financial/charges/id/proofs" state="paid" creditor />);
-  await waitFor(() => expect(screen.getByText("Encerrado porque a cobrança foi paga manualmente.")).toBeTruthy());
-  expect(screen.queryByRole("button", { name: "Aceitar comprovante" })).toBeNull();
-});
-it("allows replacing a definitively rejected file with a new upload intent", async () => {
-  const fetcher = vi.spyOn(globalThis, "fetch")
-    .mockResolvedValueOnce(Response.json({ id: "bad-intent", uploadUrl: "https://upload.test/bad", expiresAt: new Date(Date.now() + 300_000).toISOString() }))
-    .mockResolvedValueOnce(new Response(null, { status: 204 }))
-    .mockResolvedValueOnce(Response.json({ message: "Arquivo inválido." }, { status: 422 }))
-    .mockResolvedValueOnce(Response.json({ id: "replacement", uploadUrl: "https://upload.test/replacement", expiresAt: new Date(Date.now() + 300_000).toISOString() }))
-    .mockResolvedValueOnce(new Response(null, { status: 204 }))
-    .mockResolvedValueOnce(Response.json({ state: "pending" }));
-  render(<ProofPanel base="/api/public-proof/token" state="pending" publicView />);
-  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [new File(["bad"], "bad.pdf", { type: "application/pdf" })] } });
-  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
-  await screen.findByRole("alert");
+it("forgets a started upload that never became a proof instead of waiting for it", async () => {
+  sessionStorage.setItem("receivy-proof-upload", "1");
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(empty());
+  render(<ProofPanel base={BASE} state="pending" />);
+  await waitFor(() => expect(sessionStorage.getItem("receivy-proof-upload")).toBeNull());
+  expect(screen.getByRole("alert").textContent).toBe("O envio anterior não foi concluído. Selecione o arquivo e envie novamente.");
   expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeEnabled();
-  const valid = new File(["%PDF-1.7\nproof"], "valid.pdf", { type: "application/pdf" });
-  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [valid] } });
-  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
-  await screen.findByText("Comprovante enviado para revisão.");
-  expect(JSON.parse(fetcher.mock.calls[3]?.[1]?.body as string)).toEqual({ filename: "valid.pdf", mime: "application/pdf", size: 14 });
-  expect(fetcher.mock.calls[4]?.[1]?.body).toBe(valid);
 });
-it("clears an expired intent so the selected file can be replaced without reloading", async () => {
-  vi.spyOn(globalThis, "fetch")
-    .mockResolvedValueOnce(Response.json({ id: "short-intent", uploadUrl: "https://upload.test/short", expiresAt: new Date(Date.now() + 50).toISOString() }))
-    .mockRejectedValueOnce(new Error("network unavailable"));
-  render(<ProofPanel base="/api/public-proof/token" state="pending" publicView />);
-  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [new File(["pdf"], "proof.pdf", { type: "application/pdf" })] } });
+it("does not remember an upload whose bytes never reached the storage", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    if (init?.method === "PUT") throw new Error("storage down");
+    if (init?.method === "POST") return ticket();
+    return empty();
+  });
+  render(<ProofPanel base={BASE} state="pending" />);
+  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [pdf()] } });
   fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
   await screen.findByRole("alert");
-  await waitFor(() => expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeEnabled());
-  expect(screen.getByRole("button", { name: "Enviar comprovante" })).toBeDisabled();
-});
-it("retains the same unexpired intent and file for a transient upload retry", async () => {
-  const fetcher = vi.spyOn(globalThis, "fetch")
-    .mockResolvedValueOnce(Response.json({ id: "retry-intent", uploadUrl: "https://upload.test/retry", expiresAt: new Date(Date.now() + 300_000).toISOString() }))
-    .mockRejectedValueOnce(new Error("offline"))
-    .mockResolvedValueOnce(new Response(null, { status: 204 }))
-    .mockResolvedValueOnce(Response.json({ state: "pending" }));
-  render(<ProofPanel base="/api/public-proof/token" state="pending" publicView />);
-  const file = new File(["%PDF-1.7\nproof"], "proof.pdf", { type: "application/pdf" });
-  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [file] } });
-  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
-  await screen.findByRole("alert");
-  expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
-  await screen.findByText("Comprovante enviado para revisão.");
-  expect(fetcher.mock.calls[2]?.[0]).toBe("https://upload.test/retry");
-  expect(fetcher.mock.calls[2]?.[1]?.body).toBe(file);
-});
-it.each(["lost response", "already finalized"])("recovers a committed proof after %s without claiming failure", async failure => {
-  let savedAtFinalize: string | null = null;
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
-    if (url === "https://upload.test/recover") return new Response(null, { status: 204 });
-    if (String(url).endsWith("/finalize")) {
-      savedAtFinalize = sessionStorage.getItem("receivy-proof-intent");
-      if (failure === "lost response") throw new Error("connection lost after commit");
-      return Response.json({ message: "Já finalizado." }, { status: 409 });
-    }
-    if (init?.method === "POST") return Response.json({ id: "recover-intent", uploadUrl: "https://upload.test/recover", expiresAt: new Date(Date.now() + 300_000).toISOString() });
-    return Response.json({ state: "pending", reason: null, closureReason: null });
-  });
-  render(<ProofPanel base="/api/public-proof/token" state="pending" publicView />);
-  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [new File(["%PDF-1.7\nproof"], "proof.pdf", { type: "application/pdf" })] } });
-  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
-  await screen.findByText("Comprovante enviado para revisão.");
-  expect(savedAtFinalize).toBe("recover-intent");
-  expect(screen.queryByRole("alert")).toBeNull();
-});
-it.each(["reload", "manual verification"])("recovers through %s when commit response and first status lookup are lost", async recovery => {
-  let statusReads = 0;
-  const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
-    if (url === "https://upload.test/reload") return new Response(null, { status: 204 });
-    if (String(url).endsWith("/finalize")) throw new Error("connection lost after commit");
-    if (init?.method === "POST") return Response.json({ id: "reload-intent", uploadUrl: "https://upload.test/reload", expiresAt: new Date(Date.now() + 300_000).toISOString() });
-    return ++statusReads === 1 ? new Response(null, { status: 503 }) : Response.json({ state: "pending", reason: null, closureReason: null });
-  });
-  const view = render(<ProofPanel base="/api/public-proof/token" state="pending" publicView />);
-  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [new File(["%PDF-1.7\nproof"], "proof.pdf", { type: "application/pdf" })] } });
-  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
-  await screen.findByText(/Não foi possível confirmar o envio/);
-  expect(sessionStorage.getItem("receivy-proof-intent")).toBe("reload-intent");
-  if (recovery === "reload") {
-    view.unmount();
-    render(<ProofPanel base="/api/public-proof/token" state="pending" publicView />);
-  } else fireEvent.click(screen.getByRole("button", { name: "Verificar envio" }));
-  await screen.findByText("Comprovante enviado para revisão.");
-  expect(screen.queryByRole("alert")).toBeNull();
-  expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/finalize"))).toHaveLength(1);
+  expect(sessionStorage.getItem("receivy-proof-upload")).toBeNull();
+  expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeEnabled();
+  expect(screen.getByText("recibo.pdf")).toBeTruthy();
 });

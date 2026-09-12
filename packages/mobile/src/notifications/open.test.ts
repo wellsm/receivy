@@ -14,3 +14,12 @@ it("opens only the configured public charge capability path, not arbitrary notif
   ])
     expect(notificationUrl(url, "https://receivy.example")).toBeNull();
 });
+it("opens a billing by its uuid and nothing else under /billings", () => {
+  expect(
+    notificationUrl(
+      "https://receivy.example/billings/2b7c1b0e-1e2f-4c3d-8a9b-0c1d2e3f4a5b",
+      "https://receivy.example",
+    ),
+  ).toBe("https://receivy.example/billings/2b7c1b0e-1e2f-4c3d-8a9b-0c1d2e3f4a5b");
+  expect(notificationUrl("https://receivy.example/billings/x", "https://receivy.example")).toBeNull();
+});

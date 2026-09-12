@@ -1,7 +1,7 @@
-import type { ChargeDetail, Person, PersonLedger } from "@receivy/common";
+import type { ChargeDetail, Contact, ContactLedger } from "@receivy/common";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Share } from "react-native";
-import { PersonLedgerScreen } from "@/components/screens/person-ledger-screen";
+import { ContactLedgerScreen } from "@/components/screens/contact-ledger-screen";
 
 let mockFocus: (() => void | (() => void)) | null = null;
 
@@ -26,17 +26,18 @@ async function refocus() {
   });
 }
 
-function person(overrides: Partial<Person> = {}): Person {
+function contact(overrides: Partial<Contact> = {}): Contact {
   return {
     id: "p1",
+    userId: "u1",
     name: "Ana Paula Souza",
     nickname: null,
     displayName: "Ana Paula Souza",
-    email: null,
+    email: "ana@example.com",
     phone: null,
+    status: "active",
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
-    hasAccount: false,
     lastBilledAt: null,
     activeCharges: 0,
     ...overrides,
@@ -56,10 +57,11 @@ function charge(overrides: Partial<ChargeDetail> & { id: string }): ChargeDetail
     counterpartName: "Ana Paula Souza",
     proofState: null,
     direction: "receivable",
-    recipient: { name: "Ana Paula Souza", email: null },
+    recipient: { userId: "u1", name: "Ana Paula Souza", email: "ana@example.com" },
+    debtorUserId: "u1",
     pix: null,
     sharingState: "ready",
-    payment: null,
+    proof: null,
     cancelledAt: null,
     paidAt: null,
     createdAt: "2026-09-01T00:00:00Z",
@@ -67,10 +69,10 @@ function charge(overrides: Partial<ChargeDetail> & { id: string }): ChargeDetail
   };
 }
 
-function ledger(overrides: Partial<Person> = {}, charges: ChargeDetail[] = []): PersonLedger {
+function ledger(overrides: Partial<Contact> = {}, charges: ChargeDetail[] = []): ContactLedger {
   return {
-    personId: "p1",
-    person: person(overrides),
+    contactId: "p1",
+    contact: contact(overrides),
     balance: { amountCents: 0, currency: "BRL" },
     receivable: { amountCents: charges.filter((item) => item.state === "pending").reduce((sum, item) => sum + item.amount.amountCents, 0), currency: "BRL" },
     payable: { amountCents: 0, currency: "BRL" },
@@ -87,15 +89,25 @@ function makeClient(page = ledger()) {
   };
 }
 
-describe("PersonLedgerScreen", () => {
-  it("shows the display name, the full name and the formatted phone", async () => {
+describe("ContactLedgerScreen", () => {
+  it("shows the display name, the full name, the e-mail and the formatted phone", async () => {
     const client = makeClient(ledger({ nickname: "Aninha", displayName: "Aninha", phone: "+5511987654321" }));
 
-    await render(<PersonLedgerScreen id="p1" client={client} />);
+    await render(<ContactLedgerScreen id="p1" client={client} />);
 
     expect(await screen.findByText("Aninha")).toBeOnTheScreen();
     expect(screen.getByText("Ana Paula Souza")).toBeOnTheScreen();
+    expect(screen.getByText("ana@example.com")).toBeOnTheScreen();
     expect(screen.getByText("(11) 98765-4321")).toBeOnTheScreen();
+    expect(screen.queryByText("Ainda não entrou")).toBeNull();
+  });
+
+  it("tells when the person has not signed in yet", async () => {
+    const client = makeClient(ledger({ status: "pending" }));
+
+    await render(<ContactLedgerScreen id="p1" client={client} />);
+
+    expect(await screen.findByText("Ainda não entrou")).toBeOnTheScreen();
   });
 
   it("reloads on focus so the edit form's save is visible when it pops back", async () => {
@@ -104,7 +116,7 @@ describe("PersonLedgerScreen", () => {
     client.ledger.mockResolvedValueOnce(ledger());
     client.ledger.mockResolvedValue(ledger({ nickname: "Aninha", displayName: "Aninha", phone: "+5511987654321" }));
 
-    await render(<PersonLedgerScreen id="p1" client={client} />);
+    await render(<ContactLedgerScreen id="p1" client={client} />);
 
     expect(await screen.findByText("Ana Paula Souza")).toBeOnTheScreen();
 
@@ -120,17 +132,17 @@ describe("PersonLedgerScreen", () => {
 
     client.ledger.mockRejectedValue(new Error("Sem conexão."));
 
-    await render(<PersonLedgerScreen id="p1" client={client} />);
+    await render(<ContactLedgerScreen id="p1" client={client} />);
 
     expect(await screen.findByText("Sem conexão.")).toBeOnTheScreen();
   });
 
   it("splits active charges from the history and sums the balance", async () => {
-    const paid = charge({ id: "c0", description: "Churrasco", state: "paid", paidAt: "2026-09-28T15:00:00Z", payment: { id: "pay", chargeId: "c0", amount: { amountCents: 12_000, currency: "BRL" }, method: "pix", paidAt: "2026-09-28T15:00:00Z", createdAt: "" }, amount: { amountCents: 12_000, currency: "BRL" } });
+    const paid = charge({ id: "c0", description: "Churrasco", state: "paid", paidAt: "2026-09-28T15:00:00Z", amount: { amountCents: 12_000, currency: "BRL" } });
     const waiting = charge({ id: "c2", description: "Futebol", proofState: "pending", installmentCount: 1, installment: 1 });
     const client = makeClient(ledger({}, [charge({ id: "c1" }), waiting, paid]));
 
-    await render(<PersonLedgerScreen id="p1" client={client} onEdit={jest.fn()} onNewCharge={jest.fn()} />);
+    await render(<ContactLedgerScreen id="p1" client={client} onEdit={jest.fn()} onNewCharge={jest.fn()} />);
 
     expect(await screen.findByText("2 cobranças ativas")).toBeOnTheScreen();
     expect(screen.getByText("Balanço com Ana")).toBeOnTheScreen();
@@ -141,8 +153,19 @@ describe("PersonLedgerScreen", () => {
     expect(screen.getByText("Parcela 2 de 3 • Vencimento em 15/01/2099")).toBeOnTheScreen();
     expect(screen.getByText("Pendente")).toBeOnTheScreen();
     expect(screen.getByText("Aguardando comprovante")).toBeOnTheScreen();
-    expect(screen.getByText("Pago em 28/09/2026 via Pix")).toBeOnTheScreen();
+    expect(screen.getByText("Pago em 28/09/2026")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Cobrar" })).toBeOnTheScreen();
+  });
+
+  it("hands the whole contact to a new charge so the draft can seat the user id", async () => {
+    const onNewCharge = jest.fn();
+    const client = makeClient(ledger({ userId: "u9" }));
+
+    await render(<ContactLedgerScreen id="p1" client={client} onNewCharge={onNewCharge} />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Cobrar" }));
+
+    expect(onNewCharge).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", userId: "u9" }));
   });
 
   it("shares the payment link and reminds from an active charge", async () => {
@@ -150,7 +173,7 @@ describe("PersonLedgerScreen", () => {
     const notifications = { remind: jest.fn().mockResolvedValue({ queued: true }) };
     const client = makeClient(ledger({}, [charge({ id: "c1" })]));
 
-    await render(<PersonLedgerScreen id="p1" client={client} notifications={notifications} />);
+    await render(<ContactLedgerScreen id="p1" client={client} notifications={notifications} />);
 
     await fireEvent.press(await screen.findByRole("button", { name: "Link de Jantar" }));
     await waitFor(() => expect(client.publicLink).toHaveBeenCalledWith("c1"));
@@ -164,20 +187,20 @@ describe("PersonLedgerScreen", () => {
   });
 
   it("removes the contact only after the confirmation and hides the actions afterwards", async () => {
-    const people = { archive: jest.fn().mockResolvedValue(undefined) };
+    const contacts = { archive: jest.fn().mockResolvedValue(undefined) };
     const client = makeClient();
 
     client.ledger.mockResolvedValueOnce(ledger()).mockResolvedValue(ledger({ archivedAt: "2026-10-01T00:00:00Z" }));
 
-    await render(<PersonLedgerScreen id="p1" client={client} people={people} onEdit={jest.fn()} onNewCharge={jest.fn()} />);
+    await render(<ContactLedgerScreen id="p1" client={client} contacts={contacts} onEdit={jest.fn()} onNewCharge={jest.fn()} />);
 
     await fireEvent.press(await screen.findByRole("button", { name: "Remover" }));
 
-    expect(people.archive).not.toHaveBeenCalled();
+    expect(contacts.archive).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByRole("button", { name: "Confirmar remoção" }));
 
-    await waitFor(() => expect(people.archive).toHaveBeenCalledWith("p1"));
+    await waitFor(() => expect(contacts.archive).toHaveBeenCalledWith("p1"));
     expect(await screen.findByText("Contato removido")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cobrar" })).toBeNull();

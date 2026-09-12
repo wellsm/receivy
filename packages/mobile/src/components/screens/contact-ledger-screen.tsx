@@ -2,31 +2,30 @@ import { useCallback, useState } from "react";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Share, Text, View } from "react-native";
-import { calendarDate, formatMoney, formatPhoneBR, initialsOf, type ChargeDetail, type PersonLedger } from "@receivy/common";
+import { calendarDate, formatMoney, formatPhoneBR, initialsOf, type ChargeDetail, type Contact, type ContactLedger } from "@receivy/common";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { ActionTile } from "@/components/ui/action-tile";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { notificationClient } from "@/notifications/client";
-import { peopleClient } from "@/people/client";
+import { contactsClient } from "@/contacts/client";
 import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
 
 type Client = Pick<FinancialClient, "ledger" | "publicLink" | "publicChargeUrl">;
 
-type PersonLedgerScreenProps = {
+type ContactLedgerScreenProps = {
   id: string;
   client?: Client;
-  people?: Pick<typeof peopleClient, "archive">;
+  contacts?: Pick<typeof contactsClient, "archive">;
   notifications?: Pick<typeof notificationClient, "remind">;
   onOpenCharge?: (id: string) => void;
-  onNewCharge?: () => void;
+  /** Hands the contact over because a billing draft seats people by their user id, not by the agenda entry. */
+  onNewCharge?: (contact: Contact) => void;
   /** Absent when the screen cannot navigate to the contact form. */
   onEdit?: () => void;
 };
 
 const LEDGER_ERROR = "Não foi possível carregar o histórico.";
 const ARCHIVE_ERROR = "Não foi possível remover o contato.";
-
-const PAYMENT_LABELS = { pix: "Pix", cash: "dinheiro", transfer: "transferência", other: "outro meio" } as const;
 
 const ICONS = {
   phone: require("../../../assets/images/auth/phone.svg"),
@@ -88,16 +87,16 @@ function Tag({ label, tone }: { label: string; tone: "success" | "warning" | "in
   return <Text className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classes}`}>{label}</Text>;
 }
 
-export function PersonLedgerScreen({
+export function ContactLedgerScreen({
   id,
   client = financialClient,
-  people = peopleClient,
+  contacts = contactsClient,
   notifications = notificationClient,
   onOpenCharge,
   onNewCharge,
   onEdit,
-}: PersonLedgerScreenProps) {
-  const [data, setData] = useState<PersonLedger | null>(null);
+}: ContactLedgerScreenProps) {
+  const [data, setData] = useState<ContactLedger | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -147,7 +146,7 @@ export function PersonLedgerScreen({
 
   async function archive() {
     const done = await run(async () => {
-      await people.archive(id);
+      await contacts.archive(id);
       await load();
       return true;
     }, ARCHIVE_ERROR);
@@ -195,16 +194,16 @@ export function PersonLedgerScreen({
     );
   }
 
-  const { person } = data;
+  const { contact } = data;
   const today = calendarDate();
-  const archived = Boolean(person.archivedAt);
+  const archived = Boolean(contact.archivedAt);
   const active = data.charges.filter((charge) => charge.state === "pending");
   const history = data.charges.filter((charge) => charge.state !== "pending");
   const settled = history.filter((charge) => charge.state === "paid" && charge.direction === "receivable");
   const settledCents = settled.reduce((sum, charge) => sum + charge.amount.amountCents, 0);
   const activeCents = active.reduce((sum, charge) => sum + (charge.direction === "receivable" ? charge.amount.amountCents : 0), 0);
   const pendingCount = active.filter((charge) => charge.direction === "receivable").length;
-  const first = firstName(person.displayName);
+  const first = firstName(contact.displayName);
   const currency = data.receivable.currency;
 
   return (
@@ -225,27 +224,26 @@ export function PersonLedgerScreen({
         <View className="items-center overflow-hidden rounded-xl border border-outline/30 bg-surface p-5">
           <View className="absolute left-0 right-0 top-0 h-1.5 bg-primary" />
           <View className="mb-3 h-20 w-20 items-center justify-center rounded-full border-2 border-surface bg-primary-soft/60">
-            <Text className="text-[22px] font-bold text-primary-strong">{initialsOf(person.displayName)}</Text>
+            <Text className="text-[22px] font-bold text-primary-strong">{initialsOf(contact.displayName)}</Text>
           </View>
           <Text accessibilityRole="header" className="text-[22px] font-bold text-ink">
-            {person.displayName}
+            {contact.displayName}
           </Text>
-          {person.nickname ? <Text className="text-xs text-muted">{person.name}</Text> : null}
+          {contact.nickname ? <Text className="text-xs text-muted">{contact.name}</Text> : null}
           <View className="mt-1 items-center gap-0.5">
-            {person.phone ? (
+            {contact.phone ? (
               <View className="flex-row items-center gap-1.5">
                 <Image source={ICONS.phone} tintColor={ACTIVE_TINT} style={{ width: 15, height: 15 }} />
-                <Text className="text-xs font-semibold text-ink">{formatPhoneBR(person.phone)}</Text>
+                <Text className="text-xs font-semibold text-ink">{formatPhoneBR(contact.phone)}</Text>
               </View>
             ) : null}
-            {person.email ? (
-              <View className="flex-row items-center gap-1.5">
-                <Image source={ICONS.mail} tintColor={MUTED_TINT} style={{ width: 15, height: 15 }} />
-                <Text className="text-xs text-muted">{person.email}</Text>
-              </View>
-            ) : null}
+            <View className="flex-row items-center gap-1.5">
+              <Image source={ICONS.mail} tintColor={MUTED_TINT} style={{ width: 15, height: 15 }} />
+              <Text className="text-xs text-muted">{contact.email || "Só por link"}</Text>
+            </View>
           </View>
-          <View className="mt-3.5">
+          <View className="mt-3.5 flex-row items-center gap-2">
+            {contact.status === "pending" && !archived ? <Tag label="Ainda não entrou" tone="neutral" /> : null}
             {archived ? (
               <Tag label="Contato removido" tone="neutral" />
             ) : active.length ? (
@@ -265,7 +263,7 @@ export function PersonLedgerScreen({
         {!archived && (
           <View className="flex-row gap-2">
             {onEdit && <ActionTile label="Editar" icon={ICONS.edit} hint="Abre o formulário do contato" disabled={busy} onPress={onEdit} />}
-            {onNewCharge && <ActionTile label="Cobrar" icon={ICONS.plus} tone="primary" hint={`Nova cobrança para ${first}`} disabled={busy} onPress={onNewCharge} />}
+            {onNewCharge && <ActionTile label="Cobrar" icon={ICONS.plus} tone="primary" hint={`Nova conta para ${first}`} disabled={busy} onPress={() => onNewCharge(contact)} />}
             <ActionTile label="Remover" icon={ICONS.trash} tone="danger" hint="Arquiva o contato e preserva o histórico" disabled={busy} onPress={() => setConfirmRemoval(true)} />
           </View>
         )}
@@ -386,7 +384,6 @@ export function PersonLedgerScreen({
 
           {history.map((charge) => {
             const paid = charge.state === "paid";
-            const method = charge.payment ? PAYMENT_LABELS[charge.payment.method] : null;
 
             return (
               <Pressable
@@ -405,7 +402,7 @@ export function PersonLedgerScreen({
                       {charge.description}
                     </Text>
                     <Text className="text-xs text-muted">
-                      {paid ? `Pago em ${dateText((charge.paidAt ?? charge.payment?.paidAt ?? charge.dueDate).slice(0, 10))}${method ? ` via ${method}` : ""}` : "Cancelada"}
+                      {paid ? `Pago em ${dateText((charge.paidAt ?? charge.dueDate).slice(0, 10))}` : "Cancelada"}
                     </Text>
                   </View>
                 </View>
@@ -444,7 +441,7 @@ export function PersonLedgerScreen({
                   <Text className="text-[11px] text-muted">O histórico de cobranças fica preservado.</Text>
                 </View>
               </View>
-              <Text className="text-xs leading-5 text-muted">{person.displayName} sai da sua agenda e não entra em novas cobranças.</Text>
+              <Text className="text-xs leading-5 text-muted">{contact.displayName} sai da sua agenda e não entra em novas cobranças.</Text>
               <View className="flex-row gap-2.5 pt-1">
                 <Pressable accessibilityRole="button" accessibilityLabel="Cancelar" onPress={() => setConfirmRemoval(false)} className="h-11 flex-1 items-center justify-center rounded-xl border border-outline/50">
                   <Text className="text-sm font-semibold text-ink">Cancelar</Text>

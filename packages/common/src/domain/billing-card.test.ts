@@ -4,6 +4,8 @@ import { billingBadges, billingDueLabel, billingShareAction, billingSummaryLine 
 
 const base: BillingSummary = {
   id: 'b1',
+  direction: 'receivable',
+  payeeName: null,
   type: 'once',
   description: 'Aluguel',
   total: { amountCents: 100_000, currency: 'BRL' },
@@ -100,7 +102,7 @@ describe('billingBadges', () => {
 
     expect(billingBadges(summary)).toEqual([
       { label: 'Recorrente mensal', tone: 'info' },
-      { label: 'Pausada', tone: 'neutral' },
+      { label: 'Pausada', tone: 'warning' },
       { label: '3 pessoas', tone: 'neutral' }
     ]);
   });
@@ -177,5 +179,14 @@ describe('billingSummaryLine', () => {
     expect(billingSummaryLine({ people: 2, amountCents: 10_000, mode: 'fixed', dueLabel: 'Amanhã' })).toBe(
       '2 pessoas · R$ 100,00 total · vence amanhã'
     );
+  });
+});
+
+describe('billingBadges on a conta a pagar', () => {
+  it('shows the direction and the payee instead of the participant count', () => {
+    const labels = billingBadges({ ...base, direction: 'payable', payeeName: 'Imobiliária' }).map((badge) => badge.label);
+
+    expect(labels).toEqual(['Única', 'A pagar', 'Imobiliária']);
+    expect(billingBadges({ ...base, direction: 'payable', payeeName: null }).map((badge) => badge.label)).toContain('Só comigo');
   });
 });

@@ -1,17 +1,15 @@
 import { equal } from 'node:assert/strict';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { after, before, it } from 'node:test';
-import { requestEmailCode } from '../../src/auth/email-login';
-import { createAuthRepository } from '../../src/repositories/auth-repository';
-import { allowEmailCode } from '../../src/security/throttle';
+import { allowEmailCode } from '../../src/common/utils/throttle';
+import { createAuthRepository } from '../../src/users/repositories/auth';
+import { requestEmailCode } from '../../src/users/services/email-login';
 import { db } from '../fixtures/financial';
 
 const email = `${randomUUID()}@example.com`,
   codeHashKey = 'otp-policy-fixture-key-with-32-bytes';
 const hashes = new Set<string>();
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
-for (const ip of ['203.0.113.1', '203.0.113.2', '203.0.113.3', '203.0.113.4', '203.0.113.5', '203.0.113.44', '192.0.2.144'])
-  hashes.add(digest(`otp-request-ip:${ip}`));
 before(async () => {
   await db.proof_throttles.deleteMany({ where: { id: { isIn: [...hashes] } } });
 });
@@ -42,7 +40,7 @@ it('serializes first-code creation so simultaneous requests retain anti-enumerat
   equal(sent, 1);
   equal(await db.login_codes.count({ where: { email } }), 1);
 });
-it('limits normalized email hashes across IP changes and each IP across distinct emails', async () => {
+it('limits normalized email hashes to five codes per window and leaves other addresses alone', async () => {
   const prefix = randomUUID();
   for (const address of [
     `${prefix}@example.com`,
@@ -50,10 +48,8 @@ it('limits normalized email hashes across IP changes and each IP across distinct
     `${prefix}-extra@example.com`
   ])
     hashes.add(digest(`otp-request-email:${createHmac('sha256', codeHashKey).update(address).digest('hex')}`));
-  for (let index = 0; index < 5; index++)
-    equal(await allowEmailCode(db, `${prefix}@example.com`, codeHashKey, { sourceIp: `203.0.113.${index + 1}` }), true);
-  equal(await allowEmailCode(db, ` ${prefix.toUpperCase()}@EXAMPLE.COM `, codeHashKey, { sourceIp: '203.0.113.44' }), false);
-  for (let index = 0; index < 30; index++)
-    equal(await allowEmailCode(db, `${prefix}-${index}@example.com`, codeHashKey, { sourceIp: '192.0.2.144' }), true);
-  equal(await allowEmailCode(db, `${prefix}-extra@example.com`, codeHashKey, { sourceIp: '192.0.2.144' }), false);
+  for (let index = 0; index < 5; index++) equal(await allowEmailCode(db, `${prefix}@example.com`, codeHashKey), true);
+  equal(await allowEmailCode(db, ` ${prefix.toUpperCase()}@EXAMPLE.COM `, codeHashKey), false);
+  for (let index = 0; index < 30; index++) equal(await allowEmailCode(db, `${prefix}-${index}@example.com`, codeHashKey), true);
+  equal(await allowEmailCode(db, `${prefix}-extra@example.com`, codeHashKey), true);
 });

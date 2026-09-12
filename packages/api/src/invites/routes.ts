@@ -1,6 +1,9 @@
 import type { Http } from '@ez4/gateway';
-import type { sessionAuthorizer } from '../authorizers/session';
-import type { acceptInviteHandler, createInviteHandler, publicInviteHandler, revokeInviteHandler } from '../invites/endpoints';
+import type { sessionAuthorizer } from '../common/authorizers/session';
+import type { acceptInviteHandler } from './endpoints/accept';
+import type { createInviteHandler } from './endpoints/create';
+import type { publicInviteHandler } from './endpoints/public';
+import type { revokeInviteHandler } from './endpoints/revoke';
 
 export type InviteRoutes = [
   Http.UseRoute<{

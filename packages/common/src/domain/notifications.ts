@@ -9,12 +9,3 @@ export type NotificationDevice = {
   active: boolean;
   createdAt: string;
 };
-export type NotificationDelivery = {
-  id: string;
-  channel: 'email' | 'push';
-  template: 'initial' | 'reminder' | 'manual';
-  state: 'pending' | 'sending' | 'accepted' | 'delivered' | 'disabled' | 'failed' | 'uncertain' | 'suppressed';
-  attempts: number;
-  reason: string | null;
-  updatedAt: string;
-};

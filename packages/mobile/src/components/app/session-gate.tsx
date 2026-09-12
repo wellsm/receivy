@@ -17,7 +17,7 @@ type Stage = "restoring" | "checking-profile" | "ready";
 
 /**
  * Layout-level gate of the protected group: restores the stored session, sends a
- * signed-in person without a name to onboarding and only then renders the app
+ * signed-in person with a pending account to onboarding and only then renders the app
  * navigator. Every protected route mounts under it, so a cold deep link is covered too.
  */
 export function SessionGate({ client = authClient, store = profileStore, children }: SessionGateProps) {

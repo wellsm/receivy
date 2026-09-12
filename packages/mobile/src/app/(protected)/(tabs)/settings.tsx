@@ -6,7 +6,7 @@ export default function SettingsRoute() {
 
   return (
     <ProfileScreen
-      onOpenPeople={() => router.push("/people")}
+      onOpenContacts={() => router.push("/contacts")}
       onOpenPix={() => router.push("/settings/pix")}
       onLoggedOut={() => router.replace("/login")}
     />

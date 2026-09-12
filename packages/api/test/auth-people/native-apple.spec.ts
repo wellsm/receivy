@@ -1,10 +1,10 @@
 import { equal, ok, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, it } from 'node:test';
-import { beginNativeApple, exchangeNativeApple } from '../../src/auth/apple-native';
-import { hashOauthValue } from '../../src/auth/oauth';
-import type { OauthProviderClient } from '../../src/auth/oauth-flow';
-import { createAuthRepository } from '../../src/repositories/auth-repository';
+import { createAuthRepository } from '../../src/users/repositories/auth';
+import { beginNativeApple, exchangeNativeApple } from '../../src/users/services/apple-native';
+import { hashOauthValue } from '../../src/users/services/oauth';
+import type { OauthProviderClient } from '../../src/users/services/oauth-flow';
 import { cleanupUsers, db } from '../fixtures/financial';
 
 const verifier = 'a'.repeat(43),

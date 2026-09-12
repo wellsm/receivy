@@ -1,12 +1,14 @@
 import {
   type BillingFrequency,
   type BillingInput,
+  type BillingPixInput,
   type BillingReminder,
   type BillingType,
   MAX_FINITE_OCCURRENCES,
   type NormalizedBillingInput
 } from './billing';
-import { resolveBillingSplit } from './split';
+import { normalizePixKey } from './pix-key';
+import { type BillingSplit, resolveBillingSplit } from './split';
 
 export type BillingCalendarRule = { frequency: BillingFrequency; startDate: string; endDate?: string };
 
@@ -155,13 +157,21 @@ export function normalizeBillingInput(input: BillingInput): NormalizedBillingInp
     throw new RangeError('Fim anterior ao início.');
   }
 
-  const description = input.description?.normalize('NFC').trim() || 'Cobrança';
+  const description = input.description?.normalize('NFC').trim() || 'Conta';
 
   if (description.length > 500) {
     throw new RangeError('Informe uma descrição de até 500 caracteres.');
   }
 
-  resolveBillingSplit(input.totalCents, input.split);
+  const direction = input.direction ?? 'receivable';
+
+  if (direction !== 'receivable' && direction !== 'payable') {
+    throw new RangeError('Direção inválida.');
+  }
+
+  const split = direction === 'payable' ? payableSplit(input) : receivableSplit(input);
+
+  resolveBillingSplit(input.totalCents, split);
 
   if (input.type === 'until') {
     billingDueDates(input);
@@ -175,11 +185,46 @@ export function normalizeBillingInput(input: BillingInput): NormalizedBillingInp
     startDate: input.startDate,
     endDate: input.type === 'until' ? input.endDate : undefined,
     timezone: input.timezone,
-    paymentMethodId: input.paymentMethodId || undefined,
+    paymentMethodId: direction === 'receivable' ? input.paymentMethodId || undefined : undefined,
     reminders: input.reminders ? validateReminders(input.reminders) : undefined,
-    split: input.split,
-    category: input.category
+    split,
+    category: input.category,
+    direction,
+    payeeUserId: direction === 'payable' ? input.payeeUserId?.trim() || undefined : undefined,
+    pix: direction === 'payable' && input.pix ? normalizeBillingPix(input.pix) : undefined
   };
+}
+
+/** A conta a receber always names who pays. */
+function receivableSplit(input: BillingInput): BillingSplit {
+  if (!input.split) {
+    throw new RangeError('Selecione ao menos um contato.');
+  }
+
+  return input.split;
+}
+
+/** A conta a pagar has a single payer, the owner: the allocation is the owner alone and no wallet key applies. */
+function payableSplit(input: BillingInput): BillingSplit {
+  if (input.split && input.split.parts.some((part) => part.kind === 'user')) {
+    throw new RangeError('Uma conta a pagar não divide o valor com contatos.');
+  }
+
+  if (input.paymentMethodId) {
+    throw new RangeError('Uma conta a pagar usa a chave Pix de quem recebe, não a sua.');
+  }
+
+  return { mode: 'equal', parts: [{ kind: 'owner' }] };
+}
+
+function normalizeBillingPix(pix: BillingPixInput): BillingPixInput {
+  const label = pix.label?.normalize('NFC').trim() || undefined;
+
+  if (label && label.length > 120) {
+    throw new RangeError('Rótulo inválido.');
+  }
+
+  return { keyType: pix.keyType, key: normalizePixKey(pix.keyType, pix.key), label };
 }
 
 const CLOCK_PARTS: Intl.DateTimeFormatOptions = {

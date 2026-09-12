@@ -1,14 +1,7 @@
 import { createHash, createHmac } from 'node:crypto';
-import { isIP } from 'node:net';
-import { HttpError } from '@ez4/gateway';
 import { normalizeEmail } from '@receivy/common';
-import type { DbClient } from '../database';
-
-/** Only provider metadata is trusted. Body, query and forwarded headers are not. */
-export function trustedClientIp(request: object): string {
-  const value = 'sourceIp' in request ? request.sourceIp : undefined;
-  return typeof value === 'string' && isIP(value) ? value : 'unknown-client';
-}
+import type { DbClient } from '../../database';
+import { TooManyRequestsError } from '../errors';
 
 export async function consumeQuota(db: DbClient, scope: string, limit: number, now = Date.now()): Promise<boolean> {
   const id = createHash('sha256').update(scope).digest('hex');
@@ -21,26 +14,30 @@ export async function consumeQuota(db: DbClient, scope: string, limit: number, n
   return Number(rows[0]?.['attempts']) <= limit;
 }
 
-export async function allowEmailCode(db: DbClient, email: string, secret: string, request: object): Promise<boolean> {
+/** Five codes per normalized address per window; the 60 s cooldown in `replaceLoginCode` handles resends. */
+export async function allowEmailCode(db: DbClient, email: string, secret: string): Promise<boolean> {
   const hash = createHmac('sha256', secret).update(normalizeEmail(email)).digest('hex');
-  const ip = await consumeQuota(db, `otp-request-ip:${trustedClientIp(request)}`, 30);
-  const address = await consumeQuota(db, `otp-request-email:${hash}`, 5);
-  return ip && address;
+  return consumeQuota(db, `otp-request-email:${hash}`, 5);
 }
 
 export async function enforceQuota(db: DbClient, scope: string, limit: number, now = Date.now()) {
-  if (!(await consumeQuota(db, scope, limit, now))) throw new HttpError(429, 'Too many requests.');
+  if (!(await consumeQuota(db, scope, limit, now))) {
+    throw new TooManyRequestsError();
+  }
 }
 
-/** Per-capability budget of an anonymous read. Writers that reuse the same token get their own. */
+/** Per-link budget of an anonymous read. Writers that reuse the same link get their own. */
 export type TokenBucket = { scope: string; limit: number };
 
-const PUBLIC_READ: TokenBucket = { scope: 'public-read-token', limit: 60 };
+const PUBLIC_READ: TokenBucket = { scope: 'public-read', limit: 60 };
 
 /** Accepting is idempotent and legitimately retried, so it gets a wider bucket of its own. */
 export const INVITE_ACCEPT: TokenBucket = { scope: 'invite-accept', limit: 120 };
 
-export async function throttlePublicRead(db: DbClient, token: string, request: object, bucket = PUBLIC_READ) {
-  await enforceQuota(db, `public-read-ip:${trustedClientIp(request)}`, 240);
-  await enforceQuota(db, `${bucket.scope}:${token}`, bucket.limit);
+/**
+ * Call only after the token was resolved: the key is the link's `public_id`, so a guessed token
+ * costs one read and a 404, never a throttle row.
+ */
+export async function throttlePublicRead(db: DbClient, key: string, bucket = PUBLIC_READ) {
+  await enforceQuota(db, `${bucket.scope}:${key}`, bucket.limit);
 }

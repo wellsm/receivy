@@ -1,25 +1,21 @@
 "use client";
 
-import {
-  Check,
-  ChevronRight,
-  KeyRound,
-  LogOut,
-  Mail,
-  Pencil,
-  Trash2,
-  TriangleAlert,
-  Users,
-} from "lucide-react";
+import { Check, ChevronRight, KeyRound, LogOut, Mail, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, type AuthUser } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 type Dialog = "logout" | "delete" | null;
 
 const FALLBACK_TIMEZONE = "America/Sao_Paulo";
+
+const OUTLINE_BUTTON = "flex min-h-12 items-center justify-center rounded-xl border border-outline font-bold text-primary disabled:opacity-50";
+const DIALOG_ACTION = "flex min-h-12 flex-1 items-center justify-center rounded-xl font-bold";
+const LIST = "overflow-hidden rounded-3xl border border-outline/40 bg-surface";
+const SECTION_TITLE = "m-0 px-1 text-xs font-bold tracking-wider text-muted";
 
 function deviceTimezone(): string {
   try {
@@ -29,7 +25,78 @@ function deviceTimezone(): string {
   }
 }
 
-export function ProfileScreen({ version }: { version: string }) {
+type RowProps = {
+  icon: LucideIcon;
+  label: string;
+  title: string;
+  subtitle: string;
+  danger?: boolean;
+  disabled?: boolean;
+  href?: string;
+  onClick?: () => void;
+};
+
+/** A list row: a link when it navigates, a button when it opens a dialog. */
+function Row({ icon: Icon, label, title, subtitle, danger = false, disabled = false, href, onClick }: RowProps) {
+  const className = "flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-surface-muted/60 disabled:opacity-50";
+
+  const content = (
+    <>
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${danger ? "bg-red-50 text-red-700" : "bg-surface-muted text-primary-strong"}`}>
+        <Icon aria-hidden="true" size={20} strokeWidth={1.8} />
+      </span>
+
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className={`text-base font-bold ${danger ? "text-red-700" : "text-ink"}`}>{title}</span>
+        <span className="text-xs leading-4 text-muted">{subtitle}</span>
+      </span>
+
+      <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} className="shrink-0 text-muted" />
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link className={className} href={href} aria-label={label}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <button type="button" className={className} aria-label={label} disabled={disabled} onClick={onClick}>
+      {content}
+    </button>
+  );
+}
+
+function Divider() {
+  return <div className="mx-4 h-px bg-outline/40" />;
+}
+
+type DialogShellProps = { titleId: string; onClose: () => void; children: ReactNode };
+
+/** Backdrop and panel shared by the logout and delete dialogs; Escape closes them. */
+function DialogShell({ titleId, onClose, children }: DialogShellProps) {
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-6"
+      role="presentation"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="flex w-full max-w-sm flex-col gap-4 rounded-3xl bg-surface p-6 shadow-2xl">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function ProfileScreen() {
   const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [editing, setEditing] = useState(false);
@@ -41,6 +108,7 @@ export function ProfileScreen({ version }: { version: string }) {
   const [ended, setEnded] = useState(false);
   // Holds the `deleted` outcome while the browser session could not be cleared yet.
   const [logoutRetry, setLogoutRetry] = useState<boolean | null>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -63,6 +131,12 @@ export function ProfileScreen({ version }: { version: string }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!dialog) return;
+
+    cancel.current?.focus();
+  }, [dialog]);
 
   async function saveName() {
     const name = draft.trim();
@@ -188,43 +262,37 @@ export function ProfileScreen({ version }: { version: string }) {
     setConfirmation("");
   }
 
-  const initial = (user?.name?.trim().charAt(0) || "R").toUpperCase();
+  const initial = user?.name?.trim() || "R";
 
   return (
-    <div className="profile-page">
-      <header className="profile-header">
-        <h1>Perfil</h1>
-      </header>
-
+    <section className="mx-auto flex w-full max-w-md flex-col gap-5 md:max-w-none">
       {notice && (
-        <p className="profile-notice" role="status">
+        <p className="m-0 rounded-2xl bg-surface-muted p-4 leading-5 text-ink" role="status">
           {notice}
         </p>
       )}
 
       {logoutRetry !== null && (
-        <button type="button" className="secondary-button" disabled={busy} onClick={() => void retryLogout()}>
+        <button type="button" className={OUTLINE_BUTTON} disabled={busy} onClick={() => void retryLogout()}>
           Tentar encerrar a sessão novamente
         </button>
       )}
 
       {ended && (
-        <Link className="secondary-button" href="/login">
+        <Link className={OUTLINE_BUTTON} href="/login">
           Voltar ao login
         </Link>
       )}
 
       {!ended && user && (
-        <>
-          <section className="profile-identity">
-            <span className="profile-avatar" aria-hidden="true">
-              {initial}
-            </span>
+        <div className="grid gap-5 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:items-start md:gap-6">
+          <section className="flex flex-col items-center gap-3 rounded-3xl border border-outline/40 bg-surface p-6">
+            <InitialsAvatar name={initial} size={96} />
 
             {editing ? (
-              <div className="profile-name-row">
+              <div className="flex w-full items-center gap-2">
                 <input
-                  className="profile-name-input"
+                  className="min-h-12 flex-1 rounded-xl border border-outline bg-canvas px-3 text-ink"
                   aria-label="Nome"
                   maxLength={120}
                   autoComplete="name"
@@ -233,20 +301,20 @@ export function ProfileScreen({ version }: { version: string }) {
                 />
                 <button
                   type="button"
-                  className="profile-icon-button"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-white disabled:opacity-50"
                   aria-label="Salvar nome"
                   disabled={busy || !draft.trim()}
                   onClick={() => void saveName()}
                 >
-                  <Check aria-hidden="true" size={18} strokeWidth={2} />
+                  <Check aria-hidden="true" size={20} strokeWidth={2} />
                 </button>
               </div>
             ) : (
-              <div className="profile-name-row">
-                <strong className="profile-name">{user.name ?? "Sem nome"}</strong>
+              <div className="flex items-center gap-2">
+                <p className="m-0 text-2xl font-extrabold text-ink">{user.name ?? "Sem nome"}</p>
                 <button
                   type="button"
-                  className="profile-icon-button"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-muted text-primary-strong disabled:opacity-50"
                   aria-label="Editar nome"
                   disabled={busy}
                   onClick={() => {
@@ -259,152 +327,120 @@ export function ProfileScreen({ version }: { version: string }) {
               </div>
             )}
 
-            <p className="profile-email">
+            <p className="m-0 flex items-center gap-2 text-sm text-muted">
               <Mail aria-hidden="true" size={16} strokeWidth={1.8} />
               <span>{user.email}</span>
             </p>
           </section>
 
-          <section aria-labelledby="profile-management-title">
-            <h2 className="profile-section-title" id="profile-management-title">
-              Gerenciamento
-            </h2>
+          <div className="flex flex-col gap-5">
+            <section className="flex flex-col gap-2" aria-labelledby="profile-management-title">
+              <h2 className={SECTION_TITLE} id="profile-management-title">
+                GERENCIAMENTO
+              </h2>
 
-            <div className="profile-list">
-              <Link className="profile-row" href="/people" aria-label="Gerenciar contatos">
-                <span className="profile-row-icon">
-                  <Users aria-hidden="true" size={20} strokeWidth={1.8} />
-                </span>
-                <span className="profile-row-text">
-                  <strong>Meus Contatos</strong>
-                  <small>Gerenciar pessoas e dados salvos de cobrança</small>
-                </span>
-                <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} />
-              </Link>
+              <div className={LIST}>
+                <Row icon={Users} label="Gerenciar contatos" title="Meus Contatos" subtitle="Gerenciar pessoas e dados salvos de cobrança" href="/contacts" />
+                <Divider />
+                <Row icon={KeyRound} label="Gerenciar chaves Pix" title="Minhas Chaves Pix" subtitle="Chaves cadastradas para receber pagamentos" href="/settings/pix" />
+              </div>
+            </section>
 
-              <Link className="profile-row" href="/settings/pix" aria-label="Gerenciar chaves Pix">
-                <span className="profile-row-icon">
-                  <KeyRound aria-hidden="true" size={20} strokeWidth={1.8} />
-                </span>
-                <span className="profile-row-text">
-                  <strong>Minhas Chaves Pix</strong>
-                  <small>Chaves cadastradas para receber pagamentos</small>
-                </span>
-                <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} />
-              </Link>
-            </div>
-          </section>
+            <section className="flex flex-col gap-2" aria-labelledby="profile-security-title">
+              <h2 className={SECTION_TITLE} id="profile-security-title">
+                SEGURANÇA E SESSÃO
+              </h2>
 
-          <section aria-labelledby="profile-security-title">
-            <h2 className="profile-section-title" id="profile-security-title">
-              Segurança e Sessão
-            </h2>
-
-            <div className="profile-list">
-              <button
-                type="button"
-                className="profile-row"
-                aria-label="Sair da conta"
-                disabled={busy}
-                onClick={() => setDialog("logout")}
-              >
-                <span className="profile-row-icon">
-                  <LogOut aria-hidden="true" size={20} strokeWidth={1.8} />
-                </span>
-                <span className="profile-row-text">
-                  <strong>Sair da conta</strong>
-                  <small>Encerrar sessão ativa neste dispositivo</small>
-                </span>
-                <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} />
-              </button>
-
-              <button
-                type="button"
-                className="profile-row profile-row-danger"
-                aria-label="Excluir conta"
-                disabled={busy}
-                onClick={() => {
-                  setConfirmation("");
-                  setDialog("delete");
-                }}
-              >
-                <span className="profile-row-icon">
-                  <Trash2 aria-hidden="true" size={20} strokeWidth={1.8} />
-                </span>
-                <span className="profile-row-text">
-                  <strong>Excluir conta</strong>
-                  <small>Remover histórico, vínculos e dados permanentemente</small>
-                </span>
-                <ChevronRight aria-hidden="true" size={20} strokeWidth={1.8} />
-              </button>
-            </div>
-          </section>
-        </>
+              <div className={LIST}>
+                <Row icon={LogOut} label="Sair da conta" title="Sair da conta" subtitle="Encerrar sessão ativa neste dispositivo" disabled={busy} onClick={() => setDialog("logout")} />
+                <Divider />
+                <Row
+                  icon={Trash2}
+                  label="Excluir conta"
+                  title="Excluir conta"
+                  subtitle="Remover histórico, vínculos e dados permanentemente"
+                  danger
+                  disabled={busy}
+                  onClick={() => {
+                    setConfirmation("");
+                    setDialog("delete");
+                  }}
+                />
+              </div>
+            </section>
+          </div>
+        </div>
       )}
 
-      <footer className="profile-footer">
-        <p className="profile-version">Receivy v{version}</p>
-        <p>Lembretes inteligentes e conciliação financeira descomplicada.</p>
-        <p className="profile-legal">
-          <Link href="/terms">Termos</Link>
-          <span aria-hidden="true"> · </span>
-          <Link href="/privacy">Privacidade</Link>
+      <footer className="flex flex-col items-center gap-1 pt-2">
+        <p className="m-0 flex items-center gap-2">
+          <Link className="flex min-h-12 items-center font-bold text-primary" href="/terms">
+            Termos
+          </Link>
+          <span className="text-muted" aria-hidden="true">
+            ·
+          </span>
+          <Link className="flex min-h-12 items-center font-bold text-primary" href="/privacy">
+            Privacidade
+          </Link>
         </p>
       </footer>
 
       {dialog === "logout" && (
-        <div className="profile-backdrop">
-          <div className="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-logout-title">
-            <h2 id="profile-logout-title">Deseja sair da sua conta?</h2>
-            <p>Encerrar sessão ativa neste dispositivo.</p>
-            <div className="profile-dialog-actions">
-              <button type="button" className="secondary-button" onClick={closeDialog}>
-                Cancelar
-              </button>
-              <button type="button" className="primary-button" disabled={busy} onClick={() => void logout()}>
-                Sair
-              </button>
-            </div>
+        <DialogShell titleId="profile-logout-title" onClose={closeDialog}>
+          <h2 id="profile-logout-title" className="m-0 text-xl font-extrabold text-ink">
+            Deseja sair da sua conta?
+          </h2>
+
+          <p className="m-0 leading-5 text-muted">Encerrar sessão ativa neste dispositivo.</p>
+
+          <div className="flex gap-3">
+            <button ref={cancel} type="button" className={`${DIALOG_ACTION} border border-outline text-primary`} onClick={closeDialog}>
+              Cancelar
+            </button>
+            <button type="button" className={`${DIALOG_ACTION} bg-primary text-white disabled:opacity-50`} disabled={busy} onClick={() => void logout()}>
+              Sair
+            </button>
           </div>
-        </div>
+        </DialogShell>
       )}
 
       {dialog === "delete" && (
-        <div className="profile-backdrop">
-          <div className="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-delete-title">
-            <span className="profile-dialog-icon" aria-hidden="true">
-              <TriangleAlert size={24} strokeWidth={1.8} />
-            </span>
-            <h2 id="profile-delete-title">Excluir conta?</h2>
-            <p>
-              Esta ação é irreversível. Suas cobranças, contatos e chaves Pix serão apagados. Registros compartilhados
-              podem ser preservados com referências anonimizadas.
-            </p>
-            <label className="profile-dialog-label" htmlFor="profile-delete-confirmation">
-              Digite EXCLUIR para confirmar
-            </label>
-            <input
-              id="profile-delete-confirmation"
-              autoComplete="off"
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
-            />
-            <div className="profile-dialog-actions">
-              <button type="button" className="secondary-button" onClick={closeDialog}>
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="danger-button"
-                disabled={busy || confirmation !== "EXCLUIR"}
-                onClick={() => void erase()}
-              >
-                Confirmar exclusão
-              </button>
-            </div>
+        <DialogShell titleId="profile-delete-title" onClose={closeDialog}>
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-700" aria-hidden="true">
+            <TriangleAlert size={24} strokeWidth={1.8} />
+          </span>
+
+          <h2 id="profile-delete-title" className="m-0 text-xl font-extrabold text-ink">
+            Excluir conta?
+          </h2>
+
+          <p className="m-0 leading-5 text-muted">
+            Esta ação é irreversível. Suas cobranças, contatos e chaves Pix serão apagados. Registros compartilhados podem ser preservados com referências anonimizadas.
+          </p>
+
+          <label className="font-bold text-ink" htmlFor="profile-delete-confirmation">
+            Digite EXCLUIR para confirmar
+          </label>
+          <input
+            id="profile-delete-confirmation"
+            className="min-h-12 rounded-xl border border-outline bg-canvas px-3 text-ink"
+            autoComplete="off"
+            autoCapitalize="characters"
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+          />
+
+          <div className="flex gap-3">
+            <button ref={cancel} type="button" className={`${DIALOG_ACTION} border border-outline text-primary`} onClick={closeDialog}>
+              Cancelar
+            </button>
+            <button type="button" className={`${DIALOG_ACTION} bg-red-700 text-white disabled:opacity-50`} disabled={busy || confirmation !== "EXCLUIR"} onClick={() => void erase()}>
+              Confirmar exclusão
+            </button>
           </div>
-        </div>
+        </DialogShell>
       )}
-    </div>
+    </section>
   );
 }

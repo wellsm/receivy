@@ -1,4 +1,4 @@
-import type { DbClient } from '../database';
+import type { DbClient } from '../../database';
 
 /** Acquire at transaction entry, before row/FK locks. Never upgrade shared to exclusive.
  * Stable PostgreSQL advisory namespace 0x52454356 (RECV), resource 1: account references.

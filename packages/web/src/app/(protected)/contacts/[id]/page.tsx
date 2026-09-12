@@ -1,19 +1,12 @@
-import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
-import { PersonLedgerScreen } from "@/components/person-ledger-screen";
-import { backLabelFor } from "@/lib/navigation";
+import { AppShell } from "@/components/app/app-shell";
+import { ContactLedgerScreen } from "@/components/screens/contact-ledger-screen";
 
-const BACK_TO = "/people";
-
-export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ContactPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   return (
-    <AppShell activePath="/settings">
-      <Link className="back-link" href={BACK_TO}>
-        ← {backLabelFor(BACK_TO)}
-      </Link>
-      <PersonLedgerScreen id={id} />
+    <AppShell activePath="/settings" title="Contato" back="/contacts">
+      <ContactLedgerScreen id={id} />
     </AppShell>
   );
 }

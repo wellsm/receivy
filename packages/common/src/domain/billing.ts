@@ -1,5 +1,5 @@
 import type { BillingCategory } from './billing-category';
-import type { ChargeDetail, Money, SplitMode } from './contracts';
+import type { ChargeDetail, Direction, Money, PixKeyType, PixSnapshot, SplitMode } from './contracts';
 import type { BillingSplit } from './split';
 
 export type BillingType = 'once' | 'until' | 'indefinite';
@@ -7,6 +7,11 @@ export type BillingFrequency = 'monthly' | 'yearly';
 export type BillingState = 'active' | 'paused' | 'ended';
 
 export type BillingReminder = { offsetDays: number; enabled: boolean };
+
+/** A Pix key typed on a conta a pagar: it belongs to whoever receives, never to a wallet. */
+export type BillingPixInput = { keyType: PixKeyType; key: string; label?: string };
+
+export type BillingPayee = { userId: string; name: string };
 
 export const DEFAULT_BILLING_REMINDERS: BillingReminder[] = [{ offsetDays: 0, enabled: true }];
 
@@ -22,11 +27,18 @@ export type BillingInput = {
   timezone: string;
   paymentMethodId?: string;
   reminders?: BillingReminder[];
-  split: BillingSplit;
+  /** Required for a conta a receber; a conta a pagar has no participants and may omit it. */
+  split?: BillingSplit;
   category?: BillingCategory;
+  /** 'receivable' (default): the owner collects. 'payable': the owner pays a contact or only tracks the bill. */
+  direction?: Direction;
+  /** Conta a pagar only: the contact who receives; empty means the bill is the owner's alone. */
+  payeeUserId?: string;
+  /** Conta a pagar only: where the owner pays. */
+  pix?: BillingPixInput;
 };
 
-export type NormalizedBillingInput = BillingInput & { description: string };
+export type NormalizedBillingInput = BillingInput & { description: string; split: BillingSplit; direction: Direction };
 
 export type BillingPatch = {
   description?: string;
@@ -34,14 +46,20 @@ export type BillingPatch = {
   split?: BillingSplit;
   paymentMethodId?: string;
   clearPaymentMethod?: boolean;
+  pix?: BillingPixInput;
+  clearPix?: boolean;
+  payeeUserId?: string;
+  clearPayee?: boolean;
+  /** Recorrente only: the next due date; occurrences already generated keep theirs. */
+  startDate?: string;
   reminders?: BillingReminder[];
   state?: BillingState;
   category?: BillingCategory;
 };
 
 export type BillingAllocation = {
-  kind: 'owner' | 'person';
-  personId: string | null;
+  kind: 'owner' | 'user';
+  userId: string | null;
   splitMode: SplitMode;
   amount: Money;
   order: number;
@@ -50,6 +68,7 @@ export type BillingAllocation = {
 
 export type BillingPreview = {
   billingId: string;
+  direction: Direction;
   description: string;
   amount: Money;
   occurrenceDate: string;
@@ -60,6 +79,9 @@ export type BillingPreview = {
 export type BillingSummary = {
   id: string;
   type: BillingType;
+  direction: Direction;
+  /** Conta a pagar: who receives, or null when the bill is the owner's alone. */
+  payeeName: string | null;
   frequency?: BillingFrequency;
   description: string;
   total: Money;
@@ -82,6 +104,10 @@ export type BillingSummary = {
 export type BillingDetail = {
   id: string;
   type: BillingType;
+  direction: Direction;
+  payee: BillingPayee | null;
+  /** Inline key of a conta a pagar; null on a conta a receber, which uses paymentMethodId. */
+  pix: PixSnapshot | null;
   frequency?: BillingFrequency;
   description: string;
   total: Money;
@@ -102,7 +128,18 @@ export type BillingDetail = {
   nextMaterialization: string | null;
   category: BillingCategory;
   invite: BillingInvite | null;
+  /** People who joined by invite and wait for the owner to say who they are; empty for everyone but the owner. */
+  guests: BillingGuest[];
+  /** Owner's contacts without an e-mail: the only ones a guest can be linked to. */
+  linkableContacts: LinkableContact[];
 };
+
+export type BillingGuest = { id: string; userId: string; name: string; email: string; createdAt: string };
+
+export type LinkableContact = { contactId: string; displayName: string };
+
+/** What the owner decides about a waiting guest. */
+export type BillingGuestAction = { action: 'link'; contactId: string } | { action: 'add' } | { action: 'dismiss' };
 
 export type BillingsPage = { billings: BillingSummary[]; nextCursor: string | null };
 
@@ -125,4 +162,6 @@ export type InviteAcceptResult = {
   billingId: string;
   chargeId: string | null;
   joinedSplit: boolean;
+  /** The split already names contacts without e-mail: the owner decides whether the guest is one of them. */
+  awaitingOwner: boolean;
 };

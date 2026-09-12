@@ -8,13 +8,15 @@ describe("financial BFF allowlist", () => {
     ["GET", "timeline"],
     ["GET", "payment-methods"], ["POST", "payment-methods"], ["PATCH", "payment-methods/method-id"],
     ["POST", "payment-methods/method-id/default"], ["POST", "payment-methods/method-id/archive"],
-    ["GET", "charges/charge-id"], ["POST", "charges/charge-id/cancel"], ["POST", "charges/charge-id/payments"],
+    ["GET", "charges/charge-id"], ["POST", "charges/charge-id/cancel"], ["POST", "charges/charge-id/pay"],
     ["POST", "charges/charge-id/public-link"], ["POST", "charges/charge-id/public-link/rotate"], ["DELETE", "charges/charge-id/public-link"],
-    ["GET", "people/person-id/ledger"],
+    ["POST", "charges/charge-id/proof"], ["DELETE", "charges/charge-id/proof"], ["POST", "charges/charge-id/proof/review"], ["GET", "charges/charge-id/proof/download"],
+    ["GET", "contacts/contact-id/ledger"],
   ])("allows %s %s", (method, path) => expect(isAllowedFinancialRoute(method, path)).toBe(true));
 
   it.each([
     ["POST", "timeline"], ["DELETE", "charges/id"], ["GET", "auth/me"], ["GET", "../auth/me"],
     ["POST", "public/charges/token"], ["PATCH", "billings/id/nested"],
+    ["POST", "charges/charge-id/payments"], ["GET", "charges/charge-id/proofs"], ["GET", "charges/charge-id/proof"],
   ])("rejects %s %s", (method, path) => expect(isAllowedFinancialRoute(method, path)).toBe(false));
 });

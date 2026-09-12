@@ -1,8 +1,9 @@
 import { Order } from '@ez4/database';
-import { HttpConflictError, HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
+import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import type { PaymentMethod, PaymentMethodInput } from '@receivy/common';
-import type { DbClient } from '../database';
-import { normalizePixKey } from './validation';
+import type { DbClient } from '../../database';
+import { PixKeyTakenError } from '../errors';
+import { normalizePixKey } from '../services/validation';
 
 const SELECT = { id: true, pix_key_type: true, pix_key: true, label: true, is_default: true, archived_at: true, created_at: true } as const;
 
@@ -60,7 +61,7 @@ export async function savePaymentMethod(db: DbClient, ownerId: string, input: Pa
       select: { id: true },
       where: { owner_id: ownerId, pix_key_type: input.pixKeyType, pix_key: value.key }
     });
-    if (duplicate && duplicate.id !== id) throw new HttpConflictError('Esta chave Pix já foi cadastrada.');
+    if (duplicate && duplicate.id !== id) throw new PixKeyTakenError();
     const now = new Date().toISOString();
     if (existing) {
       const changed = await tx.payment_methods.updateOne({

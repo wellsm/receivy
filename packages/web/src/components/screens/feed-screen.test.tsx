@@ -1,8 +1,17 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { FeedScreen } from "./feed-screen";
+import { FeedScreen } from "@/components/screens/feed-screen";
+
+/** The feed opens on the default filters: every status but cancelled. */
+const BASE = "/api/financial/timeline?status=pending%2Coverdue%2Cpaid";
+
+async function pick(user: ReturnType<typeof userEvent.setup>, group: string, option: string) {
+  await user.click(screen.getByRole("combobox", { name: group }));
+  await user.click(screen.getByRole("option", { name: option }));
+  await user.keyboard("{Escape}");
+}
 
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
 afterEach(() => {
@@ -27,6 +36,7 @@ type ChargeOverrides = {
   dueDate?: string;
   state?: "pending" | "paid" | "cancelled";
   proofState?: "pending" | "accepted" | "rejected" | null;
+  counterpartReachable?: boolean;
 };
 
 function charge(overrides: ChargeOverrides = {}, direction: "receivable" | "payable" = "payable") {
@@ -59,20 +69,6 @@ const deferred = () => {
 };
 
 describe("FeedScreen", () => {
-  it("shows the invite notice left by the join flow once and clears it", async () => {
-    window.sessionStorage.setItem("receivy.notice", "Você entrou como contato; o criador ajusta a divisão.");
-    vi.mocked(browserFetch).mockImplementation(async () => Response.json({ summary, items: [], nextCursor: null }));
-    render(<FeedScreen />);
-    const notice = await screen.findByText("Você entrou como contato; o criador ajusta a divisão.");
-    expect(notice).toHaveAttribute("role", "status");
-    expect(window.sessionStorage.getItem("receivy.notice")).toBeNull();
-
-    cleanup();
-    render(<FeedScreen />);
-    await screen.findByText("Sua timeline começa aqui");
-    expect(screen.queryByText("Você entrou como contato; o criador ajusta a divisão.")).not.toBeInTheDocument();
-  });
-
   it("renders persisted totals and pending counts", async () => {
     vi.mocked(browserFetch).mockResolvedValue(
       Response.json({
@@ -93,32 +89,30 @@ describe("FeedScreen", () => {
     expect(await screen.findByText("R$ 90.071.992.547.409,91")).toBeInTheDocument();
     expect(screen.getByText("R$ 25,00")).toBeInTheDocument();
     expect(screen.getByText("3 pendências")).toBeInTheDocument();
-    expect(screen.getByText("1 pendências")).toBeInTheDocument();
+    expect(screen.getByText("1 pendência")).toBeInTheDocument();
   });
 
-  it("maps the API error code to client copy and never displays backend text", async () => {
+  it("shows the domain copy of a 422 and never gateway text", async () => {
     vi.mocked(browserFetch).mockResolvedValue(
-      Response.json({ code: "INVALID_REQUEST", message: "O total financeiro deve estar entre limites seguros." }, { status: 422 }),
+      Response.json({ type: "error", message: "O total financeiro deve estar entre limites seguros.", context: { code: "TIMELINE_OVERFLOW" } }, { status: 422 }),
     );
     render(<FeedScreen />);
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Confira os dados informados.");
-    expect(alert).not.toHaveTextContent("O total financeiro");
+    expect(await screen.findByRole("alert")).toHaveTextContent("O total financeiro deve estar entre limites seguros.");
   });
 
   it("keeps the newest filter when overlapping requests resolve in reverse order", async () => {
     const receivable = deferred();
     const payable = deferred();
     vi.mocked(browserFetch).mockImplementation(async (path) => {
-      if (path === "/api/financial/timeline") return Response.json({ summary, items: [], nextCursor: null });
-      if (path === "/api/financial/timeline?direction=receivable") return receivable.promise;
+      if (path === BASE) return Response.json({ summary, items: [], nextCursor: null });
+      if (path === "/api/financial/timeline?direction=receivable&status=pending%2Coverdue%2Cpaid") return receivable.promise;
       return payable.promise;
     });
     render(<FeedScreen />);
     const user = userEvent.setup();
     await screen.findByText("Sua timeline começa aqui");
-    await user.click(screen.getByRole("button", { name: "A receber" }));
-    await user.click(screen.getByRole("button", { name: "A pagar" }));
+    await pick(user, "Direção", "A receber");
+    await pick(user, "Direção", "A pagar");
     payable.resolve(Response.json({ summary, items: [charge({ id: "new", description: "Resposta nova" })], nextCursor: null }));
     expect(await screen.findByText(/Resposta nova/)).toBeInTheDocument();
     await act(async () => {
@@ -132,16 +126,16 @@ describe("FeedScreen", () => {
     const oldPage = deferred();
     const newFilter = deferred();
     vi.mocked(browserFetch).mockImplementation(async (path) => {
-      if (path === "/api/financial/timeline")
+      if (path === BASE)
         return Response.json({ summary, items: [charge({ id: "base", description: "Página inicial" })], nextCursor: "old-cursor" });
-      if (path === "/api/financial/timeline?cursor=old-cursor") return oldPage.promise;
+      if (path === `${BASE}&cursor=old-cursor`) return oldPage.promise;
       return newFilter.promise;
     });
     render(<FeedScreen />);
     const user = userEvent.setup();
     await screen.findByText(/Página inicial/);
     await user.click(screen.getByRole("button", { name: "Carregar mais" }));
-    await user.click(screen.getByRole("button", { name: "A pagar" }));
+    await pick(user, "Direção", "A pagar");
     newFilter.resolve(Response.json({ summary, items: [charge({ id: "filtered", description: "Filtro atual" })], nextCursor: null }));
     expect(await screen.findByText(/Filtro atual/)).toBeInTheDocument();
     await act(async () => {
@@ -153,17 +147,17 @@ describe("FeedScreen", () => {
 
   it("invalidates the old cursor when switching filters fails", async () => {
     vi.mocked(browserFetch).mockImplementation(async (path) => {
-      if (path === "/api/financial/timeline")
+      if (path === BASE)
         return Response.json({ summary, items: [charge({ id: "a", description: "Item do filtro A" })], nextCursor: "cursor-a" });
-      if (path === "/api/financial/timeline?direction=payable")
-        return Response.json({ code: "INTERNAL_ERROR", message: "Filtro indisponível." }, { status: 503 });
+      if (path === "/api/financial/timeline?direction=payable&status=pending%2Coverdue%2Cpaid")
+        return Response.json({ type: "error", message: "Internal server error" }, { status: 503 });
       return Response.json({ summary, items: [charge({ id: "mixed", description: "Item misturado" })], nextCursor: null });
     });
     render(<FeedScreen />);
     const user = userEvent.setup();
     await screen.findByText(/Item do filtro A/);
-    await user.click(screen.getByRole("button", { name: "A pagar" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Serviço temporariamente indisponível. Tente novamente.");
+    await pick(user, "Direção", "A pagar");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível carregar seu feed.");
     expect(screen.queryByRole("button", { name: "Carregar mais" })).not.toBeInTheDocument();
     expect(screen.queryByText(/Item do filtro A/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Item misturado/)).not.toBeInTheDocument();
@@ -192,7 +186,7 @@ describe("FeedScreen", () => {
 
   it("sends a reminder and shows the confirmation inline", async () => {
     vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-      if (path === "/api/financial/timeline") {
+      if (path === BASE) {
         return Response.json({
           summary,
           items: [charge({ id: "charge-1", description: "Aluguel" }, "receivable")],
@@ -208,7 +202,26 @@ describe("FeedScreen", () => {
     const user = userEvent.setup();
     const remindButton = await screen.findByRole("button", { name: "Lembrar" });
     await user.click(remindButton);
+    const dialog = await screen.findByRole("dialog", { name: "Enviar lembrete?" });
+    expect(dialog).toHaveTextContent("Avisa Maria por notificação no app ou por e-mail");
+    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/charges/charge-1/reminders", expect.anything());
+    await user.click(within(dialog).getByRole("button", { name: "Enviar lembrete" }));
     expect(await screen.findByText("Lembrete enviado")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("offers Ver cobrança instead of Lembrar when the debtor cannot be reached", async () => {
+    vi.mocked(browserFetch).mockResolvedValue(
+      Response.json({
+        summary,
+        items: [charge({ id: "charge-2", description: "Aluguel", counterpartReachable: false }, "receivable")],
+        nextCursor: null,
+      }),
+    );
+    render(<FeedScreen />);
+    const link = await screen.findByRole("link", { name: "Ver cobrança" });
+    expect(link).toHaveAttribute("href", "/charges/charge-2");
+    expect(screen.queryByRole("button", { name: "Lembrar" })).not.toBeInTheDocument();
   });
 
   it("links a payable charge with no proof to Pagar via Pix", async () => {

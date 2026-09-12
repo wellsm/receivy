@@ -1,9 +1,9 @@
 import type { ConfirmEmailCodeBody } from '@receivy/common';
-import { lockAccountReferences } from '../account/locking';
-import type { DbClient } from '../database';
-import { createAuthRepository } from '../repositories/auth-repository';
-import { AuthFlowError, confirmEmailCode } from './email-login';
-import { exchangeOauthGrant } from './oauth-flow';
+import type { DbClient } from '../../database';
+import { createAuthRepository } from '../repositories/auth';
+import { AuthFlowError, confirmEmailCode } from '../services/email-login';
+import { lockAccountReferences } from '../services/locking';
+import { exchangeOauthGrant } from '../services/oauth-flow';
 
 type Config = { codeHashKey: string; accessTokenSecret: string };
 

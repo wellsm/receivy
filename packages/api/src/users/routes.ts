@@ -1,18 +1,20 @@
 import type { Http } from '@ez4/gateway';
-import type { sessionAuthorizer } from '../authorizers/session';
-import type { appleCallbackHandler } from '../endpoints/auth/apple-callback';
-import type { nativeAppleExchangeHandler, nativeAppleStartHandler } from '../endpoints/auth/apple-native';
-import type { emailCodeHandler } from '../endpoints/auth/email-code';
-import type { emailConfirmHandler } from '../endpoints/auth/email-confirm';
-import type { googleCallbackHandler } from '../endpoints/auth/google-callback';
-import type { logoutHandler } from '../endpoints/auth/logout';
-import type { meHandler } from '../endpoints/auth/me';
-import type { oauthExchangeHandler } from '../endpoints/auth/oauth-exchange';
-import type { oauthProvidersHandler } from '../endpoints/auth/oauth-providers';
-import type { oauthStartHandler } from '../endpoints/auth/oauth-start';
-import type { refreshHandler } from '../endpoints/auth/refresh';
+import type { sessionAuthorizer } from '../common/authorizers/session';
+import type { appleCallbackHandler } from './endpoints/apple-callback';
+import type { nativeAppleExchangeHandler, nativeAppleStartHandler } from './endpoints/apple-native';
+import type { deleteHandler } from './endpoints/delete-account';
+import type { emailCodeHandler } from './endpoints/email-code';
+import type { emailConfirmHandler } from './endpoints/email-confirm';
+import type { googleCallbackHandler } from './endpoints/google-callback';
+import type { logoutHandler } from './endpoints/logout';
+import type { meHandler } from './endpoints/me';
+import type { oauthExchangeHandler } from './endpoints/oauth-exchange';
+import type { oauthProvidersHandler } from './endpoints/oauth-providers';
+import type { oauthStartHandler } from './endpoints/oauth-start';
+import type { profileHandler } from './endpoints/profile';
+import type { refreshHandler } from './endpoints/refresh';
 
-export type AuthRoutes = [
+export type UserRoutes = [
   Http.UseRoute<{ name: 'nativeAppleStart'; path: 'POST /auth/apple/native/start'; handler: typeof nativeAppleStartHandler }>,
   Http.UseRoute<{ name: 'nativeAppleExchange'; path: 'POST /auth/apple/native/exchange'; handler: typeof nativeAppleExchangeHandler }>,
   Http.UseRoute<{
@@ -65,5 +67,12 @@ export type AuthRoutes = [
     path: 'GET /auth/me';
     authorizer: typeof sessionAuthorizer;
     handler: typeof meHandler;
-  }>
+  }>,
+  Http.UseRoute<{
+    name: 'updateProfile';
+    path: 'PATCH /account/profile';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof profileHandler;
+  }>,
+  Http.UseRoute<{ name: 'deleteAccount'; path: 'DELETE /account'; authorizer: typeof sessionAuthorizer; handler: typeof deleteHandler }>
 ];

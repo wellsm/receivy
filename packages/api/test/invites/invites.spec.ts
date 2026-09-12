@@ -1,27 +1,34 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { Order } from '@ez4/database';
-import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
+import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import type { BillingInput } from '@receivy/common';
-import { createBilling, getBilling } from '../../src/billings/repository';
-import { acceptInviteHandler } from '../../src/invites/endpoints';
-import { acceptInvite, activeInvite, createInvite, getPublicInvite, revokeInvite } from '../../src/invites/repository';
-import { savePaymentMethod } from '../../src/payment-methods/repository';
-import { savePerson } from '../../src/people/repository';
+import { createBilling, getBilling } from '../../src/billings/repositories/billing';
+import { resolveGuest } from '../../src/billings/services/guests';
+import { ApiError, TooManyRequestsError } from '../../src/common/errors';
+import { createEmailClient } from '../../src/common/services/email/compose';
+import { archiveContact, saveContact } from '../../src/contacts/repositories/contact';
+import { acceptInviteHandler } from '../../src/invites/endpoints/accept';
+import { acceptInvite, activeInvite, createInvite, getPublicInvite, revokeInvite } from '../../src/invites/repositories/invite';
+import { savePaymentMethod } from '../../src/payment-methods/repositories/payment-method';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { fakeScheduler } from '../fixtures/scheduling';
 
 const OWNER = 'c1111111-1111-4111-8111-111111111111';
 const OTHER_OWNER = 'c2222222-2222-4222-8222-222222222222';
 const GUEST = 'c3333333-3333-4333-8333-333333333333';
 const STRANGER = 'c4444444-4444-4444-8444-444444444444';
 const LINKED_OWNER = 'c5555555-5555-4555-8555-555555555555';
+const OUTSIDER = 'c6666666-6666-4666-8666-666666666666';
+const PARKED = 'c7777777-7777-4777-8777-777777777777';
 const GUEST_EMAIL = 'invite-guest@example.com';
+const PARKED_EMAIL = 'invite-parked@example.com';
 const SECRET = 'invite-spec-capability-secret';
 const ORIGIN = 'http://localhost:3000';
 const DAY = 24 * 60 * 60 * 1000;
 
-let personId: string;
-let otherPersonId: string;
+let debtorId: string;
+let otherDebtorId: string;
 let pixId: string;
 
 const tokenOf = (url: string) => url.slice(`${ORIGIN}/join/`.length);
@@ -35,18 +42,18 @@ function once(overrides: Partial<BillingInput> = {}): BillingInput {
     timezone: 'America/Sao_Paulo',
     paymentMethodId: pixId,
     category: 'food',
-    split: { mode: 'equal', parts: [{ kind: 'person', personId }] },
+    split: { mode: 'equal', parts: [{ kind: 'user', userId: debtorId }] },
     ...overrides
   };
 }
 
-async function personFor(ownerId: string, email: string) {
-  return db.people.findOne({ select: { id: true, linked_user_id: true }, where: { owner_id: ownerId, active_email: email } });
+async function contactFor(ownerId: string, userId: string) {
+  return db.contacts.findOne({ select: { id: true, user_id: true, archived_at: true }, where: { owner_id: ownerId, user_id: userId } });
 }
 
 async function chargesOf(billingId: string) {
   const { records } = await db.charges.findMany({
-    select: { id: true, debtor_person_id: true, amount_cents: true, due_date: true, installment: true, installment_count: true },
+    select: { id: true, debtor_user_id: true, amount_cents: true, due_date: true, installment: true, installment_count: true },
     where: { billing_id: billingId },
     order: { due_date: Order.Asc, amount_cents: Order.Asc }
   });
@@ -73,6 +80,7 @@ describe('billing invites on native PostgreSQL', () => {
         id: STRANGER,
         email: 'invite-stranger@example.com',
         name: 'Sem Confirmar',
+        status: 'active',
         locale: 'pt-BR',
         timezone: 'America/Sao_Paulo',
         country: 'BR',
@@ -82,12 +90,12 @@ describe('billing invites on native PostgreSQL', () => {
       }
     });
 
-    personId = (await savePerson(db, OWNER, { name: 'Caio', email: 'invite-debtor@example.com' })).id;
-    otherPersonId = (await savePerson(db, OTHER_OWNER, { name: 'Caio', email: 'invite-other-debtor@example.com' })).id;
+    debtorId = (await saveContact(db, OWNER, { name: 'Caio', email: 'invite-debtor@example.com' })).userId;
+    otherDebtorId = (await saveContact(db, OTHER_OWNER, { name: 'Caio', email: 'invite-other-debtor@example.com' })).userId;
     pixId = (await savePaymentMethod(db, OWNER, { pixKeyType: 'cpf', pixKey: '52998224725', label: 'Principal' })).id;
   });
 
-  after(async () => cleanupUsers(db, [OWNER, OTHER_OWNER, LINKED_OWNER, GUEST, STRANGER]));
+  after(async () => cleanupUsers(db, [OWNER, OTHER_OWNER, LINKED_OWNER, GUEST, STRANGER, OUTSIDER, PARKED]));
 
   it('issues a join link, exposes it on the detail and revokes the previous invite', async () => {
     const now = new Date('2026-10-01T12:00:00Z');
@@ -155,18 +163,18 @@ describe('billing invites on native PostgreSQL', () => {
     equal(result.joinedSplit, true);
     ok(result.chargeId);
 
-    const guestPerson = await personFor(OWNER, GUEST_EMAIL);
+    const guestContact = await contactFor(OWNER, GUEST);
 
-    ok(guestPerson);
-    equal(guestPerson.linked_user_id, GUEST);
+    ok(guestContact, 'the guest joins the owner agenda through their own account');
+    ok(!guestContact.archived_at);
 
     const detail = await getBilling(db, OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
 
     deepEqual(
-      detail.allocations.map((allocation) => [allocation.personId, allocation.amount.amountCents, allocation.order]),
+      detail.allocations.map((allocation) => [allocation.userId, allocation.amount.amountCents, allocation.order]),
       [
-        [personId, 4_000, 0],
-        [guestPerson.id, 4_000, 1]
+        [debtorId, 4_000, 0],
+        [GUEST, 4_000, 1]
       ]
     );
 
@@ -180,13 +188,12 @@ describe('billing invites on native PostgreSQL', () => {
         [4_000, '2026-11-20', 1, 1]
       ]
     );
-    equal(after.find((charge) => charge.debtor_person_id === guestPerson.id)?.id, result.chargeId);
+    equal(after.find((charge) => charge.debtor_user_id === GUEST)?.id, result.chargeId);
 
     // Only the newly inserted charge announces itself; the repriced one keeps its original event.
-    equal(await db.activity_events.count({ where: { aggregate_id: result.chargeId!, type: 'charge.created', subject_user_id: OWNER } }), 1);
-    equal(await db.activity_events.count({ where: { aggregate_id: before[0]!.id, type: 'charge.created', subject_user_id: OWNER } }), 1);
-    equal(await db.activity_events.count({ where: { aggregate_id: result.chargeId!, subject_user_id: GUEST } }), 1);
-    ok(await db.activity_events.count({ where: { aggregate_id: billing.id, type: 'billings.invite_accepted' } }));
+    equal(await db.events.count({ where: { eventable_id: result.chargeId!, type: 'charge.created', actor_user_id: OWNER } }), 1);
+    equal(await db.events.count({ where: { eventable_id: before[0]!.id, type: 'charge.created', actor_user_id: OWNER } }), 1);
+    ok(await db.events.count({ where: { eventable_id: billing.id, type: 'billings.invite_accepted' } }));
 
     const publicId = tokenOf(invite.url).split('.')[0]!;
     const row = await db.billing_invites.findOne({ select: { accepted_count: true }, where: { public_id: publicId } });
@@ -195,7 +202,7 @@ describe('billing invites on native PostgreSQL', () => {
 
     const repeated = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
-    deepEqual(repeated, { billingId: billing.id, chargeId: result.chargeId, joinedSplit: false });
+    deepEqual(repeated, { billingId: billing.id, chargeId: result.chargeId, joinedSplit: false, awaitingOwner: false });
     equal((await chargesOf(billing.id)).length, 2);
     equal(detail.allocations.length, 2);
     equal(await db.allocations.count({ where: { billing_id: billing.id } }), 2);
@@ -224,7 +231,6 @@ describe('billing invites on native PostgreSQL', () => {
     );
 
     const result = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
-    const guestPerson = (await personFor(OWNER, GUEST_EMAIL))!;
 
     equal(result.joinedSplit, true);
 
@@ -243,8 +249,8 @@ describe('billing invites on native PostgreSQL', () => {
       );
     }
 
-    const guestCharges = after.filter((charge) => charge.debtor_person_id === guestPerson.id);
-    const ownerContactCharges = after.filter((charge) => charge.debtor_person_id === personId);
+    const guestCharges = after.filter((charge) => charge.debtor_user_id === GUEST);
+    const ownerContactCharges = after.filter((charge) => charge.debtor_user_id === debtorId);
 
     deepEqual(
       guestCharges.map((charge) => [charge.due_date, charge.amount_cents, charge.installment, charge.installment_count]),
@@ -265,11 +271,11 @@ describe('billing invites on native PostgreSQL', () => {
 
     // One announcement per inserted charge; the repriced originals keep the single event they had.
     for (const charge of guestCharges) {
-      equal(await db.activity_events.count({ where: { aggregate_id: charge.id, type: 'charge.created', subject_user_id: OWNER } }), 1);
+      equal(await db.events.count({ where: { eventable_id: charge.id, type: 'charge.created', actor_user_id: OWNER } }), 1);
     }
 
     for (const charge of before) {
-      equal(await db.activity_events.count({ where: { aggregate_id: charge.id, type: 'charge.created', subject_user_id: OWNER } }), 1);
+      equal(await db.events.count({ where: { eventable_id: charge.id, type: 'charge.created', actor_user_id: OWNER } }), 1);
     }
 
     equal(result.chargeId, guestCharges[0]!.id);
@@ -283,7 +289,7 @@ describe('billing invites on native PostgreSQL', () => {
     await db.charges.updateOne({ where: { id: paid.charges[0]!.id }, data: { state: 'paid', paid_at: now.toISOString() } });
     await rejects(
       () => acceptInvite(db, GUEST, tokenOf(paidInvite.url), SECRET, now),
-      (error: Error) => error instanceof HttpConflictError && error.message === 'Divisão já em andamento.'
+      (error: Error) => error instanceof ApiError && error.message === 'Divisão já em andamento.'
     );
     equal(await db.allocations.count({ where: { billing_id: paid.id } }), 1);
     equal((await chargesOf(paid.id)).length, 1);
@@ -291,22 +297,18 @@ describe('billing invites on native PostgreSQL', () => {
     const proofed = await createBilling(db, OWNER, 'invite-proofed', once(), now);
     const proofedInvite = await createInvite(db, OWNER, proofed.id, SECRET, ORIGIN, now);
 
-    await db.payment_proofs.insertOne({
+    await db.charges.updateOne({
+      where: { id: proofed.charges[0]!.id },
       data: {
-        id: crypto.randomUUID(),
-        charge: { id: proofed.charges[0]!.id },
-        object_key: `invite-spec/${proofed.charges[0]!.id}.pdf`,
-        original_name: 'comprovante.pdf',
-        mime: 'application/pdf',
-        size: 1_024,
-        sha256: 'a'.repeat(64),
-        state: 'pending',
-        created_at: now.toISOString()
+        proof_state: 'pending',
+        proof_file: { key: `invite-spec/${proofed.charges[0]!.id}.pdf`, name: 'comprovante.pdf', mime: 'application/pdf', size: 1_024 },
+        proof_sent_at: now.toISOString(),
+        updated_at: now.toISOString()
       }
     });
     await rejects(
       () => acceptInvite(db, GUEST, tokenOf(proofedInvite.url), SECRET, now),
-      (error: Error) => error instanceof HttpConflictError && error.message === 'Divisão já em andamento.'
+      (error: Error) => error instanceof ApiError && error.message === 'Divisão já em andamento.'
     );
     equal(await db.allocations.count({ where: { billing_id: proofed.id } }), 1);
   });
@@ -317,13 +319,13 @@ describe('billing invites on native PostgreSQL', () => {
       db,
       OWNER,
       'invite-indefinite',
-      once({ type: 'indefinite', frequency: 'monthly', startDate: '2026-10-05', paymentMethodId: pixId }),
+      once({ type: 'indefinite', frequency: 'monthly', startDate: '2026-10-06', paymentMethodId: pixId }),
       now
     );
     const endlessInvite = await createInvite(db, OWNER, endless.id, SECRET, ORIGIN, now);
     const joined = await acceptInvite(db, GUEST, tokenOf(endlessInvite.url), SECRET, now);
 
-    deepEqual(joined, { billingId: endless.id, chargeId: null, joinedSplit: true });
+    deepEqual(joined, { billingId: endless.id, chargeId: null, joinedSplit: true, awaitingOwner: false });
     equal(await db.allocations.count({ where: { billing_id: endless.id } }), 2);
     equal((await chargesOf(endless.id)).length, 0);
 
@@ -331,14 +333,14 @@ describe('billing invites on native PostgreSQL', () => {
       db,
       OWNER,
       'invite-fixed',
-      once({ split: { mode: 'fixed', parts: [{ kind: 'person', personId, amountCents: 5_000 }] } }),
+      once({ split: { mode: 'fixed', parts: [{ kind: 'user', userId: debtorId, amountCents: 5_000 }] } }),
       now
     );
     const fixedInvite = await createInvite(db, OWNER, fixed.id, SECRET, ORIGIN, now);
     const contactOnly = await acceptInvite(db, GUEST, tokenOf(fixedInvite.url), SECRET, now);
 
-    deepEqual(contactOnly, { billingId: fixed.id, chargeId: null, joinedSplit: false });
-    equal(await db.allocations.count({ where: { billing_id: fixed.id, kind: 'person' } }), 1);
+    deepEqual(contactOnly, { billingId: fixed.id, chargeId: null, joinedSplit: false, awaitingOwner: false });
+    equal(await db.allocations.count({ where: { billing_id: fixed.id, kind: 'user' } }), 1);
     equal((await chargesOf(fixed.id)).length, 1);
   });
 
@@ -349,7 +351,7 @@ describe('billing invites on native PostgreSQL', () => {
 
     await rejects(
       () => acceptInvite(db, OWNER, tokenOf(invite.url), SECRET, now),
-      (error: Error) => error instanceof HttpConflictError && error.message === 'Você é o dono desta cobrança.'
+      (error: Error) => error instanceof ApiError && error.message === 'Você é o dono desta cobrança.'
     );
     await rejects(
       () => acceptInvite(db, STRANGER, tokenOf(invite.url), SECRET, now),
@@ -362,20 +364,11 @@ describe('billing invites on native PostgreSQL', () => {
     await rejects(() => acceptInvite(db, GUEST, tokenOf(stale.url), SECRET, now), HttpNotFoundError);
   });
 
-  it('links an existing unlinked contact instead of duplicating it', async () => {
+  it('reuses the existing contact for the guest instead of duplicating it', async () => {
     const now = new Date('2026-10-07T12:00:00Z');
-    const stamp = now.toISOString();
+    const existing = await saveContact(db, OTHER_OWNER, { name: 'Bruna Lima', email: GUEST_EMAIL, nickname: 'Bruna' });
 
-    await db.people.insertOne({
-      data: {
-        id: crypto.randomUUID(),
-        owner: { id: OTHER_OWNER },
-        name: 'Bruna',
-        active_email: GUEST_EMAIL,
-        created_at: stamp,
-        updated_at: stamp
-      }
-    });
+    equal(existing.userId, GUEST);
 
     const billing = await createBilling(
       db,
@@ -387,7 +380,7 @@ describe('billing invites on native PostgreSQL', () => {
         totalCents: 6_000,
         startDate: '2026-11-20',
         timezone: 'America/Sao_Paulo',
-        split: { mode: 'shares', parts: [{ kind: 'person', personId: otherPersonId, shares: 2 }] }
+        split: { mode: 'shares', parts: [{ kind: 'user', userId: otherDebtorId, shares: 2 }] }
       },
       now
     );
@@ -395,39 +388,26 @@ describe('billing invites on native PostgreSQL', () => {
     const result = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
     equal(result.joinedSplit, true);
-    equal(await db.people.count({ where: { owner_id: OTHER_OWNER, active_email: GUEST_EMAIL } }), 1);
-
-    const linked = await personFor(OTHER_OWNER, GUEST_EMAIL);
-
-    equal(linked?.linked_user_id, GUEST);
+    equal(await db.contacts.count({ where: { owner_id: OTHER_OWNER, user_id: GUEST } }), 1);
+    equal((await contactFor(OTHER_OWNER, GUEST))?.id, existing.id);
 
     const detail = await getBilling(db, OTHER_OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
 
     deepEqual(
-      detail.allocations.map((allocation) => [allocation.personId, allocation.shares, allocation.amount.amountCents]),
+      detail.allocations.map((allocation) => [allocation.userId, allocation.shares, allocation.amount.amountCents]),
       [
-        [otherPersonId, 2, 4_000],
-        [linked!.id, 1, 2_000]
+        [otherDebtorId, 2, 4_000],
+        [GUEST, 1, 2_000]
       ]
     );
   });
 
-  it('refuses the acceptance when the matching contact already belongs to another account', async () => {
+  it('revives an archived contact for the guest instead of creating a second one', async () => {
     const now = new Date('2026-10-08T12:00:00Z');
-    const stamp = now.toISOString();
-    const debtorId = (await savePerson(db, LINKED_OWNER, { name: 'Caio', email: 'invite-linked-debtor@example.com' })).id;
+    const linkedDebtorId = (await saveContact(db, LINKED_OWNER, { name: 'Caio', email: 'invite-linked-debtor@example.com' })).userId;
+    const archived = await saveContact(db, LINKED_OWNER, { name: 'Bruna Lima', email: GUEST_EMAIL });
 
-    await db.people.insertOne({
-      data: {
-        id: crypto.randomUUID(),
-        owner: { id: LINKED_OWNER },
-        linked_user: { id: STRANGER },
-        name: 'Bruna',
-        active_email: GUEST_EMAIL,
-        created_at: stamp,
-        updated_at: stamp
-      }
-    });
+    await archiveContact(db, LINKED_OWNER, archived.id);
 
     const billing = await createBilling(
       db,
@@ -439,26 +419,172 @@ describe('billing invites on native PostgreSQL', () => {
         totalCents: 6_000,
         startDate: '2026-11-20',
         timezone: 'America/Sao_Paulo',
-        split: { mode: 'equal', parts: [{ kind: 'person', personId: debtorId }] }
+        split: { mode: 'equal', parts: [{ kind: 'user', userId: linkedDebtorId }] }
       },
       now
     );
     const invite = await createInvite(db, LINKED_OWNER, billing.id, SECRET, ORIGIN, now);
 
-    await rejects(() => acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now), HttpConflictError);
+    const result = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
-    const contact = await personFor(LINKED_OWNER, GUEST_EMAIL);
+    equal(result.joinedSplit, true);
 
-    equal(contact?.linked_user_id, STRANGER);
-    equal(await db.people.count({ where: { owner_id: LINKED_OWNER, active_email: GUEST_EMAIL } }), 1);
+    const contact = await contactFor(LINKED_OWNER, GUEST);
+
+    equal(contact?.id, archived.id);
+    ok(!contact?.archived_at);
+    equal(await db.contacts.count({ where: { owner_id: LINKED_OWNER, user_id: GUEST } }), 1);
   });
+  it('parks the guest when the split names a contact without e-mail, and linking moves that contact to the guest', async () => {
+    const now = new Date('2026-10-03T12:00:00Z');
+    const placeholder = await saveContact(db, OWNER, { name: 'Zé', nickname: 'Zezinho' });
+
+    equal(placeholder.email, '');
+    equal(placeholder.status, 'pending');
+
+    const billing = await createBilling(
+      db,
+      OWNER,
+      'invite-park',
+      once({ split: { mode: 'equal', parts: [{ kind: 'user', userId: placeholder.userId }] } }),
+      now
+    );
+    const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
+
+    await createUser(db, { id: PARKED, email: PARKED_EMAIL, name: 'Paula Reis' });
+
+    const result = await acceptInvite(db, PARKED, tokenOf(invite.url), SECRET, now);
+
+    deepEqual(
+      { ...result, waiting: undefined },
+      { billingId: billing.id, chargeId: null, joinedSplit: false, awaitingOwner: true, waiting: undefined }
+    );
+    deepEqual(result.waiting, { ownerId: OWNER, description: 'Churrasco', guestName: 'Paula Reis' });
+    equal(await contactFor(OWNER, PARKED), undefined, 'the guest is not in the agenda until the owner decides');
+    equal((await chargesOf(billing.id)).length, 1);
+
+    // Accepting again keeps the single waiting row instead of counting twice.
+    const again = await acceptInvite(db, PARKED, tokenOf(invite.url), SECRET, now);
+
+    equal(again.awaitingOwner, true);
+    equal(await db.billing_guests.count({ where: { billing_id: billing.id } }), 1);
+
+    const detail = await getBilling(db, OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
+
+    deepEqual(
+      detail.guests.map((guest) => [guest.userId, guest.name, guest.email]),
+      [[PARKED, 'Paula Reis', PARKED_EMAIL]]
+    );
+    deepEqual(detail.linkableContacts, [{ contactId: placeholder.id, displayName: 'Zezinho' }]);
+
+    const linked = await resolveGuest(db, OWNER, billing.id, detail.guests[0]!.id, { action: 'link', contactId: placeholder.id }, now);
+
+    deepEqual(linked.guests, []);
+    deepEqual(linked.linkableContacts, []);
+    deepEqual(
+      linked.allocations.map((allocation) => [allocation.userId, allocation.amount.amountCents]),
+      [[PARKED, 8_000]]
+    );
+
+    const contact = await contactFor(OWNER, PARKED);
+
+    equal(contact?.id, placeholder.id, 'the agenda entry survives, now pointing at the guest account');
+    equal((await db.contacts.findOne({ select: { nickname: true }, where: { id: placeholder.id } }))?.nickname, 'Zezinho');
+    equal(await db.users.count({ where: { id: placeholder.userId } }), 0, 'the placeholder account is gone');
+    deepEqual(
+      (await chargesOf(billing.id)).map((charge) => [charge.debtor_user_id, charge.amount_cents]),
+      [[PARKED, 8_000]]
+    );
+    ok(await db.events.count({ where: { eventable_id: billing.id, type: 'billings.guest_linked' } }));
+
+    await rejects(
+      resolveGuest(db, OWNER, billing.id, detail.guests[0]!.id, { action: 'dismiss' }, now),
+      ApiError,
+      'a resolved guest cannot be answered twice'
+    );
+  });
+
+  it('adds a waiting guest as a new participant, or dismisses them without touching the agenda', async () => {
+    const now = new Date('2026-10-03T12:00:00Z');
+    const placeholder = await saveContact(db, OWNER, { name: 'Sem E-mail' });
+    const billing = await createBilling(
+      db,
+      OWNER,
+      'invite-add',
+      once({ split: { mode: 'equal', parts: [{ kind: 'user', userId: placeholder.userId }] } }),
+      now
+    );
+    const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
+
+    equal((await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now)).awaitingOwner, true);
+
+    const waiting = (await getBilling(db, OWNER, billing.id, now)).guests[0]!;
+    const added = await resolveGuest(db, OWNER, billing.id, waiting.id, { action: 'add' }, now);
+
+    deepEqual(added.guests, []);
+    deepEqual(
+      added.allocations.map((allocation) => [allocation.userId, allocation.amount.amountCents]),
+      [
+        [placeholder.userId, 4_000],
+        [GUEST, 4_000]
+      ]
+    );
+    ok(await contactFor(OWNER, GUEST));
+    equal((await chargesOf(billing.id)).length, 2);
+
+    // Someone else joining the same billing can still be dismissed without leaving a trace in the agenda.
+    await createUser(db, { id: OUTSIDER, email: 'invite-outsider@example.com', name: 'Otto' });
+
+    equal((await acceptInvite(db, OUTSIDER, tokenOf(invite.url), SECRET, now)).awaitingOwner, true);
+
+    const second = (await getBilling(db, OWNER, billing.id, now)).guests[0]!;
+    const dismissed = await resolveGuest(db, OWNER, billing.id, second.id, { action: 'dismiss' }, now);
+
+    deepEqual(dismissed.guests, []);
+    equal(await contactFor(OWNER, OUTSIDER), undefined);
+    equal((await chargesOf(billing.id)).length, 2);
+    await rejects(resolveGuest(db, OTHER_OWNER, billing.id, second.id, { action: 'add' }, now), HttpNotFoundError);
+  });
+
+  it('refuses to link a guest to a contact that has an e-mail', async () => {
+    const now = new Date('2026-10-03T12:00:00Z');
+    const placeholder = await saveContact(db, OWNER, { name: 'Vago' });
+    const billing = await createBilling(
+      db,
+      OWNER,
+      'invite-refuse',
+      once({ split: { mode: 'equal', parts: [{ kind: 'user', userId: placeholder.userId }] } }),
+      now
+    );
+    const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
+
+    await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
+
+    const waiting = (await getBilling(db, OWNER, billing.id, now)).guests[0]!;
+    const withEmail = await db.contacts.findOne({ select: { id: true }, where: { owner_id: OWNER, user_id: debtorId } });
+
+    await rejects(resolveGuest(db, OWNER, billing.id, waiting.id, { action: 'link', contactId: withEmail!.id }, now), ApiError);
+    equal((await getBilling(db, OWNER, billing.id, now)).guests.length, 1, 'a refused answer leaves the guest waiting');
+  });
+
   it('rate-limits repeated acceptances of the same invite link', async () => {
     const now = new Date('2026-10-09T12:00:00Z');
     const billing = await createBilling(db, OWNER, 'invite-throttle', once(), now);
     const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
-    const context = { db, variables: { PUBLIC_LINK_HMAC_SECRET: SECRET } } as Parameters<typeof acceptInviteHandler>[1];
+    // The handler announces the guest's charge through the notice context, so the schedulers must exist.
+    const context = {
+      db,
+      email: createEmailClient({ APP_STAGE: 'test', RESEND_API_KEY: 'disabled' }),
+      chargeNotifyScheduler: fakeScheduler(),
+      variables: {
+        PUBLIC_LINK_HMAC_SECRET: SECRET,
+        PUBLIC_WEB_ORIGIN: ORIGIN,
+        EMAIL_TRANSPORT: 'disabled',
+        NOTIFICATION_PUSH_TRANSPORT: 'disabled',
+        RESEND_FROM_EMAIL: 'disabled'
+      }
+    } as unknown as Parameters<typeof acceptInviteHandler>[1];
     const request = {
-      sourceIp: '203.0.113.11',
       identity: { familyId: 'f1111111-1111-4111-8111-111111111111', userId: GUEST },
       parameters: { token: tokenOf(invite.url) }
     };
@@ -468,10 +594,7 @@ describe('billing invites on native PostgreSQL', () => {
       await acceptInviteHandler(request, context);
     }
 
-    await rejects(
-      () => acceptInviteHandler(request, context),
-      (error) => (error as { status: number }).status === 429
-    );
+    await rejects(() => acceptInviteHandler(request, context), TooManyRequestsError);
     await db.proof_throttles.deleteMany({});
   });
 });

@@ -1,16 +1,17 @@
-import type { Person } from "@receivy/common";
+import type { Contact } from "@receivy/common";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { peopleClient } from "@/people/client";
+import { contactsClient } from "@/contacts/client";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { MUTED_TINT } from "@/theme/colors";
 
 type ContactPickerSheetProps = {
+  /** User ids: a billing seats the account behind the agenda entry, so two agendas agree on who is who. */
   selected: string[];
-  people?: Pick<typeof peopleClient, "list">;
-  onToggle: (personId: string) => void;
+  contacts?: Pick<typeof contactsClient, "list">;
+  onToggle: (userId: string) => void;
   /** Every contact the sheet has shown, so the form can name the ones it selected. */
-  onSeen: (people: Person[]) => void;
+  onSeen: (contacts: Contact[]) => void;
   onClose: () => void;
   /** Absent when the screen cannot navigate to the contact form. */
   onNew?: () => void;
@@ -19,27 +20,27 @@ type ContactPickerSheetProps = {
 const LOAD_ERROR = "Não foi possível carregar os contatos.";
 
 /** The whole agenda in a sheet: server-side search plus cursor paging, multi selection. */
-export function ContactPickerSheet({ selected, people = peopleClient, onToggle, onSeen, onClose, onNew }: ContactPickerSheetProps) {
+export function ContactPickerSheet({ selected, contacts = contactsClient, onToggle, onSeen, onClose, onNew }: ContactPickerSheetProps) {
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
-  const [found, setFound] = useState<Person[]>([]);
+  const [found, setFound] = useState<Contact[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const load = useCallback(
     (after?: string) =>
-      people
+      contacts
         .list(false, after, search || undefined)
         .then((page) => {
-          setFound((previous) => (after ? [...previous, ...page.people.filter((person) => !previous.some((known) => known.id === person.id))] : page.people));
+          setFound((previous) => (after ? [...previous, ...page.contacts.filter((contact) => !previous.some((known) => known.id === contact.id))] : page.contacts));
           setCursor(page.nextCursor);
           setError("");
-          onSeen(page.people);
+          onSeen(page.contacts);
         })
         .catch(() => setError(LOAD_ERROR))
         .finally(() => setLoading(false)),
-    [people, search, onSeen],
+    [contacts, search, onSeen],
   );
 
   useEffect(() => {
@@ -92,22 +93,24 @@ export function ContactPickerSheet({ selected, people = peopleClient, onToggle, 
           {!loading && !error && !found.length && <Text className="py-6 text-muted">Nenhum contato encontrado.</Text>}
 
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-2">
-            {found.map((person) => (
-              <Pressable
-                key={person.id}
-                accessibilityRole="checkbox"
-                accessibilityLabel={person.displayName}
-                accessibilityState={{ checked: selected.includes(person.id) }}
-                onPress={() => onToggle(person.id)}
-                className={`min-h-14 flex-row items-center gap-3 rounded-2xl border px-4 ${
-                  selected.includes(person.id) ? "border-primary bg-primary-soft" : "border-outline bg-surface"
-                }`}
-              >
-                <InitialsAvatar name={person.displayName} size={36} />
-                <Text className="flex-1 font-semibold text-ink">{person.displayName}</Text>
-                {selected.includes(person.id) && <Text className="font-bold text-primary">✓</Text>}
-              </Pressable>
-            ))}
+            {found.map((contact) => {
+              const checked = selected.includes(contact.userId);
+
+              return (
+                <Pressable
+                  key={contact.id}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={contact.displayName}
+                  accessibilityState={{ checked }}
+                  onPress={() => onToggle(contact.userId)}
+                  className={`min-h-14 flex-row items-center gap-3 rounded-2xl border px-4 ${checked ? "border-primary bg-primary-soft" : "border-outline bg-surface"}`}
+                >
+                  <InitialsAvatar name={contact.displayName} size={36} />
+                  <Text className="flex-1 font-semibold text-ink">{contact.displayName}</Text>
+                  {checked && <Text className="font-bold text-primary">✓</Text>}
+                </Pressable>
+              );
+            })}
           </ScrollView>
 
           {cursor && (

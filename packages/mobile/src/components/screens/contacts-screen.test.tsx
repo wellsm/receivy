@@ -1,6 +1,6 @@
-import type { Person } from "@receivy/common";
+import type { Contact } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { PeopleScreen } from "@/components/screens/people-screen";
+import { ContactsScreen } from "@/components/screens/contacts-screen";
 
 // The list reloads on focus, so the screen only ever sees expo-router's hook.
 jest.mock("expo-router", () => {
@@ -14,41 +14,42 @@ jest.mock("expo-router", () => {
   };
 });
 
-function person(overrides: Partial<Person> = {}): Person {
+function contact(overrides: Partial<Contact> = {}): Contact {
   return {
     id: "p1",
+    userId: "u1",
     name: "Ana Paula Souza",
     nickname: null,
     displayName: "Ana Paula Souza",
-    email: null,
+    email: "ana@example.com",
     phone: null,
+    status: "active",
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
-    hasAccount: false,
     lastBilledAt: null,
     activeCharges: 0,
     ...overrides,
   };
 }
 
-function peopleApi(...pages: { people: Person[]; nextCursor: string | null }[]) {
+function contactsApi(...pages: { contacts: Contact[]; nextCursor: string | null }[]) {
   const list = jest.fn();
 
   for (const page of pages) {
     list.mockResolvedValueOnce(page);
   }
 
-  list.mockResolvedValue(pages.at(-1) ?? { people: [], nextCursor: null });
+  list.mockResolvedValue(pages.at(-1) ?? { contacts: [], nextCursor: null });
 
   return { list };
 }
 
-describe("PeopleScreen", () => {
+describe("ContactsScreen", () => {
   it("shows the display name, the initials, the pending badge and the phone subtitle", async () => {
-    const ana = person({ nickname: "Aninha", displayName: "Aninha", phone: "+5511987654321", activeCharges: 2 });
-    const client = peopleApi({ people: [ana], nextCursor: null });
+    const ana = contact({ nickname: "Aninha", displayName: "Aninha", phone: "+5511987654321", activeCharges: 2 });
+    const client = contactsApi({ contacts: [ana], nextCursor: null });
 
-    await render(<PeopleScreen client={client} />);
+    await render(<ContactsScreen client={client} />);
 
     expect(await screen.findByText("Aninha")).toBeOnTheScreen();
     expect(screen.getByText("A")).toBeOnTheScreen();
@@ -56,21 +57,39 @@ describe("PeopleScreen", () => {
     expect(screen.getByText("(11) 98765-4321")).toBeOnTheScreen();
     expect(screen.getByLabelText("Contato Aninha")).toBeOnTheScreen();
     expect(screen.getByText("1 contato")).toBeOnTheScreen();
+    expect(screen.queryByText("Ainda não entrou")).toBeNull();
   });
 
   it("falls back to the e-mail and the calm badge when there is no phone or pending charge", async () => {
-    const client = peopleApi({ people: [person({ email: "ana@example.com" })], nextCursor: null });
+    const client = contactsApi({ contacts: [contact()], nextCursor: null });
 
-    await render(<PeopleScreen client={client} />);
+    await render(<ContactsScreen client={client} />);
 
     expect(await screen.findByText("ana@example.com")).toBeOnTheScreen();
     expect(screen.getByText("Sem pendências")).toBeOnTheScreen();
   });
 
-  it("searches the server agenda after the debounce", async () => {
-    const client = peopleApi({ people: [], nextCursor: null }, { people: [person({ displayName: "Ana Paula Souza" })], nextCursor: null });
+  it("says a contact without e-mail only gets the shared link", async () => {
+    const client = contactsApi({ contacts: [contact({ email: "" })], nextCursor: null });
 
-    await render(<PeopleScreen client={client} />);
+    await render(<ContactsScreen client={client} />);
+
+    expect(await screen.findByText("Só por link")).toBeOnTheScreen();
+  });
+
+  it("marks a contact whose account is still pending", async () => {
+    const client = contactsApi({ contacts: [contact({ status: "pending", activeCharges: 1 })], nextCursor: null });
+
+    await render(<ContactsScreen client={client} />);
+
+    expect(await screen.findByText("Ainda não entrou")).toBeOnTheScreen();
+    expect(screen.getByText("1 ativa")).toBeOnTheScreen();
+  });
+
+  it("searches the server agenda after the debounce", async () => {
+    const client = contactsApi({ contacts: [], nextCursor: null }, { contacts: [contact({ displayName: "Ana Paula Souza" })], nextCursor: null });
+
+    await render(<ContactsScreen client={client} />);
 
     await screen.findByText("Nenhum contato ainda");
     await fireEvent.changeText(screen.getByLabelText("Buscar contatos"), "Ana");
@@ -81,9 +100,9 @@ describe("PeopleScreen", () => {
 
   it("opens the ledger from the card", async () => {
     const onOpenLedger = jest.fn();
-    const client = peopleApi({ people: [person()], nextCursor: null });
+    const client = contactsApi({ contacts: [contact()], nextCursor: null });
 
-    await render(<PeopleScreen client={client} onOpenLedger={onOpenLedger} />);
+    await render(<ContactsScreen client={client} onOpenLedger={onOpenLedger} />);
 
     await fireEvent.press(await screen.findByLabelText("Contato Ana Paula Souza"));
 
@@ -92,9 +111,9 @@ describe("PeopleScreen", () => {
 
   it("sends the form screen to the dedicated route", async () => {
     const onNewContact = jest.fn();
-    const client = peopleApi({ people: [person()], nextCursor: null });
+    const client = contactsApi({ contacts: [contact()], nextCursor: null });
 
-    await render(<PeopleScreen client={client} onNewContact={onNewContact} />);
+    await render(<ContactsScreen client={client} onNewContact={onNewContact} />);
 
     await fireEvent.press(await screen.findByLabelText("Novo contato"));
 
@@ -102,12 +121,12 @@ describe("PeopleScreen", () => {
   });
 
   it("appends the next page instead of replacing it", async () => {
-    const client = peopleApi(
-      { people: [person()], nextCursor: "cursor-2" },
-      { people: [person({ id: "p2", name: "Bruno Lima", displayName: "Bruno Lima" })], nextCursor: null },
+    const client = contactsApi(
+      { contacts: [contact()], nextCursor: "cursor-2" },
+      { contacts: [contact({ id: "p2", userId: "u2", name: "Bruno Lima", displayName: "Bruno Lima" })], nextCursor: null },
     );
 
-    await render(<PeopleScreen client={client} />);
+    await render(<ContactsScreen client={client} />);
 
     await fireEvent.press(await screen.findByLabelText("Carregar mais"));
 
@@ -117,9 +136,9 @@ describe("PeopleScreen", () => {
   });
 
   it("no longer offers an inline form or the archived toggle", async () => {
-    const client = peopleApi({ people: [person()], nextCursor: null });
+    const client = contactsApi({ contacts: [contact()], nextCursor: null });
 
-    await render(<PeopleScreen client={client} />);
+    await render(<ContactsScreen client={client} />);
 
     await screen.findByText("Ana Paula Souza");
 
@@ -128,9 +147,9 @@ describe("PeopleScreen", () => {
   });
 
   it("reports a list failure and retries", async () => {
-    const list = jest.fn().mockRejectedValueOnce(new Error("Sem conexão.")).mockResolvedValue({ people: [person()], nextCursor: null });
+    const list = jest.fn().mockRejectedValueOnce(new Error("Sem conexão.")).mockResolvedValue({ contacts: [contact()], nextCursor: null });
 
-    await render(<PeopleScreen client={{ list }} />);
+    await render(<ContactsScreen client={{ list }} />);
 
     expect(await screen.findByText("Sem conexão.")).toBeOnTheScreen();
 

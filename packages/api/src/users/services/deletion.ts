@@ -1,8 +1,9 @@
 import { HttpBadRequestError, HttpUnauthorizedError } from '@ez4/gateway';
-import type { DbClient } from '../database';
-import type { StorageMessage } from '../proofs/queue';
+import { CHARGE_SELECT } from '../../charges/repositories/charge';
+import { recordEvent } from '../../common/repositories/events';
+import type { DbClient } from '../../database';
+import { disableSessionDevices } from '../repositories/sessions';
 import { lockAccountReferences } from './locking';
-import { disableSessionDevices } from './sessions';
 
 // EZ4 scalar nullable boundary: relation objects cannot express SQL NULL.
 const sqlNull = null as unknown as undefined;
@@ -11,15 +12,15 @@ export async function eraseAccount(
   db: DbClient,
   userId: string,
   confirmation: string
-): Promise<{ deleted: boolean; storageMessages: StorageMessage[] }> {
+): Promise<{ deleted: boolean; objectKeys: string[] }> {
   if (confirmation !== 'EXCLUIR') throw new HttpBadRequestError('Confirme digitando EXCLUIR.');
   return db.transaction(async (tx) => {
     // Built inside the transaction so a retried erasure never reports files twice.
-    const storageMessages: StorageMessage[] = [];
+    const objectKeys: string[] = [];
     await lockAccountReferences(tx, 'erase');
     const user = await tx.users.findOne({ select: { id: true, email: true, deleted_at: true }, where: { id: userId }, lock: true });
     if (!user) throw new HttpUnauthorizedError();
-    if (user.deleted_at) return { deleted: true, storageMessages };
+    if (user.deleted_at) return { deleted: true, objectKeys };
     const now = new Date().toISOString();
     await tx.session_families.updateMany({ where: { user_id: userId }, data: { revoked_at: now, device_name: sqlNull } });
     const families = await tx.session_families.findMany({ select: { id: true }, where: { user_id: userId } });
@@ -41,88 +42,44 @@ export async function eraseAccount(
       });
     }
     const charges = await tx.charges.findMany({
-      select: { id: true, creditor_id: true, recipient_user_id: true, recipient_email_snapshot: true },
-      where: { OR: [{ creditor_id: userId }, { recipient_user_id: userId }, { recipient_email_snapshot: user.email }] },
+      select: { id: true },
+      where: { OR: [{ creditor_id: userId }, { debtor_user_id: userId }, { proof_sender_user_id: userId }] },
       lock: true
     });
-    // Delivery worker lock order is charge -> delivery -> device.
     await disableSessionDevices(tx, userId);
-    const ownedProofs = await tx.payment_proofs.findMany({ select: { charge_id: true }, where: { sender_user_id: userId } });
-    const ownedIntents = await tx.upload_intents.findMany({ select: { charge_id: true }, where: { sender_user_id: userId } });
-    const affected = new Set([
-      ...charges.records.map((x) => x.id),
-      ...ownedProofs.records.map((x) => x.charge_id),
-      ...ownedIntents.records.map((x) => x.charge_id)
-    ]);
-    for (const chargeId of [...affected].sort()) {
-      const charge = await tx.charges.findOne({
-        select: { id: true, creditor_id: true, recipient_user_id: true, recipient_email_snapshot: true },
-        where: { id: chargeId },
-        lock: true
-      });
+    for (const { id: chargeId } of [...charges.records].sort((a, b) => a.id.localeCompare(b.id))) {
+      const charge = await tx.charges.findOne({ select: CHARGE_SELECT, where: { id: chargeId }, lock: true });
       if (!charge) continue;
-      const recipientDeleted = charge.recipient_user_id === userId || charge.recipient_email_snapshot === user.email;
       const creditorDeleted = charge.creditor_id === userId;
-      if (recipientDeleted || creditorDeleted) {
-        await tx.charges.updateOne({
-          where: { id: chargeId },
-          data: {
-            ...(recipientDeleted
-              ? { recipient_user_id: sqlNull, recipient_email_snapshot: sqlNull, recipient_name_snapshot: 'Conta excluída' }
-              : {}),
-            ...(creditorDeleted ? { pix_key_snapshot: sqlNull, pix_key_type_snapshot: sqlNull, pix_label_snapshot: sqlNull } : {}),
-            updated_at: now
-          }
-        });
-        // Keep link tombstones so initial notification expansion cannot mint replacement capability.
-        await tx.public_links.updateMany({ where: { charge_id: chargeId }, data: { revoked_at: now } });
-        await tx.notification_deliveries.updateMany({
-          where: { charge_id: chargeId, state: 'pending' },
-          data: { state: 'suppressed', reason: 'account_deleted', updated_at: now }
-        });
-        await tx.notification_deliveries.updateMany({
-          where: { charge_id: chargeId },
-          data: { render_inputs: '{}', recipient_key: 'deleted', recipient_user_id: sqlNull, updated_at: now }
-        });
-      }
-      const proofs = await tx.payment_proofs.findMany({
-        select: { id: true, object_key: true },
-        where: { charge_id: chargeId, sender_user_id: userId }
-      });
-      for (const proof of proofs.records) {
-        await tx.payments.updateMany({ where: { proof_id: proof.id }, data: { ...{ proof_id: sqlNull }, currency: 'BRL' } });
-        await tx.payment_proofs.deleteOne({ where: { id: proof.id } });
-        storageMessages.push({ objectKey: proof.object_key, chargeId, purpose: 'account' });
-      }
-      const intents = await tx.upload_intents.findMany({
-        select: { id: true, object_key: true },
-        where: { charge_id: chargeId, sender_user_id: userId }
-      });
-      for (const intent of intents.records) {
-        await tx.upload_intents.deleteOne({ where: { id: intent.id } });
-        storageMessages.push({ objectKey: intent.object_key, chargeId, purpose: 'account' });
-      }
-      await tx.payment_proofs.updateMany({
-        where: { charge_id: chargeId, reviewer_id: userId },
-        data: { ...{ reviewer_id: sqlNull }, reason: sqlNull }
+      const senderDeleted = charge.proof_sender_user_id === userId;
+      // A file the erased person sent goes with them; the charge itself stays for the other side to read.
+      if (senderDeleted && charge.proof_file) objectKeys.push(charge.proof_file.key);
+      await tx.charges.updateOne({
+        where: { id: chargeId },
+        data: {
+          ...(creditorDeleted
+            ? { pix_key_snapshot: sqlNull, pix_key_type_snapshot: sqlNull, pix_label_snapshot: sqlNull, link_revoked_at: now }
+            : {}),
+          ...(senderDeleted
+            ? {
+                proof_state: sqlNull,
+                proof_file: sqlNull,
+                ...{ proof_sender_user_id: sqlNull },
+                proof_actor_hash: sqlNull,
+                proof_expires_at: sqlNull,
+                proof_sent_at: sqlNull,
+                proof_reviewed_at: sqlNull,
+                proof_reason: sqlNull
+              }
+            : {}),
+          updated_at: now
+        }
       });
     }
-    const people = await tx.people.findMany({
-      select: { id: true, owner_id: true },
-      where: { OR: [{ owner_id: userId }, { linked_user_id: userId }, { active_email: user.email }] }
-    });
-    for (const person of people.records) {
-      await tx.person_contacts.deleteMany({ where: { person_id: person.id } });
-      const referenced =
-        (await tx.charges.count({ where: { debtor_person_id: person.id } })) +
-        (await tx.allocations.count({ where: { person_id: person.id } }));
-      if (person.owner_id === userId && !referenced) await tx.people.deleteOne({ where: { id: person.id } });
-      else
-        await tx.people.updateOne({
-          where: { id: person.id },
-          data: { name: 'Conta excluída', active_email: sqlNull, ...{ linked_user_id: sqlNull }, archived_at: now, updated_at: now }
-        });
-    }
+    // The agenda of the erased account goes; every agenda that listed it keeps an archived entry so history still reads.
+    await tx.billing_guests.deleteMany({ where: { OR: [{ owner_id: userId }, { user_id: userId }] } });
+    await tx.contacts.deleteMany({ where: { owner_id: userId } });
+    await tx.contacts.updateMany({ where: { user_id: userId }, data: { nickname: sqlNull, archived_at: now, updated_at: now } });
     for (const billing of billings.records)
       if (!(await tx.charges.count({ where: { billing_id: billing.id } }))) {
         await tx.billing_invites.deleteMany({ where: { billing_id: billing.id } });
@@ -132,32 +89,26 @@ export async function eraseAccount(
     await tx.payment_methods.deleteMany({ where: { owner_id: userId } });
     await tx.auth_identities.deleteMany({ where: { user_id: userId } });
     await tx.oauth_grants.deleteMany({ where: { user_id: userId } });
-    await tx.login_codes.deleteMany({ where: { email: user.email } });
-    await tx.activity_events.deleteMany({ where: { subject_user_id: userId } });
-    await tx.activity_events.updateMany({ where: { actor_user_id: userId }, data: { ...{ actor_user_id: sqlNull }, payload: '{}' } });
+    if (user.email) await tx.login_codes.deleteMany({ where: { email: user.email } });
+    // The log keeps its lines but forgets who acted; the account's own history goes with it.
+    await tx.events.deleteMany({ where: { eventable_type: 'account', eventable_id: userId } });
+    await tx.rawQuery('UPDATE events SET actor_user_id = NULL WHERE actor_user_id = :id::uuid', { id: userId });
     await tx.users.updateOne({
       where: { id: userId },
       data: {
         email: `${userId}@deleted.invalid`,
         verified_email: sqlNull,
         name: 'Conta excluída',
+        phone: sqlNull,
         avatar_url: sqlNull,
+        status: 'removed',
         timezone: 'UTC',
         deleted_at: now,
         updated_at: now
       }
     });
-    await tx.activity_events.insertOne({
-      data: {
-        id: crypto.randomUUID(),
-        type: 'account.deleted',
-        aggregate_type: 'account',
-        aggregate_id: userId,
-        payload: '{}',
-        created_at: now
-      }
-    });
+    await recordEvent(tx, { type: 'account.deleted', eventableType: 'account', eventableId: userId, at: now });
     // The caller sends these only after this transaction commits.
-    return { deleted: true, storageMessages };
+    return { deleted: true, objectKeys };
   });
 }

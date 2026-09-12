@@ -1,8 +1,8 @@
 import { deepEqual, equal, ok } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { eraseAccount } from '../../src/account/deletion';
+import { saveContact } from '../../src/contacts/repositories/contact';
 import type { DbClient } from '../../src/database';
-import { savePerson } from '../../src/people/repository';
+import { eraseAccount } from '../../src/users/services/deletion';
 import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 
 function deferred<T>() {
@@ -56,7 +56,8 @@ describe('account erasure versus cross-account materialization', () => {
       users.push(creditor, recipient);
       await createUser(db, { id: creditor, email: `${creditor}@example.com`, name: 'Creditor fixture' });
       await createUser(db, { id: recipient, email: `${recipient}@example.com`, name: 'Recipient fixture' });
-      const person = await savePerson(db, creditor, { name: 'Recipient fixture', email: `${recipient}@example.com` });
+      const contact = await saveContact(db, creditor, { name: 'Recipient fixture', email: `${recipient}@example.com` });
+      equal(contact.userId, recipient);
       const entered = deferred<{ backend: number; tx: DbClient }>();
       const release = deferred<void>();
       const other = deferred<number>();
@@ -65,15 +66,16 @@ describe('account erasure versus cross-account materialization', () => {
         const backend = await pid(tx);
         return new Proxy(tx, {
           get(target, property, receiver) {
-            if (property === (first === 'materialization' ? 'people' : 'users')) {
-              const table = first === 'materialization' ? target.people : target.users;
+            if (property === (first === 'materialization' ? 'contacts' : 'users')) {
+              const table = first === 'materialization' ? target.contacts : target.users;
               return new Proxy(table, {
                 get(relation, operation, relationReceiver) {
                   if (operation === 'findOne')
                     return async (...args: unknown[]) => {
                       const row = await Reflect.apply(Reflect.get(relation, operation, relationReceiver), relation, args);
-                      const query = args[0] as { lock?: boolean; where?: { id?: string } };
-                      if (!paused && query.lock && query.where?.id === (first === 'materialization' ? person.id : recipient)) {
+                      const query = args[0] as { lock?: boolean; where?: { id?: string; user_id?: string } };
+                      const locked = first === 'materialization' ? query.where?.user_id : query.where?.id;
+                      if (!paused && query.lock && locked === recipient) {
                         paused = true;
                         entered.resolve({ backend, tx });
                         await release.promise;
@@ -93,7 +95,7 @@ describe('account erasure versus cross-account materialization', () => {
         return tx;
       });
       const materialize = (client: DbClient) =>
-        createOnceCharge(client, creditor, `concurrent-${recipient}`, { personId: person.id, amountCents: 1234, dueDate: '2026-10-01' });
+        createOnceCharge(client, creditor, `concurrent-${recipient}`, { userId: recipient, amountCents: 1234, dueDate: '2026-10-01' });
       const firstRun = first === 'materialization' ? materialize(firstClient) : eraseAccount(firstClient, recipient, 'EXCLUIR');
       const firstStarted = await entered.promise;
       const secondRun = first === 'materialization' ? eraseAccount(secondClient, recipient, 'EXCLUIR') : materialize(secondClient);
@@ -118,15 +120,14 @@ describe('account erasure versus cross-account materialization', () => {
         equal(outcomes[1].status, 'rejected', 'archived recipient prevents a new post-erasure charge');
       }
       const charges = await db.charges.findMany({
-        select: { amount_cents: true, state: true, recipient_user_id: true, recipient_email_snapshot: true },
+        select: { amount_cents: true, state: true, debtor_user_id: true },
         where: { creditor_id: creditor }
       });
       equal(charges.records.length, first === 'materialization' ? 1 : 0);
       for (const charge of charges.records) {
         equal(charge.amount_cents, 1234);
         equal(charge.state, 'pending');
-        equal(charge.recipient_user_id, null);
-        equal(charge.recipient_email_snapshot, null);
+        equal(charge.debtor_user_id, recipient, 'the erased account keeps its id on the charge');
       }
     });
   }

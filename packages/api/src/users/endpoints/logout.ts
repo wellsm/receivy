@@ -1,9 +1,9 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import { revokeSession } from '../../auth/refresh-session';
-import type { ApiProvider } from '../../provider';
-import { createAuthRepository } from '../../repositories/auth-repository';
+import type { UserProvider } from '../provider';
+import { createAuthRepository } from '../repositories/auth';
+import { revokeSession } from '../services/refresh-session';
 
 declare class LogoutRequest implements Http.Request {
   body: { refreshToken: String.Size<1, 256> };
@@ -13,7 +13,7 @@ declare class LogoutResponse implements Http.Response {
   status: 204;
 }
 
-export async function logoutHandler(request: LogoutRequest, context: Service.Context<ApiProvider>): Promise<LogoutResponse> {
+export async function logoutHandler(request: LogoutRequest, context: Service.Context<UserProvider>): Promise<LogoutResponse> {
   await revokeSession(request.body, { repo: createAuthRepository(context.db) });
   return { status: 204 };
 }

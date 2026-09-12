@@ -1,4 +1,4 @@
-import { EmailLoginForm } from "@/components/email-login-form";
+import { LoginScreen } from "@/components/screens/login-screen";
 import { safeNextPath } from "@/lib/auth/cookies";
 import { loginProviders } from "@/lib/auth/login-providers";
 
@@ -13,8 +13,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const nextPath = safeNextPath(params.next ?? null);
 
   return (
-    <main className="login-page">
-      <EmailLoginForm nextPath={nextPath} providers={providers} oauthError={params.error === "oauth"} />
+    <main className="relative isolate flex min-h-dvh flex-col justify-center overflow-hidden bg-canvas px-5 py-12 md:px-8 md:py-16">
+      <div aria-hidden="true" className="pointer-events-none absolute -top-40 left-1/2 -z-10 h-96 w-96 -translate-x-48 rounded-full bg-primary-soft/15" />
+      <LoginScreen nextPath={nextPath} providers={providers} oauthError={params.error === "oauth"} />
     </main>
   );
 }

@@ -13,7 +13,7 @@ export function notificationUrl(
       url.password ||
       url.search ||
       url.hash ||
-      !/^\/pay\/[A-Za-z0-9_.-]+$/.test(url.pathname)
+      !/^\/(pay\/[A-Za-z0-9_.-]+|billings\/[0-9a-f-]{36})$/.test(url.pathname)
     )
       return null;
     return url.toString();

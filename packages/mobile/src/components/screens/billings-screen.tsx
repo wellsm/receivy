@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image } from "expo-image";
-import { ActivityIndicator, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
-import { type BillingState, type BillingSummary, type BillingsPage, billingShareAction, calendarDate } from "@receivy/common";
+import { useFocusEffect } from "expo-router";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from "react-native";
+import { type BillingState, type BillingSummary, type BillingsPage, type Direction, billingShareAction, calendarDate } from "@receivy/common";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { financialClient, type FinancialClient } from "@/financial/client";
@@ -29,23 +30,34 @@ type BillingsScreenProps = {
   onOpenCharge?: (id: string) => void;
 };
 
-const LIST_ERROR = "Não foi possível carregar suas cobranças.";
+const LIST_ERROR = "Não foi possível carregar suas contas.";
 
 /** Client-side state filter over the loaded pages; ended billings stay out of the way by default. */
 const STATE_FILTERS: { value: BillingState; label: string; empty: string }[] = [
-  { value: "active", label: "Ativas", empty: "Nenhuma cobrança ativa." },
-  { value: "paused", label: "Pausadas", empty: "Nenhuma cobrança pausada." },
-  { value: "ended", label: "Encerradas", empty: "Nenhuma cobrança encerrada." },
+  { value: "active", label: "Ativas", empty: "Nenhuma conta ativa." },
+  { value: "paused", label: "Pausadas", empty: "Nenhuma conta pausada." },
+  { value: "ended", label: "Encerradas", empty: "Nenhuma conta encerrada." },
+];
+
+/** Server-side direction filter: the API lists both sides unless asked for one. */
+const DIRECTION_FILTERS: { value: Direction | ""; label: string }[] = [
+  { value: "", label: "Todas" },
+  { value: "receivable", label: "A receber" },
+  { value: "payable", label: "A pagar" },
 ];
 
 const plusMark = require("../../../assets/images/auth/plus.svg");
 
 /** No state filter for now: active, paused and ended billings all show on the list. */
-function listQuery(search: string, cursor?: string): string {
+function listQuery(search: string, direction: Direction | "", cursor?: string): string {
   const parts: string[] = [];
 
   if (search) {
     parts.push(`search=${encodeURIComponent(search)}`);
+  }
+
+  if (direction) {
+    parts.push(`direction=${direction}`);
   }
 
   if (cursor) {
@@ -74,7 +86,9 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<BillingState>("active");
+  const [direction, setDirection] = useState<Direction | "">("");
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const requests = useRef(0);
   const today = calendarDate();
 
@@ -83,7 +97,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
       const generation = cursor ? requests.current : ++requests.current;
 
       return client
-        .billings(listQuery(search, cursor))
+        .billings(listQuery(search, direction, cursor))
         .then((next) => {
           if (generation !== requests.current) {
             return;
@@ -98,7 +112,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
           }
         });
     },
-    [client, search],
+    [client, direction, search],
   );
 
   useEffect(() => {
@@ -107,8 +121,17 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
     return () => clearTimeout(timer);
   }, [term]);
 
-  useEffect(() => {
-    void load();
+  // The detail routes sit on top of the tabs: an ended or edited billing must be gone when the list comes back.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
   }, [load]);
 
   async function share(billing: BillingSummary) {
@@ -116,7 +139,8 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
 
     const chargeId = billing.shareChargeId;
 
-    if (billingShareAction(billing) !== "share" || !chargeId) {
+    // A conta a pagar has no public link: its card opens the detail instead.
+    if (billing.direction === "payable" || billingShareAction(billing) !== "share" || !chargeId) {
       onOpenBilling?.(billing.id);
       return;
     }
@@ -131,7 +155,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
     }
   }
 
-  useTabHeader({ title: "Cobranças" });
+  useTabHeader({ title: "Contas" });
 
   const visible = page?.billings.filter((billing) => billing.state === stateFilter) ?? [];
   const filter = STATE_FILTERS.find((option) => option.value === stateFilter) ?? STATE_FILTERS[0]!;
@@ -165,11 +189,35 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
             );
           })}
         </View>
+        <View accessibilityRole="radiogroup" accessibilityLabel="Direção" className="flex-row gap-2">
+          {DIRECTION_FILTERS.map((option) => {
+            const selected = option.value === direction;
+
+            return (
+              <Pressable
+                key={option.label}
+                accessibilityRole="radio"
+                accessibilityLabel={option.label}
+                accessibilityState={{ checked: selected }}
+                onPress={() => setDirection(option.value)}
+                className={`min-h-9 items-center justify-center rounded-full border px-4 ${selected ? "border-primary bg-primary-soft/60" : "border-outline/40 bg-surface"}`}
+              >
+                <Text className={`text-xs font-semibold ${selected ? "text-primary-strong" : "text-muted"}`}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        testID="billings-list"
+        className="flex-1"
+        contentContainerStyle={{ paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={ACTIVE_TINT} />}
+      >
         <View className="gap-3 px-5 pt-2">
-          {!page && !error && <ActivityIndicator accessibilityLabel="Carregando cobranças" className="my-6" color={ACTIVE_TINT} />}
+          {!page && !error && <ActivityIndicator accessibilityLabel="Carregando contas" className="my-6" color={ACTIVE_TINT} />}
 
           {error ? (
             <View className="gap-2 rounded-xl bg-red-50 p-4">
@@ -184,9 +232,9 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
 
           {page && !page.billings.length && (
             <View className="gap-3 rounded-2xl border border-outline/40 bg-surface p-5">
-              <Text className="text-2xl font-extrabold text-primary-strong">Nenhuma cobrança ainda</Text>
+              <Text className="text-2xl font-extrabold text-primary-strong">Nenhuma conta ainda</Text>
               <Text className="text-sm leading-6 text-muted">Crie a primeira para acompanhar os vencimentos.</Text>
-              <Button label="Nova cobrança" primary onPress={() => onCreate?.()} />
+              <Button label="Nova conta" primary onPress={() => onCreate?.()} />
             </View>
           )}
 
@@ -219,12 +267,12 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
       <View className="border-t border-outline/20 bg-canvas px-5 pb-2 pt-3">
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Nova cobrança"
+          accessibilityLabel="Nova conta"
           onPress={() => onCreate?.()}
           className="h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary-strong"
         >
           <Image source={plusMark} tintColor="#FFFFFF" style={{ width: 20, height: 20 }} />
-          <Text className="text-base font-bold text-white">Cadastrar Nova Cobrança</Text>
+          <Text className="text-base font-bold text-white">Cadastrar Nova Conta</Text>
         </Pressable>
       </View>
     </SafeAreaView>

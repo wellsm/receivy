@@ -1,11 +1,11 @@
-export type SplitParty = { kind: 'owner' } | { kind: 'person'; personId: string };
+export type SplitParty = { kind: 'owner' } | { kind: 'user'; userId: string };
 
 export type BillingSplit =
   | { mode: 'equal'; parts: SplitParty[] }
   // Keep schema-visible unions explicit: EZ4 cannot extract object/union intersections.
-  | { mode: 'percentage'; parts: ({ kind: 'owner'; basisPoints: number } | { kind: 'person'; personId: string; basisPoints: number })[] }
-  | { mode: 'fixed'; parts: { kind: 'person'; personId: string; amountCents: number }[] }
-  | { mode: 'shares'; parts: ({ kind: 'owner'; shares: number } | { kind: 'person'; personId: string; shares: number })[] };
+  | { mode: 'percentage'; parts: ({ kind: 'owner'; basisPoints: number } | { kind: 'user'; userId: string; basisPoints: number })[] }
+  | { mode: 'fixed'; parts: { kind: 'user'; userId: string; amountCents: number }[] }
+  | { mode: 'shares'; parts: ({ kind: 'owner'; shares: number } | { kind: 'user'; userId: string; shares: number })[] };
 
 export type ResolvedAllocation = SplitParty & { amountCents: number };
 
@@ -22,15 +22,15 @@ export function resolveBillingSplit(totalCents: number, split: BillingSplit): Re
   const keys = new Set<string>();
 
   for (const part of split.parts) {
-    if (part.kind !== 'owner' && part.kind !== 'person') {
+    if (part.kind !== 'owner' && part.kind !== 'user') {
       throw new RangeError('Participante inválido.');
     }
 
-    if (part.kind === 'person' && (typeof part.personId !== 'string' || !part.personId.trim())) {
+    if (part.kind === 'user' && (typeof part.userId !== 'string' || !part.userId.trim())) {
       throw new RangeError('Contato inválido.');
     }
 
-    const key = part.kind === 'owner' ? 'owner' : `person:${part.personId}`;
+    const key = part.kind === 'owner' ? 'owner' : `user:${part.userId}`;
 
     if (keys.has(key)) {
       throw new RangeError('Participante repetido.');
@@ -40,7 +40,7 @@ export function resolveBillingSplit(totalCents: number, split: BillingSplit): Re
   }
 
   const parties: SplitParty[] = split.parts.map((part) =>
-    part.kind === 'owner' ? { kind: 'owner' } : { kind: 'person', personId: part.personId }
+    part.kind === 'owner' ? { kind: 'owner' } : { kind: 'user', userId: part.userId }
   );
 
   const amounts = resolveAmounts(totalCents, split, parties);
@@ -51,7 +51,7 @@ export function resolveBillingSplit(totalCents: number, split: BillingSplit): Re
 function resolveAmounts(totalCents: number, split: BillingSplit, parties: SplitParty[]): number[] {
   if (split.mode === 'fixed') {
     const amounts = split.parts.map((part) => {
-      if (part.kind !== 'person' || !Number.isSafeInteger(part.amountCents) || part.amountCents < 0) {
+      if (part.kind !== 'user' || !Number.isSafeInteger(part.amountCents) || part.amountCents < 0) {
         throw new RangeError('Valor de participante inválido.');
       }
 

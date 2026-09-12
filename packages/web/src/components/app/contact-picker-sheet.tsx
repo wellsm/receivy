@@ -1,26 +1,30 @@
 "use client";
 
-import type { Person } from "@receivy/common";
+import type { Contact, ContactsPage } from "@receivy/common";
+import { Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { initialOf } from "./contact-carousel";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
-type ContactPickerProps = {
+type ContactPickerSheetProps = {
   selected: string[];
-  onToggle: (personId: string) => void;
-  onSeen: (people: Person[]) => void;
+  /** Receives the account id (`contact.userId`): the draft seats people by account, not by agenda entry. */
+  onToggle: (userId: string) => void;
+  onSeen: (contacts: Contact[]) => void;
   onClose: () => void;
+  /** Absent when the form cannot navigate to the contact form. */
+  onNew?: () => void;
   /** The control that opened the panel; focus goes back to it on close. */
   returnFocusTo?: RefObject<HTMLButtonElement | null>;
 };
 
 const LOAD_ERROR = "Não foi possível carregar os contatos.";
 
-/** Full agenda in a panel: server-side search plus cursor paging, multi selection. */
-export function ContactPicker({ selected, onToggle, onSeen, onClose, returnFocusTo }: ContactPickerProps) {
+/** The whole agenda in a dialog: server-side search plus cursor paging, multi selection. */
+export function ContactPickerSheet({ selected, onToggle, onSeen, onClose, onNew, returnFocusTo }: ContactPickerSheetProps) {
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
-  const [people, setPeople] = useState<Person[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,18 +35,18 @@ export function ContactPicker({ selected, onToggle, onSeen, onClose, returnFocus
     (after?: string) => {
       const query = new URLSearchParams({ ...(search ? { search } : {}), ...(after ? { cursor: after } : {}) });
 
-      return browserFetch(`/api/people?${query}`)
+      return browserFetch(`/api/contacts?${query}`)
         .then(async response => {
           if (!response.ok) {
             throw new Error(LOAD_ERROR);
           }
 
-          const page = (await response.json()) as { people: Person[]; nextCursor: string | null };
+          const page = (await response.json()) as ContactsPage;
 
-          setPeople(previous => (after ? [...previous, ...page.people.filter(person => !previous.some(old => old.id === person.id))] : page.people));
+          setContacts(previous => (after ? [...previous, ...page.contacts.filter(contact => !previous.some(old => old.id === contact.id))] : page.contacts));
           setCursor(page.nextCursor);
           setError("");
-          onSeen(page.people);
+          onSeen(page.contacts);
         })
         .catch(() => setError(LOAD_ERROR))
         .finally(() => setLoading(false));
@@ -61,7 +65,7 @@ export function ContactPicker({ selected, onToggle, onSeen, onClose, returnFocus
   }, [load]);
 
   // The panel takes focus when it opens and hands it back to whatever opened it
-  // (the "Ver todos" button) when it closes, so the keyboard never falls to the
+  // (the "Adicionar" button) when it closes, so the keyboard never falls to the
   // top of the page.
   useEffect(() => {
     // Captured once: StrictMode runs this effect twice in dev, and by the second
@@ -80,10 +84,8 @@ export function ContactPicker({ selected, onToggle, onSeen, onClose, returnFocus
 
   return (
     <div
-      className="contact-panel"
-      role="dialog"
-      aria-label="Contatos"
-      aria-modal="false"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center"
+      role="presentation"
       onKeyDown={event => {
         if (event.key !== "Escape") {
           return;
@@ -93,49 +95,71 @@ export function ContactPicker({ selected, onToggle, onSeen, onClose, returnFocus
         close();
       }}
     >
-      <label htmlFor="contact-panel-search">Buscar contatos</label>
-      <input
-        id="contact-panel-search"
-        ref={searchField}
-        type="search"
-        maxLength={254}
-        value={term}
-        onChange={event => {
-          setLoading(true);
-          setTerm(event.target.value);
-        }}
-      />
-      {error && <p className="login-error" role="alert">{error}</p>}
-      {loading && <p role="status">Carregando contatos…</p>}
-      {!loading && !error && !people.length && <p>Nenhum contato encontrado.</p>}
-      <ul className="contact-panel-list">
-        {people.map(person => (
-          <li key={person.id}>
-            <label>
-              <input type="checkbox" checked={selected.includes(person.id)} onChange={() => onToggle(person.id)} />
-              <span className="contact-avatar" aria-hidden="true">{initialOf(person.displayName)}</span>
-              {person.displayName}
-            </label>
-          </li>
-        ))}
-      </ul>
-      <div className="contact-panel-actions">
-        {cursor && (
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={loading}
-            onClick={() => {
-              setLoading(true);
-              void load(cursor);
-            }}
-          >
-            Carregar mais
+      <div
+        className="flex max-h-[85vh] w-full max-w-md flex-col gap-3 rounded-t-3xl bg-canvas p-5 shadow-2xl sm:rounded-3xl"
+        role="dialog"
+        aria-label="Contatos"
+        aria-modal="true"
+      >
+        <h2 className="m-0 text-xl font-extrabold text-primary-strong">Contatos</h2>
+        <label className="sr-only" htmlFor="contact-panel-search">
+          Buscar contatos
+        </label>
+        <input
+          id="contact-panel-search"
+          ref={searchField}
+          type="search"
+          placeholder="Buscar contatos…"
+          maxLength={254}
+          value={term}
+          onChange={event => {
+            setLoading(true);
+            setTerm(event.target.value);
+          }}
+          className="min-h-12 rounded-xl border border-outline bg-surface px-4 text-ink"
+        />
+        {onNew && (
+          <button type="button" onClick={onNew} className="min-h-12 rounded-xl border border-dashed border-primary bg-transparent font-bold text-primary">
+            + Novo contato
           </button>
         )}
-        <button type="button" className="primary-button" onClick={close}>
-          Concluir
-        </button>
+        {error && <p className="m-0 rounded-xl bg-red-50 p-4 text-red-700" role="alert">{error}</p>}
+        {loading && <p className="m-0 text-muted" role="status">Carregando contatos…</p>}
+        {!loading && !error && !contacts.length && <p className="m-0 py-6 text-muted">Nenhum contato encontrado.</p>}
+        <ul className="m-0 flex list-none flex-col gap-2 overflow-y-auto p-0">
+          {contacts.map(contact => {
+            const checked = selected.includes(contact.userId);
+
+            return (
+              <li key={contact.id}>
+                <label className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border px-4 ${checked ? "border-primary bg-primary-soft/40" : "border-outline bg-surface"}`}>
+                  <input type="checkbox" className="sr-only" checked={checked} onChange={() => onToggle(contact.userId)} />
+                  <InitialsAvatar name={contact.displayName} size={36} />
+                  <span className="flex-1 font-semibold text-ink">{contact.displayName}</span>
+                  {checked && <Check size={18} aria-hidden="true" className="text-primary" />}
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="flex flex-col gap-2">
+          {cursor && (
+            <button
+              type="button"
+              className="min-h-12 rounded-xl border border-outline bg-transparent font-bold text-primary"
+              disabled={loading}
+              onClick={() => {
+                setLoading(true);
+                void load(cursor);
+              }}
+            >
+              Carregar mais
+            </button>
+          )}
+          <button type="button" className="min-h-14 rounded-2xl bg-primary font-bold text-white" onClick={close}>
+            Concluir
+          </button>
+        </div>
       </div>
     </div>
   );

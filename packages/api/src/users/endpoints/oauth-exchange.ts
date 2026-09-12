@@ -3,9 +3,9 @@ import type { Http } from '@ez4/gateway';
 import { HttpUnauthorizedError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { AuthSessionResponse } from '@receivy/common';
-import { exchangeOauthAtomically } from '../../auth/atomic';
-import { OauthFlowError } from '../../auth/oauth-flow';
-import type { ApiProvider } from '../../provider';
+import type { UserProvider } from '../provider';
+import { OauthFlowError } from '../services/oauth-flow';
+import { exchangeOauthAtomically } from '../utils/atomic';
 
 declare class OauthExchangeRequest implements Http.Request {
   body: {
@@ -22,7 +22,7 @@ declare class OauthExchangeResponse implements Http.Response {
 
 export async function oauthExchangeHandler(
   request: OauthExchangeRequest,
-  context: Service.Context<ApiProvider>
+  context: Service.Context<UserProvider>
 ): Promise<OauthExchangeResponse> {
   try {
     const body = await exchangeOauthAtomically(context.db, request.body, {

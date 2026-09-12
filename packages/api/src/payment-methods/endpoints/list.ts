@@ -1,0 +1,23 @@
+import type { Service } from '@ez4/common';
+import type { Http } from '@ez4/gateway';
+import type { PaymentMethodsPage } from '@receivy/common';
+import type { SessionIdentity } from '../../common/authorizers/session';
+import type { PaymentMethodProvider } from '../provider';
+import { listPaymentMethods } from '../repositories/payment-method';
+
+declare class ListRequest implements Http.Request {
+  identity: SessionIdentity;
+  query: { archived?: boolean };
+}
+
+declare class ListResponse implements Http.Response {
+  status: 200;
+  body: PaymentMethodsPage;
+}
+
+export async function listPaymentMethodsHandler(
+  request: ListRequest,
+  context: Service.Context<PaymentMethodProvider>
+): Promise<ListResponse> {
+  return { status: 200, body: { paymentMethods: await listPaymentMethods(context.db, request.identity.userId, request.query.archived) } };
+}

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import type { AuthUser } from "@receivy/common";
+import { formatPhoneBR, type AuthUser } from "@receivy/common";
 import { accountClient, type AccountClient } from "@/account/client";
 import { profileStore, type ProfileStore } from "@/account/profile";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
@@ -10,15 +10,38 @@ type LegalKind = "terms" | "privacy";
 
 type OnboardingScreenProps = {
   client?: Pick<AccountClient, "save">;
-  store?: Pick<ProfileStore, "remember">;
+  store?: Pick<ProfileStore, "load" | "remember">;
   onComplete: (user: AuthUser) => void;
 };
 
 export function OnboardingScreen({ client = accountClient, store = profileStore, onComplete }: OnboardingScreenProps) {
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [legal, setLegal] = useState<LegalKind | null>(null);
+
+  // An account created by someone's agenda already carries the name that person
+  // typed, so the screen offers it instead of asking again from scratch.
+  useEffect(() => {
+    let live = true;
+
+    void store
+      .load()
+      .then((user) => {
+        if (!live) {
+          return;
+        }
+
+        setName((current) => current || (user.name ?? ""));
+        setPhone((current) => current || formatPhoneBR(user.phone ?? ""));
+      })
+      .catch(() => {});
+
+    return () => {
+      live = false;
+    };
+  }, [store]);
 
   const trimmedName = name.trim();
   const canContinue = !busy && trimmedName.length > 0;
@@ -34,6 +57,7 @@ export function OnboardingScreen({ client = accountClient, store = profileStore,
     try {
       const user = await client.save({
         name: trimmedName,
+        ...(phone.trim() ? { phone: phone.trim() } : {}),
         locale: "pt-BR",
         country: "BR",
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -82,6 +106,22 @@ export function OnboardingScreen({ client = accountClient, store = profileStore,
               returnKeyType="done"
               textContentType="name"
               value={name}
+              className="h-14 rounded-2xl border border-outline bg-white px-4 text-base tracking-normal text-ink"
+            />
+
+            <Text className="mb-2 mt-5 text-sm font-bold text-ink">Telefone</Text>
+            <TextInput
+              accessibilityLabel="Telefone (Opcional)"
+              autoComplete="tel"
+              keyboardType="phone-pad"
+              maxLength={20}
+              onChangeText={(value) => setPhone(formatPhoneBR(value))}
+              onSubmitEditing={() => void submit()}
+              placeholder="(11) 98765-4321"
+              placeholderTextColor="#7D8794"
+              returnKeyType="done"
+              textContentType="telephoneNumber"
+              value={phone}
               className="h-14 rounded-2xl border border-outline bg-white px-4 text-base tracking-normal text-ink"
             />
 

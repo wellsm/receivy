@@ -13,7 +13,6 @@ let parked: BillingDraft | null = null;
  * panel instead of bouncing the user out again; registering a key clears it, and
  * so does leaving the form.
  */
-let pixRequired = false;
 
 export function saveDraft(draft: BillingDraft): void {
   parked = draft;
@@ -28,30 +27,30 @@ export function takeDraft(): BillingDraft | null {
   return draft;
 }
 
-/** Merges the result of a side trip (a new contact, a new Pix key) into the parked draft. */
+/**
+ * Merges the result of a side trip (a new contact, a new Pix key) into the parked draft.
+ * A conta a pagar has a single payee, so a contact created from it takes that seat
+ * instead of joining the participants.
+ */
 export function patchDraft(patch: { selected?: string[]; pix?: string }): void {
   if (!parked) {
     return;
   }
 
+  const pix = patch.pix === undefined ? {} : { pix: patch.pix };
+
+  if (parked.direction === "payable") {
+    const payee = patch.selected?.at(-1);
+
+    parked = { ...parked, ...(payee ? { payee } : {}), ...pix };
+    return;
+  }
+
   const selected = patch.selected ? [...new Set([...parked.selected, ...patch.selected])] : parked.selected;
 
-  parked = { ...parked, selected, ...(patch.pix === undefined ? {} : { pix: patch.pix }) };
+  parked = { ...parked, selected, ...pix };
 }
 
 export function clearDraft(): void {
   parked = null;
-  pixRequired = false;
-}
-
-export function pixRequiredSeen(): boolean {
-  return pixRequired;
-}
-
-export function markPixRequiredSeen(): void {
-  pixRequired = true;
-}
-
-export function clearPixRequiredSeen(): void {
-  pixRequired = false;
 }

@@ -1,9 +1,12 @@
 import type { PublicInviteView } from "@receivy/common";
+import { needsOnboarding } from "@receivy/common";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import { JoinInvite } from "@/components/join-invite";
+import { redirect } from "next/navigation";
+import { InviteUnavailable, JoinInviteScreen } from "@/components/screens/join-invite-screen";
 import { authApiFetch } from "@/lib/auth/api";
 import { ACCESS_COOKIE } from "@/lib/auth/cookies";
+import { currentUser } from "@/lib/auth/current-user";
 
 export const metadata: Metadata = { title: "Convite | Receivy", referrer: "no-referrer", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -23,18 +26,15 @@ export default async function JoinInvitePage({ params }: { params: Promise<{ tok
   }
 
   if (!view) {
-    return (
-      <main className="public-charge public-invite">
-        <div className="public-brand">Receivy</div>
-        <section>
-          <h1>Convite indisponível</h1>
-          <p className="invite-expired">Convite expirado. Peça um novo link.</p>
-        </section>
-      </main>
-    );
+    return <InviteUnavailable />;
   }
 
   const authenticated = Boolean((await cookies()).get(ACCESS_COOKIE));
 
-  return <JoinInvite token={token} view={view} authenticated={authenticated} />;
+  // The invite names the guest by their profile name: a fresh account finishes onboarding first and comes back here.
+  if (authenticated && needsOnboarding(await currentUser())) {
+    redirect(`/onboarding?next=${encodeURIComponent(`/join/${token}`)}`);
+  }
+
+  return <JoinInviteScreen token={token} view={view} authenticated={authenticated} />;
 }

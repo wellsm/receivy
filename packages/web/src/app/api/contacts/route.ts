@@ -1,4 +1,4 @@
-import { peopleProxy } from "@/lib/people-proxy";
+import { contactsProxy } from "@/lib/contacts-proxy";
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -7,6 +7,6 @@ export async function GET(request: Request) {
     const value = params.get(key);
     if (value !== null) query.set(key, value);
   }
-  return peopleProxy(request, `people?${query}`);
+  return contactsProxy(request, `contacts?${query}`);
 }
-export async function POST(request: Request) { return peopleProxy(request, "people"); }
+export async function POST(request: Request) { return contactsProxy(request, "contacts"); }

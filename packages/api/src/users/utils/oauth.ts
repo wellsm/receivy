@@ -1,9 +1,9 @@
 import type { Service } from '@ez4/common';
-import type { OauthProvider } from '../../auth/oauth';
-import { createOauthProviderClient, oauthProviderConfigFrom } from '../../auth/oauth-provider';
-import type { ApiProvider } from '../../provider';
+import type { UserProvider } from '../provider';
+import type { OauthProvider } from '../services/oauth';
+import { createOauthProviderClient, oauthProviderConfigFrom } from '../services/oauth-provider';
 
-export function oauthDependencies(provider: OauthProvider, context: Service.Context<ApiProvider>, native = false) {
+export function oauthDependencies(provider: OauthProvider, context: Service.Context<UserProvider>, native = false) {
   const config = oauthProviderConfigFrom(context.variables);
   return {
     allowList: context.variables.OAUTH_REDIRECT_ALLOW_LIST.split(',')

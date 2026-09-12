@@ -1,8 +1,14 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { Share } from "react-native";
 import { BillingsScreen } from "@/components/screens/billings-screen";
 
 jest.mock("@/navigation/tab-header", () => ({ useTabHeader: () => {} }));
+jest.mock("expo-router", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories cannot close over module imports
+  const react = require("react");
+
+  return { useFocusEffect: (callback: () => void | (() => void)) => react.useEffect(() => callback(), [callback]) };
+});
 
 type Overrides = Record<string, unknown>;
 
@@ -10,6 +16,8 @@ function summary(overrides: Overrides = {}) {
   return {
     id: "b1",
     type: "once" as const,
+    direction: "receivable" as const,
+    payeeName: null,
     description: "Churrasco",
     total: { amountCents: 12000, currency: "BRL" as const },
     startDate: "2026-09-01",
@@ -38,6 +46,8 @@ function detail(overrides: Overrides = {}) {
     previews: [],
     nextMaterialization: null,
     invite: null,
+    guests: [],
+    linkableContacts: [],
     ...overrides,
   };
 }
@@ -197,8 +207,8 @@ describe("BillingsScreen", () => {
     await screen.findByRole("button", { name: "Cobrança Churrasco" });
     await fireEvent.press(screen.getByRole("radio", { name: "Encerradas" }));
 
-    expect(screen.getByText("Nenhuma cobrança encerrada.")).toBeOnTheScreen();
-    expect(screen.queryByText("Nenhuma cobrança ainda")).toBeNull();
+    expect(screen.getByText("Nenhuma conta encerrada.")).toBeOnTheScreen();
+    expect(screen.queryByText("Nenhuma conta ainda")).toBeNull();
   });
 
   it("offers the FAB and the empty state to create a billing", async () => {
@@ -206,7 +216,7 @@ describe("BillingsScreen", () => {
     const client = makeClient();
 
     await render(<BillingsScreen client={client} onCreate={onCreate} />);
-    await fireEvent.press(await screen.findByRole("button", { name: "Nova cobrança" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Nova conta" }));
 
     expect(onCreate).toHaveBeenCalled();
   });
@@ -216,8 +226,8 @@ describe("BillingsScreen", () => {
 
     await render(<BillingsScreen client={client} />);
 
-    expect(await screen.findByText("Nenhuma cobrança ainda")).toBeOnTheScreen();
-    expect(screen.getAllByRole("button", { name: "Nova cobrança" }).length).toBeGreaterThan(1);
+    expect(await screen.findByText("Nenhuma conta ainda")).toBeOnTheScreen();
+    expect(screen.getAllByRole("button", { name: "Nova conta" }).length).toBeGreaterThan(1);
   });
 
   it("loads the next page when asked", async () => {
@@ -234,5 +244,53 @@ describe("BillingsScreen", () => {
     expect(await screen.findByRole("button", { name: "Cobrança Aluguel" })).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Cobrança Churrasco" })).toBeOnTheScreen();
     expect(queries(client).at(-1)).toContain("cursor=c2");
+  });
+
+  it("replaces the list when the user pulls to refresh", async () => {
+    const client = makeClient({
+      billings: jest
+        .fn()
+        .mockResolvedValueOnce({ billings: [summary()], nextCursor: null })
+        .mockResolvedValue({ billings: [summary({ id: "b2", description: "Aluguel" })], nextCursor: null }),
+    });
+
+    await render(<BillingsScreen client={client} />);
+    expect(await screen.findByRole("button", { name: "Cobrança Churrasco" })).toBeOnTheScreen();
+
+    await act(async () => {
+      await screen.getByTestId("billings-list").props.refreshControl.props.onRefresh();
+    });
+
+    expect(await screen.findByRole("button", { name: "Cobrança Aluguel" })).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Cobrança Churrasco" })).toBeNull();
+    expect(client.billings).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks the API for one direction only", async () => {
+    const client = makeClient();
+
+    await render(<BillingsScreen client={client} />);
+    await screen.findByRole("button", { name: "Cobrança Churrasco" });
+    await fireEvent.press(screen.getByRole("radio", { name: "A pagar" }));
+
+    await waitFor(() => expect(queries(client).at(-1)).toBe("direction=payable"));
+
+    await fireEvent.press(screen.getByRole("radio", { name: "Todas" }));
+
+    await waitFor(() => expect(queries(client).at(-1)).toBe(""));
+  });
+
+  it("opens a conta a pagar instead of sharing a link", async () => {
+    const onOpenBilling = jest.fn();
+    const client = makeClient({
+      billings: jest.fn().mockResolvedValue({ billings: [summary({ direction: "payable", payeeName: "Ana", shareChargeId: "c9" })], nextCursor: null }),
+    });
+
+    await render(<BillingsScreen client={client} onOpenBilling={onOpenBilling} />);
+    await fireEvent.press(await screen.findByRole("button", { name: "Compartilhar" }));
+
+    expect(onOpenBilling).toHaveBeenCalledWith("b1");
+    expect(client.publicLink).not.toHaveBeenCalled();
+    expect(Share.share).not.toHaveBeenCalled();
   });
 });

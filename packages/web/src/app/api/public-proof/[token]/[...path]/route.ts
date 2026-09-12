@@ -3,3 +3,4 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const { token, path } = await params; return publicProofProxy(request, token, path.join("/"));
 }
 export const GET = POST;
+export const DELETE = POST;

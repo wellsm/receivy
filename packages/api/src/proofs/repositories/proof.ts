@@ -1,88 +1,100 @@
 import { createHash } from 'node:crypto';
-import { HttpConflictError, HttpForbiddenError, HttpNotFoundError, HttpUnprocessableEntityError } from '@ez4/gateway';
-import type { ProofDetail, ProofUploadInput, ProofUploadIntent } from '@receivy/common';
-import { lockAccountReferences } from '../account/locking';
-import { CHARGE_SELECT, type ChargeRow, findChargeForActor } from '../charges/repository';
-import type { DbClient } from '../database';
-import { resolvePublicCharge } from '../public/repository';
-import { proofEvent } from './events';
-import type { ProofStorage } from './storage';
-import { MAX_PROOF_BYTES, validateProof } from './validation';
+import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
+import type { ChargeDetail, ProofUploadInput, ProofUploadTicket, PublicProofState } from '@receivy/common';
+import { ChargeClosedError } from '../../charges/errors';
+import { CHARGE_SELECT, type ChargeRow, chargeDto, findChargeForActor } from '../../charges/repositories/charge';
+import { UnprocessableEntityError } from '../../common/errors';
+import { recordEvent } from '../../common/repositories/events';
+import type { DbClient } from '../../database';
+import { resolvePublicCharge } from '../../public/repositories/public-link';
+import { lockAccountReferences } from '../../users/services/locking';
+import {
+  ProofInvalidFileError,
+  ProofMissingError,
+  ProofPendingError,
+  ProofReviewedError,
+  ProofReviewInvalidError,
+  ProofSizeMismatchError,
+  UploadInProgressError
+} from '../errors';
+import type { UploadExpiryClient } from '../schedulers/upload-expiry';
+import { uploadExpiryIdentifier } from '../schedulers/upload-expiry';
+import type { ProofStorage } from '../services/storage';
+import { MAX_PROOF_BYTES, validateProof } from '../services/validation';
 
 export type ProofActor = { userId: string } | { token: string; secret: string };
+
+/** How long a reserved upload slot waits for its bytes. */
+export const UPLOAD_TTL_MS = 5 * 60_000;
+
+const KEY = /^proofs\/([0-9a-f-]{36})\/([0-9a-f-]{36})$/;
+const sqlNull = null as unknown as undefined;
+
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
-const actorHash = (actor: ProofActor) => hash('userId' in actor ? `user:${actor.userId}` : `public:${actor.token}`);
+
+export const actorHash = (actor: ProofActor) => hash('userId' in actor ? `user:${actor.userId}` : `public:${actor.token}`);
+
 const userId = (actor: ProofActor) => ('userId' in actor ? actor.userId : undefined);
-const SELECT = {
-  id: true,
-  charge_id: true,
-  sender_user_id: true,
-  object_key: true,
-  original_name: true,
-  mime: true,
-  size: true,
-  sha256: true,
-  state: true,
-  reason: true,
-  closure_reason: true,
-  reviewed_at: true,
-  created_at: true
-} as const;
-const INTENT = {
-  id: true,
-  charge_id: true,
-  sender_user_id: true,
-  actor_hash: true,
-  object_key: true,
-  original_name: true,
-  mime: true,
-  size: true,
-  state: true,
-  expires_at: true
+
+/** Every proof column back to "nothing attached". */
+const CLEARED = {
+  proof_state: sqlNull,
+  proof_file: sqlNull,
+  ...{ proof_sender_user_id: sqlNull },
+  proof_actor_hash: sqlNull,
+  proof_expires_at: sqlNull,
+  proof_sent_at: sqlNull,
+  proof_reviewed_at: sqlNull,
+  proof_reason: sqlNull
 } as const;
 
-async function authorize(db: DbClient, id: string, actor: ProofActor, lock = false): Promise<ChargeRow> {
-  if ('userId' in actor) return (await findChargeForActor(db, actor.userId, id, lock)).row;
-  if (lock) await lockAccountReferences(db, 'write');
-  const row = await db.charges.findOne({ select: CHARGE_SELECT, where: { id }, ...(lock ? { lock: true } : {}) });
-  if (!row || (await resolvePublicCharge(db, actor.token, actor.secret)).id !== id) throw new HttpNotFoundError();
-  return row;
-}
-function pending(row: ChargeRow) {
-  if (row.state !== 'pending') throw new HttpConflictError('A cobrança já foi encerrada.');
-}
-function dto(row: {
-  id: string;
-  charge_id: string;
-  original_name: string;
-  mime: ProofDetail['mime'];
-  size: number;
-  state: ProofDetail['state'];
-  reason?: string;
-  closure_reason?: 'paid' | 'cancelled';
-  reviewed_at?: string;
-  created_at: string;
-}): ProofDetail {
-  return {
-    id: row.id,
-    chargeId: row.charge_id,
-    originalName: row.original_name,
-    mime: row.mime,
-    size: row.size,
-    state: row.state,
-    reason: row.reason ?? null,
-    closureReason: row.closure_reason ?? null,
-    reviewedAt: row.reviewed_at ?? null,
-    createdAt: row.created_at
-  };
-}
-export async function createUploadIntent(
+async function authorize(
   db: DbClient,
-  storage: ProofStorage,
   id: string,
   actor: ProofActor,
-  input: ProofUploadInput
-): Promise<ProofUploadIntent> {
+  lock = false
+): Promise<{ row: ChargeRow; direction: 'receivable' | 'payable' | 'public' }> {
+  if ('userId' in actor) {
+    return findChargeForActor(db, actor.userId, id, lock);
+  }
+
+  if (lock) {
+    await lockAccountReferences(db, 'write');
+  }
+
+  const row = await db.charges.findOne({ select: CHARGE_SELECT, where: { id }, ...(lock ? { lock: true } : {}) });
+
+  if (!row || (await resolvePublicCharge(db, actor.token, actor.secret)).id !== id) {
+    throw new HttpNotFoundError();
+  }
+
+  return { row, direction: 'public' };
+}
+
+function pending(row: ChargeRow) {
+  if (row.state !== 'pending') {
+    throw new ChargeClosedError();
+  }
+}
+
+function ownsProof(row: ChargeRow, actor: ProofActor): boolean {
+  return row.proof_actor_hash === actorHash(actor);
+}
+
+/**
+ * Reserves the charge's single proof slot and hands back a signed PUT. The bytes never touch the API:
+ * the bucket event turns the slot into a pending proof once they land. A rejected file may be replaced;
+ * a file under review may not, and another actor's live upload is not overridden.
+ */
+export async function startProofUpload(
+  db: DbClient,
+  storage: ProofStorage,
+  expiry: UploadExpiryClient,
+  id: string,
+  actor: ProofActor,
+  input: ProofUploadInput,
+  now = Date.now()
+): Promise<ProofUploadTicket> {
   if (
     !['image/jpeg', 'image/png', 'application/pdf'].includes(input.mime) ||
     !Number.isSafeInteger(input.size) ||
@@ -91,193 +103,315 @@ export async function createUploadIntent(
     !input.filename.trim() ||
     input.filename.length > 200 ||
     /[\x00-\x1f\x7f]/.test(input.filename)
-  )
-    throw new HttpUnprocessableEntityError('Envie JPG, PNG ou PDF de até 10 MB.');
-  const now = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 300_000).toISOString();
-  const intentId = crypto.randomUUID();
-  const key = `temporary/${crypto.randomUUID()}/${intentId}`;
-  // Signing is external I/O and must not hold the financial row lock.
-  await authorize(db, id, actor);
-  const uploadUrl = await storage.uploadUrl(key, input.mime, input.size);
-  await db.transaction(async (tx) => {
-    pending(await authorize(tx, id, actor, true));
-    await tx.upload_intents.updateMany({
-      where: { charge_id: id, state: 'pending', expires_at: { lte: now } },
-      data: { state: 'expired' }
-    });
-    if (
-      (await tx.upload_intents.count({ where: { charge_id: id, state: 'pending' } })) ||
-      (await tx.payment_proofs.count({ where: { charge_id: id, state: 'pending' } }))
-    )
-      throw new HttpConflictError('Já existe um envio em andamento ou comprovante em revisão.');
-    await tx.upload_intents.insertOne({
+  ) {
+    throw new ProofInvalidFileError('Envie JPG, PNG ou PDF de até 10 MB.');
+  }
+
+  const key = `proofs/${id}/${crypto.randomUUID()}`;
+  const expiresAt = new Date(now + UPLOAD_TTL_MS).toISOString();
+  const stamp = new Date(now).toISOString();
+
+  const previousKey = await db.transaction(async (tx) => {
+    const { row, direction } = await authorize(tx, id, actor, true);
+
+    pending(row);
+
+    // Only the side that pays sends files: the debtor, the owner of a conta a pagar, or the public link.
+    if (direction === 'receivable') {
+      throw new HttpForbiddenError();
+    }
+
+    if (row.proof_state === 'pending' || row.proof_state === 'accepted') {
+      throw new ProofPendingError();
+    }
+
+    const liveUpload = row.proof_state === 'uploading' && !!row.proof_expires_at && Date.parse(row.proof_expires_at) > now;
+
+    if (liveUpload && !ownsProof(row, actor)) {
+      throw new UploadInProgressError();
+    }
+
+    await tx.charges.updateOne({
+      where: { id },
       data: {
-        id: intentId,
-        charge: { id },
-        ...(userId(actor) ? { sender_user: { id: userId(actor)! } } : {}),
-        actor_hash: actorHash(actor),
-        object_key: key,
-        original_name: input.filename.split(/[\\/]/).at(-1)!,
-        mime: input.mime,
-        size: input.size,
-        state: 'pending',
-        expires_at: expiresAt,
-        created_at: now
+        ...CLEARED,
+        proof_state: 'uploading',
+        proof_file: { key, name: input.filename.split(/[\\/]/).at(-1)!, mime: input.mime, size: input.size },
+        ...(userId(actor) ? { proof_sender: { id: userId(actor)! } } : {}),
+        proof_actor_hash: actorHash(actor),
+        proof_expires_at: expiresAt,
+        updated_at: stamp
       }
     });
+
+    return row.proof_file?.key ?? null;
   });
-  return { id: intentId, uploadUrl, expiresAt };
+
+  // The previous file (a rejected one, or an abandoned upload) has no row pointing at it any more.
+  if (previousKey) {
+    await storage.delete(previousKey).catch(() => undefined);
+  }
+
+  await expiry.setEvent(uploadExpiryIdentifier(id), { date: new Date(expiresAt), event: { chargeId: id, key } }).catch(() => undefined);
+
+  return { uploadUrl: await storage.uploadUrl(key, input.mime, input.size), expiresAt };
 }
-export async function finalizeProof(
-  db: DbClient,
-  storage: ProofStorage,
-  id: string,
-  actor: ProofActor,
-  intentId: string
-): Promise<ProofDetail> {
-  pending(await authorize(db, id, actor));
-  const intent = await db.upload_intents.findOne({ select: INTENT, where: { id: intentId, charge_id: id, actor_hash: actorHash(actor) } });
-  if (!intent) throw new HttpNotFoundError();
-  if (intent.state !== 'pending' || Date.parse(intent.expires_at) <= Date.now())
-    throw new HttpConflictError('O envio expirou ou já foi finalizado.');
-  let bytes: Buffer;
-  let validated: ReturnType<typeof validateProof>;
+
+export type ProofObjectOutcome = 'accepted' | 'invalid' | 'ignored';
+
+/**
+ * The bucket said an object landed under `proofs/`. When it is the slot the charge is waiting for, the
+ * bytes are validated and the slot becomes a pending proof; anything else is dropped from the bucket.
+ */
+export async function receiveProofObject(db: DbClient, storage: ProofStorage, key: string, now = Date.now()): Promise<ProofObjectOutcome> {
+  const chargeId = KEY.exec(key)?.[1];
+  const charge = chargeId ? await db.charges.findOne({ select: CHARGE_SELECT, where: { id: chargeId } }) : undefined;
+
+  if (charge?.proof_state !== 'uploading' || charge.proof_file?.key !== key) {
+    // A redelivered event for the file already attached must leave it alone; any other object is a stray.
+    if (charge?.proof_file?.key !== key) {
+      await storage.delete(key).catch(() => undefined);
+    }
+
+    return 'ignored';
+  }
+
+  const declared = charge.proof_file;
+  const stamp = new Date(now).toISOString();
+
+  let validated: ReturnType<typeof validateProof> | undefined;
+
   try {
-    bytes = await storage.read(intent.object_key);
-    validated = validateProof(bytes, intent.mime);
-    if (validated.size !== intent.size) throw new HttpUnprocessableEntityError('O tamanho do arquivo não corresponde ao envio autorizado.');
+    const bytes = await storage.read(key);
+
+    validated = validateProof(bytes, declared.mime);
+
+    if (validated.size !== declared.size) {
+      throw new ProofSizeMismatchError();
+    }
   } catch (failure) {
-    if (failure instanceof HttpUnprocessableEntityError) {
-      // A definitive file failure releases only this actor's still-pending intent.
-      // Network/storage errors retain it for safe retries; concurrent committed proofs stay intact.
-      await db.transaction(async (tx) => {
-        await authorize(tx, id, actor, true);
-        await tx.upload_intents.updateMany({
-          where: { id: intentId, charge_id: id, actor_hash: actorHash(actor), state: 'pending' },
-          data: { state: 'expired' }
-        });
-      });
-      await storage.delete(intent.object_key).catch(() => undefined);
+    // Storage hiccups retry through the bucket event; only a definitive file failure releases the slot.
+    if (!(failure instanceof UnprocessableEntityError)) {
+      throw failure;
     }
-    throw failure;
-  }
-  const proofId = crypto.randomUUID();
-  const finalKey = `proofs/${id}/${proofId}`;
-  // Write exactly the bounded, validated bytes. Never copy a still-uploadable source object.
-  await storage.write(finalKey, bytes, validated.mime);
-  let committed = false;
-  try {
-    const proof = await db.transaction(async (tx) => {
-      const row = await authorize(tx, id, actor, true);
-      pending(row);
-      const current = await tx.upload_intents.findOne({ select: INTENT, where: { id: intentId, actor_hash: actorHash(actor) } });
-      if (!current || current.state !== 'pending' || Date.parse(current.expires_at) <= Date.now())
-        throw new HttpConflictError('O envio expirou ou já foi finalizado.');
-      if (await tx.payment_proofs.count({ where: { charge_id: id, state: 'pending' } })) throw new HttpConflictError();
-      const now = new Date().toISOString();
-      const inserted = await tx.payment_proofs.insertOne({
-        select: SELECT,
-        data: {
-          id: proofId,
-          charge: { id },
-          ...(intent.sender_user_id ? { sender_user: { id: intent.sender_user_id } } : {}),
-          object_key: finalKey,
-          original_name: intent.original_name,
-          mime: validated.mime,
-          size: validated.size,
-          sha256: validated.sha256,
-          state: 'pending',
-          created_at: now
-        }
+
+    await db.transaction(async (tx) => {
+      const current = await tx.charges.findOne({ select: CHARGE_SELECT, where: { id: charge.id }, lock: true });
+
+      if (current?.proof_state !== 'uploading' || current.proof_file?.key !== key) {
+        return;
+      }
+
+      await tx.charges.updateOne({ where: { id: charge.id }, data: { ...CLEARED, updated_at: stamp } });
+      await recordEvent(tx, {
+        type: 'proof.invalid',
+        eventableType: 'charge',
+        eventableId: charge.id,
+        actorId: charge.proof_sender_user_id ?? null,
+        payload: { name: declared.name, mime: declared.mime, size: declared.size, reason: failure.message },
+        at: stamp
       });
-      await tx.upload_intents.updateOne({ where: { id: intentId }, data: { state: 'finalized', proof_id: proofId } });
-      await proofEvent(tx, row, 'proof.submitted', now, userId(actor), proofId);
-      return dto(inserted);
     });
-    committed = true;
-    await storage.delete(intent.object_key).catch(() => undefined);
-    return proof;
-  } finally {
-    if (!committed) {
-      // Lost commit acknowledgement is not proof of rollback. Keep potentially committed bytes.
-      const exists = await db.payment_proofs.findOne({ select: { id: true }, where: { id: proofId } }).catch(() => ({ id: proofId }));
-      if (!exists) await storage.delete(finalKey).catch(() => undefined);
+
+    await storage.delete(key).catch(() => undefined);
+
+    return 'invalid';
+  }
+
+  const outcome = await db.transaction(async (tx): Promise<'accepted' | 'attached' | 'stray'> => {
+    const current = await tx.charges.findOne({ select: CHARGE_SELECT, where: { id: charge.id }, lock: true });
+
+    if (current?.proof_state !== 'uploading' || current.proof_file?.key !== key) {
+      return current?.proof_file?.key === key ? 'attached' : 'stray';
     }
+
+    await tx.charges.updateOne({
+      where: { id: charge.id },
+      data: {
+        proof_state: 'pending',
+        proof_file: { ...declared, sha256: validated!.sha256 },
+        proof_expires_at: sqlNull,
+        proof_sent_at: stamp,
+        updated_at: stamp
+      }
+    });
+    await recordEvent(tx, {
+      type: 'proof.uploaded',
+      eventableType: 'charge',
+      eventableId: charge.id,
+      actorId: charge.proof_sender_user_id ?? null,
+      payload: { name: declared.name, mime: declared.mime, size: declared.size },
+      at: stamp
+    });
+
+    return 'accepted';
+  });
+
+  if (outcome === 'stray') {
+    await storage.delete(key).catch(() => undefined);
+  }
+
+  return outcome === 'accepted' ? 'accepted' : 'ignored';
+}
+
+/** Releases a reserved slot nobody filled; the scheduler calls it, and a retry finds nothing to do. */
+export async function expireProofUpload(db: DbClient, storage: ProofStorage, chargeId: string, key: string): Promise<boolean> {
+  const outcome = await db.transaction(async (tx): Promise<'released' | 'attached' | 'stray'> => {
+    const current = await tx.charges.findOne({ select: CHARGE_SELECT, where: { id: chargeId }, lock: true });
+
+    if (current?.proof_state !== 'uploading' || current.proof_file?.key !== key) {
+      // The bytes landed in time and the file is the charge's proof now: the schedule fires anyway, harmlessly.
+      return current?.proof_file?.key === key ? 'attached' : 'stray';
+    }
+
+    await tx.charges.updateOne({ where: { id: chargeId }, data: { ...CLEARED, updated_at: new Date().toISOString() } });
+
+    return 'released';
+  });
+
+  if (outcome !== 'attached') {
+    await storage.delete(key).catch(() => undefined);
+  }
+
+  return outcome === 'released';
+}
+
+/** The sender takes back a file nobody reviewed yet; the row and the bytes go, so another one can go up. */
+export async function withdrawProof(db: DbClient, storage: ProofStorage, id: string, actor: ProofActor, now = Date.now()): Promise<void> {
+  const key = await db.transaction(async (tx) => {
+    const { row } = await authorize(tx, id, actor, true);
+
+    pending(row);
+
+    if (!row.proof_state || !ownsProof(row, actor)) {
+      throw new HttpNotFoundError();
+    }
+
+    if (row.proof_state !== 'pending' && row.proof_state !== 'uploading') {
+      throw new ProofReviewedError();
+    }
+
+    const stamp = new Date(now).toISOString();
+
+    await tx.charges.updateOne({ where: { id }, data: { ...CLEARED, updated_at: stamp } });
+    await recordEvent(tx, {
+      type: 'proof.withdrawn',
+      eventableType: 'charge',
+      eventableId: id,
+      actorId: userId(actor) ?? null,
+      payload: { name: row.proof_file?.name, mime: row.proof_file?.mime, size: row.proof_file?.size },
+      at: stamp
+    });
+
+    return row.proof_file?.key ?? null;
+  });
+
+  if (key) {
+    await storage.delete(key).catch(() => undefined);
   }
 }
-export async function publicProofStatus(db: DbClient, token: string, secret: string, intentId: string) {
-  const charge = await resolvePublicCharge(db, token, secret);
-  const intent = await db.upload_intents.findOne({
-    select: { proof_id: true },
-    where: { id: intentId, charge_id: charge.id, actor_hash: actorHash({ token, secret }) }
-  });
-  if (!intent?.proof_id) throw new HttpNotFoundError();
-  const proof = await db.payment_proofs.findOne({
-    select: { state: true, reason: true, closure_reason: true },
-    where: { id: intent.proof_id }
-  });
-  if (!proof) throw new HttpNotFoundError();
-  return { state: proof.state, reason: proof.reason ?? null, closureReason: proof.closure_reason ?? null };
-}
-export async function listProofs(db: DbClient, id: string, actorId: string): Promise<ProofDetail[]> {
-  const { direction } = await findChargeForActor(db, actorId, id);
-  const result = await db.payment_proofs.findMany({
-    select: SELECT,
-    where: { charge_id: id, ...(direction === 'payable' ? { sender_user_id: actorId } : {}) }
-  });
-  return result.records.map(dto);
-}
-export async function downloadProof(db: DbClient, storage: ProofStorage, id: string, actorId: string, proofId: string) {
-  const { direction } = await findChargeForActor(db, actorId, id);
-  const proof = await db.payment_proofs.findOne({
-    select: SELECT,
-    where: { id: proofId, charge_id: id, ...(direction === 'payable' ? { sender_user_id: actorId } : {}) }
-  });
-  if (!proof) throw new HttpNotFoundError();
-  return { url: await storage.downloadUrl(proof.object_key, proof.mime), expiresIn: 60 };
-}
+
+/** The creditor answers the file under review: accepting settles the charge, rejecting explains why. */
 export async function reviewProof(
   db: DbClient,
   id: string,
   actorId: string,
-  proofId: string,
-  input: { decision: 'accepted' | 'rejected'; reason?: string }
-): Promise<ProofDetail> {
-  if (!['accepted', 'rejected'].includes(input.decision) || (input.reason?.length ?? 0) > 500) throw new HttpUnprocessableEntityError();
+  input: { decision: 'accepted' | 'rejected'; reason?: string },
+  now = Date.now()
+): Promise<ChargeDetail> {
+  if (!['accepted', 'rejected'].includes(input.decision) || (input.reason?.length ?? 0) > 500) {
+    throw new ProofReviewInvalidError();
+  }
+
   return db.transaction(async (tx) => {
     const { row, direction } = await findChargeForActor(tx, actorId, id, true);
-    if (direction !== 'receivable') throw new HttpForbiddenError();
-    pending(row);
-    const proof = await tx.payment_proofs.findOne({ select: SELECT, where: { id: proofId, charge_id: id } });
-    if (!proof) throw new HttpNotFoundError();
-    if (proof.state !== 'pending') throw new HttpConflictError('O comprovante já foi revisado.');
-    const now = new Date().toISOString();
-    if (input.decision === 'accepted') {
-      await tx.payments.insertOne({
-        data: {
-          id: crypto.randomUUID(),
-          charge: { id },
-          proof: { id: proofId },
-          amount_cents: row.amount_cents,
-          currency: row.currency,
-          method: 'pix',
-          registered_by: { id: actorId },
-          paid_at: now,
-          created_at: now
-        }
-      });
-      await tx.charges.updateOne({ where: { id }, data: { state: 'paid', paid_at: now, updated_at: now } });
-      await tx.upload_intents.updateMany({ where: { charge_id: id, state: 'pending' }, data: { state: 'expired' } });
-      await proofEvent(tx, row, 'charge.paid', now, actorId, proofId);
+
+    if (direction !== 'receivable') {
+      throw new HttpForbiddenError();
     }
-    await tx.payment_proofs.updateOne({
-      where: { id: proofId },
-      data: { state: input.decision, reviewer: { id: actorId }, reviewed_at: now, ...(input.reason ? { reason: input.reason.trim() } : {}) }
+
+    pending(row);
+
+    if (row.proof_state !== 'pending') {
+      throw new ProofMissingError();
+    }
+
+    const stamp = new Date(now).toISOString();
+    const reason = input.reason?.trim() || undefined;
+
+    await tx.charges.updateOne({
+      where: { id },
+      data: {
+        proof_state: input.decision,
+        proof_reviewed_at: stamp,
+        proof_reason: reason ?? sqlNull,
+        ...(input.decision === 'accepted' ? { state: 'paid', paid_at: stamp } : {}),
+        updated_at: stamp
+      }
     });
-    await proofEvent(tx, row, `proof.${input.decision}`, now, actorId, proofId);
-    const updated = await tx.payment_proofs.findOne({ select: SELECT, where: { id: proofId } });
-    if (!updated) throw new HttpNotFoundError();
-    return dto(updated);
+    await recordEvent(tx, {
+      type: `proof.${input.decision}`,
+      eventableType: 'charge',
+      eventableId: id,
+      actorId,
+      payload: { name: row.proof_file?.name, ...(reason ? { reason } : {}) },
+      at: stamp
+    });
+
+    if (input.decision === 'accepted') {
+      await recordEvent(tx, {
+        type: 'charge.paid',
+        eventableType: 'charge',
+        eventableId: id,
+        actorId,
+        payload: { via: 'proof' },
+        at: stamp
+      });
+    }
+
+    const updated = await tx.charges.findOne({ select: CHARGE_SELECT, where: { id } });
+
+    if (!updated) {
+      throw new HttpNotFoundError();
+    }
+
+    return chargeDto(tx, updated, actorId);
   });
+}
+
+/** A short-lived read URL: the creditor may open any file, the debtor only the one they sent. */
+export async function proofDownloadUrl(
+  db: DbClient,
+  storage: ProofStorage,
+  id: string,
+  actorId: string
+): Promise<{ url: string; expiresIn: number }> {
+  const { row, direction } = await findChargeForActor(db, actorId, id);
+
+  if (!row.proof_file || !row.proof_state || row.proof_state === 'uploading') {
+    throw new HttpNotFoundError();
+  }
+
+  if (direction === 'payable' && row.proof_sender_user_id !== actorId) {
+    throw new HttpNotFoundError();
+  }
+
+  return { url: await storage.downloadUrl(row.proof_file.key, row.proof_file.mime), expiresIn: 60 };
+}
+
+/** What the public page may learn: the state of its own upload, nothing about anyone else's. */
+export async function publicProofState(db: DbClient, token: string, secret: string): Promise<PublicProofState> {
+  return proofStateView(await resolvePublicCharge(db, token, secret), token, secret);
+}
+
+export function proofStateView(charge: ChargeRow, token: string, secret: string): PublicProofState {
+  if (!charge.proof_state || !charge.proof_file || charge.proof_actor_hash !== actorHash({ token, secret })) {
+    return { state: null, reason: null, file: null };
+  }
+
+  return {
+    state: charge.proof_state,
+    reason: charge.proof_reason ?? null,
+    file: { name: charge.proof_file.name, mime: charge.proof_file.mime, size: charge.proof_file.size }
+  };
 }

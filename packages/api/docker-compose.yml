@@ -19,5 +19,28 @@ services:
       timeout: 5s
       retries: 5
 
+  mailpit:
+    image: axllent/mailpit:v1.31
+    container_name: receivy-mailpit
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    ports:
+      # Web UI and REST API used by EMAIL_TRANSPORT=mailpit.
+      - "127.0.0.1:8025:8025"
+      # SMTP, kept for tools that cannot use the HTTP API.
+      - "127.0.0.1:1025:1025"
+    volumes:
+      - receivy_mailpit_data:/data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   receivy_pg_data:
+  receivy_mailpit_data:

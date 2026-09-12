@@ -1,20 +1,22 @@
-import { contactBadge, formatPhoneBR, initialsOf, type BadgeTone, type Person } from "@receivy/common";
+import { contactBadge, formatPhoneBR, initialsOf, type BadgeTone, type Contact } from "@receivy/common";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
-import { peopleClient } from "@/people/client";
+import { contactsClient } from "@/contacts/client";
 import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
 
-type PeopleScreenProps = {
-  client?: Pick<typeof peopleClient, "list">;
+type ContactsScreenProps = {
+  client?: Pick<typeof contactsClient, "list">;
   onOpenLedger?: (id: string) => void;
   /** Absent when the screen cannot navigate to the contact form. */
   onNewContact?: () => void;
 };
 
 const LIST_ERROR = "Não foi possível carregar os contatos.";
+const PENDING_LABEL = "Ainda não entrou";
+const LINK_ONLY_LABEL = "Só por link";
 
 const chevronMark = require("../../../assets/images/auth/chevron.svg");
 const plusMark = require("../../../assets/images/auth/plus.svg");
@@ -28,44 +30,54 @@ const BADGE_CLASS: Record<BadgeTone, string> = {
   neutral: "bg-surface-muted text-muted",
 };
 
-/** Phone first because it is what a reminder uses; the e-mail is the fallback line. */
-function subtitleOf(person: Person): string {
-  if (person.phone) {
-    return formatPhoneBR(person.phone);
+/** Phone first because it is what a reminder uses; the e-mail is the fallback line, and a person without one only gets the shared link. */
+function subtitleOf(contact: Contact): string {
+  if (contact.phone) {
+    return formatPhoneBR(contact.phone);
   }
 
-  return person.email ?? "Sem contato";
+  if (!contact.email) {
+    return LINK_ONLY_LABEL;
+  }
+
+  return contact.email;
 }
 
 function countLabel(total: number): string {
   return `${total} ${total === 1 ? "contato" : "contatos"}`;
 }
 
-function ContactCard({ person, onPress }: { person: Person; onPress: () => void }) {
-  const badge = contactBadge(person.activeCharges);
+function Badge({ label, tone }: { label: string; tone: BadgeTone }) {
+  return <Text className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${BADGE_CLASS[tone]}`}>{label}</Text>;
+}
+
+function ContactCard({ contact, onPress }: { contact: Contact; onPress: () => void }) {
+  const badge = contactBadge(contact.activeCharges);
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Contato ${person.displayName}`}
+      accessibilityLabel={`Contato ${contact.displayName}`}
       onPress={onPress}
       className="min-h-16 flex-row items-center gap-3 rounded-2xl border border-outline/40 bg-surface p-4"
     >
       <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft">
-        <Text className="text-sm font-extrabold text-primary-strong">{initialsOf(person.displayName)}</Text>
+        <Text className="text-sm font-extrabold text-primary-strong">{initialsOf(contact.displayName)}</Text>
       </View>
 
       <View className="flex-1 gap-1">
         <View className="flex-row items-center gap-2">
           <Text className="flex-1 text-base font-bold text-ink" numberOfLines={1}>
-            {person.displayName}
+            {contact.displayName}
           </Text>
 
-          <Text className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${BADGE_CLASS[badge.tone]}`}>{badge.label}</Text>
+          {/* The person has not signed in yet: the agenda says so instead of pretending they get reminders. */}
+          {contact.status === "pending" ? <Badge label={PENDING_LABEL} tone="neutral" /> : null}
+          <Badge label={badge.label} tone={badge.tone} />
         </View>
 
         <Text className="text-xs text-muted" numberOfLines={1}>
-          {subtitleOf(person)}
+          {subtitleOf(contact)}
         </Text>
       </View>
 
@@ -75,8 +87,8 @@ function ContactCard({ person, onPress }: { person: Person; onPress: () => void 
 }
 
 /** The agenda: server-side search, pending badges and a FAB towards the contact form. */
-export function PeopleScreen({ client = peopleClient, onOpenLedger, onNewContact }: PeopleScreenProps) {
-  const [people, setPeople] = useState<Person[]>([]);
+export function ContactsScreen({ client = contactsClient, onOpenLedger, onNewContact }: ContactsScreenProps) {
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
@@ -99,7 +111,7 @@ export function PeopleScreen({ client = peopleClient, onOpenLedger, onNewContact
             return;
           }
 
-          setPeople((previous) => (after ? [...previous, ...page.people] : page.people));
+          setContacts((previous) => (after ? [...previous, ...page.contacts] : page.contacts));
           setCursor(page.nextCursor);
           setError("");
         })
@@ -151,7 +163,7 @@ export function PeopleScreen({ client = peopleClient, onOpenLedger, onNewContact
 
           <TextInput
             accessibilityLabel="Buscar contatos"
-            placeholder="Buscar por nome, telefone ou e-mail..."
+            placeholder="Buscar por nome ou e-mail..."
             placeholderTextColor={MUTED_TINT}
             maxLength={254}
             autoCorrect={false}
@@ -165,8 +177,7 @@ export function PeopleScreen({ client = peopleClient, onOpenLedger, onNewContact
         </View>
 
         <View className="flex-row items-center justify-between">
-          <Text className="text-xs font-bold tracking-wider text-muted">CONTATOS</Text>
-          <Text className="text-xs text-muted">{countLabel(people.length)}</Text>
+          <Text className="text-xs text-muted">{countLabel(contacts.length)}</Text>
         </View>
 
         {error ? (
@@ -189,9 +200,9 @@ export function PeopleScreen({ client = peopleClient, onOpenLedger, onNewContact
           </View>
         ) : null}
 
-        {loading && !people.length ? <ActivityIndicator accessibilityLabel="Carregando contatos" color={ACTIVE_TINT} /> : null}
+        {loading && !contacts.length ? <ActivityIndicator accessibilityLabel="Carregando contatos" color={ACTIVE_TINT} /> : null}
 
-        {!loading && !error && !people.length ? (
+        {!loading && !error && !contacts.length ? (
           <View className="items-center gap-2 rounded-3xl border border-outline/40 bg-surface p-8">
             <Text className="text-lg font-extrabold text-primary-strong">Nenhum contato ainda</Text>
             <Text className="text-center text-sm leading-5 text-muted">Cadastre alguém para dividir despesas e lembrar pagamentos.</Text>
@@ -199,8 +210,8 @@ export function PeopleScreen({ client = peopleClient, onOpenLedger, onNewContact
         ) : null}
 
         <View className="gap-2">
-          {people.map((person) => (
-            <ContactCard key={person.id} person={person} onPress={() => onOpenLedger?.(person.id)} />
+          {contacts.map((contact) => (
+            <ContactCard key={contact.id} contact={contact} onPress={() => onOpenLedger?.(contact.id)} />
           ))}
         </View>
 

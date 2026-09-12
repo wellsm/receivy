@@ -1,6 +1,6 @@
-import { lockAccountReferences } from '../account/locking';
-import type { DbClient } from '../database';
-import { createAuthRepository } from '../repositories/auth-repository';
+import type { DbClient } from '../../database';
+import { createAuthRepository } from '../repositories/auth';
+import { lockAccountReferences } from './locking';
 import type { OauthGrantCommit } from './oauth-flow';
 
 export async function commitOauthIdentity(db: DbClient, input: OauthGrantCommit): Promise<void> {

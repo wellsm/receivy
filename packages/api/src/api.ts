@@ -1,18 +1,52 @@
 import type { Http } from '@ez4/gateway';
 import type { NamingStyle } from '@ez4/schema';
-import type { AccountRoutes } from './routes/account';
-import type { AuthRoutes } from './routes/auth';
-import type { BillingRoutes } from './routes/billings';
-import type { ChargeRoutes } from './routes/charges';
-import type { HealthRoutes } from './routes/health';
-import type { InviteRoutes } from './routes/invites';
-import type { NotificationRoutes } from './routes/notifications';
-import type { PaymentMethodRoutes } from './routes/payment-methods';
-import type { PeopleRoutes } from './routes/people';
-import type { ProofRoutes } from './routes/proofs';
-import type { PublicRoutes } from './routes/public';
-import type { TimelineRoutes } from './routes/timeline';
-import type { requestListener } from './security/listener';
+import type {
+  BillingEndedError,
+  BillingInactiveError,
+  BillingNotPausableError,
+  BillingPreviewUnavailableError,
+  BillingSnapshotLockedError,
+  GuestAlreadyResolvedError,
+  IdempotencyMismatchError,
+  PayableHasNoSplitError,
+  ReceivableHasNoPayeeError
+} from './billings/errors';
+import type { BillingRoutes } from './billings/routes';
+import type { ChargeClosedError, ChargeNotPaidError } from './charges/errors';
+import type { ChargeRoutes } from './charges/routes';
+import type { TooManyRequestsError } from './common/errors';
+import type { requestListener } from './common/services/listener';
+import type { DuplicateContactError, EmailTakenError, LinkedContactError, NotLinkableError, OwnEmailError } from './contacts/errors';
+import type { ContactRoutes } from './contacts/routes';
+import type { HealthRoutes } from './health/routes';
+import type {
+  InviteBillingInactiveError,
+  InviteOwnerError,
+  PayableHasNoInviteError,
+  SplitClosedError,
+  SplitInProgressError
+} from './invites/errors';
+import type { InviteRoutes } from './invites/routes';
+import type { DeviceOwnedElsewhereError, DeviceRegisteredError, ReminderQuotaError } from './notifications/errors';
+import type { NotificationRoutes } from './notifications/routes';
+import type { PixKeyTakenError } from './payment-methods/errors';
+import type { PaymentMethodRoutes } from './payment-methods/routes';
+import type {
+  ProofInvalidFileError,
+  ProofMissingError,
+  ProofPendingError,
+  ProofReviewedError,
+  ProofReviewInvalidError,
+  ProofSizeMismatchError,
+  ProofTooLargeError,
+  UploadInProgressError
+} from './proofs/errors';
+import type { ProofRoutes } from './proofs/routes';
+import type { PixRequiredError, PixSnapshotLockedError } from './public/errors';
+import type { PublicRoutes } from './public/routes';
+import type { TimelineOverflowError } from './timeline/errors';
+import type { TimelineRoutes } from './timeline/routes';
+import type { UserRoutes } from './users/routes';
 
 /** Receivy HTTP API. */
 export declare class Api extends Http.Service {
@@ -24,12 +58,50 @@ export declare class Api extends Http.Service {
     preferences: {
       namingStyle: NamingStyle.CamelCase;
     };
+    // Domain errors (`ApiError` subclasses) mapped to their status. The gateway serializes them as
+    // `{ type: 'error', message, context: { code } }`; see docs/api-errors.md.
+    httpErrors: {
+      409: [
+        IdempotencyMismatchError,
+        BillingPreviewUnavailableError,
+        BillingEndedError,
+        BillingNotPausableError,
+        PayableHasNoSplitError,
+        ReceivableHasNoPayeeError,
+        BillingSnapshotLockedError,
+        GuestAlreadyResolvedError,
+        BillingInactiveError,
+        ChargeClosedError,
+        ChargeNotPaidError,
+        LinkedContactError,
+        DuplicateContactError,
+        EmailTakenError,
+        OwnEmailError,
+        NotLinkableError,
+        InviteOwnerError,
+        SplitClosedError,
+        SplitInProgressError,
+        InviteBillingInactiveError,
+        PayableHasNoInviteError,
+        DeviceOwnedElsewhereError,
+        DeviceRegisteredError,
+        PixKeyTakenError,
+        ProofPendingError,
+        UploadInProgressError,
+        ProofReviewedError,
+        ProofMissingError,
+        PixRequiredError,
+        PixSnapshotLockedError
+      ];
+      422: [ProofInvalidFileError, ProofTooLargeError, ProofSizeMismatchError, ProofReviewInvalidError, TimelineOverflowError];
+      429: [TooManyRequestsError, ReminderQuotaError];
+    };
   }>;
 
   routes: [
     ...HealthRoutes,
-    ...AuthRoutes,
-    ...PeopleRoutes,
+    ...UserRoutes,
+    ...ContactRoutes,
     ...PaymentMethodRoutes,
     ...BillingRoutes,
     ...ChargeRoutes,
@@ -37,8 +109,7 @@ export declare class Api extends Http.Service {
     ...InviteRoutes,
     ...TimelineRoutes,
     ...ProofRoutes,
-    ...NotificationRoutes,
-    ...AccountRoutes
+    ...NotificationRoutes
   ];
 
   // Browsers reach the API only through the Next BFF; this list matters for tooling and

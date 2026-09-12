@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { ProfileScreen } from "./profile-screen";
+import { ProfileScreen } from "@/components/screens/profile-screen";
 
 const routerMock = { replace: vi.fn(), push: vi.fn() };
 
@@ -72,7 +72,7 @@ describe("ProfileScreen", () => {
       throw new Error(`unexpected ${String(path)}`);
     });
 
-    render(<ProfileScreen version="1.0.0" />);
+    render(<ProfileScreen />);
     const user = userEvent.setup();
 
     expect(await screen.findByText("Lucas Silveira")).toBeInTheDocument();
@@ -96,16 +96,16 @@ describe("ProfileScreen", () => {
     });
   });
 
-  it("links to contacts, pix keys, terms and privacy and shows the version", async () => {
+  it("links to contacts, pix keys, terms and privacy", async () => {
     loadAccount();
 
-    render(<ProfileScreen version="1.0.0" />);
+    render(<ProfileScreen />);
 
-    expect(await screen.findByRole("link", { name: "Gerenciar contatos" })).toHaveAttribute("href", "/people");
+    expect(await screen.findByRole("link", { name: "Gerenciar contatos" })).toHaveAttribute("href", "/contacts");
     expect(screen.getByRole("link", { name: "Gerenciar chaves Pix" })).toHaveAttribute("href", "/settings/pix");
     expect(screen.getByRole("link", { name: "Termos" })).toHaveAttribute("href", "/terms");
     expect(screen.getByRole("link", { name: "Privacidade" })).toHaveAttribute("href", "/privacy");
-    expect(screen.getByText("Receivy v1.0.0")).toBeInTheDocument();
+    expect(screen.queryByText(/Receivy v/)).not.toBeInTheDocument();
     expect(screen.getByText("Meus Contatos")).toBeInTheDocument();
     expect(screen.getByText("Minhas Chaves Pix")).toBeInTheDocument();
   });
@@ -115,7 +115,7 @@ describe("ProfileScreen", () => {
     const logout = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", logout);
 
-    render(<ProfileScreen version="1.0.0" />);
+    render(<ProfileScreen />);
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Sair da conta" }));
@@ -136,7 +136,7 @@ describe("ProfileScreen", () => {
     loadAccount();
     const direct = stubDirectFetch(async () => Response.json({ deleted: true }));
 
-    render(<ProfileScreen version="1.0.0" />);
+    render(<ProfileScreen />);
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Excluir conta" }));
@@ -167,7 +167,7 @@ describe("ProfileScreen", () => {
     loadAccount();
     const direct = stubDirectFetch(async () => new Response(null, { status: 401 }));
 
-    render(<ProfileScreen version="1.0.0" />);
+    render(<ProfileScreen />);
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Excluir conta" }));
@@ -186,7 +186,7 @@ describe("ProfileScreen", () => {
     let logoutStatus = 500;
     const direct = stubDirectFetch(async () => Response.json({ deleted: true }), () => new Response(null, { status: logoutStatus }));
 
-    render(<ProfileScreen version="1.0.0" />);
+    render(<ProfileScreen />);
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Excluir conta" }));

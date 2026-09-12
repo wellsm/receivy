@@ -1,17 +1,19 @@
 import type { Environment, Service } from '@ez4/common';
-import type { Client } from '@ez4/queue';
 import type { Cron } from '@ez4/scheduler';
-import type { Db, DbClient } from '../database';
-import type { BillingQueue } from './queue';
-import { dueIndefiniteBillings } from './repository';
+import type { EmailService } from '../../common/services/email/service';
+import type { Db } from '../../database';
+import type { ChargeNotifyScheduler } from '../../notifications/schedulers/charge-notify';
+import { notificationConfigFrom } from '../../notifications/services/planner';
+import { notificationTransport } from '../../notifications/services/transport';
+import { materializeDueBillings } from '../repositories/billing';
 
-export type OccurrenceMessage = { billingId: string };
-
-/** Structural view of the queue client so producers never import the queue declaration. */
-export type BillingEnqueue = Pick<Client<OccurrenceMessage, { fairMode: true }>, 'sendMessage'>;
-
+/**
+ * Daily at 05:00 UTC, past midnight in every Brazilian timezone: every active assinatura gets the
+ * occurrences that came due, and their initial notices go out. Creation and patches materialize
+ * inline, so this only covers "the day turned". Idempotent: a second run finds nothing to do.
+ */
 export declare class BillingCron extends Cron.Service {
-  expression: 'cron(0 * * * ? *)';
+  expression: 'cron(0 5 * * ? *)';
 
   timezone: 'UTC';
 
@@ -24,38 +26,33 @@ export declare class BillingCron extends Cron.Service {
 
   services: {
     db: Environment.Service<Db>;
-    billingQueue: Environment.Service<BillingQueue>;
+    email: Environment.Service<EmailService>;
+    chargeNotifyScheduler: Environment.Service<ChargeNotifyScheduler>;
     variables: Environment.ServiceVariables;
   };
 
   variables: {
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
+    EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
+    RESEND_API_KEY: Environment.Variable<'RESEND_API_KEY'>;
+    RESEND_FROM_EMAIL: Environment.VariableOrValue<'RESEND_FROM_EMAIL', 'disabled'>;
+    EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
+    NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
+    PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
+    PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
   };
 }
 
-/** Hands every due billing to `BillingQueue`; the cron itself never materializes. */
-export async function enqueueDueBillings(db: DbClient, queue: BillingEnqueue, now: Date): Promise<number> {
-  const billingIds = await dueIndefiniteBillings(db, now);
-
-  let enqueued = 0;
-
-  for (const billingId of billingIds) {
-    try {
-      await queue.sendMessage({ billingId });
-
-      enqueued++;
-    } catch {
-      // The billing keeps its cursor, so the next hourly pass publishes it again.
-      console.error('Billing enqueue failed', { billingId });
-    }
-  }
-
-  return enqueued;
-}
-
 export async function billingCronHandler(_request: Cron.Incoming<null>, context: Service.Context<BillingCron>): Promise<void> {
-  const enqueued = await enqueueDueBillings(context.db, context.billingQueue, new Date());
+  const now = new Date();
+  const notice = {
+    config: notificationConfigFrom(context.variables),
+    transport: notificationTransport(context.variables, globalThis.fetch, context.email),
+    notify: context.chargeNotifyScheduler
+  };
+
+  const materialized = await materializeDueBillings(context.db, notice, now);
 
   // Counts only; never owner or recipient data.
-  console.info('Billing cron', { enqueued });
+  console.info('Billing cron', { materialized });
 }

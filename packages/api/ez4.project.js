@@ -26,12 +26,10 @@ export default {
   projectName: 'receivy',
   sourceFiles: [
     './src/api.ts',
-    './src/billings/queue.ts',
-    './src/billings/cron.ts',
-    './src/notifications/queue.ts',
-    './src/notifications/cron.ts',
-    './src/proofs/queue.ts',
-    './src/proofs/cron.ts'
+    './src/billings/crons/materialize.ts',
+    './src/notifications/crons/arm-notify.ts',
+    './src/notifications/schedulers/charge-notify.ts',
+    './src/proofs/schedulers/upload-expiry.ts'
   ],
   stateFile: {
     path: `${APP_STAGE}-deploy`,
@@ -83,6 +81,7 @@ export default {
     AUTH_JWT_SECRET,
     LOGIN_CODE_HASH_KEY,
     EMAIL_TRANSPORT,
+    MAILPIT_API_URL: process.env.MAILPIT_API_URL ?? 'http://127.0.0.1:8025',
     RESEND_API_KEY,
     RESEND_FROM_EMAIL,
     OAUTH_PROVIDERS_CONFIG_B64,
@@ -90,15 +89,8 @@ export default {
     OAUTH_GOOGLE_ENABLED: process.env.OAUTH_GOOGLE_ENABLED ?? 'false',
     OAUTH_APPLE_ENABLED: process.env.OAUTH_APPLE_ENABLED ?? 'false',
     PUBLIC_LINK_HMAC_SECRET,
-    NOTIFICATION_EMAIL_TRANSPORT: process.env.NOTIFICATION_EMAIL_TRANSPORT ?? 'disabled',
     NOTIFICATION_PUSH_TRANSPORT: process.env.NOTIFICATION_PUSH_TRANSPORT ?? 'disabled',
     EXPO_ACCESS_TOKEN: process.env.EXPO_ACCESS_TOKEN ?? 'disabled',
     PUBLIC_WEB_ORIGIN: process.env.PUBLIC_WEB_ORIGIN ?? 'http://localhost:3000',
-    PROOF_STORAGE_MODE: process.env.PROOF_STORAGE_MODE ?? 'disabled',
-    PROOF_S3_BUCKET: process.env.PROOF_S3_BUCKET ?? 'disabled',
-    PROOF_LOCAL_DIRECTORY: process.env.PROOF_LOCAL_DIRECTORY ?? 'disabled',
-    PROOF_LOCAL_BASE_URL: process.env.PROOF_LOCAL_BASE_URL ?? 'disabled',
-    PROOF_LOCAL_SECRET: process.env.PROOF_LOCAL_SECRET ?? 'disabled',
-    EMAIL_FILE_DIRECTORY: process.env.EMAIL_FILE_DIRECTORY ?? '.ez4/emails'
   }
 };

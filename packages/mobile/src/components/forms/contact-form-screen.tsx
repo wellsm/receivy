@@ -1,24 +1,26 @@
-import { formatPhoneBR, normalizePerson, type Person, type PersonInput } from "@receivy/common";
+import { normalizeContact, type Contact, type ContactInput } from "@receivy/common";
 import { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { patchDraft } from "@/financial/draft-store";
-import { peopleClient, PeopleRequestError } from "@/people/client";
+import { contactsClient, ContactsRequestError } from "@/contacts/client";
 import { MUTED_TINT } from "@/theme/colors";
 
-type ContactFormClient = Pick<typeof peopleClient, "get" | "save">;
+type ContactFormClient = Pick<typeof contactsClient, "get" | "save">;
 
 type ContactFormScreenProps = {
-  /** Absent on `/people/new`: the screen creates instead of editing. */
-  personId?: string;
+  /** Absent on `/contacts/new`: the screen creates instead of editing. */
+  contactId?: string;
   client?: ContactFormClient;
   /** `new-billing` when the billing form sent the user here. */
   returnTo?: string;
-  onSaved?: (person: Person) => void;
+  onSaved?: (contact: Contact) => void;
 };
 
 const INTRO = "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento.";
+const EMAIL_NOTE = "Sem e-mail, a pessoa só recebe pelo link compartilhado. Quando ela entrar por um convite, você confirma quem é.";
 const LINKED_NOTE = "Contato vinculado a uma conta: só o apelido pode mudar.";
+const TAKEN_NOTE = "Esse e-mail já pertence a outra conta ou contato.";
 const LOAD_ERROR = "Não foi possível carregar o contato.";
 const SAVE_ERROR = "Não foi possível salvar o contato.";
 const INVALID_ERROR = "Confira os dados do contato.";
@@ -45,14 +47,21 @@ function Field({
 }
 
 /**
- * The endpoint answers `409` for a duplicate e-mail and for an edit that touches
- * more than the nickname of a linked contact, and the client cannot tell them
- * apart — the envelope carries the stable `CONFLICT` code for both. The screen
- * can: only a linked contact can provoke the second one.
+ * The endpoint answers `409` for a duplicate e-mail, for an edit that touches
+ * more than the nickname of an active contact and for an e-mail that already
+ * belongs to another account, and the client cannot tell them apart — the
+ * envelope carries the stable `CONFLICT` code for all. The screen can: only an
+ * active contact provokes the second one, only an edit the third.
  */
-function saveError(reason: unknown, linked: boolean): string {
-  if (linked && reason instanceof PeopleRequestError && reason.status === 409) {
-    return LINKED_NOTE;
+function saveError(reason: unknown, linked: boolean, editing: boolean): string {
+  if (reason instanceof ContactsRequestError && reason.status === 409) {
+    if (linked) {
+      return LINKED_NOTE;
+    }
+
+    if (editing) {
+      return TAKEN_NOTE;
+    }
   }
 
   if (reason instanceof Error) {
@@ -62,35 +71,34 @@ function saveError(reason: unknown, linked: boolean): string {
   return SAVE_ERROR;
 }
 
-/** The contact form on its own screen: create from `/people/new`, edit from `/people/[id]/edit`. */
-export function ContactFormScreen({ personId, client = peopleClient, returnTo, onSaved }: ContactFormScreenProps) {
+/** The contact form on its own screen: create from `/contacts/new`, edit from `/contacts/[id]/edit`. */
+export function ContactFormScreen({ contactId, client = contactsClient, returnTo, onSaved }: ContactFormScreenProps) {
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
-  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [linked, setLinked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!personId) {
+    if (!contactId) {
       return;
     }
 
     let live = true;
 
     void client
-      .get(personId)
-      .then((person) => {
+      .get(contactId)
+      .then((contact) => {
         if (!live) {
           return;
         }
 
-        setName(person.name);
-        setNickname(person.nickname ?? "");
-        setPhone(formatPhoneBR(person.phone ?? ""));
-        setEmail(person.email ?? "");
-        setLinked(person.hasAccount);
+        setName(contact.name);
+        setNickname(contact.nickname ?? "");
+        setEmail(contact.email);
+        // Once the person signed in, name and e-mail are theirs; only the nickname stays with the owner.
+        setLinked(contact.status === "active");
       })
       .catch((reason: unknown) => {
         if (live) {
@@ -101,17 +109,15 @@ export function ContactFormScreen({ personId, client = peopleClient, returnTo, o
     return () => {
       live = false;
     };
-  }, [client, personId]);
+  }, [client, contactId]);
 
   async function save() {
     setError("");
 
-    let input: PersonInput;
+    let input: ContactInput;
 
     try {
-      // `normalizePerson` takes the masked phone and hands back `+55…`, so the
-      // field stays readable while the API keeps its canonical shape.
-      input = normalizePerson({ name, nickname, email, phone });
+      input = normalizeContact({ name, nickname, email });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : INVALID_ERROR);
       return;
@@ -120,16 +126,17 @@ export function ContactFormScreen({ personId, client = peopleClient, returnTo, o
     setBusy(true);
 
     try {
-      const saved = await client.save(input, personId);
+      const saved = await client.save(input, contactId);
 
-      // Came from the billing form: hand the contact back to the parked draft.
+      // Came from the billing form: hand the contact back to the parked draft,
+      // which seats people by the account behind the agenda entry.
       if (returnTo === "new-billing") {
-        patchDraft({ selected: [saved.id] });
+        patchDraft({ selected: [saved.userId] });
       }
 
       onSaved?.(saved);
     } catch (reason) {
-      setError(saveError(reason, linked));
+      setError(saveError(reason, linked, Boolean(contactId)));
     } finally {
       setBusy(false);
     }
@@ -170,22 +177,7 @@ export function ContactFormScreen({ personId, client = peopleClient, returnTo, o
             />
           </Field>
 
-          <Field label="WhatsApp / Celular" hint="Usado para lembretes.">
-            <TextInput
-              accessibilityLabel="WhatsApp / Celular"
-              accessibilityState={{ disabled: linked }}
-              placeholder="(11) 98765-4321"
-              placeholderTextColor={MUTED_TINT}
-              keyboardType="phone-pad"
-              maxLength={20}
-              editable={!linked}
-              value={phone}
-              onChangeText={(value) => setPhone(formatPhoneBR(value))}
-              className={linked ? FROZEN_CLASS : FIELD_CLASS}
-            />
-          </Field>
-
-          <Field label="E-mail" hint="Usado para enviar avisos.">
+          <Field label="E-mail (opcional)" hint={EMAIL_NOTE}>
             <TextInput
               accessibilityLabel="E-mail"
               accessibilityState={{ disabled: linked }}

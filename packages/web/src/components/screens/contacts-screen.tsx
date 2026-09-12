@@ -1,28 +1,61 @@
 "use client";
 
-import { contactBadge, formatPhoneBR, initialsOf, type PeoplePage, type Person } from "@receivy/common";
-import { ChevronRight, Plus } from "lucide-react";
+import { contactBadge, formatPhoneBR, initialsOf, type Contact, type ContactsPage } from "@receivy/common";
+import { ChevronRight, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
+import { StatusTag } from "@/components/ui/status-tag";
 
 const LIST_ERROR = "Não foi possível carregar os contatos.";
+const LINK_ONLY = "Só por link";
 
-/** Phone first because it is what a reminder uses; the e-mail is the fallback line. */
-function subtitleOf(person: Person): string {
-  if (person.phone) {
-    return formatPhoneBR(person.phone);
+/** A contact who never signed in has no pending charges to count yet; the tag says why the list stays quiet. */
+const PENDING_BADGE = { label: "Ainda não entrou", tone: "neutral" as const };
+
+/** Phone first because it is what a reminder uses; the e-mail is the fallback line, and a person without either only gets the shared link. */
+function subtitleOf(contact: Contact): string {
+  if (contact.phone) {
+    return formatPhoneBR(contact.phone);
   }
 
-  return person.email ?? "Sem contato";
+  return contact.email || LINK_ONLY;
 }
 
 function countLabel(total: number): string {
   return `${total} ${total === 1 ? "contato" : "contatos"}`;
 }
 
-export function PeopleScreen({ returnTo }: { returnTo?: string }) {
-  const [people, setPeople] = useState<Person[]>([]);
+function ContactCard({ contact }: { contact: Contact }) {
+  const badge = contact.status === "pending" ? PENDING_BADGE : contactBadge(contact.activeCharges);
+
+  return (
+    <Link
+      href={`/contacts/${contact.id}`}
+      aria-label={`Contato ${contact.displayName}`}
+      className="flex min-h-16 items-center gap-3 rounded-2xl border border-outline/40 bg-surface p-4 transition hover:border-outline"
+    >
+      <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-extrabold text-primary-strong">
+        {initialsOf(contact.displayName)}
+      </span>
+
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="flex items-center gap-2">
+          <strong className="min-w-0 flex-1 truncate text-base font-bold text-ink">{contact.displayName}</strong>
+          <StatusTag label={badge.label} tone={badge.tone} />
+        </span>
+
+        <small className="truncate text-xs text-muted">{subtitleOf(contact)}</small>
+      </span>
+
+      <ChevronRight size={18} aria-hidden="true" className="shrink-0 text-muted" />
+    </Link>
+  );
+}
+
+/** The agenda: server-side search, pending badges and a FAB towards the contact form. */
+export function ContactsScreen({ returnTo }: { returnTo?: string }) {
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
@@ -31,7 +64,7 @@ export function PeopleScreen({ returnTo }: { returnTo?: string }) {
 
   // The form lives on its own screen, so a side trip from the billing draft has
   // to keep travelling: the list hands its own return path to the new contact.
-  const newContactHref = returnTo ? `/people/new?returnTo=${encodeURIComponent(returnTo)}` : "/people/new";
+  const newContactHref = returnTo ? `/contacts/new?returnTo=${encodeURIComponent(returnTo)}` : "/contacts/new";
 
   // Every request carries the version it was born with. A slower `Carregar mais`
   // must not append the previous query's page onto fresh search results, rewind
@@ -46,19 +79,19 @@ export function PeopleScreen({ returnTo }: { returnTo?: string }) {
       const mine = ++version.current;
       const query = new URLSearchParams({ ...(search ? { search } : {}), ...(after ? { cursor: after } : {}) });
 
-      return browserFetch(`/api/people?${query}`)
+      return browserFetch(`/api/contacts?${query}`)
         .then(async response => {
           if (!response.ok) {
             throw new Error(LIST_ERROR);
           }
 
-          const page = (await response.json()) as PeoplePage;
+          const page = (await response.json()) as ContactsPage;
 
           if (mine !== version.current) {
             return;
           }
 
-          setPeople(previous => (after ? [...previous, ...page.people] : page.people));
+          setContacts(previous => (after ? [...previous, ...page.contacts] : page.contacts));
           setCursor(page.nextCursor);
           setError("");
         })
@@ -102,82 +135,76 @@ export function PeopleScreen({ returnTo }: { returnTo?: string }) {
   }, [load, invalidate]);
 
   return (
-    <section className="financial-page people-page">
-      <header className="billings-header">
-        <div>
-          <h1>Meus Contatos</h1>
-          <p>Pessoas com quem você divide contas</p>
+    <section className="flex min-h-full flex-col gap-4 pb-24 md:pb-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center">
+        <div className="flex items-center gap-2 rounded-2xl border border-outline/40 bg-surface px-4 transition focus-within:border-primary focus-within:outline-[3px] focus-within:outline-primary focus-within:outline-offset-[3px] md:flex-1">
+          <Search size={16} aria-hidden="true" className="shrink-0 text-muted" />
+
+          <input
+            className="min-h-12 w-full min-w-0 flex-1 border-0 bg-transparent text-[14px] text-ink outline-none placeholder:text-muted focus-visible:outline-none"
+            type="search"
+            aria-label="Buscar contatos"
+            placeholder="Buscar por nome ou e-mail..."
+            maxLength={254}
+            value={term}
+            onChange={event => {
+              setLoading(true);
+              setTerm(event.target.value);
+            }}
+          />
         </div>
-        <Link className="primary-button billings-new" href={newContactHref}>
-          <Plus size={16} aria-hidden="true" />
+
+        <div className="flex items-center justify-between md:gap-4">
+          <span className="text-xs font-bold tracking-wider text-muted">{countLabel(contacts.length)}</span>
+        </div>
+
+        {/* Floats over the list on phones; sits in the heading row once there is room. */}
+        <Link
+          href={newContactHref}
+          className="fixed right-5 bottom-24 z-20 flex h-14 items-center gap-2 rounded-full bg-primary px-5 font-bold text-white shadow-lg transition active:scale-[0.98] md:static md:h-12 md:shadow-none"
+        >
+          <Plus size={18} aria-hidden="true" />
           Novo contato
         </Link>
-      </header>
-
-      <input
-        className="billings-search"
-        type="search"
-        aria-label="Buscar contatos"
-        placeholder="Buscar por nome, telefone ou e-mail..."
-        maxLength={254}
-        value={term}
-        onChange={event => {
-          setLoading(true);
-          setTerm(event.target.value);
-        }}
-      />
-
-      <div className="people-list-heading">
-        <h2 className="profile-section-title">CONTATOS</h2>
-        <span className="people-count">{countLabel(people.length)}</span>
       </div>
 
       {error && (
-        <p role="alert" className="login-error">
-          {error} <button type="button" onClick={() => void load()}>Tentar novamente</button>
+        <div className="flex flex-col gap-2 rounded-2xl bg-red-50 p-4">
+          <p role="alert" className="m-0 text-red-700">
+            {error}
+          </p>
+
+          <button type="button" className="flex min-h-11 items-center self-start font-bold text-primary" onClick={() => void load()}>
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
+      {loading && !contacts.length && (
+        <p role="status" className="m-0 py-6 text-center text-sm text-muted">
+          Carregando contatos
         </p>
       )}
 
-      {loading && !people.length && <p role="status">Carregando contatos…</p>}
-
-      {!loading && !error && !people.length && (
-        <section className="billings-empty">
-          <h3>Nenhum contato ainda</h3>
-          <p>Cadastre alguém para dividir despesas e lembrar pagamentos.</p>
-          <Link className="primary-button" href={newContactHref}>
-            Novo contato
-          </Link>
+      {!loading && !error && !contacts.length && (
+        <section className="flex flex-col items-center gap-2 rounded-3xl border border-outline/40 bg-surface p-8">
+          <h3 className="m-0 text-lg font-extrabold text-primary-strong">Nenhum contato ainda</h3>
+          <p className="m-0 text-center text-sm leading-5 text-muted">Cadastre alguém para dividir despesas e lembrar pagamentos.</p>
         </section>
       )}
 
-      <ul className="people-cards">
-        {people.map(person => {
-          const badge = contactBadge(person.activeCharges);
-
-          return (
-            <li key={person.id}>
-              <Link className="people-card" href={`/people/${person.id}`} aria-label={`Contato ${person.displayName}`}>
-                <span className="person-avatar" aria-hidden="true">
-                  {initialsOf(person.displayName)}
-                </span>
-                <span className="people-card-lines">
-                  <span className="people-card-top">
-                    <strong>{person.displayName}</strong>
-                    <span className={`feed-badge ${badge.tone}`}>{badge.label}</span>
-                  </span>
-                  <small>{subtitleOf(person)}</small>
-                </span>
-                <ChevronRight size={18} aria-hidden="true" />
-              </Link>
-            </li>
-          );
-        })}
+      <ul className="m-0 grid list-none gap-2 p-0 md:grid-cols-2 lg:grid-cols-3">
+        {contacts.map(contact => (
+          <li key={contact.id}>
+            <ContactCard contact={contact} />
+          </li>
+        ))}
       </ul>
 
       {cursor && (
         <button
           type="button"
-          className="secondary-button"
+          className="min-h-12 rounded-xl border border-outline font-bold text-primary disabled:opacity-50"
           disabled={loading}
           onClick={() => {
             setLoading(true);
@@ -187,10 +214,6 @@ export function PeopleScreen({ returnTo }: { returnTo?: string }) {
           Carregar mais
         </button>
       )}
-
-      <Link className="fab" href={newContactHref} aria-label="Novo contato">
-        <Plus size={22} aria-hidden="true" />
-      </Link>
     </section>
   );
 }

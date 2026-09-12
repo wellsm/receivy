@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { Order } from '@ez4/database';
-import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
+import { HttpNotFoundError } from '@ez4/gateway';
 import type { BillingCategory, BillingInvite, BillingState, BillingType, PublicInviteView } from '@receivy/common';
-import { lockOwner } from '../charges/materialize';
-import type { DbClient } from '../database';
-import { assertPublicLinkSecretConfigured, issuePublicChargeToken, verifyPublicChargeToken } from '../public/capability';
+import { lockOwner } from '../../charges/services/materialize';
+import type { DbClient } from '../../database';
+import { assertPublicLinkSecretConfigured, issuePublicChargeToken, verifyPublicChargeToken } from '../../public/services/capability';
+import { InviteBillingInactiveError, PayableHasNoInviteError } from '../errors';
 
 /** Secret and web origin the detail needs to re-issue the active invite URL. */
 export type InviteLinkContext = { secret: string; webOrigin: string };
@@ -32,9 +33,9 @@ export type InviteRow = {
 };
 
 /** The narrowest billing shape createInvite/revokeInvite need, so this module never depends on billings/repository. */
-const OWNED_BILLING_SELECT = { id: true, state: true } as const;
+const OWNED_BILLING_SELECT = { id: true, state: true, direction: true } as const;
 
-type OwnedBillingRow = { id: string; state: BillingState };
+type OwnedBillingRow = { id: string; state: BillingState; direction?: 'receivable' | 'payable' };
 
 /** The narrowest billing shape a public invite preview needs. */
 const PUBLIC_BILLING_SELECT = {
@@ -112,7 +113,12 @@ export async function createInvite(
     const billing = await ownedBilling(tx, ownerId, billingId, true);
 
     if (billing.state !== 'active') {
-      throw new HttpConflictError('Só cobranças ativas aceitam convite.');
+      throw new InviteBillingInactiveError();
+    }
+
+    // A conta a pagar has no participants to invite.
+    if (billing.direction === 'payable') {
+      throw new PayableHasNoInviteError();
     }
 
     const instant = now.toISOString();
@@ -202,7 +208,10 @@ export async function resolveInvite(db: DbClient, token: string, secret: string)
 }
 
 export async function getPublicInvite(db: DbClient, token: string, secret: string, now = new Date()): Promise<PublicInviteView> {
-  const invite = await resolveInvite(db, token, secret);
+  return publicInviteView(db, await resolveInvite(db, token, secret), now);
+}
+
+export async function publicInviteView(db: DbClient, invite: InviteRow, now = new Date()): Promise<PublicInviteView> {
   const billing: PublicBillingRow | undefined = await db.billings.findOne({
     select: PUBLIC_BILLING_SELECT,
     where: { id: invite.billing_id }
@@ -226,7 +235,7 @@ export async function getPublicInvite(db: DbClient, token: string, secret: strin
     description: billing.description,
     amount: { amountCents: billing.total_cents, currency: billing.currency },
     type: billing.type,
-    participantCount: await db.allocations.count({ where: { billing_id: billing.id, kind: 'person' } }),
+    participantCount: await db.allocations.count({ where: { billing_id: billing.id, kind: 'user' } }),
     category: billing.category
   };
 }

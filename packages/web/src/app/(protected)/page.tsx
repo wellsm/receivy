@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { AppShell } from "@/components/app-shell";
-import { FeedScreen } from "@/components/feed-screen";
+import { AppShell } from "@/components/app/app-shell";
+import { FeedScreen } from "@/components/screens/feed-screen";
 
 export default function FeedPage() {
   const [notificationsBadge, setNotificationsBadge] = useState(false);

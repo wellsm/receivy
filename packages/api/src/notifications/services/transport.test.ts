@@ -28,7 +28,7 @@ describe('notification provider boundaries', () => {
     const disabled = notificationTransport({}, request);
     expect(await disabled.email(email)).toEqual({ status: 'disabled' });
     expect(request).not.toHaveBeenCalled();
-    const sender = notificationTransport({ NOTIFICATION_EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'fake-key' }, request);
+    const sender = notificationTransport({ EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'fake-key' }, request);
     request.mockResolvedValueOnce(Response.json({ id: 'email-id' }));
     expect(await sender.email(email)).toEqual({
       status: 'accepted',

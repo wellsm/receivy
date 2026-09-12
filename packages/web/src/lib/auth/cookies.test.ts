@@ -23,7 +23,7 @@ describe("web auth cookies", () => {
 
 describe("safeNextPath", () => {
   it("allows only local absolute paths", () => {
-    expect(safeNextPath("/people?from=login")).toBe("/people?from=login");
+    expect(safeNextPath("/contacts?from=login")).toBe("/contacts?from=login");
     expect(safeNextPath("https://evil.example/steal")).toBe("/");
     expect(safeNextPath("//evil.example/steal")).toBe("/");
     expect(safeNextPath("/\\evil.example/steal")).toBe("/");

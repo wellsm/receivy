@@ -15,7 +15,7 @@ type ProfileGuardProps = {
 
 /**
  * Route-level middleware: whenever a signed-in person lands on an app screen
- * without a profile name, they are sent back to the onboarding screen. The
+ * with a still pending account, they are sent back to the onboarding screen. The
  * profile store caches the answer per access token, so this costs one request
  * per session, not one per navigation.
  */

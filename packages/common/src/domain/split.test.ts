@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { resolveBillingSplit } from './split';
 
-const ana = { kind: 'person' as const, personId: 'ana' };
-const bia = { kind: 'person' as const, personId: 'bia' };
+const ana = { kind: 'user' as const, userId: 'ana' };
+const bia = { kind: 'user' as const, userId: 'bia' };
 const owner = { kind: 'owner' as const };
 
 describe('billing split', () => {
@@ -84,7 +84,7 @@ describe('billing split', () => {
   });
 
   it('rejects empty and repeated participants', () => {
-    for (const parts of [[], [ana, ana], [owner, owner], [{ kind: 'person' as const, personId: '' }]]) {
+    for (const parts of [[], [ana, ana], [owner, owner], [{ kind: 'user' as const, userId: '' }]]) {
       expect(() => resolveBillingSplit(100, { mode: 'equal', parts })).toThrow();
     }
   });
@@ -103,12 +103,12 @@ describe('billing split', () => {
 
   it('splits by shares with largest remainder', () => {
     const parts = [
-      { kind: 'person' as const, personId: 'a', shares: 2 },
-      { kind: 'person' as const, personId: 'b', shares: 2 },
-      { kind: 'person' as const, personId: 'c', shares: 1 },
-      { kind: 'person' as const, personId: 'd', shares: 1 },
-      { kind: 'person' as const, personId: 'e', shares: 1 },
-      { kind: 'person' as const, personId: 'f', shares: 1 }
+      { kind: 'user' as const, userId: 'a', shares: 2 },
+      { kind: 'user' as const, userId: 'b', shares: 2 },
+      { kind: 'user' as const, userId: 'c', shares: 1 },
+      { kind: 'user' as const, userId: 'd', shares: 1 },
+      { kind: 'user' as const, userId: 'e', shares: 1 },
+      { kind: 'user' as const, userId: 'f', shares: 1 }
     ];
 
     expect(resolveBillingSplit(80_000, { mode: 'shares', parts }).map((p) => p.amountCents)).toEqual([

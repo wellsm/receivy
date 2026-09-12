@@ -2,11 +2,9 @@
 
 import {
   addCalendarDays,
-  addCentsToAmount,
   amountDigitsToInput,
   amountInputToDigits,
-  BILLING_CATEGORIES,
-  billingSummaryLine,
+  billingCategoryLabel,
   buildBillingInput,
   calendarDate,
   draftTotalCents,
@@ -15,6 +13,7 @@ import {
   formatAmountDigits,
   formatMoney,
   parseBRLCents,
+  pixKeyField,
   previewBillingSplit,
   splitPartyKey,
   splitParties,
@@ -23,66 +22,71 @@ import {
   type BillingFrequency,
   type BillingInput,
   type BillingType,
+  type Direction,
   type PaymentMethod,
-  type Person,
+  type Contact,
+  type ContactsPage,
+  type PixDraft,
+  type PixKeyType,
   type SplitMode,
   type SplitParty,
   type SplitValues,
 } from "@receivy/common";
+import { Check, ChevronDown, KeyRound, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { clearPixRequiredSeen, markPixRequiredSeen, pixRequiredSeen, saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
+import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
-import { ContactCarousel } from "./contact-carousel";
-import { ContactPicker } from "./contact-picker";
-import { SplitEditor, type SplitRow } from "./split-editor";
+import { CategorySelect } from "@/components/app/category-select";
+import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
+import { PixKeyFields } from "@/components/app/pix-key-fields";
+import { SplitEditor, type SplitRow } from "@/components/app/split-editor";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { PIX_TYPE_LABELS, PixTypeIcon } from "@/components/ui/pix-type-icon";
+import { ScreenFooter } from "@/components/ui/screen-footer";
 
 type Attempt = { input: BillingInput; key: string; uncertain: boolean };
 
-type BillingFormProps = {
+type BillingFormScreenProps = {
   billing: BillingDetail | null;
   onSaved: (billing: BillingDetail) => void;
-  onBack: () => void;
 };
 
-const RETURN_TO = "/charges/new";
+const RETURN_TO = "/billings/new";
 const PIX_SETUP = `/settings/pix/new?returnTo=${encodeURIComponent(RETURN_TO)}&required=1`;
-const NEW_CONTACT = `/people/new?returnTo=${encodeURIComponent(RETURN_TO)}`;
-const FROZEN_NOTE = "Cobranças já geradas só permitem categoria, Pix e lembretes.";
-const PIX_GATE_NOTE = "Cadastre uma chave Pix para criar cobranças.";
+const NEW_CONTACT = `/contacts/new?returnTo=${encodeURIComponent(RETURN_TO)}`;
+const FROZEN_NOTE = "Contas já geradas só permitem categoria, Pix e lembretes.";
+const PIX_GATE_TITLE = "Cadastre uma chave Pix";
+const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com a sua chave Pix. Cadastre uma e volte para continuar de onde parou.";
 const NO_VALUES: Record<string, string> = {};
+
+const DIRECTIONS: { value: Direction; label: string }[] = [
+  { value: "receivable", label: "Vou receber" },
+  { value: "payable", label: "Vou pagar" },
+];
 
 const TYPES: { value: BillingType; label: string }[] = [
   { value: "once", label: "À vista" },
   { value: "until", label: "Parcelado" },
-  { value: "indefinite", label: "Sem fim" },
+  { value: "indefinite", label: "Recorrente" },
 ];
 
 const AMOUNT_LABELS: Record<BillingType, string> = {
-  once: "Valor",
+  once: "Valor total",
   until: "Valor por parcela",
   indefinite: "Valor por ocorrência",
 };
 
-const SPLIT_MODES: { value: SplitMode; label: string }[] = [
-  { value: "equal", label: "Igual" },
-  { value: "shares", label: "Cotas" },
-  { value: "fixed", label: "Valor fixo" },
-  { value: "percentage", label: "Porcentagem" },
+/** The segmented control shows the short label; the accessible name keeps the full one. */
+const SPLIT_MODES: { value: SplitMode; label: string; name: string }[] = [
+  { value: "equal", label: "Igual", name: "Igual" },
+  { value: "shares", label: "Cotas", name: "Cotas" },
+  { value: "percentage", label: "%", name: "Porcentagem" },
+  { value: "fixed", label: "Fixo", name: "Valor fixo" },
 ];
 
-const QUICK_DUE: { label: string; days: number }[] = [
-  { label: "Hoje", days: 0 },
-  { label: "Amanhã", days: 1 },
-  { label: "Em 7 dias", days: 7 },
-];
-
-const QUICK_AMOUNTS: { cents: number; label: string }[] = [
-  { cents: 1_000, label: "+ R$ 10" },
-  { cents: 5_000, label: "+ R$ 50" },
-  { cents: 10_000, label: "+ R$ 100" },
-];
+const INPUT_CLASS = "h-12 w-full rounded-xl border border-outline/50 bg-surface px-3.5 text-[14px] text-ink disabled:opacity-60";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await browserFetch(path, init);
@@ -111,45 +115,12 @@ function todayIn(timezone: string): string {
   }
 }
 
-function daysUntil(date: string, today: string): number | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) {
-    return null;
-  }
-
-  const [year, month, day] = date.split("-").map(Number);
-  const [todayYear, todayMonth, todayDay] = today.split("-").map(Number);
-
-  return Math.round((Date.UTC(year!, month! - 1, day!) - Date.UTC(todayYear!, todayMonth! - 1, todayDay!)) / 86_400_000);
-}
-
-function dueText(start: string, today: string): string {
-  const diff = daysUntil(start, today);
-
-  if (diff === null) {
-    return "Sem data";
-  }
-
-  if (diff === 0) {
-    return "Hoje";
-  }
-
-  if (diff === 1) {
-    return "Amanhã";
-  }
-
-  if (diff > 1 && diff <= 60) {
-    return `em ${diff} dias`;
-  }
-
-  return `${start.slice(8, 10)}/${start.slice(5, 7)}`;
-}
-
 /** Rebuilds the per-mode text buckets from a saved split, so editing starts on the mode it was created with. */
 function valuesFromBilling(billing: BillingDetail): SplitValues {
   const values = EMPTY_SPLIT_VALUES();
 
   for (const part of billing.split.parts) {
-    const key = part.kind === "owner" ? "owner" : part.personId;
+    const key = part.kind === "owner" ? "owner" : part.userId;
 
     if ("amountCents" in part) {
       values.fixed[key] = moneyText(part.amountCents);
@@ -169,12 +140,24 @@ function valuesFromBilling(billing: BillingDetail): SplitValues {
   return values;
 }
 
+/** The draft keeps the canonical key (`+55…`, digits only); the field masks it for display. */
+function pixDraftFromBilling(billing: BillingDetail): PixDraft {
+  if (!billing.pix) {
+    return { type: "email", key: "", label: "" };
+  }
+
+  return { type: billing.pix.keyType, key: billing.pix.key, label: billing.pix.label };
+}
+
 function draftFromBilling(billing: BillingDetail): BillingDraft {
   const parts = billing.split.parts;
 
   return {
+    direction: billing.direction,
+    payee: billing.payee?.userId ?? "",
+    pixInline: pixDraftFromBilling(billing),
     type: billing.type,
-    selected: parts.flatMap(part => (part.kind === "person" ? [part.personId] : [])),
+    selected: parts.flatMap(part => (part.kind === "user" ? [part.userId] : [])),
     owner: parts.some(part => part.kind === "owner") || billing.split.mode === "fixed",
     amount: moneyText(billing.total.amountCents),
     description: billing.description,
@@ -191,37 +174,58 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
   };
 }
 
-function unknownPerson(id: string): Person {
-  return { id, name: "Contato", nickname: null, displayName: "Contato", email: null, phone: null, archivedAt: null, createdAt: "", hasAccount: false, lastBilledAt: null, activeCharges: 0 };
+/** A participant the agenda no longer lists (archived, or another owner's contact): the chip still needs a name. */
+function unknownContact(userId: string): Contact {
+  return { id: userId, userId, name: "Contato", nickname: null, displayName: "Contato", email: "", phone: null, status: "pending", archivedAt: null, createdAt: "", lastBilledAt: null, activeCharges: 0 };
 }
 
 function abbreviate(pixKey: string): string {
   return pixKey.length <= 18 ? pixKey : `${pixKey.slice(0, 7)}…${pixKey.slice(-7)}`;
 }
 
-export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
+function SectionLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
+  return (
+    <label htmlFor={htmlFor} className="ml-0.5 text-[11px] font-semibold text-muted">
+      {children}
+    </label>
+  );
+}
+
+function Card({ children }: { children: ReactNode }) {
+  return <div className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4">{children}</div>;
+}
+
+export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) {
   const router = useRouter();
   const [draft, setDraft] = useState<BillingDraft>(() =>
     billing ? draftFromBilling(billing) : EMPTY_BILLING_DRAFT("America/Sao_Paulo", calendarDate()),
   );
-  const [recent, setRecent] = useState<Person[]>([]);
-  const [directory, setDirectory] = useState<Person[]>([]);
+  const [recent, setRecent] = useState<Contact[]>([]);
+  const [directory, setDirectory] = useState<Contact[]>([]);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [picker, setPicker] = useState(false);
+  const [payeePicker, setPayeePicker] = useState(false);
+  const [pixOpen, setPixOpen] = useState(false);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [gated, setGated] = useState(false);
   const restored = useRef<StoredDraft | null>(null);
-  const seeAll = useRef<HTMLButtonElement>(null);
+  const addContact = useRef<HTMLButtonElement>(null);
+  const pickPayee = useRef<HTMLButtonElement>(null);
 
   const editing = Boolean(billing);
   const locked = Boolean(attempt);
   const frozen = editing && billing?.type !== "indefinite";
+  const payable = draft.direction === "payable";
+  // A conta a pagar is paid by the owner: it needs no wallet key, so the gate never applies to it.
+  const gate = gated && !payable;
   // `BillingPatch` carries no type, frequency or dates, so the schedule is
   // read-only in every edit — otherwise Salvar would silently drop the change.
   const scheduled = editing;
+  // An assinatura may move its next due date; generated occurrences keep theirs.
+  const dueLocked = scheduled && billing?.type !== "indefinite";
 
   useEffect(() => {
     // Reading the side-trip draft empties the storage, and StrictMode runs this
@@ -235,7 +239,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
     let live = true;
 
     void Promise.all([
-      request<{ people: Person[]; nextCursor: string | null }>("/api/people?sort=recent"),
+      request<ContactsPage>("/api/contacts?sort=recent"),
       request<{ paymentMethods: PaymentMethod[] }>("/api/financial/payment-methods"),
       billing || stored ? Promise.resolve(null) : request<{ user: { timezone: string } }>("/api/auth/me"),
     ])
@@ -247,11 +251,10 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
         const active = wallet.paymentMethods.filter(method => !method.archivedAt);
 
         if (active.length) {
-          clearPixRequiredSeen();
         }
 
-        setRecent(agenda.people.slice(0, 12));
-        setDirectory(agenda.people);
+        setRecent(agenda.contacts.slice(0, 12));
+        setDirectory(agenda.contacts);
         setMethods(active);
         setGated(!billing && !active.length);
         setDraft(current => {
@@ -276,20 +279,6 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
     };
   }, [billing]);
 
-  useEffect(() => {
-    // A billing without an active Pix key has nowhere to be paid, so the first
-    // load without one parks the draft and opens the key screen. Coming back
-    // still without a key must not bounce the user out again: the trip is
-    // remembered for the tab and the form shows the blocking panel instead.
-    if (!gated || !ready || pixRequiredSeen()) {
-      return;
-    }
-
-    markPixRequiredSeen();
-    saveDraft(draft, RETURN_TO);
-    router.push(PIX_SETUP);
-  }, [draft, gated, ready, router]);
-
   function update(patch: Partial<BillingDraft>) {
     if (locked) {
       return;
@@ -299,21 +288,17 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
     setDraft(current => ({ ...current, ...patch }));
   }
 
-  function toggle(personId: string) {
-    update({ selected: draft.selected.includes(personId) ? draft.selected.filter(id => id !== personId) : [...draft.selected, personId] });
+  function toggle(userId: string) {
+    update({ selected: draft.selected.includes(userId) ? draft.selected.filter(id => id !== userId) : [...draft.selected, userId] });
   }
 
-  const remember = useCallback((people: Person[]) => {
-    setDirectory(current => [...current, ...people.filter(person => !current.some(known => known.id === person.id))]);
+  const remember = useCallback((contacts: Contact[]) => {
+    setDirectory(current => [...current, ...contacts.filter(contact => !current.some(known => known.id === contact.id))]);
   }, []);
 
   function leaveTo(path: string) {
     saveDraft(draft, RETURN_TO);
     router.push(path);
-  }
-
-  function addAmount(cents: number) {
-    update({ amount: addCentsToAmount(draft.amount, cents) });
   }
 
   // The field behaves like a bank keypad: whatever the browser hands back is
@@ -329,6 +314,18 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
     }
 
     update({ values: { ...draft.values, [draft.mode]: { ...draft.values[draft.mode], [key]: value } } });
+  }
+
+  function pickPixType(type: PixKeyType) {
+    update({ pixInline: { ...draft.pixInline, type, key: "" } });
+  }
+
+  // The mask trims and groups what was typed; the draft keeps the canonical key
+  // (`+55…`, digits only) so `buildBillingInput` normalizes it like the wallet does.
+  function typePixKey(raw: string) {
+    const spec = pixKeyField(draft.pixInline.type);
+
+    update({ pixInline: { ...draft.pixInline, key: spec.unformat(spec.format(raw)) } });
   }
 
   async function save(sent: Attempt) {
@@ -363,18 +360,28 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   }
 
   function patchBody(input: BillingInput) {
-    const editable = {
-      paymentMethodId: input.paymentMethodId,
-      clearPaymentMethod: !input.paymentMethodId,
-      reminders: input.reminders,
-      category: input.category,
-    };
+    const editable =
+      input.direction === "payable"
+        ? {
+            ...(input.pix ? { pix: input.pix } : { clearPix: true }),
+            ...(input.payeeUserId ? { payeeUserId: input.payeeUserId } : { clearPayee: true }),
+            reminders: input.reminders,
+            category: input.category,
+          }
+        : {
+            paymentMethodId: input.paymentMethodId,
+            clearPaymentMethod: !input.paymentMethodId,
+            reminders: input.reminders,
+            category: input.category,
+          };
 
     if (billing && billing.type !== "indefinite") {
       return editable;
     }
 
-    return { description: input.description, totalCents: input.totalCents, split: input.split, ...editable };
+    const split = input.direction === "payable" ? {} : { split: input.split };
+
+    return { description: input.description, totalCents: input.totalCents, startDate: input.startDate, ...split, ...editable };
   }
 
   function submit(event: FormEvent) {
@@ -396,19 +403,19 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   const today = todayIn(draft.timezone);
   const totalCents = draftTotalCents(draft);
   const { amounts, error: hint } = previewBillingSplit(draft);
-  const carousel = [
-    ...recent,
-    ...draft.selected
-      .filter(id => !recent.some(person => person.id === id))
-      .map(id => directory.find(person => person.id === id) ?? unknownPerson(id)),
-  ];
+  /** The draft seats people by account; the chips and split rows look their agenda entry up by that id. */
+  function contactFor(userId: string): Contact {
+    return recent.find(contact => contact.userId === userId) ?? directory.find(contact => contact.userId === userId) ?? unknownContact(userId);
+  }
+
+  const chosen = draft.selected.map(userId => contactFor(userId));
 
   function nameOf(key: string): string {
     if (key === "owner") {
       return "Eu";
     }
 
-    return directory.find(person => person.id === key)?.displayName ?? "Contato";
+    return contactFor(key).displayName;
   }
 
   /** What the owner keeps on a fixed split: the preview's share, or the remainder of a half-typed screen. */
@@ -425,8 +432,8 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
 
     let used = 0;
 
-    for (const personId of draft.selected) {
-      const typed = draft.values.fixed[personId];
+    for (const userId of draft.selected) {
+      const typed = draft.values.fixed[userId];
 
       if (!typed) {
         continue;
@@ -443,7 +450,7 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
   }
 
   const modeValues = draft.mode === "equal" ? NO_VALUES : draft.values[draft.mode];
-  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map(personId => ({ kind: "person", personId })) : splitParties(draft);
+  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map(userId => ({ kind: "user", userId })) : splitParties(draft);
   const rows: SplitRow[] = rowParties.map(party => {
     const key = splitPartyKey(party);
     const cents = amounts[key];
@@ -463,250 +470,467 @@ export function BillingForm({ billing, onSaved, onBack }: BillingFormProps) {
     rows.push({ key: "owner", name: nameOf("owner"), value: "", amountText: "", readonlyText: `Você fica com ${money(remainder)}` });
   }
 
-  const people = draft.selected.length + (draft.owner ? 1 : 0);
+  const participants = draft.selected.length + (draft.owner ? 1 : 0);
   const perPerson = draft.mode === "equal" ? (Object.values(amounts)[0] ?? 0) : totalCents;
-  const summary =
-    people && totalCents
-      ? billingSummaryLine({ people, amountCents: perPerson, mode: draft.mode, dueLabel: dueText(draft.start, today) })
-      : "Escolha os contatos e informe o valor.";
+
+  /** The short status beside the split title: what the current mode is doing with the total. */
+  function splitTag(): string {
+    if (draft.mode === "equal") {
+      return participants && totalCents ? `Automático (${money(perPerson)} cada)` : "Automático";
+    }
+
+    if (draft.mode === "shares") {
+      const shares = rowParties.reduce((sum, party) => sum + (Number(modeValues[splitPartyKey(party)]) || 1), 0);
+
+      return `${shares} cota${shares === 1 ? "" : "s"} no total`;
+    }
+
+    if (draft.mode === "percentage") {
+      const percent = rowParties.reduce((sum, party) => sum + (Number((modeValues[splitPartyKey(party)] ?? "").replace(",", ".")) || 0), 0);
+
+      return `${String(percent).replace(".", ",")}% distribuído`;
+    }
+
+    return "Valores manuais";
+  }
+
+  const selectedPix = methods.find(method => method.id === draft.pix) ?? null;
+  // One registered key has nothing to switch to; the list only opens with a real choice.
+  const switchable = methods.length > 1 || (methods.length === 1 && !selectedPix);
+  const payee = draft.payee ? contactFor(draft.payee) : null;
+  const pixSpec = pixKeyField(draft.pixInline.type);
+  const action = editing ? "Salvar conta" : "Criar conta";
 
   return (
-    <form className="billing-form" onSubmit={submit}>
-      <header className="billing-form-header">
-        <button type="button" className="back-link" onClick={onBack}>
-          ← Voltar
-        </button>
-        <p className="date-line">{editing ? "Editar cobrança" : "Nova cobrança"}</p>
-      </header>
-      {frozen && <p className="billing-frozen-note">{FROZEN_NOTE}</p>}
-      {gated && (
-        <div className="billing-pix-gate" role="status">
-          <p>{PIX_GATE_NOTE}</p>
-          <button type="button" className="secondary-button" onClick={() => leaveTo(PIX_SETUP)}>
-            Cadastrar chave
+    <form className="mx-auto flex w-full max-w-md min-w-0 flex-col gap-4 pb-6 md:max-w-4xl" onSubmit={submit}>
+      {frozen && <p className="m-0 rounded-2xl bg-primary-soft/50 p-4 text-sm text-primary-strong">{FROZEN_NOTE}</p>}
+
+      {/* Direção */}
+      <fieldset className="m-0 min-w-0 border-0 p-0" disabled={locked || editing}>
+        <div className="flex gap-1 rounded-xl bg-surface-muted p-1" role="radiogroup" aria-label="Direção">
+          {DIRECTIONS.map(option => {
+            const active = draft.direction === option.value;
+
+            return (
+              <label
+                key={option.value}
+                className={`flex min-h-10 flex-1 cursor-pointer items-center justify-center rounded-lg text-xs ${
+                  active ? "bg-surface font-extrabold text-primary-strong shadow-sm" : "font-medium text-muted"
+                }`}
+              >
+                <input type="radio" className="sr-only" name="billing-direction" value={option.value} checked={active} onChange={() => update({ direction: option.value })} />
+                {option.label}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {/* Without a key there is nothing to send: the form waits behind a single call to action. */}
+      {gate ? (
+        <section className="flex flex-col items-center gap-3 rounded-3xl border border-outline/40 bg-surface px-6 py-10 text-center" role="status">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft/60 text-primary-strong">
+            <KeyRound size={26} aria-hidden="true" />
+          </span>
+          <h2 className="m-0 text-xl font-bold text-primary-strong">{PIX_GATE_TITLE}</h2>
+          <p className="m-0 max-w-sm text-sm leading-5 text-muted">{PIX_GATE_NOTE}</p>
+          <button type="button" className="mt-2 h-12 w-full max-w-sm rounded-xl bg-primary font-bold text-white" onClick={() => leaveTo(PIX_SETUP)}>
+            Cadastrar chave Pix
+          </button>
+        </section>
+      ) : (
+        <>
+      {!ready && !error && <p className="m-0 text-muted" role="status">Carregando dados…</p>}
+
+      <div className="grid min-w-0 gap-4 md:grid-cols-2 md:items-start">
+      <div className="flex min-w-0 flex-col gap-4">
+      {/* Para quem (conta a pagar) */}
+      {payable && (
+        <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked || frozen}>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-primary-strong">Para quem (opcional)</span>
+            <button type="button" ref={pickPayee} onClick={() => setPayeePicker(true)} className="flex min-h-10 items-center gap-1 bg-transparent px-1 text-xs font-semibold text-primary">
+              <Plus size={14} aria-hidden="true" />
+              {payee ? "Trocar" : "Escolher"}
+            </button>
+          </div>
+
+          {payee ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                aria-label={payee.displayName}
+                aria-pressed="true"
+                title="Remove o destinatário"
+                onClick={() => update({ payee: "" })}
+                className="flex items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
+              >
+                <InitialsAvatar name={payee.displayName} size={24} />
+                <span className="text-xs font-semibold text-ink">{payee.displayName}</span>
+                <X size={12} aria-hidden="true" className="text-muted" />
+              </button>
+            </div>
+          ) : (
+            <p className="m-0 text-[11px] text-muted">Sem destinatário, a conta fica só com você.</p>
+          )}
+        </fieldset>
+      )}
+
+      {payeePicker && (
+        <ContactPickerSheet
+          selected={draft.payee ? [draft.payee] : []}
+          returnFocusTo={pickPayee}
+          onToggle={userId => update({ payee: draft.payee === userId ? "" : userId })}
+          onSeen={remember}
+          onClose={() => setPayeePicker(false)}
+          onNew={
+            editing
+              ? undefined
+              : () => {
+                  setPayeePicker(false);
+                  leaveTo(NEW_CONTACT);
+                }
+          }
+        />
+      )}
+
+      {/* Participantes */}
+      {!payable && (
+      <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked || frozen}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-semibold text-primary-strong">Participantes</span>
+            <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-muted">
+              {participants} pessoa{participants === 1 ? "" : "s"}
+            </span>
+          </div>
+          <button type="button" ref={addContact} onClick={() => setPicker(true)} className="flex min-h-10 items-center gap-1 bg-transparent px-1 text-xs font-semibold text-primary">
+            <Plus size={14} aria-hidden="true" />
+            Adicionar
           </button>
         </div>
-      )}
-      {!ready && !error && <p role="status">Carregando dados…</p>}
 
-      <fieldset className="form-step" disabled={locked || frozen}>
-        <legend>1. Para quem?</legend>
-        <ContactCarousel
-          people={carousel}
-          selected={draft.selected}
-          today={today}
-          disabled={locked || frozen}
-          allowNew={!editing}
-          onToggle={toggle}
-          onNew={() => leaveTo(NEW_CONTACT)}
-        />
-        <button type="button" className="secondary-button" ref={seeAll} onClick={() => setPicker(true)}>
-          Ver todos
-        </button>
-        {picker && (
-          <ContactPicker
-            selected={draft.selected}
-            returnFocusTo={seeAll}
-            onToggle={toggle}
-            onSeen={remember}
-            onClose={() => setPicker(false)}
-          />
+        {chosen.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {chosen.map(contact => (
+              <button
+                key={contact.userId}
+                type="button"
+                aria-label={contact.displayName}
+                aria-pressed="true"
+                title="Remove da cobrança"
+                onClick={() => toggle(contact.userId)}
+                className="flex items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
+              >
+                <InitialsAvatar name={contact.displayName} size={24} />
+                <span className="text-xs font-semibold text-ink">{contact.displayName}</span>
+                <X size={12} aria-hidden="true" className="text-muted" />
+              </button>
+            ))}
+          </div>
         )}
-        <label className="owner-toggle">
-          <input type="checkbox" checked={draft.owner} onChange={event => update({ owner: event.target.checked })} /> Eu também participo
+
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface-muted/80 p-3">
+          <span className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface">
+              <InitialsAvatar name="Eu" size={20} inverted />
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-xs font-semibold text-ink">Eu também participo da divisão</span>
+              <span className="text-[11px] text-muted">Você entra no cálculo como um dos pagadores</span>
+            </span>
+          </span>
+          <input type="checkbox" aria-label="Eu também participo" className="h-5 w-5 accent-primary" checked={draft.owner} onChange={event => update({ owner: event.target.checked })} />
         </label>
       </fieldset>
+      )}
 
-      <fieldset className="form-step" disabled={locked || frozen}>
-        <legend>2. Qual o valor?</legend>
-        <label htmlFor="billing-amount">{AMOUNT_LABELS[draft.type]}</label>
-        <div className="amount-hero">
-          <span aria-hidden="true">R$</span>
+      {picker && (
+        <ContactPickerSheet
+          selected={draft.selected}
+          returnFocusTo={addContact}
+          onToggle={toggle}
+          onSeen={remember}
+          onClose={() => setPicker(false)}
+          onNew={
+            editing
+              ? undefined
+              : () => {
+                  setPicker(false);
+                  leaveTo(NEW_CONTACT);
+                }
+          }
+        />
+      )}
+
+      {/* Valor */}
+      <fieldset className="m-0 min-w-0 border-0 p-0" disabled={locked || frozen}>
+        <Card>
+          <label htmlFor="billing-amount" className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted">
+            {AMOUNT_LABELS[draft.type]}
+          </label>
+          <div className="flex items-end justify-center gap-1.5">
+            <span aria-hidden="true" className="pb-1 text-xl font-semibold text-muted">
+              R$
+            </span>
+            <input
+              id="billing-amount"
+              inputMode="numeric"
+              placeholder="0,00"
+              value={formatAmountDigits(amountInputToDigits(draft.amount))}
+              onChange={event => typeAmount(event.target.value)}
+              className="w-48 border-0 border-b-2 border-primary bg-transparent p-0 text-center text-[36px] font-extrabold tracking-tight text-primary outline-none disabled:opacity-60"
+            />
+          </div>
+        </Card>
+      </fieldset>
+
+      {/* Título e categoria */}
+      <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked}>
+        <div className="flex flex-col gap-1">
+          <SectionLabel htmlFor="billing-title">Título da conta</SectionLabel>
           <input
-            id="billing-amount"
-            inputMode="numeric"
-            placeholder="0,00"
-            value={formatAmountDigits(amountInputToDigits(draft.amount))}
-            onChange={event => typeAmount(event.target.value)}
+            id="billing-title"
+            aria-label="Título"
+            maxLength={500}
+            placeholder="Ex: Aluguel do sítio, Pizzaria..."
+            disabled={frozen}
+            value={draft.description}
+            onChange={event => update({ description: event.target.value })}
+            className={INPUT_CLASS}
           />
         </div>
-        <div className="chip-row">
-          {QUICK_AMOUNTS.map(option => (
-            <button key={option.cents} type="button" className="chip" onClick={() => addAmount(option.cents)}>
-              {option.label}
-            </button>
-          ))}
+        <div className="flex flex-col gap-1.5">
+          <span className="ml-0.5 text-[11px] font-semibold text-muted">Categoria</span>
+          <CategorySelect
+            value={draft.category}
+            disabled={locked}
+            onSelect={category => update({ category, description: draft.description || billingCategoryLabel(category) })}
+          />
         </div>
       </fieldset>
 
-      <fieldset className="form-step" disabled={locked}>
-        <legend>3. Título</legend>
-        <label htmlFor="billing-title">Título</label>
-        <input
-          id="billing-title"
-          maxLength={500}
-          placeholder="Ex.: churrasco da firma"
-          disabled={frozen}
-          value={draft.description}
-          onChange={event => update({ description: event.target.value })}
-        />
-        <div className="chip-row" role="group" aria-label="Categoria">
-          {BILLING_CATEGORIES.map(category => (
-            <button
-              key={category.value}
-              type="button"
-              className={draft.category === category.value ? "chip is-active" : "chip"}
-              aria-pressed={draft.category === category.value}
-              onClick={() => update({ category: category.value, description: draft.description || category.label })}
-            >
-              {category.label}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      </div>
 
-      <fieldset className="form-step" disabled={locked || scheduled}>
-        <legend>4. Modalidade</legend>
-        <div className="segmented" role="radiogroup" aria-label="Modalidade">
-          {TYPES.map(option => (
-            <label key={option.value} className={draft.type === option.value ? "is-active" : ""}>
-              <input
-                type="radio"
-                name="billing-type"
-                value={option.value}
-                checked={draft.type === option.value}
-                onChange={() => update({ type: option.value, frequency: option.value === "until" ? "monthly" : draft.frequency, end: "" })}
-              />
-              {option.label}
-            </label>
-          ))}
+      <div className="flex min-w-0 flex-col gap-4">
+      {/* Divisão */}
+      {!payable && (
+      <fieldset className="m-0 min-w-0 border-0 p-0" disabled={locked || frozen}>
+        <Card>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-primary-strong">Divisão da Conta</span>
+            <span className="truncate rounded-full bg-primary-soft/40 px-2 py-0.5 text-[11px] font-semibold text-primary">{splitTag()}</span>
+          </div>
+          <div className="flex gap-1 rounded-xl bg-surface-muted p-1" role="radiogroup" aria-label="Divisão">
+            {SPLIT_MODES.map(option => {
+              const active = draft.mode === option.value;
+
+              return (
+                <label
+                  key={option.value}
+                  className={`flex min-h-9 flex-1 cursor-pointer items-center justify-center rounded-lg text-[11px] ${
+                    active ? "bg-surface font-extrabold text-primary-strong shadow-sm" : "font-medium text-muted"
+                  }`}
+                >
+                  <input type="radio" className="sr-only" name="billing-split" value={option.value} aria-label={option.name} checked={active} onChange={() => update({ mode: option.value })} />
+                  <span aria-hidden="true">{option.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={changeSplitValue} />
+        </Card>
+      </fieldset>
+      )}
+
+      {/* Modalidade */}
+      <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0" disabled={locked || scheduled}>
+        <span className="ml-0.5 text-[11px] font-semibold text-muted">Modalidade de Pagamento</span>
+        <div className="flex gap-2" role="radiogroup" aria-label="Modalidade">
+          {TYPES.map(option => {
+            const active = draft.type === option.value;
+
+            return (
+              <label
+                key={option.value}
+                className={`flex min-h-12 flex-1 cursor-pointer items-center justify-center rounded-xl border px-2 text-xs font-semibold ${
+                  active ? "border-primary bg-primary text-white" : "border-outline/40 bg-surface text-ink"
+                }`}
+              >
+                <input
+                  type="radio"
+                  className="sr-only"
+                  name="billing-type"
+                  value={option.value}
+                  checked={active}
+                  onChange={() => update({ type: option.value, frequency: option.value === "until" ? "monthly" : draft.frequency, end: "" })}
+                />
+                {option.label}
+              </label>
+            );
+          })}
         </div>
         {draft.type === "until" && (
-          <>
-            <label htmlFor="billing-occurrences">Parcelas</label>
+          <div className="flex flex-col gap-1">
+            <SectionLabel htmlFor="billing-occurrences">Parcelas</SectionLabel>
             <input
               id="billing-occurrences"
               type="number"
               min={2}
               max={120}
               inputMode="numeric"
+              placeholder="2 a 120"
               value={draft.occurrences}
               onChange={event => update({ occurrences: event.target.value })}
+              className={INPUT_CLASS}
             />
-          </>
+          </div>
         )}
         {draft.type === "indefinite" && (
-          <>
-            <label htmlFor="billing-frequency">Frequência</label>
-            <select id="billing-frequency" value={draft.frequency} onChange={event => update({ frequency: event.target.value as BillingFrequency })}>
+          <div className="flex flex-col gap-1">
+            <SectionLabel htmlFor="billing-frequency">Frequência</SectionLabel>
+            <select id="billing-frequency" value={draft.frequency} onChange={event => update({ frequency: event.target.value as BillingFrequency })} className={INPUT_CLASS}>
               <option value="monthly">Mensal</option>
               <option value="yearly">Anual</option>
             </select>
-          </>
+          </div>
         )}
       </fieldset>
 
-      <fieldset className="form-step" disabled={locked || frozen}>
-        <legend>5. Divisão</legend>
-        <div className="segmented" role="radiogroup" aria-label="Divisão">
-          {SPLIT_MODES.map(option => (
-            <label key={option.value} className={draft.mode === option.value ? "is-active" : ""}>
-              <input type="radio" name="billing-split" value={option.value} checked={draft.mode === option.value} onChange={() => update({ mode: option.value })} />
-              {option.label}
-            </label>
-          ))}
-        </div>
-        <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={changeSplitValue} />
-      </fieldset>
-
-      <fieldset className="form-step" disabled={locked || scheduled}>
-        <legend>6. Vencimento</legend>
-        <div className="chip-row">
-          {QUICK_DUE.map(option => (
-            <button
-              key={option.label}
-              type="button"
-              className={draft.start === addCalendarDays(today, option.days) ? "chip is-active" : "chip"}
-              aria-pressed={draft.start === addCalendarDays(today, option.days)}
-              onClick={() => update({ start: addCalendarDays(today, option.days) })}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <label htmlFor="billing-start">Vencimento</label>
-        <input id="billing-start" type="date" value={draft.start} onChange={event => update({ start: event.target.value })} />
-        <p className="form-hint">Lembrete no vencimento.</p>
-      </fieldset>
-
-      <fieldset className="form-step" disabled={locked}>
-        <legend>7. Pix</legend>
-        <div className="chip-row" role="group" aria-label="Chave Pix">
-          {methods.map(method => (
-            <button
-              key={method.id}
-              type="button"
-              className={draft.pix === method.id ? "chip is-active" : "chip"}
-              aria-pressed={draft.pix === method.id}
-              onClick={() => update({ pix: method.id })}
-            >
-              <strong>{method.label || method.pixKey}</strong>
-              <small>{abbreviate(method.pixKey)}</small>
-            </button>
-          ))}
-          <button type="button" className={draft.pix ? "chip" : "chip is-active"} aria-pressed={!draft.pix} onClick={() => update({ pix: "" })}>
-            Nenhuma
+      {/* Vencimento */}
+      <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0" disabled={locked || dueLocked}>
+        <SectionLabel htmlFor="billing-start">{scheduled ? "Próximo vencimento" : "Data de Vencimento"}</SectionLabel>
+        <div className="flex items-center gap-2">
+          <input
+            id="billing-start"
+            aria-label="Vencimento"
+            type="date"
+            value={draft.start}
+            onChange={event => update({ start: event.target.value })}
+            className="h-11 flex-1 rounded-xl border border-outline/50 bg-surface px-3.5 text-[14px] font-semibold text-ink disabled:opacity-60"
+          />
+          <button
+            type="button"
+            aria-pressed={draft.start === today}
+            onClick={() => update({ start: addCalendarDays(today, 0) })}
+            className={`h-11 rounded-xl border px-3.5 text-xs font-semibold text-primary-strong disabled:opacity-50 ${
+              draft.start === today ? "border-primary/30 bg-primary-soft/60" : "border-outline/40 bg-surface-muted"
+            }`}
+          >
+            Hoje
           </button>
-          {!editing && !gated && (
-            <button type="button" className="chip" onClick={() => leaveTo(PIX_SETUP)}>
-              Cadastrar chave
+        </div>
+      </fieldset>
+
+      {/* Chave Pix (conta a pagar): typed inline, it belongs to whoever receives */}
+      {payable && (
+        <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked}>
+          <span className="ml-0.5 text-[11px] font-semibold text-muted">Chave Pix (opcional)</span>
+          <PixKeyFields type={draft.pixInline.type} value={pixSpec.format(draft.pixInline.key)} inputId="billing-pix-key" onPickType={pickPixType} onChange={typePixKey} />
+          <div className="flex flex-col gap-1">
+            <SectionLabel htmlFor="billing-pix-label">Apelido da chave (opcional)</SectionLabel>
+            <input
+              id="billing-pix-label"
+              maxLength={60}
+              placeholder="Ex: Conta da Ana"
+              value={draft.pixInline.label}
+              onChange={event => update({ pixInline: { ...draft.pixInline, label: event.target.value } })}
+              className={INPUT_CLASS}
+            />
+          </div>
+        </fieldset>
+      )}
+
+      {/* Pix */}
+      {!payable && (
+      <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0" disabled={locked}>
+        <div className="flex items-center justify-between">
+          <span className="ml-0.5 text-[11px] font-semibold text-muted">Receber via Pix</span>
+          {!editing && !gate && (
+            <button type="button" aria-label="Cadastrar chave" onClick={() => leaveTo(PIX_SETUP)} className="min-h-8 bg-transparent text-[11px] font-medium text-primary">
+              + Cadastrar nova chave
             </button>
           )}
         </div>
-        {draft.reminders.map((reminder, index) => (
-          <div key={index} className="reminder-row">
-            <label>
-              <input
-                type="checkbox"
-                checked={reminder.enabled}
-                onChange={event => update({ reminders: draft.reminders.map((item, position) => (position === index ? { ...item, enabled: event.target.checked } : item)) })}
-              />
-              Lembrete {index + 1}
-            </label>
-            <label>
-              Dias em relação ao vencimento
-              <input
-                inputMode="text"
-                value={reminder.offsetDays}
-                onChange={event => update({ reminders: draft.reminders.map((item, position) => (position === index ? { ...item, offsetDays: event.target.value } : item)) })}
-              />
-            </label>
-          </div>
-        ))}
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={draft.reminders.length >= 10}
-          onClick={() => update({ reminders: [...draft.reminders, { offsetDays: "", enabled: true }] })}
-        >
-          Adicionar lembrete
-        </button>
-      </fieldset>
+        <div className="relative">
+          <button
+            type="button"
+            aria-expanded={pixOpen}
+            aria-controls="billing-pix-options"
+            disabled={!switchable}
+            onClick={() => setPixOpen(open => !open)}
+            className="flex w-full items-center justify-between rounded-xl border border-outline/40 bg-surface p-3 text-left disabled:cursor-default"
+          >
+            <span className="flex min-w-0 flex-1 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">
+                <PixTypeIcon type={selectedPix?.pixKeyType ?? "random"} />
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-xs font-semibold text-ink">
+                  {selectedPix ? `${PIX_TYPE_LABELS[selectedPix.pixKeyType]}: ${abbreviate(selectedPix.pixKey)}` : "Selecionar chave Pix"}
+                </span>
+                <span className="truncate text-[11px] text-muted">
+                  {selectedPix ? (selectedPix.isDefault ? "Chave padrão" : "Chave secundária") : methods.length ? "Clique para escolher" : "Nenhuma chave cadastrada"}
+                </span>
+              </span>
+            </span>
+            {switchable && <ChevronDown size={16} aria-hidden="true" className="text-muted" />}
+          </button>
+          {pixOpen && (
+            <ul id="billing-pix-options" role="listbox" aria-label="Chave Pix" className="absolute left-0 right-0 top-full z-20 m-0 mt-2 flex list-none flex-col gap-2 rounded-2xl border border-outline/40 bg-canvas p-3 shadow-xl">
+              {methods.map(method => {
+                const active = draft.pix === method.id;
 
-      <footer className="billing-form-footer">
-        <p className="billing-form-summary">{summary}</p>
-        {busy && <p role="status">Salvando…</p>}
-        {error && <p className="login-error" role="alert">{error}</p>}
+                return (
+                  <li key={method.id} role="option" aria-selected={active}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        update({ pix: method.id });
+                        setPixOpen(false);
+                      }}
+                      className={`flex min-h-16 w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${active ? "border-primary bg-primary-soft/40" : "border-outline/40 bg-surface"}`}
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">
+                        <PixTypeIcon type={method.pixKeyType} />
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-semibold text-ink">{PIX_TYPE_LABELS[method.pixKeyType]}</span>
+                          {method.isDefault && <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-muted">Padrão</span>}
+                        </span>
+                        <span className="truncate text-[11px] text-muted">{method.pixKey}</span>
+                      </span>
+                      {active && <Check size={18} aria-hidden="true" className="text-primary-strong" />}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </fieldset>
+      )}
+
+      </div>
+      </div>
+
+      {error && <p className="m-0 rounded-xl bg-red-50 p-4 text-red-700" role="alert">{error}</p>}
+
+      <ScreenFooter className="-mx-1 border-t border-outline/30 bg-surface/95 px-1 pb-2 pt-4 backdrop-blur">
+        {busy && <p className="m-0 mb-2 text-sm text-muted" role="status">Salvando…</p>}
         {attempt?.uncertain ? (
-          <button type="submit" className="primary-button" disabled={busy}>
+          <button type="submit" className="h-[52px] w-full rounded-xl border border-outline bg-transparent text-sm font-bold text-primary" disabled={busy}>
             Tentar novamente
           </button>
         ) : (
-          <button type="submit" className="primary-button" disabled={busy || gated || !totalCents}>
-            {editing ? "Salvar" : "Criar cobrança"}
+          <button type="submit" className="h-[52px] w-full rounded-xl bg-primary text-sm font-bold text-white disabled:opacity-50" disabled={busy || !totalCents}>
+            {action}
           </button>
         )}
-      </footer>
+      </ScreenFooter>
+        </>
+      )}
     </form>
   );
 }

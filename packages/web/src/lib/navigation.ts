@@ -5,12 +5,19 @@
  */
 const BACK_LABELS: Record<string, string> = {
   "/": "Feed",
-  "/billings": "Cobranças",
-  "/charges/new": "Nova cobrança",
-  "/people": "Contatos",
+  "/billings": "Contas",
+  "/billings/new": "Nova conta",
+  "/contacts": "Contatos",
   "/settings": "Perfil",
   "/settings/pix": "Chaves Pix",
 };
+
+/** Detail routes carry an id, so they are matched by shape rather than by exact path. */
+const BACK_PATTERNS: [RegExp, string][] = [
+  [/^\/billings\/[^/]+$/, "Conta"],
+  [/^\/charges\/[^/]+$/, "Cobrança"],
+  [/^\/contacts\/[^/]+$/, "Contato"],
+];
 
 const FALLBACK_LABEL = "Voltar";
 
@@ -24,5 +31,5 @@ export function backLabelFor(path: string): string {
 
   const normalized = route.length > 1 ? route.replace(/\/+$/, "") : route;
 
-  return BACK_LABELS[normalized] ?? FALLBACK_LABEL;
+  return BACK_LABELS[normalized] ?? BACK_PATTERNS.find(([pattern]) => pattern.test(normalized))?.[1] ?? FALLBACK_LABEL;
 }

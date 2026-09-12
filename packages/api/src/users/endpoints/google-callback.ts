@@ -2,11 +2,11 @@ import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import { commitOauthIdentity } from '../../auth/oauth-commit';
-import { completeOauth, OauthFlowError } from '../../auth/oauth-flow';
-import type { ApiProvider } from '../../provider';
-import { createAuthRepository } from '../../repositories/auth-repository';
-import { appendOauthGrant, oauthDependencies } from './oauth-shared';
+import type { UserProvider } from '../provider';
+import { createAuthRepository } from '../repositories/auth';
+import { commitOauthIdentity } from '../services/oauth-commit';
+import { completeOauth, OauthFlowError } from '../services/oauth-flow';
+import { appendOauthGrant, oauthDependencies } from '../utils/oauth';
 
 declare class GoogleCallbackRequest implements Http.Request {
   query: {
@@ -23,7 +23,7 @@ declare class GoogleCallbackResponse implements Http.Response {
 
 export async function googleCallbackHandler(
   request: GoogleCallbackRequest,
-  context: Service.Context<ApiProvider>
+  context: Service.Context<UserProvider>
 ): Promise<GoogleCallbackResponse> {
   const dependencies = oauthDependencies('google', context);
   if (!dependencies.client) {

@@ -9,19 +9,19 @@ const ID = "[A-Za-z0-9-]+";
 /** Exported only so the OpenAPI contract test can prove every entry maps to a real API operation. */
 export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["PATCH", /^account\/profile$/], ["DELETE", /^account$/],
-  ["GET", new RegExp(`^charges/${ID}/deliveries$`)], ["POST", new RegExp(`^charges/${ID}/reminders$`)],
+  ["POST", new RegExp(`^charges/${ID}/reminders$`)],
   ["GET", /^billings(?:\?.*)?$/], ["POST", /^billings$/], ["GET", new RegExp(`^billings/${ID}(?:/preview)?$`)],
   ["PATCH", new RegExp(`^billings/${ID}$`)],
   ["POST", new RegExp(`^billings/${ID}/invite$`)], ["DELETE", new RegExp(`^billings/${ID}/invite$`)],
+  ["POST", new RegExp(`^billings/${ID}/guests/${ID}$`)],
   ["POST", /^invites\/[^/]+\/accept$/],
   ["GET", /^timeline$/],
   ["GET", /^payment-methods$/], ["POST", /^payment-methods$/], ["PATCH", new RegExp(`^payment-methods/${ID}$`)],
   ["POST", new RegExp(`^payment-methods/${ID}/(?:default|archive)$`)],
-  ["GET", new RegExp(`^charges/${ID}$`)], ["POST", new RegExp(`^charges/${ID}/(?:cancel|payments|public-link|public-link/rotate)$`)],
-  ["DELETE", new RegExp(`^charges/${ID}/public-link$`)], ["GET", new RegExp(`^people/${ID}/ledger$`)],
-  ["GET", new RegExp(`^charges/${ID}/proofs$`)], ["POST", new RegExp(`^charges/${ID}/proofs/uploads$`)],
-  ["POST", new RegExp(`^charges/${ID}/proofs/uploads/${ID}/finalize$`)],
-  ["POST", new RegExp(`^charges/${ID}/proofs/${ID}/(?:review|download)$`)],
+  ["GET", new RegExp(`^charges/${ID}$`)], ["POST", new RegExp(`^charges/${ID}/(?:cancel|pay|reopen|public-link|public-link/rotate)$`)],
+  ["DELETE", new RegExp(`^charges/${ID}/public-link$`)], ["GET", new RegExp(`^contacts/${ID}/ledger$`)],
+  ["POST", new RegExp(`^charges/${ID}/proof(?:/review)?$`)], ["DELETE", new RegExp(`^charges/${ID}/proof$`)],
+  ["GET", new RegExp(`^charges/${ID}/proof/download$`)],
 ];
 
 export function isAllowedFinancialRoute(method: string, path: string): boolean {

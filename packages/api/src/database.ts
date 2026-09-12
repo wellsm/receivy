@@ -1,23 +1,21 @@
 import type { Client, Database, Index } from '@ez4/database';
 import type { PostgresEngine } from '@ez4/raw-pg/client';
-import type { ActivityEventSchema } from './schemas/activity-event';
-import type { AuthIdentitySchema } from './schemas/auth-identity';
-import type { AllocationSchema, BillingSchema } from './schemas/billing';
-import type { ChargeSchema } from './schemas/charge';
-import type { BillingInviteSchema } from './schemas/invite';
-import type { LoginCodeSchema } from './schemas/login-code';
-import type { DeviceTokenSchema, NotificationDeliverySchema } from './schemas/notification';
-import type { OauthAttemptSchema } from './schemas/oauth-attempt';
-import type { OauthGrantSchema } from './schemas/oauth-grant';
-import type { PaymentSchema } from './schemas/payment';
-import type { PaymentMethodSchema } from './schemas/payment-method';
-import type { PaymentProofSchema, ProofThrottleSchema, UploadIntentSchema } from './schemas/payment-proof';
-import type { PersonSchema } from './schemas/person';
-import type { PersonContactSchema } from './schemas/person-contact';
-import type { PublicLinkSchema } from './schemas/public-link';
-import type { RefreshTokenSchema } from './schemas/refresh-token';
-import type { SessionFamilySchema } from './schemas/session-family';
-import type { UserSchema } from './schemas/user';
+import type { AllocationSchema, BillingSchema } from './billings/schemas/billing';
+import type { BillingGuestSchema } from './billings/schemas/billing-guest';
+import type { ChargeSchema } from './charges/schemas/charge';
+import type { EventSchema } from './common/schemas/event';
+import type { ContactSchema } from './contacts/schemas/contact';
+import type { BillingInviteSchema } from './invites/schemas/invite';
+import type { DeviceTokenSchema } from './notifications/schemas/notification';
+import type { PaymentMethodSchema } from './payment-methods/schemas/payment-method';
+import type { ProofThrottleSchema } from './proofs/schemas/proof-throttle';
+import type { AuthIdentitySchema } from './users/schemas/auth-identity';
+import type { LoginCodeSchema } from './users/schemas/login-code';
+import type { OauthAttemptSchema } from './users/schemas/oauth-attempt';
+import type { OauthGrantSchema } from './users/schemas/oauth-grant';
+import type { RefreshTokenSchema } from './users/schemas/refresh-token';
+import type { SessionFamilySchema } from './users/schemas/session-family';
+import type { UserSchema } from './users/schemas/user';
 
 export declare class Db extends Database.Service<PostgresEngine> {
   client: Client<Db>;
@@ -29,23 +27,6 @@ export declare class Db extends Database.Service<PostgresEngine> {
       relations: { 'user_id@user': 'users:id' };
       indexes: { id: Index.Primary; token: Index.Unique; 'user_id:installation_id': Index.Unique };
     }>,
-    Database.UseTable<{
-      name: 'notification_deliveries';
-      schema: NotificationDeliverySchema;
-      indexes: { id: Index.Primary; idempotency_key: Index.Unique; charge_id: Index.Secondary; 'state:available_at': Index.Secondary };
-    }>,
-    Database.UseTable<{
-      name: 'payment_proofs';
-      schema: PaymentProofSchema;
-      relations: { 'charge_id@charge': 'charges:id'; 'sender_user_id@sender_user': 'users:id'; 'reviewer_id@reviewer': 'users:id' };
-      indexes: { id: Index.Primary; charge_id: Index.Secondary; object_key: Index.Unique };
-    }>,
-    Database.UseTable<{
-      name: 'upload_intents';
-      schema: UploadIntentSchema;
-      relations: { 'charge_id@charge': 'charges:id'; 'sender_user_id@sender_user': 'users:id' };
-      indexes: { id: Index.Primary; charge_id: Index.Secondary; object_key: Index.Unique };
-    }>,
     Database.UseTable<{ name: 'proof_throttles'; schema: ProofThrottleSchema; indexes: { id: Index.Primary } }>,
     Database.UseTable<{
       name: 'payment_methods';
@@ -56,45 +37,36 @@ export declare class Db extends Database.Service<PostgresEngine> {
     Database.UseTable<{
       name: 'billings';
       schema: BillingSchema;
-      relations: { 'owner_id@owner': 'users:id'; 'payment_method_id@payment_method': 'payment_methods:id' };
+      relations: {
+        'owner_id@owner': 'users:id';
+        'payment_method_id@payment_method': 'payment_methods:id';
+        'payee_user_id@payee_user': 'users:id';
+      };
       indexes: { id: Index.Primary; 'owner_id:idempotency_key': Index.Unique; owner_id: Index.Secondary; 'state:type': Index.Secondary };
     }>,
     Database.UseTable<{
       name: 'allocations';
       schema: AllocationSchema;
-      relations: { 'billing_id@billing': 'billings:id'; 'person_id@person': 'people:id' };
-      indexes: { id: Index.Primary; 'billing_id:allocation_order': Index.Unique; billing_id: Index.Secondary; person_id: Index.Secondary };
+      relations: { 'billing_id@billing': 'billings:id'; 'user_id@user': 'users:id' };
+      indexes: { id: Index.Primary; 'billing_id:allocation_order': Index.Unique; billing_id: Index.Secondary; user_id: Index.Secondary };
     }>,
     Database.UseTable<{
       name: 'charges';
       schema: ChargeSchema;
       relations: {
         'creditor_id@creditor': 'users:id';
-        'debtor_person_id@debtor_person': 'people:id';
-        'recipient_user_id@recipient_user': 'users:id';
+        'debtor_user_id@debtor_user': 'users:id';
         'billing_id@billing': 'billings:id';
+        'proof_sender_user_id@proof_sender': 'users:id';
       };
       indexes: {
         id: Index.Primary;
         creditor_id: Index.Secondary;
-        recipient_user_id: Index.Secondary;
-        recipient_email_snapshot: Index.Secondary;
-        debtor_person_id: Index.Secondary;
+        debtor_user_id: Index.Secondary;
         billing_id: Index.Secondary;
-        'billing_id:debtor_person_id:due_date': Index.Unique;
+        'billing_id:debtor_user_id:due_date': Index.Unique;
+        public_id: Index.Unique;
       };
-    }>,
-    Database.UseTable<{
-      name: 'payments';
-      schema: PaymentSchema;
-      relations: { 'charge_id@charge': 'charges:id'; 'registered_by_id@registered_by': 'users:id'; 'proof_id@proof': 'payment_proofs:id' };
-      indexes: { id: Index.Primary; charge_id: Index.Unique; registered_by_id: Index.Secondary };
-    }>,
-    Database.UseTable<{
-      name: 'public_links';
-      schema: PublicLinkSchema;
-      relations: { 'charge_id@charge': 'charges:id' };
-      indexes: { id: Index.Primary; public_id: Index.Unique; charge_id: Index.Unique };
     }>,
     Database.UseTable<{
       name: 'billing_invites';
@@ -103,22 +75,22 @@ export declare class Db extends Database.Service<PostgresEngine> {
       indexes: { id: Index.Primary; public_id: Index.Unique; billing_id: Index.Secondary };
     }>,
     Database.UseTable<{
-      name: 'activity_events';
-      schema: ActivityEventSchema;
-      relations: { 'actor_user_id@actor_user': 'users:id'; 'subject_user_id@subject_user': 'users:id' };
-      indexes: { id: Index.Primary; subject_user_id: Index.Secondary; aggregate_id: Index.Secondary };
+      name: 'billing_guests';
+      schema: BillingGuestSchema;
+      relations: { 'billing_id@billing': 'billings:id'; 'owner_id@owner': 'users:id'; 'user_id@user': 'users:id' };
+      indexes: { id: Index.Primary; 'billing_id:user_id': Index.Unique; billing_id: Index.Secondary; owner_id: Index.Secondary };
     }>,
     Database.UseTable<{
-      name: 'people';
-      schema: PersonSchema;
-      relations: { 'owner_id@owner': 'users:id'; 'linked_user_id@linked_user': 'users:id' };
-      indexes: { id: Index.Primary; 'owner_id:active_email': Index.Unique; owner_id: Index.Secondary; linked_user_id: Index.Secondary };
+      name: 'events';
+      schema: EventSchema;
+      relations: { 'actor_user_id@actor_user': 'users:id' };
+      indexes: { id: Index.Primary; eventable_id: Index.Secondary; actor_user_id: Index.Secondary };
     }>,
     Database.UseTable<{
-      name: 'person_contacts';
-      schema: PersonContactSchema;
-      relations: { 'person_id@person': 'people:id' };
-      indexes: { id: Index.Primary; 'person_id:type': Index.Unique; normalized_value: Index.Secondary };
+      name: 'contacts';
+      schema: ContactSchema;
+      relations: { 'owner_id@owner': 'users:id'; 'user_id@user': 'users:id' };
+      indexes: { id: Index.Primary; 'owner_id:user_id': Index.Unique; owner_id: Index.Secondary; user_id: Index.Secondary };
     }>,
     Database.UseTable<{
       name: 'users';

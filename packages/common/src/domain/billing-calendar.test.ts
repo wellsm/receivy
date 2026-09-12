@@ -10,7 +10,7 @@ import {
   zonedInstant
 } from './billing-calendar';
 
-const split = { mode: 'equal' as const, parts: [{ kind: 'person' as const, personId: 'ana' }] };
+const split = { mode: 'equal' as const, parts: [{ kind: 'user' as const, userId: 'ana' }] };
 
 describe('billing calendar', () => {
   it('clamps monthly dates to the last day without drifting', () => {
@@ -64,7 +64,7 @@ describe('billing calendar', () => {
 
   it('normalizes input per type and rejects incompatible fields', () => {
     const once = normalizeBillingInput({ type: 'once', totalCents: 100, startDate: '2026-01-31', timezone: 'America/Sao_Paulo', split });
-    expect(once.description).toBe('Cobrança');
+    expect(once.description).toBe('Conta');
     expect(once.frequency).toBeUndefined();
     expect(once.reminders).toBeUndefined();
     const until = normalizeBillingInput({

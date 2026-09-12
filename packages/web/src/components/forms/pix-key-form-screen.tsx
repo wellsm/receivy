@@ -1,46 +1,31 @@
 "use client";
 
 import { pixKeyField, type PaymentMethod, type PaymentMethodsPage, type PixKeyType } from "@receivy/common";
+import { Check, Loader2, Star } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { patchDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
+import { PixKeyFields } from "@/components/app/pix-key-fields";
+import { ScreenFooter } from "@/components/ui/screen-footer";
 
-type PixKeyFormProps = { returnTo?: string; required?: boolean };
-
-const TYPES: { value: PixKeyType; label: string }[] = [
-  { value: "cpf", label: "CPF" },
-  { value: "cnpj", label: "CNPJ" },
-  { value: "phone", label: "Celular" },
-  { value: "email", label: "E-mail" },
-  { value: "random", label: "Chave aleatória" },
-];
+type PixKeyFormScreenProps = { returnTo?: string; required?: boolean };
 
 const SAVE_ERROR = "Não foi possível salvar a chave Pix.";
 
-// `keyboard` is the shared vocabulary with the native app; the web maps it to
-// the matching `inputMode` so the mobile keyboard opens on the right layout.
-const INPUT_MODES: Record<string, "numeric" | "tel" | "email" | "text"> = {
-  numeric: "numeric",
-  tel: "tel",
-  email: "email",
-  text: "text",
-};
-
-export function PixKeyForm({ returnTo, required = false }: PixKeyFormProps) {
+export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScreenProps) {
   const router = useRouter();
   const [type, setType] = useState<PixKeyType>("email");
   const [key, setKey] = useState("");
   const [touched, setTouched] = useState(false);
-  const [label, setLabel] = useState("");
   const [makeDefault, setMakeDefault] = useState(true);
   // A ref, not state: the list request reads it from a closure created at mount.
   const defaultTouched = useRef(false);
   const [accountEmail, setAccountEmail] = useState("");
+  const [accountPhone, setAccountPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const field = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -68,10 +53,18 @@ export function PixKeyForm({ returnTo, required = false }: PixKeyFormProps) {
     let live = true;
 
     void browserFetch("/api/auth/me")
-      .then(response => (response.ok ? (response.json() as Promise<{ user: { email: string | null } }>) : null))
+      .then(response => (response.ok ? (response.json() as Promise<{ user: { email: string | null; phone?: string | null } }>) : null))
       .then(payload => {
-        if (live && payload?.user?.email) {
+        if (!live || !payload) {
+          return;
+        }
+
+        if (payload.user.email) {
           setAccountEmail(payload.user.email);
+        }
+
+        if (payload.user.phone) {
+          setAccountPhone(pixKeyField("phone").format(payload.user.phone));
         }
       })
       .catch(() => undefined);
@@ -82,10 +75,11 @@ export function PixKeyForm({ returnTo, required = false }: PixKeyFormProps) {
   }, []);
 
   const spec = pixKeyField(type);
-  // Most people register their own e-mail, so an untouched e-mail field shows the
-  // account e-mail. It stays editable: typing — or clearing it — takes over, and
-  // picking another type starts over.
-  const value = type === "email" && !key && !touched ? accountEmail : key;
+  // Most people register their own e-mail or phone, so an untouched field shows the
+  // account value of that type. It stays editable: typing — or clearing it — takes
+  // over, and picking another type starts over.
+  const prefilled = type === "email" ? accountEmail : type === "phone" ? accountPhone : "";
+  const value = !key && !touched ? prefilled : key;
 
   function pick(next: PixKeyType) {
     setType(next);
@@ -95,31 +89,9 @@ export function PixKeyForm({ returnTo, required = false }: PixKeyFormProps) {
   }
 
   function change(raw: string) {
+    setError("");
     setTouched(true);
     setKey(pixKeyField(type).format(raw));
-  }
-
-  async function paste() {
-    setError("");
-
-    try {
-      const text = await navigator.clipboard?.readText();
-
-      if (!text) {
-        field.current?.focus();
-        return;
-      }
-
-      change(text);
-    } catch {
-      field.current?.focus();
-    }
-  }
-
-  function clear() {
-    setTouched(true);
-    setKey("");
-    field.current?.focus();
   }
 
   async function submit(event: FormEvent) {
@@ -131,7 +103,7 @@ export function PixKeyForm({ returnTo, required = false }: PixKeyFormProps) {
       const response = await browserFetch("/api/financial/payment-methods", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pixKeyType: type, pixKey: spec.unformat(value), ...(label ? { label } : {}) }),
+        body: JSON.stringify({ pixKeyType: type, pixKey: spec.unformat(value) }),
       });
 
       if (!response.ok) {
@@ -160,90 +132,58 @@ export function PixKeyForm({ returnTo, required = false }: PixKeyFormProps) {
   }
 
   return (
-    <form className="billing-form pix-key-form" onSubmit={submit}>
-      <header className="billing-form-header">
-        <h1>Nova chave Pix</h1>
-        <p className="form-hint">A chave aparece no link de pagamento. O pagamento acontece no banco.</p>
-      </header>
-
+    <form className="mx-auto flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-2xl" onSubmit={submit}>
       {required && (
-        <p className="pix-required-notice" role="status">
+        <p className="m-0 rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900" role="status">
           Você precisa de uma chave Pix para criar cobranças.
         </p>
       )}
 
-      <fieldset className="form-step">
-        <legend>Tipo de chave</legend>
-        <div className="pix-type-grid" role="radiogroup" aria-label="Tipo de chave">
-          {TYPES.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={type === option.value}
-              className={type === option.value ? "pix-type is-active" : "pix-type"}
-              onClick={() => pick(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
+      <PixKeyFields type={type} value={value} required onPickType={pick} onChange={change} />
+
+      <section className="flex items-center justify-between gap-4 rounded-xl border border-outline/40 bg-surface p-4">
+        <div className="flex flex-1 flex-col gap-1">
+          <label htmlFor="pix-default" className="flex items-center gap-1.5 text-sm font-bold text-ink">
+            <Star size={16} aria-hidden="true" className="fill-current text-[#006c49]" />
+            Definir como chave principal
+          </label>
+          <p className="m-0 text-xs leading-5 text-muted">Esta chave será usada como padrão ao criar novas cobranças e links Pix.</p>
         </div>
-      </fieldset>
-
-      <fieldset className="form-step">
-        <legend>Chave</legend>
-
-        <label htmlFor="pix-key">{spec.label}</label>
-        <div className="pix-key-row">
-          <input
-            id="pix-key"
-            ref={field}
-            type="text"
-            required
-            maxLength={254}
-            inputMode={INPUT_MODES[spec.keyboard]}
-            placeholder={spec.placeholder}
-            value={value}
-            onChange={event => change(event.target.value)}
-          />
-          {value ? (
-            <button type="button" className="secondary-button" onClick={clear}>
-              Limpar
-            </button>
-          ) : (
-            <button type="button" className="secondary-button" onClick={() => void paste()}>
-              Colar
-            </button>
-          )}
-        </div>
-
-        <label htmlFor="pix-label">Banco (opcional)</label>
-        <input id="pix-label" type="text" maxLength={120} placeholder="Nubank" value={label} onChange={event => setLabel(event.target.value)} />
-
-        <label className="owner-toggle" htmlFor="pix-default">
+        <span className="relative inline-flex shrink-0 items-center">
           <input
             id="pix-default"
             type="checkbox"
+            className="peer sr-only"
             checked={makeDefault}
             onChange={event => {
               defaultTouched.current = true;
               setMakeDefault(event.target.checked);
             }}
           />
-          Definir como chave principal
-        </label>
-      </fieldset>
+          <span
+            aria-hidden="true"
+            className="relative h-7 w-12 rounded-full bg-outline/60 transition after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:bg-primary peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30"
+          />
+        </span>
+      </section>
 
-      <footer className="billing-form-footer">
-        {error && (
-          <p className="login-error" role="alert">
-            {error}
-          </p>
-        )}
-        <button type="submit" className="primary-button" disabled={busy}>
-          {busy ? "Salvando…" : "Salvar chave Pix"}
+      {error && (
+        <p className="m-0 rounded-xl bg-red-50 p-4 text-sm text-red-700" role="alert">
+          {error}
+        </p>
+      )}
+
+      <ScreenFooter className="-mx-1 border-t border-outline/30 bg-canvas/95 px-1 pb-2 pt-4 backdrop-blur-md">
+        <button
+          type="submit"
+          aria-label="Salvar chave Pix"
+          disabled={busy}
+          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white transition active:scale-[0.985] disabled:opacity-60"
+        >
+          {busy ? <Loader2 size={18} aria-hidden="true" className="animate-spin" /> : <Check size={18} aria-hidden="true" />}
+          {busy ? "Salvando…" : "Salvar Chave Pix"}
         </button>
-      </footer>
+      </ScreenFooter>
     </form>
   );
 }

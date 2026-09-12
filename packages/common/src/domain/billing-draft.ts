@@ -1,7 +1,8 @@
 import type { BillingFrequency, BillingInput, BillingReminder, BillingType } from './billing';
 import { billingDates, normalizeBillingInput } from './billing-calendar';
 import type { BillingCategory } from './billing-category';
-import type { SplitMode } from './contracts';
+import { pixKeyField } from './contact-format';
+import type { Direction, PixKeyType, SplitMode } from './contracts';
 import { parseBRLCents, parsePercentageBasisPoints } from './financial-form';
 
 export type ReminderDraft = Omit<BillingReminder, 'offsetDays'> & { offsetDays: string };
@@ -21,7 +22,15 @@ export function EMPTY_SPLIT_VALUES(): SplitValues {
   return { fixed: {}, percentage: {}, shares: {} };
 }
 
+/** The Pix key typed on a conta a pagar, kept as the user sees it; `buildBillingInput` normalizes it. */
+export type PixDraft = { type: PixKeyType; key: string; label: string };
+
 export type BillingDraft = {
+  /** 'receivable' collects from contacts; 'payable' is the owner's own bill, optionally owed to one contact. */
+  direction: Direction;
+  /** Conta a pagar: the contact who receives, or empty when the bill is the owner's alone. */
+  payee: string;
+  pixInline: PixDraft;
   type: BillingType;
   selected: string[];
   owner: boolean;
@@ -44,6 +53,9 @@ export type BillingDraft = {
 /** Fresh draft for a new billing form. Returns a new object on every call. */
 export function EMPTY_BILLING_DRAFT(timezone: string, today: string): BillingDraft {
   return {
+    direction: 'receivable',
+    payee: '',
+    pixInline: { type: 'email', key: '', label: '' },
     type: 'once',
     selected: [],
     owner: true,
@@ -94,7 +106,7 @@ function endDateFor(draft: BillingDraft): string | undefined {
   return dates.at(-1);
 }
 
-function buildSplit(draft: BillingDraft, parties: ({ kind: 'owner' } | { kind: 'person'; personId: string })[]): BillingInput['split'] {
+function buildSplit(draft: BillingDraft, parties: ({ kind: 'owner' } | { kind: 'user'; userId: string })[]): BillingInput['split'] {
   if (draft.mode === 'equal') {
     return { mode: draft.mode, parts: parties };
   }
@@ -104,10 +116,10 @@ function buildSplit(draft: BillingDraft, parties: ({ kind: 'owner' } | { kind: '
 
     return {
       mode: draft.mode,
-      parts: draft.selected.map((personId) => ({
-        kind: 'person' as const,
-        personId,
-        amountCents: parseBRLCents(values[personId] ?? '')
+      parts: draft.selected.map((userId) => ({
+        kind: 'user' as const,
+        userId,
+        amountCents: parseBRLCents(values[userId] ?? '')
       }))
     };
   }
@@ -119,7 +131,7 @@ function buildSplit(draft: BillingDraft, parties: ({ kind: 'owner' } | { kind: '
       mode: draft.mode,
       parts: parties.map((party) => ({
         ...party,
-        shares: integer(values[party.kind === 'owner' ? 'owner' : party.personId] || '1', 'Informe cotas inteiras de 1 a 1000.')
+        shares: integer(values[party.kind === 'owner' ? 'owner' : party.userId] || '1', 'Informe cotas inteiras de 1 a 1000.')
       }))
     };
   }
@@ -130,25 +142,14 @@ function buildSplit(draft: BillingDraft, parties: ({ kind: 'owner' } | { kind: '
     mode: draft.mode,
     parts: parties.map((party) => ({
       ...party,
-      basisPoints: parsePercentageBasisPoints(values[party.kind === 'owner' ? 'owner' : party.personId] ?? '')
+      basisPoints: parsePercentageBasisPoints(values[party.kind === 'owner' ? 'owner' : party.userId] ?? '')
     }))
   };
 }
 
 /** Shared pure review boundary; raw text stays in each platform's local UI. */
 export function buildBillingInput(draft: BillingDraft): BillingInput {
-  if (!draft.selected.length) {
-    throw new RangeError('Selecione ao menos um contato.');
-  }
-
-  const parties = [
-    ...draft.selected.map((personId) => ({ kind: 'person' as const, personId })),
-    ...(draft.owner ? [{ kind: 'owner' as const }] : [])
-  ];
-
-  const split = buildSplit(draft, parties);
-
-  return normalizeBillingInput({
+  const base = {
     type: draft.type,
     frequency: draft.type === 'once' ? undefined : draft.frequency,
     description: draft.description,
@@ -157,11 +158,37 @@ export function buildBillingInput(draft: BillingDraft): BillingInput {
     endDate: endDateFor(draft),
     category: draft.category,
     timezone: draft.timezone,
-    paymentMethodId: draft.pix || undefined,
     reminders: draft.reminders.map((reminder) => ({
       enabled: reminder.enabled,
       offsetDays: integer(reminder.offsetDays, 'Informe dias inteiros, como -3, 0 ou 2.')
-    })),
-    split
+    }))
+  };
+
+  if (draft.direction === 'payable') {
+    // The key is kept as typed (masked); the field spec turns it into the canonical form before validation.
+    const key = pixKeyField(draft.pixInline.type).unformat(draft.pixInline.key).trim();
+
+    return normalizeBillingInput({
+      ...base,
+      direction: 'payable',
+      payeeUserId: draft.payee || undefined,
+      pix: key ? { keyType: draft.pixInline.type, key, label: draft.pixInline.label.trim() || undefined } : undefined
+    });
+  }
+
+  if (!draft.selected.length) {
+    throw new RangeError('Selecione ao menos um contato.');
+  }
+
+  const parties = [
+    ...draft.selected.map((userId) => ({ kind: 'user' as const, userId })),
+    ...(draft.owner ? [{ kind: 'owner' as const }] : [])
+  ];
+
+  return normalizeBillingInput({
+    ...base,
+    direction: 'receivable',
+    paymentMethodId: draft.pix || undefined,
+    split: buildSplit(draft, parties)
   });
 }

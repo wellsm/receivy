@@ -67,19 +67,19 @@ ordering and do not insert cross-account user references.
   facts, charge/source IDs and financial timestamps remain for consistency; free-form
   descriptions supplied by other people are not indiscriminately erased. Ended owned
   recurrence descriptions become generic. Own expenses without charges are removed.
-- Preserve revoked public-link tombstones. Suppress affected pending deliveries and
-  fail/scrub their outbox events, including unsupported event types. Notifications for
-  a deleted creditor cannot create a fresh initial link. Accepted/in-flight delivery
-  observations remain; protected render inputs do not.
-- Delete only proof/upload-intent objects with sender_user_id matching the erased
-  account. Clear payment proof references and preserve the payment fact. Keep anonymous
-  capability uploads and counterparty-owned proofs: no authenticated evidence assigns
-  those files to the deleting account. Clear the erased reviewer reference/reason.
-- File-reference removal happens under the charge lock, and the erasure returns one
-  StorageQueue message (purpose: account) per removed file. The endpoint sends them
-  only after the transaction commits, so a failed send never blocks the erasure: the
-  hourly orphan scan re-queues the object. The consumer revalidates the reference
-  before deleting and never removes a still-referenced file.
+- Revoke the public links of charges the erased creditor owned (`link_revoked_at`),
+  so a reminder for a deleted creditor cannot mint a fresh link. Scheduled reminders
+  find no recipient and log `notice.skipped`.
+- Clear the proof columns only where `proof_sender_user_id` matches the erased
+  account and keep the payment fact (`state`, `paid_at`). Anonymous public-link
+  uploads and counterparty-owned proofs stay: no authenticated evidence assigns those
+  files to the deleting account.
+- The erasure returns the object keys it stopped referencing; the endpoint deletes
+  them from the bucket only after the transaction commits, best effort. Nothing
+  references those keys any more, so a failed delete leaves at most a dangling
+  object, never a dangling row.
+- `events` keep their lines but lose the actor (`actor_user_id = NULL`); the
+  account's own events are deleted.
 
 No statutory retention period is invented. This is the MVP's technical boundary,
 not a promise to recall already delivered provider messages or erase third-party

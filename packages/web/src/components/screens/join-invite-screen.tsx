@@ -7,13 +7,36 @@ import { useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
 
-type JoinInviteProps = { token: string; view: PublicInviteView; authenticated: boolean };
+type JoinInviteScreenProps = { token: string; view: PublicInviteView; authenticated: boolean };
 
 const EXPIRED = "Convite expirado. Peça um novo link.";
 const CONTACT_NOTICE = "Você entrou como contato; o criador ajusta a divisão.";
+const AWAITING_NOTICE = "Você entrou. O dono da conta vai confirmar sua participação e a cobrança aparece no seu feed.";
 const TYPE_LABELS: Record<BillingType, string> = { once: "À vista", until: "Parcelado", indefinite: "Sem fim" };
 
-export function JoinInvite({ token, view, authenticated }: JoinInviteProps) {
+const PAGE = "min-h-screen bg-canvas px-4 pb-16 pt-7";
+const COLUMN = "mx-auto flex w-full max-w-md flex-col gap-6 md:max-w-2xl";
+const BRAND = "m-0 text-[22px] font-extrabold text-primary-strong";
+const CARD = "flex flex-col gap-4 rounded-2xl border border-outline/30 bg-surface p-6 md:p-10";
+const TITLE = "m-0 text-3xl font-extrabold leading-tight tracking-tight text-primary-strong md:text-4xl";
+const PRIMARY_BUTTON = "inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-white transition hover:bg-primary-strong disabled:opacity-50";
+
+/** The public shell shown when the invite is missing, used by the page and by the screen. */
+export function InviteUnavailable() {
+  return (
+    <main className={PAGE}>
+      <div className={COLUMN}>
+        <p className={BRAND}>Receivy</p>
+        <section className={CARD}>
+          <h1 className={TITLE}>Convite indisponível</h1>
+          <p className="m-0 text-sm font-bold leading-6 text-muted">{EXPIRED}</p>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+export function JoinInviteScreen({ token, view, authenticated }: JoinInviteScreenProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -35,12 +58,17 @@ export function JoinInvite({ token, view, authenticated }: JoinInviteProps) {
 
       const result = (await response.json()) as InviteAcceptResult;
 
-      if (!result.joinedSplit) {
+      if (result.awaitingOwner || !result.joinedSplit) {
         try {
-          window.sessionStorage.setItem("receivy.notice", CONTACT_NOTICE);
+          window.sessionStorage.setItem("receivy.notice", result.awaitingOwner ? AWAITING_NOTICE : CONTACT_NOTICE);
         } catch {
           // The notice is a courtesy; storage may be blocked.
         }
+      }
+
+      if (result.awaitingOwner) {
+        router.replace("/");
+        return;
       }
 
       router.replace(result.chargeId ? `/charges/${result.chargeId}` : "/");
@@ -52,52 +80,53 @@ export function JoinInvite({ token, view, authenticated }: JoinInviteProps) {
   }
 
   if (view.expired) {
-    return (
-      <main className="public-charge public-invite">
-        <div className="public-brand">Receivy</div>
-        <section>
-          <h1>Convite indisponível</h1>
-          <p className="invite-expired">{EXPIRED}</p>
-        </section>
-      </main>
-    );
+    return <InviteUnavailable />;
   }
 
   return (
-    <main className="public-charge public-invite">
-      <div className="public-brand">Receivy</div>
-      <section>
-        <p className="invite-inviter">
-          <strong>{view.creditorFirstName}</strong> te convidou para
-        </p>
-        <h1>{view.description}</h1>
-        <strong className="public-amount">{formatMoney(view.amount)}</strong>
-        <dl>
-          <div>
-            <dt>Categoria</dt>
-            <dd>{billingCategoryLabel(view.category)}</dd>
-          </div>
-          <div>
-            <dt>Participantes</dt>
-            <dd>{`${view.participantCount} pessoa${view.participantCount === 1 ? "" : "s"}`}</dd>
-          </div>
-          <div>
-            <dt>Modalidade</dt>
-            <dd>{TYPE_LABELS[view.type]}</dd>
-          </div>
-        </dl>
-        {!authenticated && (
-          <Link className="primary-button" href={`/login?next=${encodeURIComponent(`/join/${token}`)}`}>
-            Entrar para participar
-          </Link>
-        )}
-        {authenticated && (
-          <button type="button" className="primary-button" disabled={busy} onClick={() => void join()}>
-            Participar
-          </button>
-        )}
-        {error && <p className="login-error" role="alert">{error}</p>}
-      </section>
+    <main className={PAGE}>
+      <div className={COLUMN}>
+        <p className={BRAND}>Receivy</p>
+        <section className={CARD}>
+          <p className="m-0 text-sm text-muted">
+            <strong className="font-bold text-primary-strong">{view.creditorFirstName}</strong> te convidou para
+          </p>
+          <h1 className={TITLE}>{view.description}</h1>
+          <strong className="text-4xl font-extrabold tracking-tight text-primary-strong tabular-nums md:text-5xl">{formatMoney(view.amount)}</strong>
+
+          <dl className="m-0 grid gap-3 border-t border-outline/20 pt-4 sm:grid-cols-3">
+            <div>
+              <dt className="text-xs text-muted">Categoria</dt>
+              <dd className="m-0 mt-1 font-bold text-ink">{billingCategoryLabel(view.category)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted">Participantes</dt>
+              <dd className="m-0 mt-1 font-bold text-ink">{`${view.participantCount} pessoa${view.participantCount === 1 ? "" : "s"}`}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted">Modalidade</dt>
+              <dd className="m-0 mt-1 font-bold text-ink">{TYPE_LABELS[view.type]}</dd>
+            </div>
+          </dl>
+
+          {!authenticated && (
+            <Link className={PRIMARY_BUTTON} href={`/login?next=${encodeURIComponent(`/join/${token}`)}`}>
+              Entrar para participar
+            </Link>
+          )}
+          {authenticated && (
+            <button type="button" className={PRIMARY_BUTTON} disabled={busy} onClick={() => void join()}>
+              Participar
+            </button>
+          )}
+
+          {error && (
+            <p className="m-0 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-[13px] leading-5 text-red-700" role="alert">
+              {error}
+            </p>
+          )}
+        </section>
+      </div>
     </main>
   );
 }

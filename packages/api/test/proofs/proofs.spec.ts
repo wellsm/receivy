@@ -1,214 +1,539 @@
-import { equal, ok, rejects } from 'node:assert/strict';
+import { deepEqual, equal, notEqual, ok, rejects } from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
-import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
+import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
-import { cancelCharge, recordManualPayment } from '../../src/charges/repository';
-import { savePaymentMethod } from '../../src/payment-methods/repository';
-import { savePerson } from '../../src/people/repository';
-import { publicFinalizeProofHandler, publicUploadProofHandler } from '../../src/proofs/endpoints';
-import { createUploadIntent, downloadProof, finalizeProof, listProofs, publicProofStatus, reviewProof } from '../../src/proofs/repository';
-import type { ProofStorage } from '../../src/proofs/storage';
-import { throttleProof } from '../../src/proofs/throttle';
-import { createOrRotatePublicLink, revokePublicLink } from '../../src/public/repository';
-import { getTimeline } from '../../src/timeline/repository';
+import { cancelCharge, getCharge, payCharge, reopenCharge } from '../../src/charges/repositories/charge';
+import { ApiError, TooManyRequestsError } from '../../src/common/errors';
+import { listEvents } from '../../src/common/repositories/events';
+import { saveContact } from '../../src/contacts/repositories/contact';
+import { savePaymentMethod } from '../../src/payment-methods/repositories/payment-method';
+import { publicStartProofUploadHandler } from '../../src/proofs/endpoints/public-start-upload';
+import { publicWithdrawProofHandler } from '../../src/proofs/endpoints/public-withdraw';
+import {
+  actorHash,
+  expireProofUpload,
+  proofDownloadUrl,
+  publicProofState,
+  receiveProofObject,
+  reviewProof,
+  startProofUpload,
+  UPLOAD_TTL_MS,
+  withdrawProof
+} from '../../src/proofs/repositories/proof';
+
+import type { UploadExpirySchedule } from '../../src/proofs/schedulers/upload-expiry';
+import { uploadExpiryIdentifier } from '../../src/proofs/schedulers/upload-expiry';
+import { bucketProofStorage } from '../../src/proofs/services/bucket-storage';
+import type { ProofStorage } from '../../src/proofs/services/storage';
+import { throttleProof } from '../../src/proofs/services/throttle';
+import { createOrRotatePublicLink, getPublicCharge } from '../../src/public/repositories/public-link';
+import { getTimeline } from '../../src/timeline/repositories/timeline';
 import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
+import { fakeScheduler } from '../fixtures/scheduling';
 
 const OWNER = 'a1111111-1111-4111-8111-111111111111';
 const DEBTOR = 'a2222222-2222-4222-8222-222222222222';
 const OTHER = 'a3333333-3333-4333-8333-333333333333';
 const SECRET = 'proof-native-test-secret-with-enough-entropy';
-// Native service-test boundary. The real local client shares .ez4/proof-files
-// across stages, so isolate bytes with EZ4's typed tester, not a hand-written store.
-// Signed HTTP and offline S3 semantics have separate tests; this is domain proof.
+
+// Native service-test boundary: EZ4's typed bucket tester holds the bytes, the API only signs and reads.
 const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
-const storage: ProofStorage = {
-  uploadUrl: (key, mime) => bucket.getWriteUrl(key, { expiresIn: 300, contentType: mime }),
-  read: (key) => bucket.read(key),
-  write: (key, bytes, mime) => bucket.write(key, bytes, { contentType: mime }),
-  delete: (key) => bucket.delete(key),
-  downloadUrl: (key) => bucket.getReadUrl(key, { expiresIn: 60 })
-};
+const storage = bucketProofStorage(bucket);
+const expiry = fakeScheduler<UploadExpirySchedule>();
+
 const actor = { userId: DEBTOR };
 const input = { filename: 'proof.pdf', mime: 'application/pdf' as const, size: 14 };
+const PDF = Buffer.from('%PDF-1.7\nproof');
+
 let counter = 0;
-let personId: string;
+let debtorId: string;
+
 async function charge() {
-  if (!personId) personId = (await savePerson(db, OWNER, { name: 'Proof debtor', email: 'proof-debtor@example.com' })).id;
-  return (await createOnceCharge(db, OWNER, `proof-${++counter}`, { personId, amountCents: 1234, dueDate: '2027-01-01' })).chargeId;
+  if (!debtorId) {
+    debtorId = (await saveContact(db, OWNER, { name: 'Proof Debtor', email: 'proof-debtor@example.com' })).userId;
+  }
+
+  return (await createOnceCharge(db, OWNER, `proof-${++counter}`, { userId: debtorId, amountCents: 1234, dueDate: '2027-01-01' })).chargeId;
 }
-async function upload(id: string) {
-  const intent = await createUploadIntent(db, storage, id, actor, input);
-  await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from('%PDF-1.7\nproof'));
-  return { intent, proof: await finalizeProof(db, storage, id, actor, intent.id) };
+
+async function row(id: string) {
+  const found = await db.charges.findOne({
+    select: {
+      state: true,
+      paid_at: true,
+      proof_state: true,
+      proof_file: true,
+      proof_sender_user_id: true,
+      proof_actor_hash: true,
+      proof_expires_at: true,
+      proof_sent_at: true,
+      proof_reviewed_at: true,
+      proof_reason: true
+    },
+    where: { id }
+  });
+
+  ok(found);
+
+  return found;
 }
-describe('private proof transactions on PostgreSQL', () => {
+
+/** Reserves the slot and returns the key the bucket event will name. */
+async function reserve(id: string, who: Parameters<typeof startProofUpload>[4] = actor, now?: number) {
+  const ticket = await startProofUpload(db, storage, expiry, id, who, input, now);
+  const key = (await row(id)).proof_file!.key;
+
+  return { ticket, key };
+}
+
+/** The whole happy path: a reserved slot, the bytes landing, the bucket event turning them into a pending proof. */
+async function upload(id: string, who: Parameters<typeof startProofUpload>[4] = actor) {
+  const { key } = await reserve(id, who);
+
+  await bucket.write(key, PDF);
+
+  equal(await receiveProofObject(db, storage, key), 'accepted');
+
+  return key;
+}
+
+async function publicActor(id: string) {
+  const link = await createOrRotatePublicLink(db, OWNER, id, SECRET);
+
+  return { token: link.token, secret: SECRET };
+}
+
+async function eventTypes(id: string) {
+  return (await listEvents(db, id)).map((event) => event.type);
+}
+
+describe('proof slot, bucket event and review on PostgreSQL', () => {
   before(async () => {
-    const [row] = await db.rawQuery('SELECT current_database() AS name');
-    equal(row?.['name'], 'receivy_tests');
+    const [database] = await db.rawQuery('SELECT current_database() AS name');
+
+    equal(database?.['name'], 'receivy_tests');
+
     await createUser(db, { id: OWNER, email: 'proof-owner@example.com', name: 'Proof Owner' });
     await savePaymentMethod(db, OWNER, { pixKeyType: 'email', pixKey: 'proof-owner@example.com' });
     await createUser(db, { id: DEBTOR, email: 'proof-debtor@example.com', name: 'Proof Debtor' });
     await createUser(db, { id: OTHER, email: 'proof-other@example.com', name: 'Other' });
   });
+
   after(async () => cleanupUsers(db, [OWNER, DEBTOR, OTHER]));
-  it('allows one pending proof, immutable finalized bytes and no replay', async () => {
+
+  it('reserves the slot only for the side that pays and arms its expiry', async () => {
     const id = await charge();
-    const { intent, proof } = await upload(id);
-    await rejects(() => createUploadIntent(db, storage, id, actor, input), HttpConflictError);
-    await rejects(() => finalizeProof(db, storage, id, actor, intent.id), HttpConflictError);
-    const row = await db.payment_proofs.findOne({ select: { object_key: true, sha256: true }, where: { id: proof.id } });
-    ok(row);
-    await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from('evil replacement'));
-    equal((await bucket.read(row.object_key)).toString(), '%PDF-1.7\nproof');
-    equal(row.sha256.length, 64);
-    await rejects(() => listProofs(db, id, OTHER), HttpForbiddenError);
-    await rejects(() => reviewProof(db, id, DEBTOR, proof.id, { decision: 'accepted' }), HttpForbiddenError);
-    await rejects(() => downloadProof(db, storage, id, OTHER, proof.id), HttpForbiddenError);
-    equal((await listProofs(db, id, DEBTOR)).length, 1);
-    await reviewProof(db, id, OWNER, proof.id, { decision: 'rejected', reason: 'Confira o valor' });
-    const retry = await upload(id);
-    ok(retry.proof.id !== proof.id);
+    const now = Date.now();
+
+    await rejects(() => startProofUpload(db, storage, expiry, id, { userId: OWNER }, input), HttpForbiddenError);
+    await rejects(() => startProofUpload(db, storage, expiry, id, { userId: OTHER }, input), HttpForbiddenError);
+    await rejects(() => startProofUpload(db, storage, expiry, id, actor, { ...input, mime: 'text/html' as never }), ApiError);
+    await rejects(() => startProofUpload(db, storage, expiry, id, actor, { ...input, size: 0 }), ApiError);
+
+    const { ticket, key } = await reserve(id, actor, now);
+
+    ok(ticket.uploadUrl.includes(key), 'the signed PUT targets the reserved key');
+    equal(ticket.expiresAt, new Date(now + UPLOAD_TTL_MS).toISOString());
+    deepEqual(expiry.events.get(uploadExpiryIdentifier(id)), { date: new Date(ticket.expiresAt), event: { chargeId: id, key } });
+
+    const reserved = await row(id);
+
+    equal(reserved.proof_state, 'uploading');
+    equal(reserved.proof_sender_user_id, DEBTOR);
+    equal(reserved.proof_actor_hash, actorHash(actor));
+    equal(reserved.proof_expires_at, ticket.expiresAt);
+    ok(key.startsWith(`proofs/${id}/`));
+
+    // A reserved slot is nobody's business yet: neither side sees a proof.
+    equal((await getCharge(db, OWNER, id)).proof, null);
+    equal((await getCharge(db, OWNER, id)).proofState, null);
+
+    // The public link reserves its own slot on a fresh charge, with no sender account behind it.
+    const publicId = await charge();
+    const token = await publicActor(publicId);
+
+    await reserve(publicId, token);
+
+    const anonymous = await row(publicId);
+
+    equal(anonymous.proof_state, 'uploading');
+    equal(anonymous.proof_sender_user_id ?? null, null);
+    equal(anonymous.proof_actor_hash, actorHash(token));
   });
-  it('serializes concurrent acceptance and writes integral payment/activity/timeline', async () => {
+
+  it('lets the same actor re-reserve, refuses another actor while the slot is live and drops the abandoned key', async () => {
     const id = await charge();
-    const { proof } = await upload(id);
-    const results = await Promise.allSettled([
-      reviewProof(db, id, OWNER, proof.id, { decision: 'accepted' }),
-      reviewProof(db, id, OWNER, proof.id, { decision: 'accepted' })
-    ]);
-    equal(results.filter((x) => x.status === 'fulfilled').length, 1);
-    equal(await db.payments.count({ where: { charge_id: id } }), 1);
-    const payment = await db.payments.findOne({ select: { amount_cents: true, proof_id: true }, where: { charge_id: id } });
-    equal(payment?.amount_cents, 1234);
-    equal(payment?.proof_id, proof.id);
-    equal(await db.activity_events.count({ where: { aggregate_id: id, type: 'proof.accepted', subject_user_id: OWNER } }), 1);
-    const timeline = await getTimeline(db, OWNER, {});
-    ok(timeline.items.some((x) => x.kind === 'proof' && x.proof.id === proof.id));
-    ok(timeline.items.some((x) => x.kind === 'payment' && x.payment.chargeId === id));
+    const token = await publicActor(id);
+    const first = await reserve(id);
+
+    await bucket.write(first.key, Buffer.from('half-uploaded'));
+    await rejects(() => startProofUpload(db, storage, expiry, id, token, input), ApiError);
+
+    const second = await reserve(id);
+
+    notEqual(second.key, first.key);
+    equal(await bucket.exists(first.key), false, 'the abandoned object has no row pointing at it any more');
+    equal(expiry.events.get(uploadExpiryIdentifier(id))?.event.key, second.key);
+
+    // Once the slot has expired it is up for grabs again, whoever held it.
+    const later = Date.now() + UPLOAD_TTL_MS + 1;
+    const taken = await reserve(id, token, later);
+
+    notEqual(taken.key, second.key);
+    equal((await row(id)).proof_actor_hash, actorHash(token));
   });
-  it('closes pending proofs when manual payment/cancellation wins and retains history', async () => {
-    for (const action of ['paid', 'cancelled'] as const) {
-      const id = await charge();
-      const { proof } = await upload(id);
-      if (action === 'paid') await recordManualPayment(db, OWNER, id, { method: 'cash' });
-      else await cancelCharge(db, OWNER, id);
-      const [closed] = await listProofs(db, id, OWNER);
-      equal(closed?.state, 'rejected');
-      equal(closed?.closureReason, action);
-      await rejects(() => reviewProof(db, id, OWNER, proof.id, { decision: 'accepted' }), HttpConflictError);
-      await rejects(() => createUploadIntent(db, storage, id, actor, input), HttpConflictError);
-      ok(await downloadProof(db, storage, id, OWNER, proof.id));
-    }
-  });
-  it('rechecks revoked capability and rejects foreign intent finalization', async () => {
+
+  it('turns the landed bytes into a pending proof with its hash and history', async () => {
     const id = await charge();
-    const link = await createOrRotatePublicLink(db, OWNER, id, SECRET);
-    const publicActor = { token: link.token, secret: SECRET };
-    const intent = await createUploadIntent(db, storage, id, publicActor, input);
-    await rejects(() => finalizeProof(db, storage, id, actor, intent.id), HttpNotFoundError);
-    await revokePublicLink(db, OWNER, id);
-    await rejects(() => finalizeProof(db, storage, id, publicActor, intent.id), HttpNotFoundError);
+    const key = await upload(id);
+    const stored = await row(id);
+
+    equal(stored.proof_state, 'pending');
+    equal(stored.proof_file?.sha256, createHash('sha256').update(PDF).digest('hex'));
+    equal(stored.proof_file?.size, PDF.length);
+    equal(stored.proof_expires_at ?? null, null);
+    ok(stored.proof_sent_at);
+
+    const uploaded = (await listEvents(db, id, 'proof.uploaded'))[0];
+
+    equal(uploaded?.actor_user_id, DEBTOR);
+    deepEqual(uploaded?.payload, { name: 'proof.pdf', mime: 'application/pdf', size: 14 });
+
+    // One proof at a time: the slot stays taken while the file is under review.
+    const token = await publicActor(id);
+
+    await rejects(() => startProofUpload(db, storage, expiry, id, actor, input), ApiError);
+    await rejects(() => startProofUpload(db, storage, expiry, id, token, input), ApiError);
+
+    const mine = (await getCharge(db, DEBTOR, id)).proof;
+    const theirs = (await getCharge(db, OWNER, id)).proof;
+
+    equal(mine?.state, 'pending');
+    equal(mine?.sentByViewer, true);
+    equal(theirs?.sentByViewer, false);
+    deepEqual(theirs?.file, { name: 'proof.pdf', mime: 'application/pdf', size: 14 });
+    equal((await getCharge(db, OWNER, id)).proofState, 'pending');
+
+    // The bucket may deliver the same event twice: the attached file must survive the replay.
+    equal(await receiveProofObject(db, storage, key), 'ignored');
+    equal(await bucket.exists(key), true);
+    equal((await row(id)).proof_state, 'pending');
+    ok((await getTimeline(db, OWNER, {})).items.some((item) => item.kind === 'proof' && item.proof.chargeId === id));
   });
-  it('rejects invalid bytes without creating a proof, and checks state again after storage I/O', async () => {
+
+  it('releases the slot and drops the bytes when the file is invalid or lies about its size', async () => {
     const id = await charge();
-    const intent = await createUploadIntent(db, storage, id, actor, input);
-    await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from('<html>bad</html>'));
-    await rejects(() => finalizeProof(db, storage, id, actor, intent.id));
-    equal(await db.payment_proofs.count({ where: { charge_id: id } }), 0);
-    equal(
-      await db.upload_intents.count({ where: { charge_id: id, state: 'pending' } }),
-      0,
-      'a definitively invalid file must release its intent so the user can replace it'
-    );
-    const replacement = await createUploadIntent(db, storage, id, actor, input);
-    await bucket.write(new URL(replacement.uploadUrl).pathname.slice(1), Buffer.from('%PDF-1.7\nproof'));
-    const racing: ProofStorage = {
-      ...storage,
-      async write(key, bytes, mime) {
-        await storage.write(key, bytes, mime);
-        await cancelCharge(db, OWNER, id);
-      }
-    };
-    await rejects(() => finalizeProof(db, racing, id, actor, replacement.id), HttpConflictError);
-    equal(await db.payment_proofs.count({ where: { charge_id: id } }), 0);
-    equal(await db.upload_intents.count({ where: { charge_id: id, state: 'pending' } }), 0);
+    const { key } = await reserve(id);
+
+    await bucket.write(key, Buffer.from('<html>bad</html>'));
+
+    equal(await receiveProofObject(db, storage, key), 'invalid');
+
+    const cleared = await row(id);
+
+    equal(cleared.proof_state ?? null, null);
+    equal(cleared.proof_file ?? null, null);
+    equal(cleared.proof_actor_hash ?? null, null);
+    equal(await bucket.exists(key), false);
+
+    const invalid = (await listEvents(db, id, 'proof.invalid'))[0];
+
+    equal(invalid?.actor_user_id, DEBTOR);
+    equal(invalid?.payload['name'], 'proof.pdf');
+    ok(invalid?.payload['reason']);
+
+    // A valid PDF that is not the size the client declared is refused the same way.
+    const oversized = await reserve(id);
+
+    await bucket.write(oversized.key, Buffer.concat([PDF, Buffer.from(' and then some')]));
+
+    equal(await receiveProofObject(db, storage, oversized.key), 'invalid');
+    equal((await row(id)).proof_state ?? null, null);
+    equal(await bucket.exists(oversized.key), false);
+    equal((await listEvents(db, id, 'proof.invalid')).length, 2);
+
+    // The slot is free again, so the same person may try once more.
+    await upload(id);
   });
-  it("keeps public proof history private and exposes only the submitting intent's status", async () => {
+
+  it('ignores an unknown or stale key, drops its object, and keeps the slot on a storage outage', async () => {
     const id = await charge();
-    const link = await createOrRotatePublicLink(db, OWNER, id, SECRET);
-    const publicActor = { token: link.token, secret: SECRET };
-    const intent = await createUploadIntent(db, storage, id, publicActor, input);
-    await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from('%PDF-1.7\nproof'));
-    const proof = await finalizeProof(db, storage, id, publicActor, intent.id);
-    equal((await listProofs(db, id, DEBTOR)).length, 0);
-    await rejects(() => downloadProof(db, storage, id, DEBTOR, proof.id), HttpNotFoundError);
-    const status = await publicProofStatus(db, link.token, SECRET, intent.id);
-    equal(Object.keys(status).sort().join(','), 'closureReason,reason,state');
-    await reviewProof(db, id, OWNER, proof.id, { decision: 'rejected', reason: 'Confira a data' });
-    equal((await publicProofStatus(db, link.token, SECRET, intent.id)).reason, 'Confira a data');
-  });
-  it('retains an upload intent after a transient storage failure so the same upload can finalize', async () => {
-    const id = await charge();
-    const intent = await createUploadIntent(db, storage, id, actor, input);
+    const stray = `proofs/${id}/${crypto.randomUUID()}`;
+
+    await bucket.write(stray, PDF);
+
+    equal(await receiveProofObject(db, storage, stray), 'ignored');
+    equal(await bucket.exists(stray), false);
+    equal(await receiveProofObject(db, storage, 'not-a-proof-key'), 'ignored');
+    equal(await receiveProofObject(db, storage, `proofs/${crypto.randomUUID()}/${crypto.randomUUID()}`), 'ignored');
+
+    // A key the charge stopped waiting for is stale even though it once was its slot.
+    const old = await reserve(id);
+    const live = await reserve(id);
+
+    await bucket.write(old.key, PDF);
+
+    equal(await receiveProofObject(db, storage, old.key), 'ignored');
+    equal(await bucket.exists(old.key), false);
+    equal((await row(id)).proof_file?.key, live.key);
+
+    // Storage hiccups retry through the bucket event: the slot stays reserved.
     const unavailable: ProofStorage = {
       ...storage,
       read: async () => {
         throw new Error('temporary storage outage');
       }
     };
-    await rejects(() => finalizeProof(db, unavailable, id, actor, intent.id), /temporary storage outage/);
-    equal(await db.upload_intents.count({ where: { id: intent.id, state: 'pending' } }), 1);
-    equal(await db.payment_proofs.count({ where: { charge_id: id } }), 0);
-    await bucket.write(new URL(intent.uploadUrl).pathname.slice(1), Buffer.from('%PDF-1.7\nproof'));
-    equal((await finalizeProof(db, storage, id, actor, intent.id)).state, 'pending');
+
+    await bucket.write(live.key, PDF);
+    await rejects(() => receiveProofObject(db, unavailable, live.key), /temporary storage outage/);
+    equal((await row(id)).proof_state, 'uploading');
+    equal(await receiveProofObject(db, storage, live.key), 'accepted');
   });
-  it('serializes proof acceptance with manual payment and never produces two payments', async () => {
+
+  it('expires only a live slot and never the file that already landed', async () => {
     const id = await charge();
-    const { proof } = await upload(id);
-    const outcomes = await Promise.allSettled([
-      reviewProof(db, id, OWNER, proof.id, { decision: 'accepted' }),
-      recordManualPayment(db, OWNER, id, { method: 'cash' })
-    ]);
-    equal(outcomes.filter((result) => result.status === 'fulfilled').length, 1);
-    equal(await db.payments.count({ where: { charge_id: id } }), 1);
-    equal(await db.payment_proofs.count({ where: { charge_id: id, state: 'pending' } }), 0);
+    const { key } = await reserve(id);
+
+    await bucket.write(key, Buffer.from('half'));
+
+    equal(await expireProofUpload(db, storage, id, `proofs/${id}/${crypto.randomUUID()}`), false);
+    equal((await row(id)).proof_state, 'uploading');
+    equal(await expireProofUpload(db, storage, id, key), true);
+    equal((await row(id)).proof_state ?? null, null);
+    equal(await bucket.exists(key), false);
+    equal(await expireProofUpload(db, storage, id, key), false, 'a retry finds nothing to do');
+
+    // The schedule fires after the bytes were accepted: the pending proof and its object stay.
+    const attached = await upload(id);
+
+    equal(await expireProofUpload(db, storage, id, attached), false);
+    equal((await row(id)).proof_state, 'pending');
+    equal(await bucket.exists(attached), true);
   });
-  it('persists quota across invocations and uses a shared unknown-client bucket', async () => {
+
+  it('lets only the sender withdraw a file under review', async () => {
+    const id = await charge();
+    const key = await upload(id);
+
+    // A stranger never reaches the charge; the creditor reaches it but did not send the file.
+    await rejects(() => withdrawProof(db, storage, id, { userId: OTHER }), HttpForbiddenError);
+    await rejects(() => withdrawProof(db, storage, id, { userId: OWNER }), HttpNotFoundError);
+    await withdrawProof(db, storage, id, actor);
+
+    equal((await row(id)).proof_state ?? null, null);
+    equal(await bucket.exists(key), false);
+    equal((await listEvents(db, id, 'proof.withdrawn'))[0]?.actor_user_id, DEBTOR);
+    await rejects(() => withdrawProof(db, storage, id, actor), HttpNotFoundError, 'nothing left to take back');
+
+    // A reserved slot can be given up too; a reviewed file cannot.
+    const reserved = await reserve(id);
+
+    await withdrawProof(db, storage, id, actor);
+    equal(await bucket.exists(reserved.key), false);
+    await upload(id);
+    await reviewProof(db, id, OWNER, { decision: 'accepted' });
+    await rejects(() => withdrawProof(db, storage, id, actor), ApiError);
+  });
+
+  it('lets the public sender withdraw their own upload, and nobody else', async () => {
+    const id = await charge();
+    const token = await publicActor(id);
+
+    await upload(id, token);
+
+    // The signed-in debtor did not send this file, so it is not theirs to take back.
+    await rejects(() => withdrawProof(db, storage, id, actor), HttpNotFoundError);
+    await rejects(() => withdrawProof(db, storage, id, { token: 'forged.token', secret: SECRET }), HttpNotFoundError);
+
+    await withdrawProof(db, storage, id, token);
+
+    deepEqual(await publicProofState(db, token.token, SECRET), { state: null, reason: null, file: null });
+    equal((await row(id)).proof_state ?? null, null);
+    equal((await listEvents(db, id, 'proof.withdrawn'))[0]?.actor_user_id ?? null, null);
+    ok(await startProofUpload(db, storage, expiry, id, token, input));
+  });
+
+  it('settles the charge when the creditor accepts and explains when they reject', async () => {
+    const id = await charge();
+
+    await rejects(() => reviewProof(db, id, OWNER, { decision: 'accepted' }), ApiError, 'nothing under review yet');
+    await upload(id);
+    await rejects(() => reviewProof(db, id, DEBTOR, { decision: 'accepted' }), HttpForbiddenError);
+    await rejects(() => reviewProof(db, id, OTHER, { decision: 'accepted' }), HttpForbiddenError);
+    await rejects(() => reviewProof(db, id, OWNER, { decision: 'maybe' as never }), ApiError);
+
+    const results = await Promise.allSettled([
+      reviewProof(db, id, OWNER, { decision: 'accepted' }),
+      reviewProof(db, id, OWNER, { decision: 'accepted' })
+    ]);
+
+    equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+
+    const settled = await row(id);
+
+    equal(settled.state, 'paid');
+    ok(settled.paid_at);
+    equal(settled.proof_state, 'accepted');
+    ok(settled.proof_reviewed_at);
+
+    const types = await eventTypes(id);
+
+    ok(types.includes('proof.accepted'));
+    equal(types.filter((type) => type === 'charge.paid').length, 1);
+    deepEqual((await listEvents(db, id, 'charge.paid'))[0]?.payload, { via: 'proof' });
+    equal((await getCharge(db, OWNER, id)).proof?.state, 'accepted');
+
+    // Rejecting keeps the charge open and leaves a reason the sender can read; the file may then be replaced.
+    const rejectedId = await charge();
+    const first = await upload(rejectedId);
+
+    await reviewProof(db, rejectedId, OWNER, { decision: 'rejected', reason: '  Confira o valor  ' });
+
+    const rejected = await row(rejectedId);
+
+    equal(rejected.state, 'pending');
+    equal(rejected.proof_state, 'rejected');
+    equal(rejected.proof_reason, 'Confira o valor');
+    equal((await getCharge(db, DEBTOR, rejectedId)).proof?.reason, 'Confira o valor');
+    deepEqual((await listEvents(db, rejectedId, 'proof.rejected'))[0]?.payload, { name: 'proof.pdf', reason: 'Confira o valor' });
+    await rejects(() => reviewProof(db, rejectedId, OWNER, { decision: 'accepted' }), ApiError);
+
+    const replacement = await reserve(rejectedId);
+
+    equal(await bucket.exists(first), false, 'the rejected file goes when its replacement is reserved');
+    equal((await row(rejectedId)).proof_reason ?? null, null);
+    await bucket.write(replacement.key, PDF);
+    equal(await receiveProofObject(db, storage, replacement.key), 'accepted');
+    equal((await reviewProof(db, rejectedId, OWNER, { decision: 'accepted' })).state, 'paid');
+  });
+
+  it('hands a download URL to the creditor for any file and to the debtor only for their own', async () => {
+    const id = await charge();
+
+    await reserve(id);
+    await rejects(() => proofDownloadUrl(db, storage, id, OWNER), HttpNotFoundError, 'a reserved slot has no file yet');
+
+    await upload(id);
+
+    const link = await proofDownloadUrl(db, storage, id, OWNER);
+
+    ok(link.url);
+    equal(link.expiresIn, 60);
+    ok(await proofDownloadUrl(db, storage, id, DEBTOR));
+    await rejects(() => proofDownloadUrl(db, storage, id, OTHER), HttpForbiddenError);
+
+    const anonymousId = await charge();
+
+    await upload(anonymousId, await publicActor(anonymousId));
+
+    ok(await proofDownloadUrl(db, storage, anonymousId, OWNER));
+    await rejects(() => proofDownloadUrl(db, storage, anonymousId, DEBTOR), HttpNotFoundError);
+  });
+
+  it('keeps the public state private to the token that uploaded', async () => {
+    const id = await charge();
+    const token = await publicActor(id);
+
+    await upload(id);
+
+    deepEqual(await publicProofState(db, token.token, SECRET), { state: null, reason: null, file: null });
+    equal((await getPublicCharge(db, token.token, SECRET)).uploadsEnabled, false);
+
+    const ownId = await charge();
+    const own = await publicActor(ownId);
+
+    await reserve(ownId, own);
+    equal((await publicProofState(db, own.token, SECRET)).state, 'uploading');
+
+    await upload(ownId, own);
+
+    deepEqual(await publicProofState(db, own.token, SECRET), {
+      state: 'pending',
+      reason: null,
+      file: { name: 'proof.pdf', mime: 'application/pdf', size: 14 }
+    });
+    await reviewProof(db, ownId, OWNER, { decision: 'rejected', reason: 'Confira a data' });
+    equal((await publicProofState(db, own.token, SECRET)).reason, 'Confira a data');
+    await rejects(() => publicProofState(db, 'forged.token', SECRET), HttpNotFoundError);
+  });
+
+  it('leaves a pending proof alone on manual settlement or cancellation and reopens an accepted one', async () => {
+    const id = await charge();
+
+    await upload(id);
+    await payCharge(db, OWNER, id);
+
+    equal((await row(id)).proof_state, 'pending', 'a manual settlement does not answer the file');
+    equal((await getCharge(db, OWNER, id)).proof?.state, 'pending');
+    await rejects(() => reviewProof(db, id, OWNER, { decision: 'accepted' }), ApiError);
+    await rejects(() => startProofUpload(db, storage, expiry, id, actor, input), ApiError);
+    ok(await proofDownloadUrl(db, storage, id, OWNER));
+
+    const reopened = await reopenCharge(db, OWNER, id);
+
+    equal(reopened.state, 'pending');
+    equal(reopened.paidAt, null);
+    equal(reopened.proof?.state, 'pending');
+    await reviewProof(db, id, OWNER, { decision: 'accepted' });
+
+    const again = await reopenCharge(db, OWNER, id);
+
+    equal(again.proofState, 'pending', 'an accepted file goes back under review');
+    equal((await row(id)).proof_reviewed_at ?? null, null);
+    ok((await eventTypes(id)).includes('charge.reopened'));
+    await rejects(() => reopenCharge(db, OWNER, id), ApiError);
+    equal((await reviewProof(db, id, OWNER, { decision: 'accepted' })).state, 'paid');
+
+    const cancelledId = await charge();
+
+    await upload(cancelledId);
+    await cancelCharge(db, OWNER, cancelledId);
+
+    equal((await row(cancelledId)).proof_state, 'pending');
+    await rejects(() => startProofUpload(db, storage, expiry, cancelledId, actor, input), ApiError);
+    await rejects(() => withdrawProof(db, storage, cancelledId, actor), ApiError);
+    ok(await proofDownloadUrl(db, storage, cancelledId, OWNER));
+  });
+
+  it('persists the capability quota across invocations and windows', async () => {
     const now = Date.now() + 600_000;
+
     for (let attempt = 0; attempt < 12; attempt++) await throttleProof(db, 'quota-native-proof', now);
-    await rejects(
-      () => throttleProof(db, 'quota-native-proof', now),
-      (error) => (error as { status: number }).status === 429
-    );
-    // Rotating capability does not reset the shared client quota; no forwarded header enters this API.
-    for (let attempt = 13; attempt < 120; attempt++) await throttleProof(db, `quota-${attempt}`, now);
-    await rejects(
-      () => throttleProof(db, 'quota-another', now),
-      (error) => (error as { status: number }).status === 429
-    );
+    await rejects(() => throttleProof(db, 'quota-native-proof', now), TooManyRequestsError);
+    // Other capabilities keep their own budget; a new window resets the exhausted one.
+    await throttleProof(db, 'quota-another', now);
     await throttleProof(db, 'quota-native-proof', now + 600_001);
     await db.proof_throttles.deleteMany({});
   });
-  it("counts invalid anonymous capabilities against the guessing client's IP only", async () => {
-    // Task 7 contract: quota is consumed before capability lookup so token guessing cannot
-    // bypass it, but the trusted source IP scopes that cost to the guessing client alone.
-    const context = { db, variables: { PUBLIC_LINK_HMAC_SECRET: SECRET } } as Parameters<typeof publicUploadProofHandler>[1];
-    const guesser = '203.0.113.7';
-    for (let attempt = 0; attempt < 60; attempt++) {
-      const upload = { sourceIp: guesser, parameters: { token: `invalid-${attempt}` }, body: input };
-      const finalize = { sourceIp: guesser, parameters: { token: `invalid-${attempt}`, intentId: '11111111-1111-4111-8111-111111111111' } };
-      await rejects(() => publicUploadProofHandler(upload, context), HttpNotFoundError);
-      await rejects(() => publicFinalizeProofHandler(finalize, context), HttpNotFoundError);
+
+  it('resolves the capability before charging its quota, so guesses never consume anything', async () => {
+    const context = { db, variables: { PUBLIC_LINK_HMAC_SECRET: SECRET } } as Parameters<typeof publicStartProofUploadHandler>[1];
+    const before = await db.proof_throttles.count({});
+
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const start = { parameters: { token: `invalid-${attempt}` }, body: input };
+      const withdraw = { parameters: { token: `invalid-${attempt}` } };
+
+      await rejects(() => publicStartProofUploadHandler(start, context), HttpNotFoundError);
+      await rejects(() => publicWithdrawProofHandler(withdraw, context), HttpNotFoundError);
     }
-    const exhausted = { sourceIp: guesser, parameters: { token: 'invalid-final' }, body: input };
-    await rejects(
-      () => publicUploadProofHandler(exhausted, context),
-      (error) => (error as { status: number }).status === 429
-    );
+
+    equal(await db.proof_throttles.count({}), before);
+
+    // A real link is charged twelve actions per window, whatever the outcome of each action.
     const id = await charge();
-    const link = await createOrRotatePublicLink(db, OWNER, id, SECRET);
-    await throttleProof(db, link.token, Date.now(), '198.51.100.5');
-    await throttleProof(db, link.token, Date.now(), 'unknown-client');
+    const { token } = await createOrRotatePublicLink(db, OWNER, id, SECRET);
+
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await rejects(
+        () => publicWithdrawProofHandler({ parameters: { token } }, context),
+        (error) => !(error instanceof TooManyRequestsError)
+      );
+    }
+
+    await rejects(() => publicWithdrawProofHandler({ parameters: { token } }, context), TooManyRequestsError);
     await db.proof_throttles.deleteMany({});
   });
 });

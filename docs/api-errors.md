@@ -1,0 +1,57 @@
+# API errors
+
+The API answers every failure with the stock EZ4 envelope:
+
+```json
+{ "type": "error", "message": "A cobrança já foi encerrada.", "context": { "code": "CHARGE_CLOSED" } }
+```
+
+- `message` — copy for the user, in pt-BR, only on the statuses below. On other statuses it is
+  gateway text (validation details, "Not found") and clients must not display it.
+- `context.code` — stable machine code of a domain error (`packages/api/src/<domain>/errors.ts`).
+  Absent on gateway-raised errors (400 validation, 401, 403, 404).
+- `context.fields` — optional map `field -> message` when a domain error points at a field.
+
+| Status | Source | Client shows |
+|---|---|---|
+| 400 | Schema validation (`@ez4/gateway`) or `HttpBadRequestError` | "Confira os dados informados." |
+| 401 / 403 / 404 | `HttpUnauthorizedError`, `HttpForbiddenError`, `HttpNotFoundError` | the screen's own fallback |
+| 409 | `ConflictError` subclasses | `message` (generic conflict copy if absent) |
+| 422 | `UnprocessableEntityError` subclasses | `message` ("Confira os dados informados." if absent) |
+| 429 | `TooManyRequestsError`, `ReminderQuotaError` | `message` (generic quota copy if absent) |
+| 5xx | unexpected | the screen's own fallback |
+
+`apiErrorMessage(status, body, fallback)` in `@receivy/common` applies this table; `apiErrorCode(body)`
+reads the code.
+
+## How a domain error is declared
+
+```ts
+// packages/api/src/charges/errors.ts
+export class ChargeClosedError extends ConflictError {
+  constructor() {
+    super('A cobrança já foi encerrada.', 'CHARGE_CLOSED');
+  }
+}
+```
+
+`packages/api/src/api.ts` lists every class under `httpErrors` by status; the gateway maps the
+class to that status. The base classes (`ConflictError` 409, `UnprocessableEntityError` 422,
+`RateLimitedError` 429) live in `packages/api/src/common/errors.ts` and carry the same status so
+the request listener logs it.
+
+## Quotas
+
+No quota is keyed by client IP: the stock gateway does not expose one, and browsers reach the API
+through the Next BFF anyway. Buckets are keyed by what the API verified:
+
+| Route | Key | Limit / 10 min |
+|---|---|---|
+| `POST /auth/email/code` | normalized e-mail | 5 (plus a 60 s resend cooldown) |
+| `POST /auth/email/confirm` | the code itself | 5 attempts per code |
+| public charge / invite reads | link `public_id`, after the token was verified | 60 |
+| `POST /invites/{token}/accept` | invite `public_id` | 120 |
+| public proof upload / withdraw | charge `public_id` | 12 |
+| `POST /charges/{id}/reminders` | charge | 1 per 24 h |
+
+A guessed token costs one indexed read and a 404; it never creates a throttle row.

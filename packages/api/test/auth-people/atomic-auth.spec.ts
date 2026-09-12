@@ -1,10 +1,10 @@
 import { equal, ok, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, describe, it } from 'node:test';
-import { confirmEmailAtomically, exchangeOauthAtomically } from '../../src/auth/atomic';
-import { AuthFlowError } from '../../src/auth/email-login';
-import { hashOauthValue } from '../../src/auth/oauth';
-import { createAuthRepository } from '../../src/repositories/auth-repository';
+import { createAuthRepository } from '../../src/users/repositories/auth';
+import { AuthFlowError } from '../../src/users/services/email-login';
+import { hashOauthValue } from '../../src/users/services/oauth';
+import { confirmEmailAtomically, exchangeOauthAtomically } from '../../src/users/utils/atomic';
 import { cleanupUsers, db } from '../fixtures/financial';
 
 const email = `atomic-${randomUUID()}@example.com`;

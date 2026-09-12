@@ -4,7 +4,7 @@ import { ACCESS_COOKIE } from "./auth/cookies";
 import { hasTrustedOrigin } from "./auth/origin";
 import { authApiFetch } from "./auth/api";
 
-export async function peopleProxy(request: Request, path: string) {
+export async function contactsProxy(request: Request, path: string) {
   if (request.method !== "GET" && !hasTrustedOrigin(request)) return new NextResponse(null, { status: 403 });
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
   if (!token) return new NextResponse(null, { status: 401 });
@@ -15,9 +15,9 @@ export async function peopleProxy(request: Request, path: string) {
     });
     if (!upstream.ok) {
       const status = [400, 401, 403, 404, 409].includes(upstream.status) ? upstream.status : 503;
-      const message = status === 409 ? "Já existe um contato ativo com esse e-mail."
+      const message = status === 409 ? "Esse e-mail já está em uso: por outro contato seu ou por uma conta ativa. Só o apelido de um contato ativo pode mudar."
         : status === 404 ? "Contato não encontrado."
-        : status === 400 ? "Confira o nome, e-mail e telefone informados." : "Não foi possível acessar seus contatos.";
+        : status === 400 ? "Confira o nome e o e-mail informados." : "Não foi possível acessar seus contatos.";
       return NextResponse.json({ message }, { status });
     }
     if (upstream.status === 204) return new NextResponse(null, { status: 204 });

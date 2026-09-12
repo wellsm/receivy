@@ -1,36 +1,38 @@
 import { equal, rejects } from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { publicUploadProofHandler } from '../../src/proofs/endpoints';
-import { throttleProof } from '../../src/proofs/throttle';
+import { TooManyRequestsError } from '../../src/common/errors';
+import { publicStartProofUploadHandler } from '../../src/proofs/endpoints/public-start-upload';
+import { throttleProof } from '../../src/proofs/services/throttle';
 import { db } from '../fixtures/financial';
 
-describe('trusted source IP quotas on PostgreSQL', () => {
-  it('counts invalid capabilities before lookup so guesses cannot bypass the quota', async () => {
+describe('link quotas on PostgreSQL', () => {
+  it('answers 404 to guessed capabilities without writing a throttle row', async () => {
     const context = { db, variables: { PUBLIC_LINK_HMAC_SECRET: 'throttle-test-secret-only' } } as Parameters<
-      typeof publicUploadProofHandler
+      typeof publicStartProofUploadHandler
     >[1];
-    const request = {
-      sourceIp: '192.0.2.211',
-      parameters: { token: `invalid-${crypto.randomUUID()}` },
-      body: { filename: 'fixture.pdf', mime: 'application/pdf' as const, size: 12 }
-    };
-    for (let index = 0; index < 12; index++)
+    const before = await db.proof_throttles.count({});
+
+    for (let index = 0; index < 20; index++) {
+      const request = {
+        parameters: { token: `invalid-${crypto.randomUUID()}` },
+        body: { filename: 'fixture.pdf', mime: 'application/pdf' as const, size: 12 }
+      };
       await rejects(
-        () => publicUploadProofHandler(request, context),
+        () => publicStartProofUploadHandler(request, context),
         (error) => (error as { status: number }).status === 404
       );
-    await rejects(
-      () => publicUploadProofHandler(request, context),
-      (error) => (error as { status: number }).status === 429
-    );
+    }
+
+    equal(await db.proof_throttles.count({}), before);
   });
-  it('isolates real IP buckets while a capability quota survives IP changes', async () => {
+
+  it('caps one capability at twelve actions per window and hashes the bucket id', async () => {
     const now = Date.now() + 86400000;
-    for (let index = 0; index < 120; index++) await throttleProof(db, `ip-quota-${index}`, now, '192.0.2.1');
-    await rejects(() => throttleProof(db, 'ip-quota-exhausted', now, '192.0.2.1'));
-    await throttleProof(db, 'fresh-other-ip', now, '192.0.2.2');
-    for (let index = 0; index < 12; index++) await throttleProof(db, 'one-capability', now, `198.51.100.${index + 1}`);
-    await rejects(() => throttleProof(db, 'one-capability', now, '198.51.100.99'));
+
+    for (let index = 0; index < 12; index++) await throttleProof(db, 'one-capability', now);
+    await rejects(() => throttleProof(db, 'one-capability', now), TooManyRequestsError);
+    await throttleProof(db, 'another-capability', now);
+
     const rows = await db.proof_throttles.findMany({ select: { id: true } });
     equal(
       rows.records.every((row) => /^[a-f0-9]{64}$/.test(row.id)),

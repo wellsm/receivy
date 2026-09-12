@@ -1,9 +1,9 @@
-# Perfil -> Pix key -> contact -> Cobranças -> charge -> share -> feed totals.
+# Perfil -> Pix key -> contact -> Contas -> charge -> share -> feed totals.
 # Labels and inputs share the same string, so those inputs are addressed by
 # index 1. Tapping a section title dismisses the keyboard (the form's ScrollView
 # uses keyboardShouldPersistTaps="handled"), which keeps the fixed footer
 # reachable. Sub-screens now run under the native stack header, so "back" is a
-# tap on the previous screen's title in the header ("Perfil", "Cobranças").
+# tap on the previous screen's title in the header ("Perfil", "Contas").
 # Keys and contacts are registered on their own screens, reached from the FABs
 # of their lists; a save pops back to the list, so the list's own FAB label
 # ("Cadastrar nova chave") and the new row are what prove the return trip.
@@ -55,11 +55,12 @@ appId: dev.receivy.local
     index: 1
 - inputText: "Ana QA"
 # The keyboard covers the lower fields; tapping the intro text dismisses it and
-# the scroll brings the e-mail field into view before it is focused.
+# the scroll brings the e-mail field into view before it is focused. The form has
+# no phone field any more: the person fills their own number at onboarding.
 - tapOn: "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento."
 - scrollUntilVisible:
     element:
-      text: "Usado para enviar avisos."
+      text: "Se este e-mail já tiver conta no Receivy, o contato será associado a ela."
     direction: DOWN
 - tapOn:
     text: "E-mail"
@@ -74,45 +75,48 @@ appId: dev.receivy.local
 - extendedWaitUntil:
     visible: "Gerenciar contatos"
     timeout: 15000
-- tapOn: "Cobranças"
+- tapOn: "Contas"
 - extendedWaitUntil:
-    visible: "Nova cobrança"
+    visible: "Nova conta"
     timeout: 15000
-- tapOn: "Nova cobrança"
+- tapOn: "Nova conta"
 - extendedWaitUntil:
-    visible: "Para quem?"
+    visible: "Participantes"
+    timeout: 15000
+- tapOn: "Adicionar"
+- extendedWaitUntil:
+    visible: "Ana QA"
     timeout: 15000
 - tapOn: "Ana QA"
+- tapOn: "Concluir"
 - tapOn: "Valor"
 - inputText: "10000"
-- tapOn: "Para quem?"
+- tapOn: "Participantes"
 - assertVisible: "100,00"
 - scrollUntilVisible:
     element:
-      text: "Título"
+      text: "Título da conta"
     direction: DOWN
-- tapOn:
-    text: "Título"
-    index: 1
+- tapOn: "Título"
 - inputText: "Mercado QA"
 - scrollUntilVisible:
     element:
-      text: "Para quem?"
+      text: "Participantes"
     direction: UP
-- tapOn: "Para quem?"
+- tapOn: "Participantes"
 - scrollUntilVisible:
     element:
-      text: "Criar cobrança"
+      text: "Criar conta"
     direction: DOWN
-- tapOn: "Criar cobrança"
+- tapOn: "Criar conta"
 - extendedWaitUntil:
-    visible: "Cobrança criada"
+    visible: "Detalhes da conta"
     timeout: 20000
-- tapOn: "Ver cobrança"
+- tapOn: "Ana QA"
 - extendedWaitUntil:
-    visible: "Compartilhar cobrança"
+    visible: "Compartilhar"
     timeout: 20000
-- tapOn: "Compartilhar cobrança"
+- tapOn: "Compartilhar"
 - runFlow:
     when:
       visible: "Sharing link"
@@ -124,11 +128,11 @@ appId: dev.receivy.local
     commands:
       - tapOn: "dismiss popup"
 - extendedWaitUntil:
-    visible: "Compartilhar cobrança"
+    visible: "Compartilhar"
     timeout: 20000
-- tapOn: "Cobranças"
+- tapOn: "Contas"
 - extendedWaitUntil:
-    visible: "Nova cobrança"
+    visible: "Nova conta"
     timeout: 15000
 - tapOn: "Feed"
 - extendedWaitUntil:

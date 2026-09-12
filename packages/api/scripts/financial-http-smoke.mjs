@@ -91,7 +91,7 @@ try {
     `INSERT INTO users (id,email,name,locale,timezone,country,currency,created_at,updated_at) VALUES ('11111111-1111-4111-8111-111111111111','billing-http@example.invalid','HTTP fixture','pt-BR','America/Sao_Paulo','BR','BRL',now(),now()); INSERT INTO session_families (id,user_id,created_at,last_seen_at) VALUES ('${familyId}','11111111-1111-4111-8111-111111111111',now(),now())`
   ]);
   const authorization = `Bearer ${accessToken('11111111-1111-4111-8111-111111111111')}`;
-  const invalidJson = await request('people', {
+  const invalidJson = await request('contacts', {
     method: 'POST',
     headers: { authorization, 'content-type': 'application/json', 'x-trace-id': 'fixture-secret-trace' },
     body: '{"name":"fixture-secret-name","email":"fixture-secret@example.invalid",'
@@ -116,7 +116,7 @@ try {
   assert.equal(invalidPix.body.code, 'INVALID_REQUEST');
   assert.equal(
     (
-      await request('people', {
+      await request('contacts', {
         method: 'POST',
         headers: { authorization, 'content-type': 'application/json' },
         body: JSON.stringify({ name: 'Fixture', ownerId: familyId })
@@ -125,15 +125,11 @@ try {
     400
   );
   assert.equal((await request('public/charges/not-a-capability')).status, 404);
+  assert.equal((await request('public/charges/not-a-capability/proof')).status, 404);
   // Disposable container-only fixture. Business behavior stays in DatabaseTester specs;
   // this assertion covers EZ4's real generated request/response serialization.
   const headers = { authorization, 'content-type': 'application/json' };
-  const preferences = { emailEnabled: false, pushEnabled: true, reminderOffsets: [-3, 0, 2] };
-  assert.equal((await request('notification-preferences')).status, 401);
-  const savedPreferences = await request('notification-preferences', { method: 'PATCH', headers, body: JSON.stringify(preferences) });
-  assert.equal(savedPreferences.status, 200);
-  assert.deepEqual(savedPreferences.body, preferences);
-  assert.deepEqual((await request('notification-preferences', { headers })).body, preferences);
+  assert.equal((await request('devices', { method: 'POST' })).status, 401);
   const registered = await request('devices', {
     method: 'POST',
     headers,
@@ -143,11 +139,11 @@ try {
   assert.deepEqual(Object.keys(registered.body).sort(), ['active', 'createdAt', 'id', 'platform']);
   assert.equal(registered.body.active, true);
   assert.equal(registered.body.platform, 'ios');
-  const devicePage = await request('devices', { headers });
-  assert.equal(devicePage.status, 200);
-  assert.deepEqual(devicePage.body.devices, [registered.body]);
-  assert.equal((await request(`devices/${registered.body.id}`, { method: 'DELETE', headers })).status, 204);
-  const person = await request('people', { method: 'POST', headers, body: JSON.stringify({ name: 'Ana HTTP' }) });
+  const person = await request('contacts', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name: 'Ana HTTP', email: 'ana-http@example.invalid' })
+  });
   assert.equal(person.status, 201);
   const billing = await request('billings', {
     method: 'POST',
@@ -157,19 +153,21 @@ try {
       totalCents: 1234,
       startDate: '2027-01-01',
       timezone: 'America/Sao_Paulo',
-      split: { mode: 'fixed', parts: [{ kind: 'person', personId: person.body.id, amountCents: 1234 }] }
+      split: { mode: 'fixed', parts: [{ kind: 'user', userId: person.body.userId, amountCents: 1234 }] }
     })
   });
   assert.equal(billing.status, 201);
   const chargeId = billing.body.charges[0].id;
-  const unavailableStorage = await request(`charges/${chargeId}/proofs/uploads`, {
+  // The owner collects: only the side that pays may reserve the proof slot.
+  const forbiddenUpload = await request(`charges/${chargeId}/proof`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ filename: 'fixture-secret-file.pdf', mime: 'application/pdf', size: 100 })
   });
-  assert.equal(unavailableStorage.status, 500);
-  assert.equal(unavailableStorage.body.code, 'INTERNAL_ERROR');
-  assert.match(unavailableStorage.body.correlationId, /^[a-f0-9-]{36}$/);
+  assert.equal(forbiddenUpload.status, 403);
+  assert.equal((await request(`charges/${chargeId}/proof/download`, { headers })).status, 404);
+  assert.equal((await request(`charges/${chargeId}/pay`, { method: 'POST', headers })).status, 200);
+  assert.equal((await request(`charges/${chargeId}/reopen`, { method: 'POST', headers })).status, 200);
   const foreignFamilyId = '62222222-2222-4222-8222-222222222222';
   run('docker', [
     ...compose,
@@ -192,33 +190,17 @@ try {
     request(`charges/${chargeId}/reminders`, { method: 'POST', headers }),
     request(`charges/${chargeId}/reminders`, { method: 'POST', headers })
   ]);
-  assert.deepEqual(reminders.map((result) => result.status).sort(), [202, 429]);
-  assert.deepEqual(reminders.find((result) => result.status === 202).body, { queued: true });
-  const deliveryId = randomUUID();
-  // Narrow generated DTO fixture, not a substitute for the native delivery suite.
-  run('docker', [
-    ...compose,
-    'exec',
-    '-T',
-    'postgres',
-    'psql',
-    '-U',
-    'receivy',
-    '-d',
-    'receivy',
-    '-v',
-    'ON_ERROR_STOP=1',
-    '-c',
-    `INSERT INTO notification_deliveries (id,event_id,charge_id,recipient_key,channel,template,state,render_inputs,body_hash,idempotency_key,attempts,available_at,created_at,updated_at) VALUES ('${deliveryId}','${randomUUID()}','${chargeId}','fixture','email','initial','disabled','{}','fixture','${randomUUID()}',0,now(),now(),now())`
-  ]);
-  const deliveries = await request(`charges/${chargeId}/deliveries`, { headers });
-  assert.equal(deliveries.status, 200);
-  const delivery = deliveries.body.deliveries.find((row) => row.id === deliveryId);
-  assert.deepEqual(Object.keys(delivery).sort(), ['attempts', 'channel', 'id', 'reason', 'state', 'template', 'updatedAt']);
-  assert.equal(delivery.state, 'disabled');
-  assert.equal(delivery.attempts, 0);
-  assert.equal(delivery.reason, null);
-  assert.equal((await request(`charges/${chargeId}/deliveries`, { headers: foreignHeaders })).status, 403);
+  // Every transport is disabled here, so nothing reaches the contact and the daily quota stays free.
+  assert.deepEqual(reminders.map((result) => result.status).sort(), [202, 202]);
+  assert.deepEqual(
+    reminders.map((result) => result.body),
+    [{ queued: false }, { queued: false }]
+  );
+  const detail = await request(`charges/${chargeId}`, { headers });
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.proof, null);
+  assert.equal(detail.body.state, 'pending');
+  assert.equal((await request(`charges/${chargeId}`, { headers: foreignHeaders })).status, 403);
   const indefinite = {
     type: 'indefinite',
     description: 'HTTP mensal',
@@ -226,7 +208,7 @@ try {
     frequency: 'monthly',
     startDate: '2999-01-31',
     timezone: 'America/Sao_Paulo',
-    split: { mode: 'equal', parts: [{ kind: 'person', personId: person.body.id }, { kind: 'owner' }] },
+    split: { mode: 'equal', parts: [{ kind: 'user', userId: person.body.userId }, { kind: 'owner' }] },
     reminders: [
       { offsetDays: -5, enabled: true },
       { offsetDays: 0, enabled: false }

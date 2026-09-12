@@ -1,15 +1,24 @@
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import type { BillingPlan, BillingType, PaymentMethod } from '@receivy/common';
-import { lockAccountReferences } from '../account/locking';
-import type { DbClient } from '../database';
-import { type NoticeContext, planNotice } from '../notifications/planner';
-import { CHARGE_SELECT, type ChargeRow } from './repository';
+import { recordEvent } from '../../common/repositories/events';
+import type { DbClient } from '../../database';
+import { lockAccountReferences } from '../../users/services/locking';
+import { CHARGE_SELECT, type ChargeRow } from '../repositories/charge';
 
-export type ChargeRecipientMaterialization = { personId: string; name: string; email?: string; linkedUserId?: string };
+/** A participant validated against the owner's agenda: the person's account id, and whether they already use the app. */
+export type ChargeRecipientMaterialization = { userId: string; active: boolean };
 
 export type ChargeMaterializationContext = {
   recipients: Map<string, ChargeRecipientMaterialization>;
   pix: { keyType: PaymentMethod['pixKeyType']; key: string; label: string } | null;
+  /** 'owner' materializes a conta a pagar: the owner pays, the (optional) payee is the counterpart. */
+  payer: 'person' | 'owner';
+};
+
+/** How a conta a pagar materializes: the key typed on the billing replaces any wallet lookup. */
+export type PayableMaterialization = {
+  payer: 'owner';
+  pix?: { keyType: PaymentMethod['pixKeyType']; key: string; label?: string } | null;
 };
 
 export type ChargeBillingRef = { id: string; type: BillingType };
@@ -25,25 +34,24 @@ export async function lockOwner(db: DbClient, ownerId: string): Promise<void> {
   }
 }
 
-async function recipientSnapshots(
-  db: DbClient,
-  ownerId: string,
-  personIds: string[]
-): Promise<Map<string, ChargeRecipientMaterialization>> {
+/** The owner may only bill people in their agenda: every participant needs an unarchived contact and a live account. */
+async function recipientSnapshots(db: DbClient, ownerId: string, userIds: string[]): Promise<Map<string, ChargeRecipientMaterialization>> {
   const result = new Map<string, ChargeRecipientMaterialization>();
 
-  for (const personId of new Set(personIds)) {
-    const row = await db.people.findOne({
-      select: { id: true, owner_id: true, linked_user_id: true, name: true, active_email: true, archived_at: true },
-      where: { id: personId, owner_id: ownerId },
+  for (const userId of new Set(userIds)) {
+    const contact = await db.contacts.findOne({
+      select: { id: true, archived_at: true },
+      where: { owner_id: ownerId, user_id: userId },
       lock: true
     });
+    const user =
+      contact && !contact.archived_at ? await db.users.findOne({ select: { id: true, status: true }, where: { id: userId } }) : undefined;
 
-    if (!row || row.archived_at) {
+    if (!user || user.status === 'removed') {
       throw new HttpNotFoundError('Contato indisponível.');
     }
 
-    result.set(personId, { personId: row.id, name: row.name, email: row.active_email, linkedUserId: row.linked_user_id });
+    result.set(userId, { userId, active: user.status === 'active' });
   }
 
   return result;
@@ -79,51 +87,35 @@ async function pixSnapshot(db: DbClient, ownerId: string, paymentMethodId?: stri
 export async function prepareChargeMaterialization(
   db: DbClient,
   ownerId: string,
-  personIds: string[],
-  paymentMethodId?: string
+  userIds: string[],
+  paymentMethodId?: string,
+  payable?: PayableMaterialization
 ): Promise<ChargeMaterializationContext> {
-  return { recipients: await recipientSnapshots(db, ownerId, personIds), pix: await pixSnapshot(db, ownerId, paymentMethodId) };
+  const recipients = await recipientSnapshots(db, ownerId, userIds);
+
+  if (payable) {
+    const pix = payable.pix ? { keyType: payable.pix.keyType, key: payable.pix.key, label: payable.pix.label ?? 'Pix' } : null;
+
+    return { recipients, pix, payer: 'owner' };
+  }
+
+  return { recipients, pix: await pixSnapshot(db, ownerId, paymentMethodId), payer: 'person' };
 }
 
-async function recordCreation(
-  db: DbClient,
-  ownerId: string,
-  row: ChargeRow,
-  recipient: ChargeRecipientMaterialization,
-  now: string,
-  notice?: NoticeContext
-): Promise<string[]> {
-  const payload = JSON.stringify({ chargeId: row.id, billingId: row.billing_id });
-  const subjects = new Set([ownerId, ...(recipient.linkedUserId ? [recipient.linkedUserId] : [])]);
-
-  for (const subjectId of subjects) {
-    await db.activity_events.insertOne({
-      select: { id: true },
-      data: {
-        id: crypto.randomUUID(),
-        actor_user: { id: ownerId },
-        subject_user: { id: subjectId },
-        type: 'charge.created',
-        aggregate_type: 'charge',
-        aggregate_id: row.id,
-        payload,
-        created_at: now
-      }
-    });
-  }
-
-  if (!notice) {
-    return [];
-  }
-
-  const planned = await planNotice(db, row, `charge:${row.id}:initial`, 'initial', notice.config, Date.parse(now));
-
-  return planned.due;
+async function recordCreation(db: DbClient, ownerId: string, row: ChargeRow, now: string): Promise<void> {
+  await recordEvent(db, {
+    type: 'charge.created',
+    eventableType: 'charge',
+    eventableId: row.id,
+    actorId: ownerId,
+    payload: { billingId: row.billing_id, ...(row.debtor_user_id ? { debtorUserId: row.debtor_user_id } : {}) },
+    at: now
+  });
 }
 
 /**
  * Shared persistence seam for every billing type. Caller owns the transaction and, once it
- * commits, publishes `dueDeliveryIds` to the notification queue.
+ * commits, hands `noticeChargeIds` to `announceCharges` so the people involved hear about them.
  */
 export async function persistChargePlan(
   db: DbClient,
@@ -131,16 +123,20 @@ export async function persistChargePlan(
   plan: BillingPlan,
   billing: ChargeBillingRef,
   context: ChargeMaterializationContext,
-  now: string,
-  notice?: NoticeContext
-): Promise<{ rows: ChargeRow[]; dueDeliveryIds: string[] }> {
+  now: string
+): Promise<{ rows: ChargeRow[]; noticeChargeIds: string[] }> {
   const rows: ChargeRow[] = [];
-  const dueDeliveryIds: string[] = [];
+  const noticeChargeIds: string[] = [];
 
   for (const item of plan.charges) {
-    const recipient = context.recipients.get(item.personId);
+    // A conta a pagar without a payee has no one on the other side: the owner is both parties.
+    const recipient = item.userId ? context.recipients.get(item.userId) : undefined;
 
-    if (!recipient) {
+    if (item.userId && !recipient) {
+      throw new HttpNotFoundError('Contato indisponível.');
+    }
+
+    if (!item.userId && context.payer !== 'owner') {
       throw new HttpNotFoundError('Contato indisponível.');
     }
 
@@ -149,10 +145,8 @@ export async function persistChargePlan(
       data: {
         id: crypto.randomUUID(),
         creditor: { id: ownerId },
-        debtor_person: { id: recipient.personId },
-        ...(recipient.linkedUserId ? { recipient_user: { id: recipient.linkedUserId } } : {}),
-        recipient_name_snapshot: recipient.name,
-        ...(recipient.email ? { recipient_email_snapshot: recipient.email } : {}),
+        ...(recipient ? { debtor_user: { id: recipient.userId } } : {}),
+        payer: context.payer,
         billing: { id: billing.id },
         billing_type: billing.type,
         description: item.description,
@@ -172,9 +166,10 @@ export async function persistChargePlan(
     });
 
     rows.push(row);
+    noticeChargeIds.push(row.id);
 
-    dueDeliveryIds.push(...(await recordCreation(db, ownerId, row, recipient, now, notice)));
+    await recordCreation(db, ownerId, row, now);
   }
 
-  return { rows, dueDeliveryIds };
+  return { rows, noticeChargeIds };
 }

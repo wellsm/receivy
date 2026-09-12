@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft } from "@/lib/billing-draft";
-import { PixKeyForm } from "./pix-key-form";
+import { PixKeyFormScreen } from "@/components/forms/pix-key-form-screen";
 
 const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
 
@@ -29,7 +29,7 @@ function api(existing: unknown[] = []) {
     sent.push({ path, init });
 
     if (path === "/api/auth/me") {
-      return Response.json({ user: { email: "conta@example.com" } });
+      return Response.json({ user: { email: "conta@example.com", phone: "+5511987654321" } });
     }
 
     if (init.method === "POST" && path.endsWith("/default")) {
@@ -54,7 +54,7 @@ async function ready() {
 
 it("prefills the e-mail key with the account e-mail and keeps it editable", async () => {
   api();
-  render(<PixKeyForm />);
+  render(<PixKeyFormScreen />);
 
   const field = await screen.findByLabelText("E-mail Pix");
 
@@ -65,9 +65,20 @@ it("prefills the e-mail key with the account e-mail and keeps it editable", asyn
   expect(field).toHaveValue("conta@example.com.br");
 });
 
+it("prefills the phone key with the account phone once that type is picked", async () => {
+  api();
+  render(<PixKeyFormScreen />);
+
+  await vi.waitFor(() => expect(screen.getByLabelText("E-mail Pix")).toHaveValue("conta@example.com"));
+
+  await userEvent.setup().click(screen.getByRole("radio", { name: "Celular" }));
+
+  expect(screen.getByLabelText("Telefone celular")).toHaveValue("(11) 98765-4321");
+});
+
 it("switches the field label, placeholder and mask with the key type", async () => {
   api();
-  render(<PixKeyForm />);
+  render(<PixKeyFormScreen />);
 
   const user = await ready();
   await user.click(screen.getByRole("radio", { name: "CPF" }));
@@ -84,7 +95,7 @@ it("switches the field label, placeholder and mask with the key type", async () 
 
 it("pastes into the field and then offers to clear it", async () => {
   api();
-  render(<PixKeyForm />);
+  render(<PixKeyFormScreen />);
 
   const user = await ready();
 
@@ -101,16 +112,16 @@ it("pastes into the field and then offers to clear it", async () => {
   expect(screen.getByLabelText("CPF do titular")).toHaveValue("");
 });
 
-it("saves the unmasked key, the bank label and promotes it to the main key", async () => {
+it("saves the unmasked key without a nickname and promotes it to the main key", async () => {
   const sent = api();
-  render(<PixKeyForm />);
+  render(<PixKeyFormScreen />);
 
   const user = await ready();
   await user.click(screen.getByRole("radio", { name: "CPF" }));
   await user.type(screen.getByLabelText("CPF do titular"), "52998224725");
-  await user.type(screen.getByLabelText("Banco (opcional)"), "Nubank");
 
   expect(screen.getByLabelText("Definir como chave principal")).toBeChecked();
+  expect(screen.queryByLabelText("Banco (opcional)")).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Salvar chave Pix" }));
 
@@ -118,13 +129,13 @@ it("saves the unmasked key, the bank label and promotes it to the main key", asy
 
   const created = sent.find(entry => entry.init.method === "POST" && entry.path === "/api/financial/payment-methods");
 
-  expect(JSON.parse(String(created?.init.body))).toEqual({ pixKeyType: "cpf", pixKey: "52998224725", label: "Nubank" });
+  expect(JSON.parse(String(created?.init.body))).toEqual({ pixKeyType: "cpf", pixKey: "52998224725" });
   expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pix-1/default")).toBe(true);
 });
 
 it("leaves the main key toggle off when the account already has keys", async () => {
   const sent = api([{ ...saved, id: "pix-0", isDefault: true }]);
-  render(<PixKeyForm />);
+  render(<PixKeyFormScreen />);
 
   const user = await ready();
 
@@ -138,9 +149,9 @@ it("leaves the main key toggle off when the account already has keys", async () 
 });
 
 it("hands the new key back to the billing draft and returns to the form", async () => {
-  saveDraft({ ...EMPTY_BILLING_DRAFT("America/Sao_Paulo", "2026-09-08"), selected: ["p1"] }, "/charges/new");
+  saveDraft({ ...EMPTY_BILLING_DRAFT("America/Sao_Paulo", "2026-09-08"), selected: ["p1"] }, "/billings/new");
   api();
-  render(<PixKeyForm returnTo="/charges/new" required />);
+  render(<PixKeyFormScreen returnTo="/billings/new" required />);
 
   const user = await ready();
 
@@ -150,6 +161,6 @@ it("hands the new key back to the billing draft and returns to the form", async 
 
   await user.click(screen.getByRole("button", { name: "Salvar chave Pix" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/charges/new"));
+  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/billings/new"));
   expect(takeDraft()?.draft.pix).toBe("pix-1");
 });

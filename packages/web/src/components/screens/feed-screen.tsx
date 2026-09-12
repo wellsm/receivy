@@ -1,55 +1,34 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Bell, Loader2 } from "lucide-react";
 import {
+  DEFAULT_FEED_FILTERS,
   calendarDate,
   chargeAction,
   chargeBadges,
   chargeStateLabel,
   feedDayLabel,
+  feedFilterQuery,
   formatMoney,
   type ChargeSummary,
   type Direction,
+  type FeedFilters,
   type TimelineItem,
   type TimelinePage,
   type TimelineSummary,
+  REMINDER_QUOTA_MESSAGE,
 } from "@receivy/common";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
+import { FeedFiltersBar } from "@/components/app/feed-filters";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { StatusTag } from "@/components/ui/status-tag";
 
-type FeedFilter = {
-  label: string;
-  value: string;
-  badge?: (data: TimelinePage | null) => number;
-};
-
-const filters: FeedFilter[] = [
-  { label: "Todos", value: "", badge: (data) => (data ? data.summary.receivableCount + data.summary.payableCount : 0) },
-  { label: "A receber", value: "direction=receivable", badge: (data) => (data ? data.summary.receivableCount : 0) },
-  { label: "A pagar", value: "direction=payable", badge: (data) => (data ? data.summary.payableCount : 0) },
-  { label: "Hoje", value: "today" },
-  { label: "Esta semana", value: "week" },
-  { label: "Sem fim", value: "type=indefinite" },
-  { label: "Pendentes", value: "status=pending" },
-];
-
-function dateQuery(value: string): string {
-  const today = new Date();
-
-  if (value === "today") {
-    return `from=${calendarDate(today)}&to=${calendarDate(today)}`;
-  }
-
-  if (value === "week") {
-    const end = new Date(today);
-    end.setDate(end.getDate() + 7);
-    return `from=${calendarDate(today)}&to=${calendarDate(end)}`;
-  }
-
-  return value;
-}
+const FEED_ERROR = "Não foi possível carregar seu feed.";
+const REMIND_ERROR = "Não foi possível enviar o lembrete.";
 
 function itemDate(item: TimelineItem): string {
   if (item.kind === "charge") {
@@ -61,156 +40,163 @@ function itemDate(item: TimelineItem): string {
   }
 
   if (item.kind === "proof") {
-    return item.proof.createdAt.slice(0, 10);
+    return item.proof.sentAt.slice(0, 10);
   }
 
   return item.payment.paidAt.slice(0, 10);
 }
 
-function ReminderAction({ chargeId }: { chargeId: string }) {
-  const [status, setStatus] = useState<"idle" | "busy" | "sent" | "error">("idle");
-  const [message, setMessage] = useState("");
+function groupByDay(items: TimelineItem[]): [string, TimelineItem[]][] {
+  const groups = new Map<string, TimelineItem[]>();
 
-  async function remind() {
-    setStatus("busy");
-
-    try {
-      const response = await browserFetch(`/api/financial/charges/${chargeId}/reminders`, { method: "POST" });
-
-      if (!response.ok) {
-        throw new Error(await responseMessage(response, "Não foi possível enviar o lembrete."));
-      }
-
-      setStatus("sent");
-    } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Não foi possível enviar o lembrete.");
-      setStatus("error");
-    }
+  for (const item of items) {
+    const date = itemDate(item);
+    groups.set(date, [...(groups.get(date) ?? []), item]);
   }
 
-  if (status === "sent") {
-    return <span className="feed-action feed-action-done">Lembrete enviado</span>;
-  }
+  return [...groups];
+}
 
-  if (status === "error") {
-    return (
-      <span className="feed-action feed-action-error" role="alert">
-        {message}
-      </span>
-    );
-  }
+function pluralize(count: number): string {
+  return count === 1 ? "1 pendência" : `${count} pendências`;
+}
+
+function TotalCard({ label, amount, count, tone }: { label: string; amount: string; count: number; tone: "receivable" | "payable" }) {
+  const receivable = tone === "receivable";
+  const Arrow = receivable ? ArrowDownLeft : ArrowUpRight;
 
   return (
-    <button type="button" className="feed-action" disabled={status === "busy"} onClick={() => void remind()}>
-      Lembrar
-    </button>
+    <article className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-outline/40 bg-surface p-4">
+      <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-1 ${receivable ? "bg-primary" : "bg-red-600"}`} />
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-bold tracking-widest text-muted">{label}</span>
+        <Arrow size={18} aria-hidden="true" className={receivable ? "text-primary" : "text-red-600"} />
+      </div>
+      <strong className={`mt-2 text-xl font-extrabold tracking-tight ${receivable ? "text-primary" : "text-red-700"}`}>{amount}</strong>
+      <div className="mt-3 flex items-center gap-1.5 border-t border-outline/30 pt-2">
+        <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${receivable ? "bg-primary" : "bg-red-600"}`} />
+        <span className="text-[11px] font-semibold text-muted">{pluralize(count)}</span>
+      </div>
+    </article>
   );
 }
 
-function ChargeCard({ charge, direction, today }: { charge: ChargeSummary; direction: Direction; today: string }) {
+function ChargeCard({
+  charge,
+  direction,
+  today,
+  reminded,
+  onRemind,
+}: {
+  charge: ChargeSummary;
+  direction: Direction;
+  today: string;
+  reminded: string | null;
+  onRemind: () => void;
+}) {
+  const [confirmRemind, setConfirmRemind] = useState(false);
   const badges = chargeBadges(charge, today);
-  const stateLabel = chargeStateLabel(charge, direction);
   const action = chargeAction(charge, direction);
-  const amountClass = charge.state === "pending" ? direction : "settled";
-  const initial = charge.counterpartName.slice(0, 1).toUpperCase();
+  const settled = charge.state !== "pending";
+  const amountClass = settled ? "text-muted" : direction === "receivable" ? "text-primary" : "text-red-700";
+  const href = `/charges/${charge.id}`;
 
   const content = (
     <>
-      <div className="feed-card-top">
-        <span className="feed-avatar" aria-hidden="true">{initial}</span>
-        <div className="feed-card-lines">
-          <p className="feed-card-title">
-            <strong>{charge.counterpartName}</strong> · {charge.description}
+      <div className="flex items-center gap-3">
+        <InitialsAvatar name={charge.counterpartName} size={44} />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="m-0 truncate text-sm text-muted">
+            <strong className="font-bold text-ink">{charge.counterpartName}</strong> · {charge.description}
           </p>
           {badges.length > 0 && (
-            <div className="feed-card-badges">
+            <div className="flex flex-wrap gap-1.5">
               {badges.map((badge) => (
-                <span className={`feed-badge ${badge.tone}`} key={badge.label}>
-                  {badge.label}
-                </span>
+                <StatusTag key={badge.label} label={badge.label} tone={badge.tone} />
               ))}
             </div>
           )}
         </div>
       </div>
-      <div className="feed-card-divider" aria-hidden="true" />
-      <div className="feed-card-bottom">
-        <div className="feed-card-amount">
-          <strong className={`feed-amount ${amountClass}`}>{formatMoney(charge.amount)}</strong>
-          <span className="feed-card-state">{stateLabel}</span>
+      <div className="flex items-center justify-between border-t border-outline/30 pt-3">
+        <div className="flex flex-col">
+          <strong className={`text-lg font-extrabold tracking-tight ${amountClass}`}>{formatMoney(charge.amount)}</strong>
+          <span className="text-[11px] text-muted">{chargeStateLabel(charge, direction)}</span>
         </div>
+        {action?.kind === "remind" && (
+          <button
+            type="button"
+            disabled={reminded !== null}
+            onClick={() => setConfirmRemind(true)}
+            className="flex min-h-10 items-center rounded-lg bg-primary-soft/40 px-3 text-xs font-bold text-primary-strong"
+          >
+            {reminded ?? action.label}
+          </button>
+        )}
         {action?.kind === "open" && (
-          <Link className="feed-action" href={`/charges/${charge.id}`}>
+          <Link
+            href={href}
+            className={`flex min-h-10 items-center rounded-lg px-3 text-xs font-bold no-underline ${
+              action.label === "Pagar via Pix" ? "bg-primary text-white" : "bg-surface-muted text-primary-strong"
+            }`}
+          >
             {action.label}
           </Link>
         )}
-        {action?.kind === "remind" && <ReminderAction chargeId={charge.id} />}
       </div>
+      {confirmRemind && (
+        <ConfirmDialog
+          title="Enviar lembrete?"
+          icon={Bell}
+          tone="primary"
+          explanation={`Avisa ${charge.counterpartName} por notificação no app ou por e-mail, com o link de pagamento e a chave Pix. Só um lembrete a cada 24 horas.`}
+          confirmLabel="Enviar lembrete"
+          onConfirm={() => {
+            setConfirmRemind(false);
+            onRemind();
+          }}
+          onCancel={() => setConfirmRemind(false)}
+        />
+      )}
     </>
   );
 
+  const cardClass = "flex flex-col gap-3 rounded-2xl border border-outline/40 bg-surface p-4";
+
+  // A card with its own action keeps the action as the only control: nested links are not accessible.
   if (action) {
-    return <article className="feed-card">{content}</article>;
+    return <article className={cardClass}>{content}</article>;
   }
 
   return (
-    <Link className="feed-card feed-card-link" href={`/charges/${charge.id}`} aria-label={`Abrir cobrança ${charge.description}`}>
+    <Link href={href} aria-label={`Abrir cobrança ${charge.description}`} className={`${cardClass} text-inherit no-underline`}>
       {content}
     </Link>
   );
 }
 
-function PreviewCard({ item }: { item: Extract<TimelineItem, { kind: "billing_preview" }> }) {
-  return (
-    <div className="feed-card feed-card-muted">
-      <p className="feed-card-title">Previsto · {item.preview.description}</p>
-      <strong className="feed-amount settled">{formatMoney(item.preview.amount)}</strong>
-    </div>
-  );
-}
-
-function EventRow({ item }: { item: Extract<TimelineItem, { kind: "proof" | "payment" }> }) {
-  return <div className="feed-event-row">{item.kind === "payment" ? "Pagamento registrado" : "Comprovante"}</div>;
-}
-
 export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummary) => void } = {}) {
   const [data, setData] = useState<TimelinePage | null>(null);
-  const [filter, setFilter] = useState("");
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
+  const [reminded, setReminded] = useState<Record<string, string>>({});
   const generation = useRef(0);
   const today = calendarDate();
 
-  // The join flow leaves a one-shot notice behind. It is read after the first
-  // paint so the hydrated markup still matches the server, then consumed.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        const stored = window.sessionStorage.getItem("receivy.notice");
-
-        if (stored) {
-          setNotice(stored);
-          window.sessionStorage.removeItem("receivy.notice");
-        }
-      } catch {
-        // Storage may be blocked; the notice is a courtesy.
-      }
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, []);
-
   const load = useCallback(
-    async (nextFilter = filter, cursor?: string) => {
+    async (nextFilters = filters, cursor?: string) => {
       const requestGeneration = cursor ? generation.current : ++generation.current;
+
       setLoading(true);
       setError("");
+
       if (!cursor) {
         setData(null);
       }
 
-      const query = new URLSearchParams(dateQuery(nextFilter));
+      const query = feedFilterQuery(nextFilters);
+
       if (cursor) {
         query.set("cursor", cursor);
       }
@@ -219,7 +205,7 @@ export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummar
         const response = await browserFetch(`/api/financial/timeline${query.size ? `?${query}` : ""}`);
 
         if (!response.ok) {
-          throw new Error(await responseMessage(response, "Não foi possível carregar sua timeline."));
+          throw new Error(await responseMessage(response, FEED_ERROR));
         }
 
         const page = (await response.json()) as TimelinePage;
@@ -231,7 +217,7 @@ export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummar
         setData((previous) => (cursor && previous ? { ...page, items: [...previous.items, ...page.items] } : page));
       } catch (reason) {
         if (requestGeneration === generation.current) {
-          setError(reason instanceof Error ? reason.message : "Não foi possível carregar sua timeline.");
+          setError(reason instanceof Error ? reason.message : FEED_ERROR);
         }
       } finally {
         if (requestGeneration === generation.current) {
@@ -239,16 +225,16 @@ export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummar
         }
       }
     },
-    [filter],
+    [filters],
   );
 
   useEffect(() => {
     const requestGeneration = ++generation.current;
 
-    void browserFetch("/api/financial/timeline")
+    void browserFetch(`/api/financial/timeline?${feedFilterQuery(DEFAULT_FEED_FILTERS)}`)
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error(await responseMessage(response, "Não foi possível carregar sua timeline."));
+          throw new Error(await responseMessage(response, FEED_ERROR));
         }
 
         return response.json() as Promise<TimelinePage>;
@@ -260,7 +246,7 @@ export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummar
       })
       .catch((reason) => {
         if (requestGeneration === generation.current) {
-          setError(reason instanceof Error ? reason.message : "Não foi possível carregar sua timeline.");
+          setError(reason instanceof Error ? reason.message : FEED_ERROR);
         }
       })
       .finally(() => {
@@ -276,115 +262,129 @@ export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummar
     }
   }, [data, onSummary]);
 
-  const groups = new Map<string, TimelineItem[]>();
+  async function remind(chargeId: string) {
+    try {
+      const response = await browserFetch(`/api/financial/charges/${chargeId}/reminders`, { method: "POST" });
 
-  for (const item of data?.items ?? []) {
-    const date = itemDate(item);
-    groups.set(date, [...(groups.get(date) ?? []), item]);
+      if (response.status === 429) {
+        throw new Error(REMINDER_QUOTA_MESSAGE);
+      }
+
+      if (!response.ok) {
+        throw new Error(await responseMessage(response, REMIND_ERROR));
+      }
+
+      setReminded((current) => ({ ...current, [chargeId]: "Lembrete enviado" }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : REMIND_ERROR);
+    }
   }
 
+  const summary = data?.summary;
+  const counts = { receivable: summary?.receivableCount, payable: summary?.payableCount };
+  const groups = groupByDay(data?.items ?? []);
+
   return (
-    <div className="feed-page financial-page">
-      <p className="date-line">Sua visão de hoje</p>
+    <section className="flex flex-col gap-5 pt-2 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-start">
+      <div className="flex flex-col gap-5">
+        <div className="flex gap-3">
+          <TotalCard label="A RECEBER" amount={summary ? formatMoney(summary.receivable) : "—"} count={summary?.receivableCount ?? 0} tone="receivable" />
+          <TotalCard label="A PAGAR" amount={summary ? formatMoney(summary.payable) : "—"} count={summary?.payableCount ?? 0} tone="payable" />
+        </div>
 
-      {notice && (
-        <p role="status" className="feed-notice">
-          {notice}
-        </p>
-      )}
-
-      <div className="feed-totals">
-        <article className="feed-total receivable">
-          <ArrowDownLeft aria-hidden="true" size={20} />
-          <span>A RECEBER</span>
-          <strong>{data ? formatMoney(data.summary.receivable) : "—"}</strong>
-          <p>
-            <span className="feed-total-dot" aria-hidden="true" />
-            {data ? data.summary.receivableCount : 0} pendências
-          </p>
-        </article>
-        <article className="feed-total payable">
-          <ArrowUpRight aria-hidden="true" size={20} />
-          <span>A PAGAR</span>
-          <strong>{data ? formatMoney(data.summary.payable) : "—"}</strong>
-          <p>
-            <span className="feed-total-dot" aria-hidden="true" />
-            {data ? data.summary.payableCount : 0} pendências
-          </p>
-        </article>
+        <FeedFiltersBar
+          value={filters}
+          counts={counts}
+          onChange={(next) => {
+            setFilters(next);
+            void load(next);
+          }}
+        />
       </div>
 
-      <div className="feed-chip-strip" role="group" aria-label="Filtrar feed">
-        {filters.map((option) => (
+      <div className="flex flex-col gap-5">
+        {loading && (
+          <div role="status" aria-label="Carregando feed" className="my-6 flex justify-center">
+            <Loader2 size={28} aria-hidden="true" className="animate-spin text-primary" />
+          </div>
+        )}
+
+        {error && (
+          <div className="flex flex-col gap-2 rounded-xl bg-red-50 p-4">
+            <p role="alert" className="m-0 text-red-700">
+              {error}
+            </p>
+            <button type="button" className="flex min-h-12 items-center self-start font-bold text-red-700" onClick={() => void load()}>
+              Tentar novamente
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && data?.items.length === 0 && (
+          <div className="flex flex-col gap-2 rounded-2xl border border-outline/40 bg-surface p-5">
+            <h2 className="m-0 text-2xl font-extrabold text-primary-strong">Sua timeline começa aqui</h2>
+            <p className="m-0 text-sm leading-6 text-muted">Crie uma conta na aba Contas ou entre com o e-mail em que recebeu uma.</p>
+          </div>
+        )}
+
+        {groups.map(([date, items]) => {
+          const isToday = date === today;
+
+          return (
+            <section key={date} className="flex flex-col gap-3">
+              <h2 className="m-0 flex items-center gap-2 px-1">
+                <span aria-hidden="true" className={`h-2 w-2 rounded-full ${isToday ? "bg-primary" : "bg-outline"}`} />
+                <span className={`text-sm font-bold tracking-wide ${isToday ? "text-primary" : "text-muted"}`}>{feedDayLabel(date, today)}</span>
+              </h2>
+              {items.map((item, index) => {
+                if (item.kind === "charge") {
+                  return (
+                    <ChargeCard
+                      key={item.charge.id}
+                      charge={item.charge}
+                      direction={item.direction}
+                      today={today}
+                      reminded={reminded[item.charge.id] ?? null}
+                      onRemind={() => void remind(item.charge.id)}
+                    />
+                  );
+                }
+
+                if (item.kind === "billing_preview") {
+                  return (
+                    <div key={`${item.kind}-${index}`} className="flex flex-col gap-1 rounded-2xl border border-dashed border-outline bg-surface p-4">
+                      <p className="m-0 text-sm font-bold text-ink">{item.preview.description}</p>
+                      <span className="text-xs text-muted">Previsto · {formatMoney(item.preview.amount)} · ainda não é cobrança</span>
+                    </div>
+                  );
+                }
+
+                // A charge carries one payment and one live proof, so the kind and the charge name the row.
+                const chargeId = item.kind === "payment" ? item.payment.chargeId : item.proof.chargeId;
+
+                return (
+                  <div key={`${item.kind}-${chargeId}`} className="rounded-2xl bg-surface-muted px-4 py-3">
+                    <span className="text-xs font-semibold text-muted">
+                      {item.kind === "payment" ? `Pagamento registrado · ${formatMoney(item.payment.amount)}` : "Comprovante enviado"}
+                    </span>
+                  </div>
+                );
+              })}
+            </section>
+          );
+        })}
+
+        {data?.nextCursor && (
           <button
-            key={option.label}
             type="button"
-            className={filter === option.value ? "feed-chip is-active" : "feed-chip"}
-            onClick={() => {
-              setFilter(option.value);
-              void load(option.value);
-            }}
+            disabled={loading}
+            onClick={() => void load(filters, data.nextCursor ?? undefined)}
+            className="flex min-h-12 items-center justify-center rounded-xl border border-outline font-bold text-primary"
           >
-            {option.label}
-            {option.badge && (
-              <span className="feed-chip-badge" aria-hidden="true">
-                {option.badge(data)}
-              </span>
-            )}
+            Carregar mais
           </button>
-        ))}
+        )}
       </div>
-
-      {error && (
-        <p className="login-error" role="alert">
-          {error} <button type="button" onClick={() => void load()}>Tentar novamente</button>
-        </p>
-      )}
-
-      {loading && <p role="status">Carregando timeline…</p>}
-
-      {!loading && !error && data?.items.length === 0 && (
-        <section className="empty-timeline">
-          <div className="timeline-rail">
-            <span />
-          </div>
-          <div className="empty-copy">
-            <h2>Sua timeline começa aqui</h2>
-            <p>Crie uma cobrança ou entre com o e-mail em que recebeu uma.</p>
-            <Link className="primary-link" href="/charges/new">
-              Criar cobrança
-            </Link>
-          </div>
-        </section>
-      )}
-
-      {[...groups].map(([date, items]) => (
-        <section className="feed-day" key={date}>
-          <h2 className="feed-day-heading">
-            <span className="feed-day-dot" aria-hidden="true" />
-            {feedDayLabel(date, today)}
-          </h2>
-          <div className="feed-day-items">
-            {items.map((item, index) => {
-              if (item.kind === "charge") {
-                return <ChargeCard charge={item.charge} direction={item.direction} today={today} key={item.charge.id} />;
-              }
-
-              if (item.kind === "billing_preview") {
-                return <PreviewCard item={item} key={`preview-${index}`} />;
-              }
-
-              return <EventRow item={item} key={`${item.kind}-${index}`} />;
-            })}
-          </div>
-        </section>
-      ))}
-
-      {data?.nextCursor && (
-        <button className="secondary-button" disabled={loading} onClick={() => void load(filter, data.nextCursor ?? undefined)}>
-          Carregar mais
-        </button>
-      )}
-    </div>
+    </section>
   );
 }

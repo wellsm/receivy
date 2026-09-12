@@ -14,6 +14,14 @@ export interface BillingSchema extends Database.Schema {
   end_date?: String.Date;
   timezone: String.Max<100>;
   payment_method_id?: String.UUID;
+  /** 'payable' is the owner's own bill; null (legacy) or 'receivable' means the owner collects from contacts. */
+  direction?: 'receivable' | 'payable';
+  /** Conta a pagar only: the person who receives (users.id); null when the bill is the owner's alone. */
+  payee_user_id?: String.UUID;
+  /** Conta a pagar only: the key typed on the billing (it belongs to whoever receives, not to a wallet). */
+  pix_key_type?: 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+  pix_key?: String.Max<254>;
+  pix_label?: String.Max<120>;
   /** JSON array of { offsetDays, enabled }; null falls back to the owner's notification preferences. */
   reminders?: String.Max<2000>;
   state: 'active' | 'paused' | 'ended';
@@ -27,8 +35,9 @@ export interface BillingSchema extends Database.Schema {
 export interface AllocationSchema extends Database.Schema {
   id: String.UUID;
   billing_id: String.UUID;
-  person_id?: String.UUID;
-  kind: 'owner' | 'person';
+  /** The participant (users.id) on a 'user' part; null on the owner part. */
+  user_id?: String.UUID;
+  kind: 'owner' | 'user';
   split_mode: 'fixed' | 'equal' | 'percentage' | 'shares';
   basis_points?: number;
   /** Quota weight for `shares` splits; null for every other mode. */

@@ -2,7 +2,7 @@ import { LOGIN_CODE_TTL_MS, RESEND_COOLDOWN_MS } from "@receivy/common";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { writePendingLogin } from "@/lib/auth/pending-login";
-import { CodeLoginForm } from "./code-login-form";
+import { CodeScreen } from "@/components/screens/code-screen";
 
 const replace = vi.fn();
 const push = vi.fn();
@@ -18,16 +18,16 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-describe("CodeLoginForm", () => {
+describe("CodeScreen", () => {
   it("redirects to /login when there is no pending login", async () => {
-    render(<CodeLoginForm />);
+    render(<CodeScreen />);
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
   });
 
   it("filters non-digit characters and enables confirm only at six digits", () => {
     writePendingLogin({ email: "ana@example.com", sentAt: Date.now(), nextPath: "/" });
-    render(<CodeLoginForm />);
+    render(<CodeScreen />);
 
     const input = screen.getByLabelText("Código de 6 dígitos");
     const confirm = screen.getByRole("button", { name: /Confirmar e Entrar/ });
@@ -45,7 +45,7 @@ describe("CodeLoginForm", () => {
   it("disables confirm and shows the expiry message once the code expires", () => {
     vi.useFakeTimers();
     writePendingLogin({ email: "ana@example.com", sentAt: Date.now(), nextPath: "/" });
-    render(<CodeLoginForm />);
+    render(<CodeScreen />);
 
     const input = screen.getByLabelText("Código de 6 dígitos");
     fireEvent.change(input, { target: { value: "123456" } });
@@ -60,7 +60,7 @@ describe("CodeLoginForm", () => {
   it("disables resend for the cooldown window after any code send", () => {
     vi.useFakeTimers();
     writePendingLogin({ email: "ana@example.com", sentAt: Date.now(), nextPath: "/" });
-    render(<CodeLoginForm />);
+    render(<CodeScreen />);
 
     const resend = screen.getByRole("button", { name: /Reenviar/ });
     expect(resend).toBeDisabled();
@@ -78,7 +78,7 @@ describe("CodeLoginForm", () => {
       message: "Código inválido ou expirado. Peça um novo código e tente novamente.",
     }), { status: 401, headers: { "content-type": "application/json" } })));
 
-    render(<CodeLoginForm />);
+    render(<CodeScreen />);
     fireEvent.change(screen.getByLabelText("Código de 6 dígitos"), { target: { value: "000000" } });
     fireEvent.click(screen.getByRole("button", { name: /Confirmar e Entrar/ }));
 

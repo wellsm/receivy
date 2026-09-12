@@ -1,27 +1,26 @@
 "use client";
 
 import { formatRemaining, LOGIN_CODE_TTL_MS, maskEmail, RESEND_COOLDOWN_MS } from "@receivy/common";
-import { ArrowLeft, ArrowRight, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Lock, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import { CODE_LENGTH, CodeBoxes } from "@/components/ui/code-boxes";
 import { readPendingLogin, writePendingLogin, type PendingLogin } from "@/lib/auth/pending-login";
 import { responseMessage } from "@/lib/financial-response";
 
-const CODE_LENGTH = 6;
-
-export function CodeLoginForm() {
+export function CodeScreen() {
   const router = useRouter();
   // Read once when the component mounts; readPendingLogin() only touches
   // sessionStorage (unavailable during any server render) and safely
   // returns null there, so this stays SSR-safe without needing an effect.
   const [pending, setPending] = useState<PendingLogin | null>(() => readPendingLogin());
-  const [digits, setDigits] = useState("");
-  const [focused, setFocused] = useState(false);
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -39,14 +38,16 @@ export function CodeLoginForm() {
     return null;
   }
 
-  const remainingMs = pending.sentAt + LOGIN_CODE_TTL_MS - now;
-  const expired = remainingMs <= 0;
-  const cooldownMs = pending.sentAt + RESEND_COOLDOWN_MS - now;
-  const cooling = cooldownMs > 0;
+  const remaining = pending.sentAt + LOGIN_CODE_TTL_MS - now;
+  const expired = remaining <= 0;
+  const cooldown = pending.sentAt + RESEND_COOLDOWN_MS - now;
+  const canResend = !busy && !resending && cooldown <= 0;
+  const canConfirm = !busy && !expired && code.length === CODE_LENGTH;
 
-  async function confirmCode(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!pending) {
+
+    if (!pending || !canConfirm) {
       return;
     }
 
@@ -57,14 +58,11 @@ export function CodeLoginForm() {
       const response = await fetch("/api/auth/email/confirm", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: pending.email, code: digits }),
+        body: JSON.stringify({ email: pending.email, code }),
       });
 
       if (!response.ok) {
-        setError(await responseMessage(
-          response,
-          "Código inválido ou expirado. Peça um novo código e tente novamente.",
-        ));
+        setError(await responseMessage(response, "Código inválido ou expirado. Peça um novo código e tente novamente."));
         return;
       }
 
@@ -76,13 +74,14 @@ export function CodeLoginForm() {
     }
   }
 
-  async function resendCode() {
-    if (!pending) {
+  async function resend() {
+    if (!pending || !canResend) {
       return;
     }
 
     setResending(true);
     setError(null);
+    setNotice(null);
 
     try {
       const response = await fetch("/api/auth/email/code", {
@@ -99,7 +98,8 @@ export function CodeLoginForm() {
       const refreshed = { ...pending, sentAt: Date.now() };
       writePendingLogin(refreshed);
       setPending(refreshed);
-      setDigits("");
+      setCode("");
+      setNotice("Enviamos um novo código.");
     } catch {
       setError("Não foi possível enviar o código agora.");
     } finally {
@@ -107,84 +107,62 @@ export function CodeLoginForm() {
     }
   }
 
-  const activeIndex = focused ? Math.min(digits.length, CODE_LENGTH - 1) : -1;
-
   return (
-    <div className="login-code-page">
-      <div className="login-topbar">
-        <Link className="login-back-link" href="/login">
-          <ArrowLeft aria-hidden="true" size={18} />
-          Voltar
+    <div className="mx-auto flex w-full max-w-md flex-col md:max-w-lg">
+      <header className="grid h-14 grid-cols-[44px_1fr_44px] items-center">
+        <Link href="/login" aria-label="Voltar" className="flex h-11 w-11 items-center justify-center rounded-full text-primary-strong hover:bg-surface-muted">
+          <ArrowLeft aria-hidden="true" size={22} />
         </Link>
-        <span className="login-secure-pill">
-          <ShieldCheck aria-hidden="true" size={14} />
-          Conexão Segura
-        </span>
-      </div>
+        <span className="text-center text-base font-bold text-primary-strong">Código</span>
+      </header>
 
-      <div className="login-card login-code-card">
-        <div className="login-shield-square" aria-hidden="true">
-          <ShieldCheck size={28} />
+      <div className="mt-4 md:rounded-3xl md:border md:border-outline/60 md:bg-surface md:p-8">
+        <div className="flex flex-col items-center">
+          <div aria-hidden="true" className="flex h-20 w-20 items-center justify-center rounded-3xl bg-primary-soft/40 text-primary-strong">
+            <ShieldCheck size={36} />
+          </div>
+          <h1 className="m-0 mt-6 text-center text-3xl font-extrabold tracking-tight text-primary-strong">Digite o código de 6 dígitos</h1>
+          <p className="m-0 mt-3 px-6 text-center text-base leading-6 text-muted">Enviamos um código de segurança temporário para</p>
+          <p className="m-0 text-center text-base font-bold text-ink">{maskEmail(pending.email)}</p>
         </div>
-        <h2 className="login-code-title">Digite o código de 6 dígitos</h2>
-        <p className="login-code-copy">
-          Enviamos um código de segurança temporário para <strong>{maskEmail(pending.email)}</strong>
-        </p>
 
-        <form onSubmit={confirmCode}>
-          <p className="login-code-field-label">Código de Verificação</p>
-          <div className="code-boxes">
-            <div className="code-boxes__row" aria-hidden="true">
-              {Array.from({ length: CODE_LENGTH }).map((_, index) => (
-                <span
-                  key={index}
-                  className={index === activeIndex ? "code-boxes__digit code-boxes__digit--active" : "code-boxes__digit"}
-                >
-                  {digits[index] ?? ""}
-                </span>
-              ))}
-            </div>
-            <input
-              id="login-code"
-              className="code-boxes__input"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={CODE_LENGTH}
-              autoFocus
-              aria-label="Código de 6 dígitos"
-              value={digits}
-              onChange={(event) => setDigits(event.target.value.replace(/\D/g, "").slice(0, CODE_LENGTH))}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-            />
+        <form onSubmit={submit}>
+          <p className="m-0 mb-3 mt-8 text-center text-sm font-semibold text-ink">Código de Verificação</p>
+          <CodeBoxes value={code} onChange={setCode} disabled={busy || expired} />
+
+          <div className="mt-3 flex items-center gap-2">
+            <Lock aria-hidden="true" size={16} className="shrink-0 text-muted" />
+            {expired ? (
+              <p className="m-0 text-sm font-semibold text-red-700">Código expirado. Peça um novo código.</p>
+            ) : (
+              <p className="m-0 text-sm text-muted">
+                Expira em <strong className="font-extrabold text-ink">{formatRemaining(remaining)}</strong>
+              </p>
+            )}
           </div>
 
-          <p className={expired ? "login-countdown login-countdown--expired" : "login-countdown"}>
-            {expired ? "Código expirado. Peça um novo código." : `Expira em ${formatRemaining(remainingMs)}`}
-          </p>
-
-          <button
-            className="login-submit"
-            type="submit"
-            disabled={busy || expired || digits.length !== CODE_LENGTH}
-          >
-            {busy ? "Confirmando…" : "Confirmar e Entrar"}
-            {!busy && <ArrowRight aria-hidden="true" size={19} />}
+          <button type="submit" disabled={!canConfirm} className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-extrabold text-white transition active:opacity-80 disabled:opacity-50">
+            Confirmar e Entrar
+            {busy ? <Loader2 aria-hidden="true" size={20} className="animate-spin" /> : <ArrowRight aria-hidden="true" size={20} />}
           </button>
         </form>
 
-        {error && <p className="login-error" role="alert">{error}</p>}
+        {error && (
+          <p role="alert" className="m-0 mt-4 rounded-xl bg-red-50 p-3 text-sm leading-5 text-red-700">
+            {error}
+          </p>
+        )}
+        {notice && !error && (
+          <p aria-live="polite" className="m-0 mt-4 text-center text-sm text-primary">
+            {notice}
+          </p>
+        )}
 
-        <div className="login-help">
-          <span>Não recebeu o código?</span>
-          <button
-            type="button"
-            className="login-text-button"
-            onClick={() => void resendCode()}
-            disabled={resending || cooling}
-          >
-            <RefreshCw aria-hidden="true" size={14} />
-            {cooling ? `Reenviar em ${formatRemaining(cooldownMs)}` : "Reenviar código"}
+        <div className="mt-8 border-t border-outline/50 pt-6">
+          <p className="m-0 text-center text-base font-semibold text-ink">Não recebeu o código?</p>
+          <button type="button" disabled={!canResend} onClick={() => void resend()} className="mt-2 flex min-h-12 w-full items-center justify-center gap-2 text-base font-bold text-primary transition disabled:opacity-50">
+            <RefreshCw aria-hidden="true" size={18} />
+            {cooldown > 0 ? `Reenviar em ${formatRemaining(cooldown)}` : "Reenviar código"}
           </button>
         </div>
       </div>

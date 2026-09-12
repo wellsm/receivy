@@ -1,6 +1,9 @@
 import type { Http } from '@ez4/gateway';
-import type { sessionAuthorizer } from '../authorizers/session';
-import type { createPublicLinkHandler, publicChargeHandler, revokePublicLinkHandler, rotatePublicLinkHandler } from '../public/endpoints';
+import type { sessionAuthorizer } from '../common/authorizers/session';
+import type { publicChargeHandler } from './endpoints/charge';
+import type { createPublicLinkHandler } from './endpoints/create-link';
+import type { revokePublicLinkHandler } from './endpoints/revoke-link';
+import type { rotatePublicLinkHandler } from './endpoints/rotate-link';
 
 export type PublicRoutes = [
   Http.UseRoute<{

@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { JoinInvite } from "./join-invite";
+import { JoinInviteScreen } from "@/components/screens/join-invite-screen";
 
 const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
 
@@ -27,7 +27,7 @@ const view: PublicInviteView = {
 };
 
 it("shows the invite summary and sends a signed out visitor to the login with the return path", () => {
-  render(<JoinInvite token="tok-1" view={view} authenticated={false} />);
+  render(<JoinInviteScreen token="tok-1" view={view} authenticated={false} />);
 
   expect(screen.getByText("Lucas")).toBeInTheDocument();
   expect(screen.getByText("te convidou para", { exact: false })).toBeInTheDocument();
@@ -41,9 +41,9 @@ it("shows the invite summary and sends a signed out visitor to the login with th
 });
 
 it("accepts the invite and opens the new charge", async () => {
-  vi.mocked(browserFetch).mockResolvedValue(Response.json({ billingId: "b1", chargeId: "c1", joinedSplit: true }));
+  vi.mocked(browserFetch).mockResolvedValue(Response.json({ billingId: "b1", chargeId: "c1", joinedSplit: true, awaitingOwner: false }));
   const user = userEvent.setup();
-  render(<JoinInvite token="tok-1" view={view} authenticated />);
+  render(<JoinInviteScreen token="tok-1" view={view} authenticated />);
 
   await user.click(screen.getByRole("button", { name: "Participar" }));
 
@@ -53,9 +53,9 @@ it("accepts the invite and opens the new charge", async () => {
 });
 
 it("stores a notice and goes to the feed when the split was not joined", async () => {
-  vi.mocked(browserFetch).mockResolvedValue(Response.json({ billingId: "b1", chargeId: null, joinedSplit: false }));
+  vi.mocked(browserFetch).mockResolvedValue(Response.json({ billingId: "b1", chargeId: null, joinedSplit: false, awaitingOwner: false }));
   const user = userEvent.setup();
-  render(<JoinInvite token="tok-1" view={view} authenticated />);
+  render(<JoinInviteScreen token="tok-1" view={view} authenticated />);
 
   await user.click(screen.getByRole("button", { name: "Participar" }));
 
@@ -63,10 +63,21 @@ it("stores a notice and goes to the feed when the split was not joined", async (
   expect(window.sessionStorage.getItem("receivy.notice")).toBe("Você entrou como contato; o criador ajusta a divisão.");
 });
 
+it("stores the awaiting notice and goes to the feed while the owner has to confirm the guest", async () => {
+  vi.mocked(browserFetch).mockResolvedValue(Response.json({ billingId: "b1", chargeId: null, joinedSplit: false, awaitingOwner: true }));
+  const user = userEvent.setup();
+  render(<JoinInviteScreen token="tok-1" view={view} authenticated />);
+
+  await user.click(screen.getByRole("button", { name: "Participar" }));
+
+  expect(routerMock.replace).toHaveBeenCalledWith("/");
+  expect(window.sessionStorage.getItem("receivy.notice")).toBe("Você entrou. O dono da conta vai confirmar sua participação e a cobrança aparece no seu feed.");
+});
+
 it("shows the conflict message returned by the API", async () => {
   vi.mocked(browserFetch).mockResolvedValue(Response.json({ code: "CONFLICT" }, { status: 409 }));
   const user = userEvent.setup();
-  render(<JoinInvite token="tok-1" view={view} authenticated />);
+  render(<JoinInviteScreen token="tok-1" view={view} authenticated />);
 
   await user.click(screen.getByRole("button", { name: "Participar" }));
 
@@ -79,7 +90,7 @@ it("shows the conflict message returned by the API", async () => {
 it("shows the expired copy when the invite is gone", async () => {
   vi.mocked(browserFetch).mockResolvedValue(Response.json({ code: "NOT_FOUND" }, { status: 404 }));
   const user = userEvent.setup();
-  render(<JoinInvite token="tok-1" view={view} authenticated />);
+  render(<JoinInviteScreen token="tok-1" view={view} authenticated />);
 
   await user.click(screen.getByRole("button", { name: "Participar" }));
 
@@ -87,7 +98,7 @@ it("shows the expired copy when the invite is gone", async () => {
 });
 
 it("exposes nothing but the expired notice for an unusable invite", () => {
-  render(<JoinInvite token="tok-1" view={{ expired: true }} authenticated />);
+  render(<JoinInviteScreen token="tok-1" view={{ expired: true }} authenticated />);
 
   expect(screen.getByText("Convite expirado. Peça um novo link.")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Participar" })).not.toBeInTheDocument();

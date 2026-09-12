@@ -75,6 +75,10 @@ export function chargeBadges(charge: ChargeSummary, today: string): ChargeBadge[
     badges.push({ label: 'Comprovante enviado', tone: 'info' });
   }
 
+  if (charge.payer === 'owner' && charge.ownedByViewer) {
+    badges.push({ label: 'Minha conta', tone: 'info' });
+  }
+
   return badges;
 }
 
@@ -96,9 +100,29 @@ export function chargeAction(charge: ChargeSummary, direction: Direction): Charg
     return null;
   }
 
+  const ownBill = charge.payer === 'owner';
+
   if (direction === 'receivable') {
-    return charge.proofState === 'pending' ? { kind: 'open', label: 'Ver comprovante' } : { kind: 'remind', label: 'Lembrar' };
+    if (charge.proofState === 'pending') {
+      return { kind: 'open', label: 'Ver comprovante' };
+    }
+
+    // The payee of a conta a pagar only confirms; reminders belong to whoever collects, and only
+    // reach someone with an address on file.
+    if (ownBill || charge.counterpartReachable === false) {
+      return { kind: 'open', label: 'Ver cobrança' };
+    }
+
+    return { kind: 'remind', label: 'Lembrar' };
   }
 
-  return charge.proofState === 'pending' ? { kind: 'open', label: 'Ver cobrança' } : { kind: 'open', label: 'Pagar via Pix' };
+  if (charge.proofState === 'pending') {
+    return { kind: 'open', label: 'Ver cobrança' };
+  }
+
+  if (ownBill && charge.ownedByViewer && !charge.hasPix) {
+    return { kind: 'open', label: 'Marcar pago' };
+  }
+
+  return { kind: 'open', label: 'Pagar via Pix' };
 }

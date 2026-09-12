@@ -14,7 +14,7 @@ type ProfileScreenProps = {
   client?: Pick<AccountClient, "profile" | "save" | "logout" | "erase">;
   store?: Pick<ProfileStore, "remember">;
   version?: string;
-  onOpenPeople?: () => void;
+  onOpenContacts?: () => void;
   onOpenPix?: () => void;
   onLoggedOut?: () => void;
 };
@@ -82,7 +82,7 @@ export function ProfileScreen({
   client = accountClient,
   store = profileStore,
   version = Constants.expoConfig?.version ?? "1.0.0",
-  onOpenPeople,
+  onOpenContacts,
   onOpenPix,
   onLoggedOut,
 }: ProfileScreenProps) {
@@ -264,7 +264,7 @@ export function ProfileScreen({
                     label="Gerenciar contatos"
                     title="Meus Contatos"
                     subtitle="Gerenciar pessoas e dados salvos de cobrança"
-                    onPress={onOpenPeople}
+                    onPress={onOpenContacts}
                   />
 
                   <View className="mx-4 h-px bg-outline/40" />

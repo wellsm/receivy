@@ -90,7 +90,7 @@ componentes, tipos e builds; não substitui essa execução com Postgres.
 Com Node 24, pnpm e Docker disponíveis, execute a partir da raiz:
 
 ```sh
-pnpm --filter @receivy/api db:up
+pnpm --filter @receivy/api docker:up
 pnpm --filter @receivy/api test:integration
 pnpm --filter @receivy/api check-types:test
 pnpm verify
@@ -116,21 +116,26 @@ emulador, sem exigir permissão de acessibilidade do terminal. Fluxos em
 `packages/mobile/e2e/smoke/*.yaml`, na ordem numérica, iguais para as duas
 plataformas. Pré-requisitos:
 
-1. `packages/api/local.env` com todas as variáveis de `local.env.example` mais o
-   bloco `PROOF_*` de `proof-local.env.example` (modo local explícito).
+1. `packages/api/local.env` com todas as variáveis de `local.env.example`. Os
+   comprovantes usam o bucket `ProofFiles` que o próprio `serve --local` serve em
+   `http://localhost:3735/local-receivy-proof-files` (arquivos em `.ez4/proof-files`).
 2. Banco local com o schema completo. `ez4 serve --local` não cria tabelas novas
    em um banco existente; na primeira execução após novos módulos rode uma vez
    `node --env-file=local.env ./node_modules/@ez4/project/bin/cli.mjs serve -e local.env --local --reset`
    (apaga o banco descartável `receivy` da porta 55434, nunca outro).
-3. `packages/web/.env.local` com `EZ4_API_URL` e `PROOF_UPLOAD_ORIGIN`; API, web e
-   `scripts/local-proof-storage.ts` em execução.
+3. `packages/web/.env.local` com `EZ4_API_URL` e `PROOF_UPLOAD_ORIGIN=http://localhost:3735`;
+   API e web em execução.
 4. `packages/mobile/.env.local` copiado do exemplo e
    `RECEIVY_LOCAL_NATIVE=1 npx expo run:ios` para o build de desenvolvimento.
 
-Com `EMAIL_TRANSPORT=file` (padrão do `local.env.example`) o código chega em
-`packages/api/.ez4/emails/<data>-seu-codigo-de-acesso-ao-receivy-<id>.eml`; o
-arquivo mais recente é o pedido em curso. Para automação sem ler arquivos, ou
-com `disabled`, `node --env-file=local.env scripts/local-login-code.mjs <e-mail>`
+Com `EMAIL_TRANSPORT=mailpit` (padrão do `local.env.example`) o código chega na
+caixa do Mailpit em <http://127.0.0.1:8025>; a mensagem mais recente é o pedido em
+curso. Para asserções automatizadas, `createMailpitMailbox()` de
+`packages/api/src/vendors/mailpit/mailbox.ts` expõe `clear`, `search`, `waitFor` e `text`
+sobre a mesma API REST. Com `EMAIL_TRANSPORT=file` o código vira
+`packages/api/.ez4/emails/<data>-seu-codigo-de-acesso-ao-receivy-<id>.eml`. Sem
+nenhum dos dois, ou com `disabled`,
+`node --env-file=local.env scripts/local-login-code.mjs <e-mail>`
 recupera o código vigente pelo HMAC do `LOGIN_CODE_HASH_KEY` local; o script
 recusa qualquer `APP_STAGE` diferente de `local` ou banco fora do loopback.
 
@@ -146,16 +151,17 @@ de comprovante pelo seletor de arquivos e push real não foram exercitados.
 Android: `RECEIVY_LOCAL_NATIVE=1 npx expo run:android` gera o APK de debug; se o
 AVD acusar `INSTALL_FAILED_INSUFFICIENT_STORAGE`, use outro AVD com
 `disk.dataPartition.size` maior em vez de apagar apps do existente. Faça
-`adb reverse` das portas 8081/3735/3000/3736 e abra o dev client com
+`adb reverse` das portas 8081/3735/3000 e abra o dev client com
 `receivy://expo-development-client/?url=http%3A%2F%2F10.0.2.2%3A8081`; o
 `launchApp` do Maestro abre só o launcher do dev client. Não use `hideKeyboard`:
 no Android ele envia Back e fecha o app na tela raiz.
 
 ## Contrato e acessibilidade no web
 
-`packages/web/src/lib/openapi-contract.test.ts` confronta `docs/openapi.json` com a
+`packages/web/src/lib/openapi-contract.test.ts` confronta `docs/api-oas.yml` com a
 allowlist do BFF (`ALLOWED_ROUTES`, exportada só para isso) e com os literais de
-caminho dos clientes Expo. Ao adicionar uma rota na API: regenere a OpenAPI, inclua
+caminho dos clientes Expo. Ao adicionar uma rota na API: regenere a OpenAPI
+(`pnpm --filter @receivy/api openapi:generate`, gerador `@ez4/docs-gateway`), inclua
 a rota na allowlist ou em `DEDICATED_BFF`/`WEB_EXCLUSIONS`, e chame-a no cliente
 nativo ou registre o adiamento em `NATIVE_DEFERRED`. O teste falha em qualquer
 deriva entre as três superfícies.

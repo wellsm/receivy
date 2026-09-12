@@ -68,7 +68,7 @@ describe("session gate", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const response = await proxy(request("/people", { [REFRESH_COOKIE]: "old-refresh" }));
+    const response = await proxy(request("/contacts", { [REFRESH_COOKIE]: "old-refresh" }));
 
     expect(response.status).toBe(200);
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://api.receivy.example/auth/refresh");

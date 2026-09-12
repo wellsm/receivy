@@ -1,5 +1,5 @@
-import type { BillingType } from './billing';
-import type { Person } from './people';
+import type { BillingPreview, BillingType } from './billing';
+import type { Contact } from './contacts';
 
 export type Money = {
   amountCents: number;
@@ -25,38 +25,49 @@ export type ChargeSummary = {
   counterpartName: string;
   /** State of the most recent proof on this charge, if any. */
   proofState: ProofState | null;
+  /** Who pays: a contact (default) or the billing owner on a conta a pagar. Omitted by older payloads means 'person'. */
+  payer?: 'person' | 'owner';
+  /** True when the viewer owns the billing behind this charge; owner powers key on this, never on direction. */
+  ownedByViewer?: boolean;
+  /** A Pix key is attached; the feed offers "Pagar via Pix" only then. */
+  hasPix?: boolean;
+  /** The other side has an e-mail or phone on file, so a reminder can reach them; false hides "Lembrar". */
+  counterpartReachable?: boolean;
 };
 
-export type ProofSummary = {
-  id: string;
-  chargeId: string;
+export type ProofMime = 'image/jpeg' | 'image/png' | 'application/pdf';
+
+export type ProofFile = { name: string; mime: ProofMime; size: number };
+
+/** The single file attached to a charge; the history of earlier ones lives in the events log. */
+export type ChargeProof = {
   state: ProofState;
-  createdAt: string;
-};
-
-export type ProofDetail = ProofSummary & {
-  originalName: string;
-  mime: 'image/jpeg' | 'image/png' | 'application/pdf';
-  size: number;
-  reason: string | null;
-  closureReason: 'paid' | 'cancelled' | null;
+  file: ProofFile;
+  sentAt: string;
   reviewedAt: string | null;
+  /** The creditor's words when rejecting. */
+  reason: string | null;
+  /** True when the viewer is the one who sent it, which is what allows taking it back. */
+  sentByViewer: boolean;
 };
-export type ProofUploadInput = { filename: string; mime: 'image/jpeg' | 'image/png' | 'application/pdf'; size: number };
-export type ProofUploadIntent = { id: string; uploadUrl: string; expiresAt: string };
 
-export type PaymentSummary = {
-  id: string;
-  chargeId: string;
-  amount: Money;
-  paidAt: string;
-};
+export type ProofUploadInput = { filename: string; mime: ProofMime; size: number };
+
+/** A signed PUT the client uses directly against the bucket; the API learns about the file from the bucket event. */
+export type ProofUploadTicket = { uploadUrl: string; expiresAt: string };
+
+/** What the public payment page may know: its own upload, never the charge's history. */
+export type PublicProofState = { state: ProofState | 'uploading' | null; reason: string | null; file: ProofFile | null };
+
+export type ProofSummary = { chargeId: string; state: ProofState; sentAt: string };
+
+export type PaymentSummary = { chargeId: string; amount: Money; paidAt: string };
 
 export type TimelineItem =
   | { kind: 'charge'; direction: Direction; charge: ChargeSummary }
   | { kind: 'proof'; direction: Direction; proof: ProofSummary }
   | { kind: 'payment'; direction: Direction; payment: PaymentSummary }
-  | { kind: 'billing_preview'; direction: 'receivable'; preview: import('./billing').BillingPreview };
+  | { kind: 'billing_preview'; direction: Direction; preview: BillingPreview };
 
 export type HealthResponse = {
   status: 'ok';
@@ -84,7 +95,9 @@ export type PaymentMethodInput = {
 
 export type PaymentMethodsPage = { paymentMethods: PaymentMethod[] };
 
-export type ChargeRecipientSnapshot = {
+/** The person on the other side of a charge, read live from their account; null user on a bill that is the owner's alone. */
+export type ChargeCounterpart = {
+  userId: string | null;
   name: string;
   email: string | null;
 };
@@ -95,21 +108,14 @@ export type PixSnapshot = {
   label: string;
 };
 
-export type PaymentRecord = {
-  id: string;
-  chargeId: string;
-  amount: Money;
-  method: 'pix' | 'cash' | 'transfer' | 'other';
-  paidAt: string;
-  createdAt: string;
-};
-
 export type ChargeDetail = ChargeSummary & {
   direction: Direction;
-  recipient: ChargeRecipientSnapshot;
+  recipient: ChargeCounterpart;
+  /** The person who owes (or, on a conta a pagar, who receives); null when the bill is the owner's alone. */
+  debtorUserId: string | null;
   pix: PixSnapshot | null;
   sharingState: 'ready' | 'pix_required' | 'legacy_without_pix' | 'closed';
-  payment: PaymentRecord | null;
+  proof: ChargeProof | null;
   cancelledAt: string | null;
   paidAt: string | null;
   createdAt: string;
@@ -143,9 +149,9 @@ export type TimelinePage = {
   nextCursor: string | null;
 };
 
-export type PersonLedger = {
-  personId: string;
-  person: Person;
+export type ContactLedger = {
+  contactId: string;
+  contact: Contact;
   balance: Money;
   receivable: Money;
   payable: Money;

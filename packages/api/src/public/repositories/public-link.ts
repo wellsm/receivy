@@ -1,37 +1,29 @@
-import { randomBytes } from 'node:crypto';
-import { HttpConflictError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
+import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import type { PublicChargeView, PublicLink } from '@receivy/common';
-import { CHARGE_SELECT, findChargeForActor } from '../charges/repository';
-import type { DbClient } from '../database';
-import { enqueueDue, type NoticeContext, planNotice } from '../notifications/planner';
-import { assertPublicLinkSecretConfigured, issuePublicChargeToken, verifyPublicChargeToken } from './capability';
+import { ChargeClosedError } from '../../charges/errors';
+import { CHARGE_SELECT, type ChargeRow, chargePayer, findChargeForActor } from '../../charges/repositories/charge';
+import { listEvents, recordEvent } from '../../common/repositories/events';
+import type { DbClient } from '../../database';
+import { type NoticeContext, notifyCharge } from '../../notifications/services/send';
+import { PixRequiredError, PixSnapshotLockedError } from '../errors';
+import { assertPublicLinkSecretConfigured, verifyPublicChargeToken } from '../services/capability';
+import { ensurePublicLink, linkToken } from '../services/links';
 
-const LINK_SELECT = {
-  id: true,
-  public_id: true,
-  charge_id: true,
-  token_version: true,
-  expires_at: true,
-  revoked_at: true,
-  created_at: true,
-  updated_at: true
-} as const;
-const TTL_SECONDS = 90 * 24 * 60 * 60;
-const sqlNull = null as unknown as string | undefined;
+function response(row: ChargeRow, secret: string): PublicLink {
+  if (!row.public_id || !row.link_expires_at) {
+    throw new Error('Charge has no public link.');
+  }
 
-function response(row: { public_id: string; token_version: number; expires_at: string }, secret: string): PublicLink {
   return {
-    token: issuePublicChargeToken({
-      publicId: row.public_id,
-      version: row.token_version,
-      expiresAtSeconds: Math.floor(new Date(row.expires_at).getTime() / 1000),
-      secret,
-      purpose: 'charge'
-    }),
-    expiresAt: row.expires_at
+    token: linkToken({ public_id: row.public_id, link_expires_at: row.link_expires_at, link_version: row.link_version }, secret),
+    expiresAt: row.link_expires_at
   };
 }
 
+/**
+ * Issues (or reuses) the public payment link of a charge. Publishing a Pix key on a charge created
+ * without one happens here too, and sends the initial notice that had nothing to say until now.
+ */
 export async function createOrRotatePublicLink(
   db: DbClient,
   creditorId: string,
@@ -44,17 +36,18 @@ export async function createOrRotatePublicLink(
 ): Promise<PublicLink> {
   assertPublicLinkSecretConfigured(secret);
 
-  const dueDeliveryIds: string[] = [];
-
-  const link = await db.transaction(async (tx) => {
-    let resume = false;
-
+  const { link, announce } = await db.transaction(async (tx) => {
     const { row, direction } = await findChargeForActor(tx, creditorId, chargeId, true);
-    if (direction !== 'receivable') throw new HttpForbiddenError();
-    if (row.state !== 'pending') throw new HttpConflictError('Charge is closed.');
-    const existing = await tx.public_links.findOne({ select: LINK_SELECT, where: { charge_id: row.id }, lock: true });
+
+    // A conta a pagar never gets a public link: the owner pays with the key they typed.
+    if (direction !== 'receivable' || chargePayer(row) === 'owner') throw new HttpForbiddenError();
+    if (row.state !== 'pending') throw new ChargeClosedError();
+
+    let current = row;
+    let published = false;
+
     if (!row.pix_key_snapshot || !row.pix_key_type_snapshot) {
-      if (existing || !paymentMethodId) throw new HttpConflictError('Pix required before first publication.');
+      if (row.public_id || !paymentMethodId) throw new PixRequiredError();
       const method = await tx.payment_methods.findOne({
         select: { pix_key: true, pix_key_type: true, label: true },
         where: { id: paymentMethodId, owner_id: creditorId, archived_at: { isNull: true } },
@@ -71,82 +64,26 @@ export async function createOrRotatePublicLink(
           updated_at: stamp
         }
       });
-      await tx.activity_events.insertOne({
-        data: {
-          id: crypto.randomUUID(),
-          actor_user: { id: creditorId },
-          subject_user: { id: creditorId },
-          type: 'charge.pix_published',
-          aggregate_type: 'charge',
-          aggregate_id: row.id,
-          payload: '{}',
-          created_at: stamp
-        }
-      });
-      // The initial notice was planned without a Pix key; publication replans it in place.
-      resume = !!(await tx.notification_deliveries.count({
-        where: { event_id: `charge:${row.id}:initial`, reason: 'pix_required', attempts: 0 }
-      }));
+      await recordEvent(tx, { type: 'charge.pix_published', eventableType: 'charge', eventableId: row.id, actorId: creditorId, at: stamp });
+      current = (await tx.charges.findOne({ select: CHARGE_SELECT, where: { id: row.id } }))!;
+      // The creation notice was skipped for lack of a key; it goes out once the link exists.
+      published = !(await listEvents(tx, row.id, 'notice.sent')).some((event) => event.payload['template'] === 'initial');
     } else if (paymentMethodId) {
       const method = await tx.payment_methods.findOne({
         select: { pix_key: true, pix_key_type: true },
         where: { id: paymentMethodId, owner_id: creditorId, archived_at: { isNull: true } }
       });
       if (!method) throw new HttpNotFoundError();
-      if (method.pix_key !== row.pix_key_snapshot || method.pix_key_type !== row.pix_key_type_snapshot)
-        throw new HttpConflictError('Published Pix snapshot is immutable.');
-    }
-    if (existing && !rotate && !existing.revoked_at && new Date(existing.expires_at).getTime() / 1000 > nowSeconds) {
-      return response(existing, secret);
-    }
-    const expiresAt = new Date((nowSeconds + TTL_SECONDS) * 1000).toISOString();
-    const now = new Date(nowSeconds * 1000).toISOString();
-    if (existing) {
-      const changed = await tx.public_links.updateOne({
-        select: { id: true },
-        where: { id: existing.id },
-        data: {
-          token_version: existing.token_version + 1,
-          expires_at: expiresAt,
-          revoked_at: sqlNull,
-          updated_at: now
-        }
-      });
-      if (!changed) throw new HttpNotFoundError();
-      const updated = await tx.public_links.findOne({ select: LINK_SELECT, where: { id: existing.id } });
-      if (!updated) throw new HttpNotFoundError();
-      return response(updated, secret);
-    }
-    const created = await tx.public_links.insertOne({
-      select: LINK_SELECT,
-      data: {
-        id: crypto.randomUUID(),
-        public_id: randomBytes(16).toString('base64url'),
-        charge: { id: row.id },
-        token_version: 1,
-        expires_at: expiresAt,
-        created_at: now,
-        updated_at: now
-      }
-    });
-
-    // Replanning needs the published Pix snapshot and the capability created just above.
-    if (resume && notice) {
-      const published = await tx.charges.findOne({ select: CHARGE_SELECT, where: { id: row.id } });
-
-      if (published) {
-        const planned = await planNotice(tx, published, `charge:${published.id}:initial`, 'initial', notice.config, nowSeconds * 1000);
-
-        dueDeliveryIds.push(...planned.due);
-      }
+      if (method.pix_key !== row.pix_key_snapshot || method.pix_key_type !== row.pix_key_type_snapshot) throw new PixSnapshotLockedError();
     }
 
-    return response(created, secret);
+    const linked = await ensurePublicLink(tx, current, nowSeconds, rotate);
+
+    return { link: response(linked, secret), announce: published };
   });
 
-  // The replanned rows are committed before the queue learns about them.
-  if (notice) {
-    await enqueueDue(db, notice.queue, dueDeliveryIds, nowSeconds * 1000);
+  if (announce && notice) {
+    await notifyCharge(db, notice, chargeId, 'initial', nowSeconds * 1000);
   }
 
   return link;
@@ -155,14 +92,10 @@ export async function createOrRotatePublicLink(
 export async function revokePublicLink(db: DbClient, creditorId: string, chargeId: string): Promise<void> {
   await db.transaction(async (tx) => {
     const { row, direction } = await findChargeForActor(tx, creditorId, chargeId, true);
-    if (direction !== 'receivable') throw new HttpForbiddenError();
-    const link = await tx.public_links.findOne({ select: LINK_SELECT, where: { charge_id: row.id }, lock: true });
-    if (!link || link.revoked_at) return;
-    await tx.public_links.updateOne({
-      select: { id: true },
-      where: { id: link.id },
-      data: { revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() }
-    });
+    if (direction !== 'receivable' || chargePayer(row) === 'owner') throw new HttpForbiddenError();
+    if (!row.public_id || row.link_revoked_at) return;
+    const stamp = new Date().toISOString();
+    await tx.charges.updateOne({ where: { id: row.id }, data: { link_revoked_at: stamp, updated_at: stamp } });
   });
 }
 
@@ -172,7 +105,10 @@ export async function getPublicCharge(
   secret: string,
   nowSeconds = Math.floor(Date.now() / 1000)
 ): Promise<PublicChargeView> {
-  const charge = await resolvePublicCharge(db, token, secret, nowSeconds);
+  return publicChargeView(db, await resolvePublicCharge(db, token, secret, nowSeconds));
+}
+
+export async function publicChargeView(db: DbClient, charge: ChargeRow): Promise<PublicChargeView> {
   const user = await db.users.findOne({ select: { name: true }, where: { id: charge.creditor_id } });
   const firstName = user?.name?.trim().split(/\s+/)[0] || 'Pessoa';
   return {
@@ -185,25 +121,29 @@ export async function getPublicCharge(
       charge.pix_key_type_snapshot && charge.pix_key_snapshot
         ? { keyType: charge.pix_key_type_snapshot, key: charge.pix_key_snapshot, label: charge.pix_label_snapshot ?? 'Pix' }
         : null,
-    uploadsEnabled: charge.state === 'pending' && !(await db.payment_proofs.count({ where: { charge_id: charge.id, state: 'pending' } }))
+    uploadsEnabled: charge.state === 'pending' && charge.proof_state !== 'pending'
   };
 }
 
-export async function resolvePublicCharge(db: DbClient, token: string, secret: string, nowSeconds = Math.floor(Date.now() / 1000)) {
+/** The charge behind a public token, or 404 for anything forged, rotated, revoked or expired. */
+export async function resolvePublicCharge(
+  db: DbClient,
+  token: string,
+  secret: string,
+  nowSeconds = Math.floor(Date.now() / 1000)
+): Promise<ChargeRow> {
   assertPublicLinkSecretConfigured(secret);
   const publicId = token.split('.')[0];
   if (!publicId) throw new HttpNotFoundError();
-  const link = await db.public_links.findOne({ select: LINK_SELECT, where: { public_id: publicId } });
-  if (!link || link.revoked_at) throw new HttpNotFoundError();
+  const charge = await db.charges.findOne({ select: CHARGE_SELECT, where: { public_id: publicId } });
+  if (!charge?.link_expires_at || charge.link_revoked_at) throw new HttpNotFoundError();
   let capability: { publicId: string; expiresAtSeconds: number };
   try {
-    capability = verifyPublicChargeToken(token, { version: link.token_version, nowSeconds, secret, purpose: 'charge' });
+    capability = verifyPublicChargeToken(token, { version: charge.link_version ?? 1, nowSeconds, secret, purpose: 'charge' });
   } catch {
     throw new HttpNotFoundError();
   }
-  const storedExpiry = Math.floor(new Date(link.expires_at).getTime() / 1000);
+  const storedExpiry = Math.floor(Date.parse(charge.link_expires_at) / 1000);
   if (capability.expiresAtSeconds !== storedExpiry || storedExpiry <= nowSeconds) throw new HttpNotFoundError();
-  const charge = await db.charges.findOne({ select: CHARGE_SELECT, where: { id: link.charge_id } });
-  if (!charge) throw new HttpNotFoundError();
   return charge;
 }

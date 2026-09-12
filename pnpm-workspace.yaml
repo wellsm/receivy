@@ -25,9 +25,3 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
-patchedDependencies:
-  '@ez4/aws-gateway@0.52.0': patches/@ez4__aws-gateway@0.52.0.patch
-  '@ez4/local-common@0.52.0': patches/@ez4__local-common@0.52.0.patch
-  '@ez4/local-gateway@0.52.0': patches/@ez4__local-gateway@0.52.0.patch
-  '@ez4/pgclient@0.52.0': patches/@ez4__pgclient@0.52.0.patch
-  '@ez4/project@0.52.0': patches/@ez4__project@0.52.0.patch

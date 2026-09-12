@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { AppShell } from "./app-shell";
+import { AppShell } from "@/components/app/app-shell";
 
 afterEach(() => {
   cleanup();
@@ -14,13 +14,13 @@ describe("AppShell", () => {
       </AppShell>,
     );
 
-    for (const label of ["Feed", "Cobranças", "Perfil"]) {
+    for (const label of ["Feed", "Contas", "Perfil"]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
 
     expect(screen.queryByText("Contatos")).not.toBeInTheDocument();
     expect(screen.queryByText("Ajustes")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Nova cobrança" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Nova conta" })).not.toBeInTheDocument();
   });
 
   it("links the bell to the profile and shows a dot only when badged", () => {
@@ -36,7 +36,7 @@ describe("AppShell", () => {
       expect(bell).toHaveAttribute("href", "/settings");
     }
 
-    expect(document.querySelectorAll(".header-bell-dot").length).toBe(0);
+    expect(screen.queryAllByTestId("header-bell-dot").length).toBe(0);
 
     rerender(
       <AppShell notificationsBadge>
@@ -44,6 +44,6 @@ describe("AppShell", () => {
       </AppShell>,
     );
 
-    expect(document.querySelectorAll(".header-bell-dot").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("header-bell-dot").length).toBeGreaterThan(0);
   });
 });

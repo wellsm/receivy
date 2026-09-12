@@ -24,9 +24,9 @@ appId: dev.receivy.local
 - extendedWaitUntil:
     visible: "Gerenciar contatos"
     timeout: 15000
-- tapOn: "Cobranças"
+- tapOn: "Contas"
 - extendedWaitUntil:
-    visible: "Nova cobrança"
+    visible: "Nova conta"
     timeout: 15000
 - tapOn: "Feed"
 - extendedWaitUntil:

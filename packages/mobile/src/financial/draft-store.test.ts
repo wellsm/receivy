@@ -1,5 +1,5 @@
 import { EMPTY_BILLING_DRAFT } from "@receivy/common";
-import { clearDraft, clearPixRequiredSeen, markPixRequiredSeen, patchDraft, pixRequiredSeen, saveDraft, takeDraft } from "./draft-store";
+import { clearDraft, patchDraft, saveDraft, takeDraft } from "./draft-store";
 
 function draft() {
   return { ...EMPTY_BILLING_DRAFT("America/Sao_Paulo", "2026-09-08"), selected: ["p1"], amount: "85,00" };
@@ -27,6 +27,13 @@ describe("billing draft store", () => {
     expect(takeDraft()?.selected).toEqual(["p1", "p2"]);
   });
 
+  it("seats the contact a side trip created as the payee of a conta a pagar", () => {
+    saveDraft({ ...draft(), direction: "payable", selected: [] });
+    patchDraft({ selected: ["p2"] });
+
+    expect(takeDraft()).toMatchObject({ payee: "p2", selected: [] });
+  });
+
   it("selects the Pix key a side trip created", () => {
     saveDraft(draft());
     patchDraft({ pix: "pix-1" });
@@ -52,25 +59,5 @@ describe("billing draft store", () => {
     clearDraft();
 
     expect(takeDraft()).toBeNull();
-  });
-
-  it("remembers the trip to the Pix keys so the form never bounces twice", () => {
-    expect(pixRequiredSeen()).toBe(false);
-
-    markPixRequiredSeen();
-
-    expect(pixRequiredSeen()).toBe(true);
-  });
-
-  it("forgets the Pix trip when the draft is dropped or a key shows up", () => {
-    markPixRequiredSeen();
-    clearDraft();
-
-    expect(pixRequiredSeen()).toBe(false);
-
-    markPixRequiredSeen();
-    clearPixRequiredSeen();
-
-    expect(pixRequiredSeen()).toBe(false);
   });
 });

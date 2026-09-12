@@ -1,14 +1,13 @@
 import type { AuthUser } from '@receivy/common';
-import { lockAccountReferences } from '../account/locking';
-import { disableSessionDevices, revokeSession } from '../account/sessions';
-import { canAttemptEmailCode, createEmailCodeHash, verifyEmailCodeHash } from '../auth/code';
-import type { AuthRepository, LoginCodeOutcome } from '../auth/email-login';
-import type { OauthFlowRepository } from '../auth/oauth-flow';
-import { OauthFlowError } from '../auth/oauth-flow';
-import type { RotateRefreshTokenOutcome, SessionRepository } from '../auth/refresh-session';
-import { generateRefreshToken, hashRefreshToken } from '../auth/session';
-import type { DbClient } from '../database';
-import { linkVerifiedPeople } from '../people/repository';
+import type { DbClient } from '../../database';
+import { canAttemptEmailCode, createEmailCodeHash, verifyEmailCodeHash } from '../services/code';
+import type { AuthRepository, LoginCodeOutcome } from '../services/email-login';
+import { lockAccountReferences } from '../services/locking';
+import type { OauthFlowRepository } from '../services/oauth-flow';
+import { OauthFlowError } from '../services/oauth-flow';
+import type { RotateRefreshTokenOutcome, SessionRepository } from '../services/refresh-session';
+import { generateRefreshToken, hashRefreshToken } from '../services/session';
+import { disableSessionDevices, revokeSession } from './sessions';
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const CODE_COOLDOWN_MS = 60 * 1000;
@@ -25,19 +24,28 @@ const LOGIN_CODE_SELECT = {
 
 function toAuthUser(row: {
   id: string;
-  email: string;
+  email?: string;
   name?: string;
+  phone?: string;
   avatar_url?: string;
+  status: AuthUser['status'];
   locale: 'pt-BR';
   timezone: string;
   country: 'BR';
   currency: 'BRL';
 }): AuthUser {
+  // Only a placeholder typed by an owner lacks an address, and a placeholder never authenticates.
+  if (!row.email) {
+    throw new Error('Authenticated user without e-mail.');
+  }
+
   return {
     id: row.id,
     email: row.email,
     name: row.name ?? null,
+    phone: row.phone ?? null,
     avatarUrl: row.avatar_url ?? null,
+    status: row.status,
     locale: row.locale,
     timezone: row.timezone,
     country: row.country,
@@ -147,7 +155,9 @@ async function findOrCreateUserByEmail(db: DbClient, email: string): Promise<Aut
     id: true,
     email: true,
     name: true,
+    phone: true,
     avatar_url: true,
+    status: true,
     locale: true,
     timezone: true,
     country: true,
@@ -167,6 +177,7 @@ async function findOrCreateUserByEmail(db: DbClient, email: string): Promise<Aut
       data: {
         id,
         email,
+        status: 'pending',
         locale: 'pt-BR',
         timezone: 'America/Sao_Paulo',
         country: 'BR',
@@ -289,7 +300,9 @@ async function resolveOauthUser(
     id: true,
     email: true,
     name: true,
+    phone: true,
     avatar_url: true,
+    status: true,
     locale: true,
     timezone: true,
     country: true,
@@ -336,6 +349,7 @@ async function resolveOauthUser(
           email: input.identity.email,
           name: input.identity.name,
           avatar_url: input.identity.picture,
+          status: 'pending',
           locale: 'pt-BR',
           timezone: 'America/Sao_Paulo',
           country: 'BR',
@@ -402,7 +416,9 @@ async function consumeOauthGrant(
         id: true,
         email: true,
         name: true,
+        phone: true,
         avatar_url: true,
+        status: true,
         locale: true,
         timezone: true,
         country: true,
@@ -516,7 +532,7 @@ export function createAuthRepository(db: DbClient): AuthRepository & SessionRepo
     consumeLoginCode: (input) => consumeLoginCode(db, input),
     findOrCreateUserByEmail: async (email) => {
       const user = await findOrCreateUserByEmail(db, email);
-      await linkVerifiedPeople(db, user.id, email);
+      await markEmailVerified(db, user.id, email);
       return user;
     },
     issueSession: (userId, deviceName) => issueSession(db, userId, deviceName),
@@ -527,7 +543,7 @@ export function createAuthRepository(db: DbClient): AuthRepository & SessionRepo
     resolveUser: async (input) => {
       const user = await resolveOauthUser(db, input);
       if (input.identity.emailAuthoritative && user.email === input.identity.email) {
-        await linkVerifiedPeople(db, user.id, user.email);
+        await markEmailVerified(db, user.id, user.email);
       }
       return user;
     },
@@ -542,7 +558,9 @@ export async function findAuthUserById(db: DbClient, id: string): Promise<AuthUs
       id: true,
       email: true,
       name: true,
+      phone: true,
       avatar_url: true,
+      status: true,
       locale: true,
       timezone: true,
       country: true,
@@ -551,4 +569,9 @@ export async function findAuthUserById(db: DbClient, id: string): Promise<AuthUs
     where: { id, deleted_at: { isNull: true } }
   });
   return row ? toAuthUser(row) : undefined;
+}
+
+/** A login through a verified channel confirms the address; a pending account created by a contact keeps its id. */
+export async function markEmailVerified(db: DbClient, userId: string, email: string): Promise<void> {
+  await db.users.updateOne({ where: { id: userId, email, deleted_at: { isNull: true } }, data: { verified_email: email } });
 }

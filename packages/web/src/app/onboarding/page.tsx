@@ -1,31 +1,22 @@
 import { needsOnboarding } from "@receivy/common";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { OnboardingForm } from "@/components/onboarding-form";
+import { OnboardingScreen } from "@/components/screens/onboarding-screen";
+import { safeNextPath } from "@/lib/auth/cookies";
 import { currentUser } from "@/lib/auth/current-user";
 
-export default async function OnboardingPage() {
-  const user = await currentUser();
+type OnboardingPageProps = { searchParams: Promise<{ next?: string }> };
+
+export default async function OnboardingPage({ searchParams }: OnboardingPageProps) {
+  const [user, params] = await Promise.all([currentUser(), searchParams]);
+  const nextPath = safeNextPath(params.next ?? null);
 
   if (user && !needsOnboarding(user)) {
-    redirect("/");
+    redirect(nextPath);
   }
 
   return (
-    <main className="onboarding-page">
-      <Link className="login-brand" href="/" aria-label="Receivy — início">
-        <span className="brand-mark" aria-hidden="true"><span>R</span></span>
-        <span>Receivy</span>
-      </Link>
-      <section className="login-card onboarding-card" aria-labelledby="onboarding-title">
-        <p className="login-eyebrow">Antes de começar</p>
-        <h1 id="onboarding-title">Como podemos chamar você?</h1>
-        <p className="login-intro">Esse nome aparece para quem recebe suas cobranças e lembretes.</p>
-        <OnboardingForm />
-      </section>
-      <p className="login-legal">
-        Ao continuar, você concorda com os <a href="/terms">Termos de uso</a> e a <a href="/privacy">Privacidade</a>.
-      </p>
+    <main className="flex min-h-dvh flex-col justify-center bg-canvas px-6 py-8 md:px-8 md:py-16">
+      <OnboardingScreen nextPath={nextPath} initialName={user?.name} />
     </main>
   );
 }

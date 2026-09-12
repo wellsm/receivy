@@ -1,7 +1,6 @@
 import type { BillingDraft } from "@receivy/common";
 
 const KEY = "receivy.billingDraft";
-const PIX_REQUIRED_KEY = "receivy.pixRequiredSeen";
 
 export type StoredDraft = { draft: BillingDraft; returnTo: string };
 
@@ -56,7 +55,10 @@ export function takeDraft(): StoredDraft | null {
   return stored;
 }
 
-/** Merges the result of a side trip (a new contact, a new Pix key) into the draft. */
+/**
+ * Merges the result of a side trip (a new contact, a new Pix key) into the draft.
+ * A conta a pagar has no participants: the contact created on the way becomes its payee.
+ */
 export function patchDraft(patch: { selected?: string[]; pix?: string }): void {
   const stored = read();
 
@@ -64,38 +66,16 @@ export function patchDraft(patch: { selected?: string[]; pix?: string }): void {
     return;
   }
 
-  const selected = patch.selected ? [...new Set([...stored.draft.selected, ...patch.selected])] : stored.draft.selected;
   const pix = patch.pix === undefined ? {} : { pix: patch.pix };
 
+  if (stored.draft.direction === "payable") {
+    const payee = patch.selected?.[0];
+
+    write({ returnTo: stored.returnTo, draft: { ...stored.draft, ...(payee ? { payee } : {}), ...pix } });
+    return;
+  }
+
+  const selected = patch.selected ? [...new Set([...stored.draft.selected, ...patch.selected])] : stored.draft.selected;
+
   write({ returnTo: stored.returnTo, draft: { ...stored.draft, selected, ...pix } });
-}
-
-/**
- * The billing form pushes the Pix key screen the first time an account without a
- * key opens it. The trip is remembered for the tab so the return visit shows the
- * blocking panel instead of bouncing the user out again; registering a key clears
- * it, and the flag dies with the session like the draft itself.
- */
-export function pixRequiredSeen(): boolean {
-  try {
-    return window.sessionStorage.getItem(PIX_REQUIRED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function markPixRequiredSeen(): void {
-  try {
-    window.sessionStorage.setItem(PIX_REQUIRED_KEY, "1");
-  } catch {
-    // Storage is unavailable; the gate simply pushes again on the next mount.
-  }
-}
-
-export function clearPixRequiredSeen(): void {
-  try {
-    window.sessionStorage.removeItem(PIX_REQUIRED_KEY);
-  } catch {
-    // Nothing to clean up when storage is unavailable.
-  }
 }

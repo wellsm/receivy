@@ -1,20 +1,20 @@
 import type {
   DeviceRegistration,
-  NotificationDelivery,
   NotificationDevice,
 } from "@receivy/common";
 import { authClient } from "@/auth/client";
-import { apiErrorMessage } from "@receivy/common";
+import { apiErrorMessage, REMINDER_QUOTA_MESSAGE } from "@receivy/common";
 export function createNotificationClient(
   authenticatedFetch: (path: string, init?: RequestInit) => Promise<Response>,
 ) {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await authenticatedFetch(path, init);
     if (!response.ok) {
-      let message = "Não foi possível acessar notificações.";
+      const fallback = "Não foi possível acessar notificações.";
+      let message = response.status === 429 ? REMINDER_QUOTA_MESSAGE : fallback;
       try {
-        const body = (await response.json()) as { code?: unknown };
-        message = apiErrorMessage(body.code, message);
+        const body = await response.json();
+        message = response.status === 429 ? message : apiErrorMessage(response.status, body, fallback);
       } catch {}
       throw new Error(message);
     }
@@ -32,10 +32,6 @@ export function createNotificationClient(
       request<{ queued: boolean }>(`charges/${id}/reminders`, {
         method: "POST",
       }),
-    deliveries: (id: string) =>
-      request<{ deliveries: NotificationDelivery[] }>(
-        `charges/${id}/deliveries`,
-      ),
   };
 }
 export const notificationClient = createNotificationClient(

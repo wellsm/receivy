@@ -3,32 +3,42 @@ import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, Text, View } from "react-native";
-import { calendarDate, formatMoney, type ChargeDetail, type PixKeyType, type ProofDetail } from "@receivy/common";
+import {
+  calendarDate,
+  canAcceptProof,
+  canCancelCharge,
+  canMarkPaid,
+  canRemind,
+  canReopenCharge,
+  canShare,
+  canUploadProof,
+  chargeDateText,
+  chargeStateTag,
+  chargeShareText,
+  chargeStatusLine,
+  chargeTypeLabel,
+  counterpartRoleLabel,
+  formatMoney,
+  type ChargeDetail,
+  type PixKeyType,
+} from "@receivy/common";
 import { FirstSharePix } from "@/components/app/first-share-pix";
 import { ProofCard } from "@/components/app/proof-card";
+import { Toast } from "@/components/app/toast";
 import { ActionTile } from "@/components/ui/action-tile";
 import { CopyButton } from "@/components/ui/copy-button";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { StatusTag } from "@/components/ui/status-tag";
 import { financialClient, type FinancialClient } from "@/financial/client";
-import {
-  canAcceptProof,
-  canUploadProof,
-  chargeStateLabel,
-  chargeStatusLine,
-  chargeTypeLabel,
-  dateText,
-  latestProof,
-} from "@/financial/charge-text";
 import { pickAndUploadProof } from "@/financial/proof-upload";
 import { notificationClient } from "@/notifications/client";
 import { ACTIVE_TINT } from "@/theme/colors";
 
-export type ProofClient = Pick<FinancialClient, "proofs" | "uploadIntent" | "finalizeProof" | "reviewProof" | "downloadProof">;
+export type ProofClient = Pick<FinancialClient, "startProofUpload" | "reviewProof" | "downloadProof" | "withdrawProof">;
 
 type Client = Pick<FinancialClient, "charge" | "cancel" | "pay" | "publicLink" | "publicChargeUrl"> &
-  Partial<ProofClient & Pick<FinancialClient, "paymentMethods" | "savePaymentMethod">>;
+  Partial<ProofClient & Pick<FinancialClient, "reopen" | "paymentMethods" | "savePaymentMethod">>;
 
 type ChargeDetailScreenProps = {
   id: string;
@@ -53,6 +63,7 @@ const ICONS = {
   share: require("../../../assets/images/auth/share.svg"),
   bell: require("../../../assets/images/auth/bell.svg"),
   stop: require("../../../assets/images/auth/stop.svg"),
+  edit: require("../../../assets/images/auth/edit.svg"),
   copy: require("../../../assets/images/auth/copy.svg"),
   receipt: require("../../../assets/images/auth/receipt.svg"),
   upload: require("../../../assets/images/auth/upload.svg"),
@@ -83,12 +94,16 @@ function payableGuidance(charge: ChargeDetail): string | null {
     return "Esta cobrança foi cancelada e não deve ser paga.";
   }
 
-  return charge.pix ? null : "A chave Pix ainda não está disponível. Combine o pagamento com o credor.";
+  // The owner of a conta a pagar knows where to pay; the note only helps a debtor waiting on a key.
+  if (charge.pix || charge.ownedByViewer) {
+    return null;
+  }
+
+  return "A chave Pix ainda não está disponível. Combine o pagamento com o credor.";
 }
 
 export function ChargeDetailScreen({ id, client = financialClient, notifications = notificationClient, onOpenProof }: ChargeDetailScreenProps) {
   const [charge, setCharge] = useState<ChargeDetail | null>(null);
-  const [proofs, setProofs] = useState<ProofDetail[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -96,15 +111,14 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   const load = useCallback(() => {
     let live = true;
 
-    // Proofs are optional for the caller; losing them must not hide the charge.
-    Promise.all([client.charge(id), client.proofs ? client.proofs(id).catch(() => ({ proofs: [] })) : { proofs: [] }])
-      .then(([detail, page]) => {
+    client
+      .charge(id)
+      .then((detail) => {
         if (!live) {
           return;
         }
 
         setCharge(detail);
-        setProofs(page.proofs);
         setError("");
       })
       .catch((reason: unknown) => live && setError(reason instanceof Error ? reason.message : LOAD_ERROR));
@@ -132,19 +146,10 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
     }
   }
 
-  async function refresh() {
-    setCharge(await client.charge(id));
-
-    if (client.proofs) {
-      setProofs((await client.proofs(id)).proofs);
-    }
-  }
-
-  async function markPaid(proof: ProofDetail | null) {
+  async function markPaid(acceptProof: boolean) {
     await run(async () => {
-      if (proof && client.reviewProof) {
-        await client.reviewProof(id, proof.id, "accepted");
-        await refresh();
+      if (acceptProof && client.reviewProof) {
+        setCharge(await client.reviewProof(id, "accepted"));
         setNotice("Comprovante aceito e pagamento registrado.");
         return;
       }
@@ -154,10 +159,28 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
     }, "Não foi possível atualizar a cobrança.");
   }
 
-  function confirmPaid(proof: ProofDetail | null) {
-    Alert.alert("Marcar como paga?", "Isso registra um pagamento integral e encerra a cobrança.", [
+  function confirmPaid(acceptProof: boolean) {
+    Alert.alert("Marcar como paga?", "Isso registra um pagamento integral e encerra a cobrança. Dá para reabrir depois.", [
       { text: "Voltar", style: "cancel" },
-      { text: "Marcar paga", onPress: () => void markPaid(proof) },
+      { text: "Marcar paga", onPress: () => void markPaid(acceptProof) },
+    ]);
+  }
+
+  function confirmReopen() {
+    if (!client.reopen) {
+      return;
+    }
+
+    Alert.alert("Reabrir cobrança?", "O pagamento registrado é removido e a cobrança volta a ficar pendente. Um comprovante aceito volta para revisão.", [
+      { text: "Voltar", style: "cancel" },
+      {
+        text: "Reabrir",
+        style: "destructive",
+        onPress: () =>
+          void run(async () => {
+            setCharge(await client.reopen!(id));
+          }, "Não foi possível reabrir a cobrança."),
+      },
     ]);
   }
 
@@ -179,15 +202,29 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   async function shareLink(rotate = false, paymentMethodId?: string) {
     await run(async () => {
       const result = await client.publicLink(id, rotate, paymentMethodId);
+      const detail = paymentMethodId ? await client.charge(id) : charge;
 
-      if (paymentMethodId) {
-        setCharge(await client.charge(id));
+      if (!detail) {
+        return;
       }
+
+      setCharge(detail);
 
       const url = client.publicChargeUrl(result.token);
 
-      await Share.share({ title: "Cobrança Receivy", message: url, url });
+      await Share.share({ title: "Cobrança Receivy", message: chargeShareText(detail, url), url });
     }, "Não foi possível compartilhar o link.");
+  }
+
+  function confirmRemind(detail: ChargeDetail) {
+    Alert.alert(
+      "Enviar lembrete?",
+      `Avisa ${detail.recipient.name} por notificação no app ou por e-mail, com o link de pagamento e a chave Pix. Só um lembrete a cada 24 horas.`,
+      [
+        { text: "Voltar", style: "cancel" },
+        { text: "Enviar lembrete", onPress: () => void remind(detail) },
+      ],
+    );
   }
 
   async function remind(detail: ChargeDetail) {
@@ -217,18 +254,36 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   }
 
   async function uploadProof() {
-    if (!client.uploadIntent || !client.finalizeProof) {
+    if (!client.startProofUpload) {
       return;
     }
 
-    const proof = await run(() => pickAndUploadProof(id, client as ProofClient), "Não foi possível enviar o comprovante.");
+    const detail = await run(() => pickAndUploadProof(id, client as Client & ProofClient), "Não foi possível enviar o comprovante.");
 
-    if (!proof) {
+    if (!detail) {
       return;
     }
 
-    setProofs((previous) => [...previous, proof]);
+    setCharge(detail);
     onOpenProof?.();
+  }
+
+  async function withdrawProof() {
+    if (!client.withdrawProof) {
+      return;
+    }
+
+    const done = await run(async () => {
+      await client.withdrawProof!(id);
+      return true;
+    }, "Não foi possível apagar o comprovante.");
+
+    if (!done) {
+      return;
+    }
+
+    setCharge((previous) => previous && { ...previous, proof: null, proofState: null });
+    setNotice("Comprovante apagado. Envie outro quando quiser.");
   }
 
   if (!charge) {
@@ -252,14 +307,24 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
 
   const receivable = charge.direction === "receivable";
   const pending = charge.state === "pending";
-  const proof = latestProof(proofs);
-  const state = chargeStateLabel(charge);
+  const proof = charge.proof;
+  const state = chargeStateTag(charge);
   const status = chargeStatusLine(charge, calendarDate());
   const guidance = payableGuidance(charge);
-  const canShare = receivable && pending && !!charge.pix;
-  const acceptProof = canAcceptProof(charge, proof);
-  const uploadProofAllowed = canUploadProof(charge, proof);
-  const proofsEnabled = !!client.proofs;
+  const ownBill = charge.payer === "owner" && charge.ownedByViewer === true;
+  // Who could publish a link once a key exists: the creditor of a conta a receber.
+  const sharer = receivable && pending && charge.payer !== "owner";
+  const settleable = canMarkPaid(charge);
+  const reopenable = !!client.reopen && canReopenCharge(charge);
+  const share = canShare(charge);
+  const remindable = canRemind(charge);
+  const cancellable = canCancelCharge(charge);
+  const acceptProof = canAcceptProof(charge);
+  const uploadProofAllowed = canUploadProof(charge);
+  const proofsEnabled = !!client.startProofUpload;
+  // A debtor sends the proof; the payee of a conta a pagar only reviews the one the owner sent.
+  const proofTile = proofsEnabled && (!receivable || (charge.payer === "owner" && !!proof));
+  const name = charge.counterpartName || charge.recipient.name;
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
@@ -267,11 +332,6 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
         {error ? (
           <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
             {error}
-          </Text>
-        ) : null}
-        {notice ? (
-          <Text accessibilityLiveRegion="polite" className="rounded-xl bg-primary-soft/40 p-3 text-sm text-primary-strong">
-            {notice}
           </Text>
         ) : null}
 
@@ -283,6 +343,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
                 {receivable ? "A receber" : "A pagar"}
               </Text>
               <Text className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">{chargeTypeLabel(charge)}</Text>
+              {ownBill && <Text className="rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-semibold text-muted">Minha conta</Text>}
             </View>
             <StatusTag label={state.label} tone={state.tone} compact />
           </View>
@@ -292,19 +353,19 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
           </Text>
 
           <View className="flex-row items-center gap-3">
-            <InitialsAvatar name={charge.recipient.name} size={40} />
+            <InitialsAvatar name={name} size={40} />
             <View className="flex-1">
               <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
-                {charge.recipient.name}
+                {name}
               </Text>
-              <Text className="text-[11px] text-muted">{receivable ? "Vai pagar para você" : "Vai receber de você"}</Text>
+              <Text className="text-[11px] text-muted">{counterpartRoleLabel(charge)}</Text>
             </View>
           </View>
 
           <View className="flex-row items-center gap-1.5">
             <Image source={ICONS.calendar} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
             <Text className="text-xs text-muted">
-              Vencimento: <Text className="font-semibold text-ink">{dateText(charge.dueDate)}</Text>
+              Vencimento: <Text className="font-semibold text-ink">{chargeDateText(charge.dueDate)}</Text>
               {pending && <Text className={STATUS_COLOR[status.tone]}> ({status.text.toLocaleLowerCase("pt-BR")})</Text>}
             </Text>
           </View>
@@ -334,16 +395,35 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
           <Text className={`text-xs font-medium ${STATUS_COLOR[status.tone]}`}>{status.text}</Text>
         </View>
 
-        {/* Quick actions */}
-        {receivable && pending && (
+        {/* Quick actions: the shared helpers decide what each viewer may do */}
+        {(pending || reopenable) && (
           <View className="gap-2.5">
             <View className="flex-row gap-2">
-              <ActionTile label="Marcar pago" icon={ICONS.check} tone="primary" hint="Registra o pagamento integral" disabled={busy} onPress={() => confirmPaid(acceptProof ? proof : null)} />
-              {canShare && <ActionTile label="Compartilhar" icon={ICONS.share} hint="Envia o link público de pagamento" disabled={busy} onPress={() => void shareLink()} />}
-              {charge.pix && <ActionTile label="Lembrar Pix" icon={ICONS.bell} hint="Envia um lembrete de pagamento" disabled={busy} onPress={() => void remind(charge)} />}
-              <ActionTile label="Cancelar" icon={ICONS.stop} tone="danger" hint="Encerra a cobrança sem pagamento" disabled={busy} onPress={confirmCancel} />
+              {reopenable && <ActionTile label="Reabrir" icon={ICONS.edit} hint="Desfaz o pagamento e volta a cobrança para pendente" disabled={busy} onPress={confirmReopen} />}
+              {!receivable && charge.pix && (
+                <ActionTile
+                  label="Copiar Pix"
+                  icon={ICONS.copy}
+                  hint={ownBill ? "Copia a chave Pix da conta" : "Copia a chave Pix do credor"}
+                  disabled={busy}
+                  onPress={() => void copyPix(charge.pix!.key)}
+                />
+              )}
+              {proofTile && (
+                <ActionTile
+                  label={proof ? "Comprovante" : "Enviar comprovante"}
+                  icon={proof ? ICONS.eye : ICONS.upload}
+                  tone={settleable ? "neutral" : "primary"}
+                  hint={proof ? "Abre o comprovante enviado" : "Envia o comprovante de pagamento"}
+                  disabled={busy}
+                  onPress={() => (proof ? onOpenProof?.() : void uploadProof())}
+                />
+              )}
+              {share && <ActionTile label="Compartilhar" icon={ICONS.share} hint="Envia o link público de pagamento" disabled={busy} onPress={() => void shareLink()} />}
+              {remindable && <ActionTile label="Lembrar" icon={ICONS.bell} hint="Envia um lembrete de pagamento" disabled={busy} onPress={() => confirmRemind(charge)} />}
+              {cancellable && <ActionTile label="Cancelar" icon={ICONS.stop} tone="danger" hint="Encerra a cobrança sem pagamento" disabled={busy} onPress={confirmCancel} />}
             </View>
-            {canShare && (
+            {share && (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Trocar e compartilhar link"
@@ -358,22 +438,6 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
           </View>
         )}
 
-        {!receivable && pending && (
-          <View className="flex-row gap-2">
-            {charge.pix && <ActionTile label="Copiar Pix" icon={ICONS.copy} hint="Copia a chave Pix do credor" disabled={busy} onPress={() => void copyPix(charge.pix!.key)} />}
-            {proofsEnabled && (
-              <ActionTile
-                label={proof ? "Comprovante" : "Enviar comprovante"}
-                icon={proof ? ICONS.eye : ICONS.upload}
-                tone="primary"
-                hint={proof ? "Abre o comprovante enviado" : "Envia o comprovante de pagamento"}
-                disabled={busy}
-                onPress={() => (proof ? onOpenProof?.() : void uploadProof())}
-              />
-            )}
-          </View>
-        )}
-
         {guidance && (
           <View className="rounded-2xl bg-surface-muted p-4">
             <Text className="text-sm leading-5 text-muted">{guidance}</Text>
@@ -381,10 +445,17 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
         )}
 
         {proofsEnabled && (
-          <ProofCard charge={charge} proof={proof} busy={busy} onView={() => onOpenProof?.()} onUpload={() => void uploadProof()} onAccept={() => confirmPaid(proof)} />
+          <ProofCard
+            charge={charge}
+            busy={busy}
+            onView={() => onOpenProof?.()}
+            onUpload={() => void uploadProof()}
+            onAccept={() => confirmPaid(acceptProof)}
+            onWithdraw={proof ? () => void withdrawProof() : undefined}
+          />
         )}
 
-        {receivable && charge.sharingState === "pix_required" && client.paymentMethods && client.savePaymentMethod && (
+        {sharer && charge.sharingState === "pix_required" && client.paymentMethods && client.savePaymentMethod && (
           <FirstSharePix client={client as FinancialClient} busy={busy} publish={(methodId) => shareLink(false, methodId)} />
         )}
 
@@ -395,35 +466,23 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
         )}
       </ScrollView>
 
-      {pending && (receivable || uploadProofAllowed || proof) && (
+      {pending && !settleable && (uploadProofAllowed || proof) && (
         <View className="border-t border-outline/20 bg-canvas px-5 py-3">
-          {receivable ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Marcar cobrança como paga"
-              accessibilityState={{ disabled: busy }}
-              disabled={busy}
-              onPress={() => confirmPaid(acceptProof ? proof : null)}
-              className={`h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
-            >
-              <Image source={ICONS.check} tintColor="#FFFFFF" style={{ width: 18, height: 18 }} />
-              <Text className="text-sm font-bold text-white">Marcar cobrança como paga</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={uploadProofAllowed ? (proof ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado"}
-              accessibilityState={{ disabled: busy }}
-              disabled={busy}
-              onPress={() => (uploadProofAllowed ? void uploadProof() : onOpenProof?.())}
-              className={`h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
-            >
-              <Image source={uploadProofAllowed ? ICONS.upload : ICONS.eye} tintColor="#FFFFFF" style={{ width: 18, height: 18 }} />
-              <Text className="text-sm font-bold text-white">{uploadProofAllowed ? (proof ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado"}</Text>
-            </Pressable>
-          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={uploadProofAllowed ? (proof ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado"}
+            accessibilityState={{ disabled: busy }}
+            disabled={busy}
+            onPress={() => (uploadProofAllowed ? void uploadProof() : onOpenProof?.())}
+            className={`h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
+          >
+            <Image source={uploadProofAllowed ? ICONS.upload : ICONS.eye} tintColor="#FFFFFF" style={{ width: 18, height: 18 }} />
+            <Text className="text-sm font-bold text-white">{uploadProofAllowed ? (proof ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado"}</Text>
+          </Pressable>
         </View>
       )}
+
+      {notice ? <Toast message={notice} onDismiss={() => setNotice("")} /> : null}
     </SafeAreaView>
   );
 }

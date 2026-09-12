@@ -2,7 +2,7 @@ import {
   addCalendarDays,
   amountDigitsToInput,
   amountInputToDigits,
-  BILLING_CATEGORIES,
+  billingCategoryLabel,
   buildBillingInput,
   calendarDate,
   draftTotalCents,
@@ -11,6 +11,7 @@ import {
   formatAmountDigits,
   formatMoney,
   parseBRLCents,
+  pixKeyField,
   previewBillingSplit,
   splitParties,
   splitPartyKey,
@@ -18,8 +19,11 @@ import {
   type BillingDraft,
   type BillingInput,
   type BillingType,
+  type Contact,
+  type Direction,
   type PaymentMethod,
-  type Person,
+  type PixDraft,
+  type PixKeyType,
   type SplitMode,
   type SplitParty,
   type SplitValues,
@@ -32,11 +36,12 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { financialClient, FinancialRequestError, type FinancialClient } from "@/financial/client";
-import { clearDraft, clearPixRequiredSeen, markPixRequiredSeen, pixRequiredSeen, saveDraft, takeDraft } from "@/financial/draft-store";
-import { peopleClient } from "@/people/client";
-import { CategoryIcon } from "@/components/ui/category-icon";
+import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
+import { contactsClient } from "@/contacts/client";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { CategorySelect } from "@/components/app/category-select";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
+import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { SplitEditor, type SplitRow } from "@/components/app/split-editor";
 import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
 
@@ -59,7 +64,7 @@ type Attempt = { input: BillingInput; key: string; uncertain: boolean };
 
 type BillingFormScreenProps = {
   client?: Client;
-  people?: Pick<typeof peopleClient, "list">;
+  contacts?: Pick<typeof contactsClient, "list">;
   billing?: BillingDetail | null;
   onSaved: (billing: BillingDetail) => void;
   /**
@@ -73,15 +78,16 @@ type BillingFormScreenProps = {
   onCreatePix?: (required?: boolean) => void;
 };
 
-const FROZEN_NOTE = "Cobranças já geradas só permitem categoria, Pix e lembretes.";
+const FROZEN_NOTE = "Contas já geradas só permitem categoria, Pix e lembretes.";
 const LOAD_ERROR = "Não foi possível carregar os dados.";
-const PIX_GATE_NOTE = "Cadastre uma chave Pix para criar cobranças.";
+const PIX_GATE_TITLE = "Cadastre uma chave Pix";
+const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com a sua chave Pix. Cadastre uma e volte para continuar de onde parou.";
 const NO_VALUES: Record<string, string> = {};
 
 const TYPES: { value: BillingType; label: string }[] = [
   { value: "once", label: "À vista" },
   { value: "until", label: "Parcelado" },
-  { value: "indefinite", label: "Assinatura" },
+  { value: "indefinite", label: "Recorrente" },
 ];
 
 const AMOUNT_LABELS: Record<BillingType, string> = {
@@ -89,6 +95,14 @@ const AMOUNT_LABELS: Record<BillingType, string> = {
   until: "Valor por parcela",
   indefinite: "Valor por ocorrência",
 };
+
+/** A conta a pagar has no split, so "total" says nothing there. */
+const PAYABLE_AMOUNT_LABELS: Record<BillingType, string> = { ...AMOUNT_LABELS, once: "Valor" };
+
+const DIRECTIONS: { value: Direction; label: string }[] = [
+  { value: "receivable", label: "Vou receber" },
+  { value: "payable", label: "Vou pagar" },
+];
 
 /** The segmented control shows the short label; the accessible name keeps the full one. */
 const SPLIT_MODES: { value: SplitMode; label: string; name: string }[] = [
@@ -154,7 +168,7 @@ function valuesFromBilling(billing: BillingDetail): SplitValues {
   const values = EMPTY_SPLIT_VALUES();
 
   for (const part of billing.split.parts) {
-    const key = part.kind === "owner" ? "owner" : part.personId;
+    const key = part.kind === "owner" ? "owner" : part.userId;
 
     if ("amountCents" in part) {
       values.fixed[key] = moneyText(part.amountCents);
@@ -174,12 +188,23 @@ function valuesFromBilling(billing: BillingDetail): SplitValues {
   return values;
 }
 
+function pixDraftFromBilling(billing: BillingDetail): PixDraft {
+  if (!billing.pix) {
+    return { type: "email", key: "", label: "" };
+  }
+
+  return { type: billing.pix.keyType, key: pixKeyField(billing.pix.keyType).format(billing.pix.key), label: billing.pix.label };
+}
+
 function draftFromBilling(billing: BillingDetail): BillingDraft {
   const parts = billing.split.parts;
 
   return {
+    direction: billing.direction,
+    payee: billing.payee?.userId ?? "",
+    pixInline: pixDraftFromBilling(billing),
     type: billing.type,
-    selected: parts.flatMap((part) => (part.kind === "person" ? [part.personId] : [])),
+    selected: parts.flatMap((part) => (part.kind === "user" ? [part.userId] : [])),
     owner: parts.some((part) => part.kind === "owner") || billing.split.mode === "fixed",
     amount: moneyText(billing.total.amountCents),
     description: billing.description,
@@ -196,17 +221,28 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
   };
 }
 
-function unknownPerson(id: string): Person {
+/** The draft keeps the key masked as typed; the API wants the canonical form (digits only, `+55…`). */
+function draftToBuild(draft: BillingDraft): BillingDraft {
+  if (draft.direction !== "payable") {
+    return draft;
+  }
+
+  return { ...draft, pixInline: { ...draft.pixInline, key: pixKeyField(draft.pixInline.type).unformat(draft.pixInline.key) } };
+}
+
+/** A seated user the agenda has not shown yet (a stale draft, a contact removed meanwhile): the chip still needs a face. */
+function unknownContact(userId: string): Contact {
   return {
-    id,
+    id: userId,
+    userId,
     name: "Contato",
     nickname: null,
     displayName: "Contato",
-    email: null,
+    email: "",
     phone: null,
+    status: "pending",
     archivedAt: null,
     createdAt: "",
-    hasAccount: false,
     lastBilledAt: null,
     activeCharges: 0,
   };
@@ -271,13 +307,13 @@ function TypeButton({ label, active, disabled, onPress }: { label: string; activ
   );
 }
 
-export function BillingFormScreen({ client = financialClient, people = peopleClient, billing = null, onSaved, onBack, onCreateContact, onCreatePix }: BillingFormScreenProps) {
+export function BillingFormScreen({ client = financialClient, contacts = contactsClient, billing = null, onSaved, onBack, onCreateContact, onCreatePix }: BillingFormScreenProps) {
   const navigation = useNavigation();
   const [draft, setDraft] = useState<BillingDraft>(() =>
     billing ? draftFromBilling(billing) : EMPTY_BILLING_DRAFT("America/Sao_Paulo", calendarDate()),
   );
-  const [recent, setRecent] = useState<Person[]>([]);
-  const [directory, setDirectory] = useState<Person[]>([]);
+  const [recent, setRecent] = useState<Contact[]>([]);
+  const [directory, setDirectory] = useState<Contact[]>([]);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [picker, setPicker] = useState(false);
   const [pixOpen, setPixOpen] = useState(false);
@@ -292,16 +328,21 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   const editing = Boolean(billing);
   const locked = Boolean(attempt);
   const frozen = editing && billing?.type !== "indefinite";
+  const payable = draft.direction === "payable";
+  // A conta a pagar is paid elsewhere, so the wallet gate only holds a conta a receber.
+  const blocked = gated && !payable;
   // `BillingPatch` carries no type, frequency or dates, so the schedule is
   // read-only in every edit — otherwise Salvar would silently drop the change.
   const scheduled = editing;
+  // An assinatura may move its next due date; generated occurrences keep theirs.
+  const dueLocked = scheduled && billing?.type !== "indefinite";
 
   const load = useCallback(
     (stored: BillingDraft | null) => {
       let live = true;
 
       void Promise.all([
-        people.list(false, undefined, undefined, "recent"),
+        contacts.list(false, undefined, undefined, "recent"),
         client.paymentMethods(),
         billing || stored ? Promise.resolve(null) : client.profile(),
       ])
@@ -313,11 +354,10 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
           const active = wallet.paymentMethods.filter((method) => !method.archivedAt);
 
           if (active.length) {
-            clearPixRequiredSeen();
           }
 
-          setRecent(agenda.people.slice(0, 12));
-          setDirectory(agenda.people);
+          setRecent(agenda.contacts.slice(0, 12));
+          setDirectory(agenda.contacts);
           setMethods(active);
           setGated(!billing && !active.length);
           setDraft((current) => {
@@ -341,7 +381,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
         live = false;
       };
     },
-    [billing, client, people],
+    [billing, client, contacts],
   );
 
   // The route stays mounted while the form takes a side trip to the contact or
@@ -369,20 +409,6 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
     });
   }, [navigation]);
 
-  // A billing without an active Pix key has nowhere to be paid, so the first
-  // load without one parks the draft and opens the key screen. Coming back
-  // still without a key must not bounce the user out again: the trip is
-  // remembered and the form shows the blocking panel instead.
-  useEffect(() => {
-    if (!gated || !ready || !onCreatePix || pixRequiredSeen()) {
-      return;
-    }
-
-    markPixRequiredSeen();
-    saveDraft(draft);
-    onCreatePix(true);
-  }, [draft, gated, onCreatePix, ready]);
-
   function update(patch: Partial<BillingDraft>) {
     if (locked) {
       return;
@@ -392,12 +418,30 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
     setDraft((current) => ({ ...current, ...patch }));
   }
 
-  function toggle(personId: string) {
-    update({ selected: draft.selected.includes(personId) ? draft.selected.filter((id) => id !== personId) : [...draft.selected, personId] });
+  function toggle(userId: string) {
+    update({ selected: draft.selected.includes(userId) ? draft.selected.filter((id) => id !== userId) : [...draft.selected, userId] });
   }
 
-  const remember = useCallback((seen: Person[]) => {
-    setDirectory((current) => [...current, ...seen.filter((person) => !current.some((known) => known.id === person.id))]);
+  /** The payee seat holds one contact: picking closes the sheet, picking again clears it. */
+  function pickPayee(userId: string) {
+    update({ payee: draft.payee === userId ? "" : userId });
+    setPicker(false);
+  }
+
+  function updatePix(patch: Partial<PixDraft>) {
+    update({ pixInline: { ...draft.pixInline, ...patch } });
+  }
+
+  function pickPixType(type: PixKeyType) {
+    updatePix({ type, key: "" });
+  }
+
+  function changePixKey(raw: string) {
+    updatePix({ key: pixKeyField(draft.pixInline.type).format(raw) });
+  }
+
+  const remember = useCallback((seen: Contact[]) => {
+    setDirectory((current) => [...current, ...seen.filter((contact) => !current.some((known) => known.id === contact.id))]);
   }, []);
 
   function leaveTo(go: () => void) {
@@ -432,17 +476,24 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
 
   function patchBody(input: BillingInput) {
     const editable = {
-      paymentMethodId: input.paymentMethodId,
-      clearPaymentMethod: !input.paymentMethodId,
       reminders: input.reminders,
       category: input.category,
+      ...(input.direction === "payable"
+        ? { pix: input.pix, clearPix: !input.pix }
+        : { paymentMethodId: input.paymentMethodId, clearPaymentMethod: !input.paymentMethodId }),
     };
 
     if (billing && billing.type !== "indefinite") {
       return editable;
     }
 
-    return { description: input.description, totalCents: input.totalCents, split: input.split, ...editable };
+    const body = { description: input.description, totalCents: input.totalCents, startDate: input.startDate, ...editable };
+
+    if (input.direction === "payable") {
+      return { ...body, payeeUserId: input.payeeUserId, clearPayee: !input.payeeUserId };
+    }
+
+    return { ...body, split: input.split };
   }
 
   async function save(sent: Attempt) {
@@ -460,7 +511,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
       const uncertain = sent.uncertain || !(reason instanceof FinancialRequestError) || reason.status >= 500;
 
       setAttempt(uncertain ? { ...sent, uncertain: true } : null);
-      setError(reason instanceof Error ? reason.message : "Não foi possível salvar a cobrança.");
+      setError(reason instanceof Error ? reason.message : "Não foi possível salvar a conta.");
     } finally {
       setBusy(false);
     }
@@ -480,7 +531,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
     }
 
     try {
-      void save({ input: buildBillingInput(draft), key: Crypto.randomUUID(), uncertain: false });
+      void save({ input: buildBillingInput(draftToBuild(draft)), key: Crypto.randomUUID(), uncertain: false });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Confira os dados informados.");
     }
@@ -489,10 +540,16 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   const today = todayIn(draft.timezone);
   const totalCents = draftTotalCents(draft);
   const { amounts, error: hint } = previewBillingSplit(draft);
-  const chosen = draft.selected.map((id) => recent.find((person) => person.id === id) ?? directory.find((person) => person.id === id) ?? unknownPerson(id));
+  /** The draft seats user ids; the agenda entries loaded so far give them a name. */
+  function contactOf(userId: string): Contact {
+    return recent.find((contact) => contact.userId === userId) ?? directory.find((contact) => contact.userId === userId) ?? unknownContact(userId);
+  }
+
+  const chosen = draft.selected.map(contactOf);
+  const payee = draft.payee ? contactOf(draft.payee) : null;
 
   function nameOf(key: string): string {
-    return key === "owner" ? "Eu" : (directory.find((person) => person.id === key)?.name ?? "Contato");
+    return key === "owner" ? "Eu" : (directory.find((contact) => contact.userId === key)?.name ?? "Contato");
   }
 
   /** What the owner keeps on a fixed split: the preview's share, or the remainder of a half-typed screen. */
@@ -509,8 +566,8 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
 
     let used = 0;
 
-    for (const personId of draft.selected) {
-      const typed = draft.values.fixed[personId];
+    for (const userId of draft.selected) {
+      const typed = draft.values.fixed[userId];
 
       if (!typed) {
         continue;
@@ -527,7 +584,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   }
 
   const modeValues = draft.mode === "equal" ? NO_VALUES : draft.values[draft.mode];
-  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map((personId) => ({ kind: "person", personId })) : splitParties(draft);
+  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map((userId) => ({ kind: "user", userId })) : splitParties(draft);
   const rows: SplitRow[] = rowParties.map((party) => {
     const key = splitPartyKey(party);
     const cents = amounts[key];
@@ -574,7 +631,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
   const selectedPix = methods.find((method) => method.id === draft.pix) ?? null;
   // One registered key has nothing to switch to; the sheet only opens with a real choice.
   const switchable = methods.length > 1 || (methods.length === 1 && !selectedPix);
-  const action = editing ? "Salvar" : "Criar cobrança";
+  const action = editing ? "Salvar conta" : "Criar conta";
   const retry = editing ? "Tentar salvar novamente" : "Tentar criar novamente";
 
   return (
@@ -593,95 +650,160 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
             <Text className="font-bold text-primary">← Voltar</Text>
           </Pressable>
           <Text accessibilityRole="header" className="text-lg font-extrabold text-primary-strong">
-            {editing ? "Editar cobrança" : "Nova cobrança"}
+            {editing ? "Editar conta" : "Nova conta"}
           </Text>
         </View>
       )}
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 px-5 pb-36 pt-4" showsVerticalScrollIndicator={false}>
+        {/* Direção */}
+        <View className="flex-row gap-1 rounded-xl bg-surface-muted p-1">
+          {DIRECTIONS.map((option) => (
+            <Segment
+              key={option.value}
+              label={option.label}
+              name={option.label}
+              active={draft.direction === option.value}
+              disabled={locked || editing}
+              onPress={() => update({ direction: option.value })}
+            />
+          ))}
+        </View>
+
         {frozen && <Text className="rounded-2xl bg-primary-soft/50 p-4 text-sm text-primary-strong">{FROZEN_NOTE}</Text>}
-        {gated && (
-          <View className="gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
-            <Text className="font-semibold text-amber-900">{PIX_GATE_NOTE}</Text>
+        {/* Without a key there is nothing to send: the form waits behind a single call to action. */}
+        {blocked ? (
+          <View className="items-center gap-3 rounded-3xl border border-outline/40 bg-surface px-6 py-10">
+            <View className="h-14 w-14 items-center justify-center rounded-full bg-primary-soft/60">
+              <Image source={keyMark} tintColor={ACTIVE_TINT} style={{ width: 26, height: 26 }} />
+            </View>
+            <Text accessibilityRole="header" className="text-center text-xl font-bold text-primary-strong">
+              {PIX_GATE_TITLE}
+            </Text>
+            <Text className="text-center text-sm leading-5 text-muted">{PIX_GATE_NOTE}</Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Cadastrar chave"
+              accessibilityLabel="Cadastrar chave Pix"
+              accessibilityState={{ disabled: !onCreatePix }}
               disabled={!onCreatePix}
               onPress={() => onCreatePix && leaveTo(() => onCreatePix(true))}
-              className="min-h-12 items-center justify-center rounded-xl border border-outline bg-canvas"
+              className="mt-2 h-12 w-full items-center justify-center rounded-xl bg-primary"
             >
-              <Text className="font-bold text-primary">Cadastrar chave</Text>
+              <Text className="font-bold text-white">Cadastrar chave Pix</Text>
             </Pressable>
           </View>
-        )}
+        ) : (
+          <>
         {!ready && !error && <ActivityIndicator accessibilityLabel="Carregando dados" color={ACTIVE_TINT} />}
 
-        {/* Participantes */}
-        <View className="gap-3">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-1.5">
-              <Text className="text-sm font-semibold text-primary-strong">Participantes</Text>
-              <Text className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-muted">
-                {participants} pessoa{participants === 1 ? "" : "s"}
-              </Text>
+        {/* Para quem: the single contact a conta a pagar is owed to */}
+        {payable && (
+          <View className="gap-3">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-sm font-semibold text-primary-strong">Para quem (opcional)</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Escolher contato"
+                accessibilityState={{ disabled: locked || frozen }}
+                disabled={locked || frozen}
+                onPress={() => setPicker(true)}
+                className="min-h-10 flex-row items-center gap-1 px-1"
+              >
+                <Image source={closeMark} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
+                <Text className="text-xs font-semibold text-primary">{payee ? "Trocar" : "Escolher"}</Text>
+              </Pressable>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Adicionar"
-              accessibilityState={{ disabled: locked || frozen }}
-              disabled={locked || frozen}
-              onPress={() => setPicker(true)}
-              className="min-h-10 flex-row items-center gap-1 px-1"
-            >
-              <Image source={closeMark} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
-              <Text className="text-xs font-semibold text-primary">Adicionar</Text>
-            </Pressable>
-          </View>
 
-          {chosen.length > 0 && (
-            <View className="flex-row flex-wrap gap-2">
-              {chosen.map((person) => (
+            {payee ? (
+              <View className="flex-row flex-wrap gap-2">
                 <Pressable
-                  key={person.id}
                   accessibilityRole="button"
-                  accessibilityLabel={person.displayName}
-                  accessibilityHint="Remove da cobrança"
+                  accessibilityLabel={payee.displayName}
+                  accessibilityHint="Remove da conta"
                   accessibilityState={{ selected: true, disabled: locked || frozen }}
                   disabled={locked || frozen}
-                  onPress={() => toggle(person.id)}
+                  onPress={() => update({ payee: "" })}
                   className="flex-row items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
                 >
-                  <InitialsAvatar name={person.displayName} size={24} />
-                  <Text className="text-xs font-semibold text-ink">{person.displayName}</Text>
+                  <InitialsAvatar name={payee.displayName} size={24} />
+                  <Text className="text-xs font-semibold text-ink">{payee.displayName}</Text>
                   <Image source={closeMark} tintColor={MUTED_TINT} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
                 </Pressable>
-              ))}
-            </View>
-          )}
-
-          <View className="flex-row items-center justify-between rounded-xl border border-outline/30 bg-surface-muted/80 p-3">
-            <View className="flex-1 flex-row items-center gap-2.5">
-              <View className="h-8 w-8 items-center justify-center rounded-lg bg-surface">
-                <InitialsAvatar name="Eu" size={20} inverted />
               </View>
-              <View className="flex-1">
-                <Text className="text-xs font-semibold text-ink">Eu também participo da divisão</Text>
-                <Text className="text-[11px] text-muted">Você entra no cálculo como um dos pagadores</Text>
-              </View>
-            </View>
-            <Switch
-              accessibilityLabel="Eu também participo"
-              disabled={locked || frozen}
-              value={draft.owner}
-              onValueChange={(value) => update({ owner: value })}
-              trackColor={{ true: "#0B513D" }}
-            />
+            ) : (
+              <Text className="text-[11px] text-muted">Sem contato, a conta fica só com você.</Text>
+            )}
           </View>
-        </View>
+        )}
+
+        {/* Participantes */}
+        {!payable && (
+          <View className="gap-3">
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center gap-1.5">
+                <Text className="text-sm font-semibold text-primary-strong">Participantes</Text>
+                <Text className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-muted">
+                  {participants} pessoa{participants === 1 ? "" : "s"}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Adicionar"
+                accessibilityState={{ disabled: locked || frozen }}
+                disabled={locked || frozen}
+                onPress={() => setPicker(true)}
+                className="min-h-10 flex-row items-center gap-1 px-1"
+              >
+                <Image source={closeMark} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
+                <Text className="text-xs font-semibold text-primary">Adicionar</Text>
+              </Pressable>
+            </View>
+
+            {chosen.length > 0 && (
+              <View className="flex-row flex-wrap gap-2">
+                {chosen.map((contact) => (
+                  <Pressable
+                    key={contact.userId}
+                    accessibilityRole="button"
+                    accessibilityLabel={contact.displayName}
+                    accessibilityHint="Remove da cobrança"
+                    accessibilityState={{ selected: true, disabled: locked || frozen }}
+                    disabled={locked || frozen}
+                    onPress={() => toggle(contact.userId)}
+                    className="flex-row items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
+                  >
+                    <InitialsAvatar name={contact.displayName} size={24} />
+                    <Text className="text-xs font-semibold text-ink">{contact.displayName}</Text>
+                    <Image source={closeMark} tintColor={MUTED_TINT} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            <View className="flex-row items-center justify-between rounded-xl border border-outline/30 bg-surface-muted/80 p-3">
+              <View className="flex-1 flex-row items-center gap-2.5">
+                <View className="h-8 w-8 items-center justify-center rounded-lg bg-surface">
+                  <InitialsAvatar name="Eu" size={20} inverted />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs font-semibold text-ink">Eu também participo da divisão</Text>
+                  <Text className="text-[11px] text-muted">Você entra no cálculo como um dos pagadores</Text>
+                </View>
+              </View>
+              <Switch
+                accessibilityLabel="Eu também participo"
+                disabled={locked || frozen}
+                value={draft.owner}
+                onValueChange={(value) => update({ owner: value })}
+                trackColor={{ true: "#0B513D" }}
+              />
+            </View>
+          </View>
+        )}
 
         {/* Valor */}
         <Card>
-          <Text className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted">{AMOUNT_LABELS[draft.type]}</Text>
+          <Text className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted">{(payable ? PAYABLE_AMOUNT_LABELS : AMOUNT_LABELS)[draft.type]}</Text>
           <View className="flex-row items-end justify-center gap-1.5">
             <Text className="pb-1 text-xl font-semibold text-muted">R$</Text>
             <TextInput
@@ -700,7 +822,7 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
         {/* Título e categoria */}
         <View className="gap-3">
           <View className="gap-1">
-            <SectionLabel>Título da cobrança</SectionLabel>
+            <SectionLabel>Título da conta</SectionLabel>
             <TextInput
               accessibilityLabel="Título"
               editable={!locked && !frozen}
@@ -714,43 +836,38 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
           </View>
           <View className="gap-1.5">
             <SectionLabel>Categoria</SectionLabel>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 pb-1">
-              {BILLING_CATEGORIES.map((category) => (
-                <Chip
-                  key={category.value}
-                  label={category.label}
-                  active={draft.category === category.value}
-                  disabled={locked}
-                  icon={<CategoryIcon category={category.value} size={16} tint={draft.category === category.value ? ACTIVE_TINT : MUTED_TINT} />}
-                  onPress={() => update({ category: category.value, description: draft.description || category.label })}
-                />
-              ))}
-            </ScrollView>
+            <CategorySelect
+              value={draft.category}
+              disabled={locked}
+              onSelect={(category) => update({ category, description: draft.description || billingCategoryLabel(category) })}
+            />
           </View>
         </View>
 
         {/* Divisão */}
-        <Card>
-          <View className="flex-row items-center justify-between gap-2">
-            <Text className="text-sm font-semibold text-primary-strong">Divisão da Conta</Text>
-            <Text className="rounded-full bg-primary-soft/40 px-2 py-0.5 text-[11px] font-semibold text-primary" numberOfLines={1}>
-              {splitTag()}
-            </Text>
-          </View>
-          <View className="flex-row gap-1 rounded-xl bg-surface-muted p-1">
-            {SPLIT_MODES.map((option) => (
-              <Segment
-                key={option.value}
-                label={option.label}
-                name={option.name}
-                active={draft.mode === option.value}
-                disabled={locked || frozen}
-                onPress={() => update({ mode: option.value })}
-              />
-            ))}
-          </View>
-          <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={changeSplitValue} />
-        </Card>
+        {!payable && (
+          <Card>
+            <View className="flex-row items-center justify-between gap-2">
+              <Text className="text-sm font-semibold text-primary-strong">Divisão da Conta</Text>
+              <Text className="rounded-full bg-primary-soft/40 px-2 py-0.5 text-[11px] font-semibold text-primary" numberOfLines={1}>
+                {splitTag()}
+              </Text>
+            </View>
+            <View className="flex-row gap-1 rounded-xl bg-surface-muted p-1">
+              {SPLIT_MODES.map((option) => (
+                <Segment
+                  key={option.value}
+                  label={option.label}
+                  name={option.name}
+                  active={draft.mode === option.value}
+                  disabled={locked || frozen}
+                  onPress={() => update({ mode: option.value })}
+                />
+              ))}
+            </View>
+            <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={changeSplitValue} />
+          </Card>
+        )}
 
         {/* Modalidade */}
         <View className="gap-2">
@@ -791,11 +908,11 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
 
         {/* Vencimento */}
         <View className="gap-2">
-          <SectionLabel>Data de Vencimento</SectionLabel>
+          <SectionLabel>{scheduled ? "Próximo vencimento" : "Data de Vencimento"}</SectionLabel>
           <View className="flex-row items-center gap-2">
             <TextInput
               accessibilityLabel="Vencimento"
-              editable={!locked && !scheduled}
+              editable={!locked && !dueLocked}
               placeholder="AAAA-MM-DD"
               placeholderTextColor={MUTED_TINT}
               value={draft.start}
@@ -807,12 +924,12 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
                 key={option.label}
                 accessibilityRole="button"
                 accessibilityLabel={option.label}
-                accessibilityState={{ selected: draft.start === addCalendarDays(today, option.days), disabled: locked || scheduled }}
-                disabled={locked || scheduled}
+                accessibilityState={{ selected: draft.start === addCalendarDays(today, option.days), disabled: locked || dueLocked }}
+                disabled={locked || dueLocked}
                 onPress={() => update({ start: addCalendarDays(today, option.days) })}
                 className={`h-11 items-center justify-center rounded-xl border px-3.5 ${
                   draft.start === addCalendarDays(today, option.days) ? "border-primary/30 bg-primary-soft/60" : "border-outline/40 bg-surface-muted"
-                } ${locked || scheduled ? "opacity-50" : ""}`}
+                } ${locked || dueLocked ? "opacity-50" : ""}`}
               >
                 <Text className="text-xs font-semibold text-primary-strong">{option.label}</Text>
               </Pressable>
@@ -820,10 +937,10 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Abrir calendário"
-              accessibilityState={{ expanded: calendarOpen, disabled: locked || scheduled }}
-              disabled={locked || scheduled}
+              accessibilityState={{ expanded: calendarOpen, disabled: locked || dueLocked }}
+              disabled={locked || dueLocked}
               onPress={() => setCalendarOpen((open) => !open)}
-              className={`h-11 w-11 items-center justify-center rounded-xl border border-outline/50 bg-surface ${locked || scheduled ? "opacity-50" : ""}`}
+              className={`h-11 w-11 items-center justify-center rounded-xl border border-outline/50 bg-surface ${locked || dueLocked ? "opacity-50" : ""}`}
             >
               <Image source={calendarMark} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
             </Pressable>
@@ -868,40 +985,63 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
           )}
         </View>
 
-        {/* Pix */}
-        <View className="gap-2">
-          <View className="flex-row items-center justify-between">
-            <SectionLabel>Receber via Pix</SectionLabel>
-            {!editing && !gated && onCreatePix && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Cadastrar chave" disabled={locked} onPress={() => leaveTo(onCreatePix)} className="min-h-8 justify-center">
-                <Text className="text-[11px] font-medium text-primary">+ Cadastrar nova chave</Text>
-              </Pressable>
-            )}
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Trocar chave Pix"
-            accessibilityState={{ disabled: locked || !switchable }}
-            disabled={locked || !switchable}
-            onPress={() => setPixOpen(true)}
-            className="flex-row items-center justify-between rounded-xl border border-outline/40 bg-surface p-3"
-          >
-            <View className="flex-1 flex-row items-center gap-3">
-              <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
-                <Image source={selectedPix ? PIX_ICONS[selectedPix.pixKeyType] : keyMark} tintColor={ACTIVE_TINT} style={{ width: 18, height: 18 }} />
-              </View>
-              <View className="flex-1">
-                <Text className="text-xs font-semibold text-ink" numberOfLines={1}>
-                  {selectedPix ? `${PIX_TYPE_LABELS[selectedPix.pixKeyType]}: ${abbreviate(selectedPix.pixKey)}` : "Selecionar chave Pix"}
-                </Text>
-                <Text className="text-[11px] text-muted" numberOfLines={1}>
-                  {selectedPix ? (selectedPix.isDefault ? "Chave padrão" : "Chave secundária") : methods.length ? "Toque para escolher" : "Nenhuma chave cadastrada"}
-                </Text>
-              </View>
+        {/* Chave Pix inline: where the owner pays a conta a pagar */}
+        {payable && (
+          <View className="gap-4">
+            <SectionLabel>Chave Pix (opcional)</SectionLabel>
+            <PixKeyFields type={draft.pixInline.type} value={draft.pixInline.key} disabled={locked} onPickType={pickPixType} onChangeKey={changePixKey} onClear={() => updatePix({ key: "" })} />
+            <View className="gap-1">
+              <SectionLabel>Apelido da chave</SectionLabel>
+              <TextInput
+                accessibilityLabel="Apelido da chave"
+                editable={!locked}
+                maxLength={60}
+                placeholder="Ex: Nubank, Inter..."
+                placeholderTextColor={MUTED_TINT}
+                value={draft.pixInline.label}
+                onChangeText={(label) => updatePix({ label })}
+                className="h-11 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] text-ink"
+              />
             </View>
-            {switchable && <Image source={chevronMark} tintColor={MUTED_TINT} style={{ width: 16, height: 16, transform: [{ rotate: "90deg" }] }} />}
-          </Pressable>
-        </View>
+          </View>
+        )}
+
+        {/* Pix */}
+        {!payable && (
+          <View className="gap-2">
+            <View className="flex-row items-center justify-between">
+              <SectionLabel>Receber via Pix</SectionLabel>
+              {!editing && !gated && onCreatePix && (
+                <Pressable accessibilityRole="button" accessibilityLabel="Cadastrar chave" disabled={locked} onPress={() => leaveTo(onCreatePix)} className="min-h-8 justify-center">
+                  <Text className="text-[11px] font-medium text-primary">+ Cadastrar nova chave</Text>
+                </Pressable>
+              )}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Trocar chave Pix"
+              accessibilityState={{ disabled: locked || !switchable }}
+              disabled={locked || !switchable}
+              onPress={() => setPixOpen(true)}
+              className="flex-row items-center justify-between rounded-xl border border-outline/40 bg-surface p-3"
+            >
+              <View className="flex-1 flex-row items-center gap-3">
+                <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
+                  <Image source={selectedPix ? PIX_ICONS[selectedPix.pixKeyType] : keyMark} tintColor={ACTIVE_TINT} style={{ width: 18, height: 18 }} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs font-semibold text-ink" numberOfLines={1}>
+                    {selectedPix ? `${PIX_TYPE_LABELS[selectedPix.pixKeyType]}: ${abbreviate(selectedPix.pixKey)}` : "Selecionar chave Pix"}
+                  </Text>
+                  <Text className="text-[11px] text-muted" numberOfLines={1}>
+                    {selectedPix ? (selectedPix.isDefault ? "Chave padrão" : "Chave secundária") : methods.length ? "Toque para escolher" : "Nenhuma chave cadastrada"}
+                  </Text>
+                </View>
+              </View>
+              {switchable && <Image source={chevronMark} tintColor={MUTED_TINT} style={{ width: 16, height: 16, transform: [{ rotate: "90deg" }] }} />}
+            </Pressable>
+          </View>
+        )}
 
         {pixOpen && (
           <Modal transparent animationType="slide" visible onRequestClose={() => setPixOpen(false)}>
@@ -966,25 +1106,29 @@ export function BillingFormScreen({ client = financialClient, people = peopleCli
             <Text className="font-bold text-primary">{retry}</Text>
           </Pressable>
         )}
+          </>
+        )}
       </ScrollView>
 
+      {!blocked && (
       <View className="absolute bottom-0 left-0 right-0 border-t border-outline/30 bg-surface/95 px-4 pb-8 pt-4">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={action}
-          disabled={busy || gated}
+          disabled={busy}
           onPress={submit}
-          className={`h-[52px] items-center justify-center rounded-xl bg-primary ${busy || gated ? "opacity-50" : ""}`}
+          className={`h-[52px] items-center justify-center rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
         >
           {busy ? <ActivityIndicator color="white" /> : <Text className="text-sm font-bold text-white">{action}</Text>}
         </Pressable>
       </View>
+      )}
 
       {picker && (
         <ContactPickerSheet
-          selected={draft.selected}
-          people={people}
-          onToggle={toggle}
+          selected={payable ? (draft.payee ? [draft.payee] : []) : draft.selected}
+          contacts={contacts}
+          onToggle={payable ? pickPayee : toggle}
           onSeen={remember}
           onClose={() => setPicker(false)}
           onNew={

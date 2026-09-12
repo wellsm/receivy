@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
-import { BILLING_CATEGORIES, type BillingCategory, type BillingState, type BillingType } from "@receivy/common";
+import { BILLING_CATEGORIES, type BillingCategory, type BillingState, type BillingType, type Direction } from "@receivy/common";
 
 export type BillingFiltersValue = {
   state: BillingState;
   type: BillingType | "";
   category: BillingCategory | "";
+  /** Empty lists both sides; otherwise it becomes `direction=` on the list query. */
+  direction: Direction | "";
 };
 
-export const DEFAULT_BILLING_FILTERS: BillingFiltersValue = { state: "active", type: "", category: "" };
+export const DEFAULT_BILLING_FILTERS: BillingFiltersValue = { state: "active", type: "", category: "", direction: "" };
 
 const STATES: { value: BillingState; label: string }[] = [
   { value: "active", label: "Ativas" },
@@ -25,6 +27,12 @@ const TYPES: { value: BillingType | ""; label: string }[] = [
 
 const CATEGORIES: { value: BillingCategory | ""; label: string }[] = [{ value: "", label: "Todas" }, ...BILLING_CATEGORIES];
 
+const DIRECTIONS: { value: Direction | ""; label: string }[] = [
+  { value: "", label: "Todas" },
+  { value: "receivable", label: "A receber" },
+  { value: "payable", label: "A pagar" },
+];
+
 /** The filters that differ from the default, as removable chips under the search field. */
 export function activeBillingChips(value: BillingFiltersValue): { key: keyof BillingFiltersValue; label: string }[] {
   const chips: { key: keyof BillingFiltersValue; label: string }[] = [];
@@ -39,6 +47,10 @@ export function activeBillingChips(value: BillingFiltersValue): { key: keyof Bil
 
   if (value.category) {
     chips.push({ key: "category", label: CATEGORIES.find((option) => option.value === value.category)?.label ?? value.category });
+  }
+
+  if (value.direction) {
+    chips.push({ key: "direction", label: DIRECTIONS.find((option) => option.value === value.direction)?.label ?? value.direction });
   }
 
   return chips;
@@ -84,7 +96,7 @@ type BillingFiltersSheetProps = {
   onClose: () => void;
 };
 
-/** Bottom sheet with the three filter groups; nothing reaches the list until `Aplicar`. */
+/** Bottom sheet with the four filter groups; nothing reaches the list until `Aplicar`. */
 export function BillingFiltersSheet({ value, onApply, onClose }: BillingFiltersSheetProps) {
   const [draft, setDraft] = useState<BillingFiltersValue>(value);
 
@@ -98,6 +110,7 @@ export function BillingFiltersSheet({ value, onApply, onClose }: BillingFiltersS
         </Text>
 
         <ScrollView contentContainerClassName="gap-5" showsVerticalScrollIndicator={false}>
+          <ChipGroup group="Direção" options={DIRECTIONS} selected={draft.direction} onSelect={(direction) => setDraft({ ...draft, direction })} />
           <ChipGroup group="Estado" options={STATES} selected={draft.state} onSelect={(state) => setDraft({ ...draft, state })} />
           <ChipGroup group="Tipo" options={TYPES} selected={draft.type} onSelect={(type) => setDraft({ ...draft, type })} />
           <ChipGroup group="Categoria" options={CATEGORIES} selected={draft.category} onSelect={(category) => setDraft({ ...draft, category })} />

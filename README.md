@@ -27,7 +27,6 @@ corepack enable
 corepack prepare pnpm@11.5.3 --activate
 pnpm install
 cp packages/api/local.env.example packages/api/local.env
-pnpm --filter @receivy/api db:up
 pnpm dev
 ```
 
@@ -72,16 +71,17 @@ ou como argumento de build da imagem.
 
 O backend já expõe o núcleo passwordless em `/auth/email/code`,
 `/auth/email/confirm`, `/auth/refresh`, `/auth/logout` e `/auth/me`. O arquivo de
-exemplo usa `EMAIL_TRANSPORT=file` e `NOTIFICATION_EMAIL_TRANSPORT=file`: cada
-e-mail (código de login, avisos e lembretes) vira um arquivo `.eml` em
-`packages/api/.ez4/emails/`, ao lado do estado local do EZ4, e nada é impresso
-no terminal. Abra o arquivo mais recente para pegar o código. Esse modo é
-recusado fora de `APP_STAGE=local`; `disabled` descarta tudo em silêncio. Para
+exemplo usa `EMAIL_TRANSPORT=mailpit`: cada e-mail (código de login, avisos e
+lembretes) vai para o Mailpit do `docker-compose.yml`, e a caixa fica em
+<http://127.0.0.1:8025>. Abra a mensagem mais recente para pegar o código. Sem
+Docker, `EMAIL_TRANSPORT=file` grava cada mensagem como `.eml` em
+`packages/api/.ez4/emails/`. `mailpit` e `file` são recusados fora de
+`APP_STAGE=local` ou `test`; `disabled` descarta tudo em silêncio. Para
 entrega real, defina `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY` e
 `RESEND_FROM_EMAIL` em um gerenciador de segredos, além de gerar valores
 independentes e aleatórios de pelo menos 32 bytes para `AUTH_JWT_SECRET` e
 `LOGIN_CODE_HASH_KEY`. A escolha do provedor fica em
-`packages/api/src/email/service.ts` (Factory EZ4 com um vendor por transporte).
+`packages/api/src/common/services/email/service.ts` (Factory EZ4 com um vendor por transporte).
 
 O acesso dura 15 minutos. O refresh é opaco, vive por 30 dias, gira a cada uso e
 fica armazenado apenas como hash. Reutilizar um refresh já consumido revoga toda
@@ -110,12 +110,28 @@ Ativação e testes reais de Google/Apple dependem das credenciais e callbacks
 configurados conforme [configuração OAuth](docs/oauth-setup.md).
 Deploy dos stages `dev` e `prd` na AWS, ordem das etapas e origem de cada
 variável: [guia de deploy](docs/deploy-guide.md) e [ambientes](docs/environments.md).
+Envelope de erro, códigos de domínio e cotas: [erros da API](docs/api-errors.md); a OpenAPI
+gerada fica em `docs/api-oas.yml` (`pnpm --filter @receivy/api openapi:generate`).
 
-Cobranças são uma entidade só (`billings`): "Uma vez", "Até uma data" (ou N
-vezes) e "Sem fim". O valor é por ocorrência; os tipos finitos geram todas as
-`charges` na criação e o tipo sem fim é materializado pelo job horário na
-janela do primeiro lembrete. A aba "Cobranças" lista uma linha por `billing`;
-a Timeline mostra cada pessoa e vencimento. Rotas: `POST/GET /billings`,
+Glossário: uma **conta** (`billings`) é o cadastro dono do valor, do tipo
+("À vista", "Parcelado" ou "Assinatura") e das pessoas; uma **cobrança**
+(`charges`) é cada pessoa × vencimento, com estado pendente/pago/cancelado,
+comprovantes e pagamento. O valor da conta é por ocorrência; os tipos finitos
+geram todas as cobranças na criação e a assinatura é materializada pelo job
+horário na janela do primeiro lembrete. A aba "Contas" lista uma linha por
+conta; o Feed mostra cada cobrança. Uma conta pode ser **a receber** (o dono
+cobra contatos, Pix da carteira) ou **a pagar** (`direction = 'payable'`: o
+dono paga, credor opcional em `payee_person_id`, chave Pix digitada na conta;
+o credor com conta vê a cobrança como "a receber" e só confirma o pagamento;
+lembretes vão por push ao próprio dono).
+
+Pessoas: um **usuário** (`users`) é a identidade, único por e-mail, com `status`
+`pending` (criado por um contato ou por um login sem onboarding), `active` (fez o
+onboarding) ou `removed`. Um **contato** (`contacts`) é só o vínculo da agenda de um
+dono com um usuário mais o apelido; cadastrar um contato busca ou cria o usuário pelo
+e-mail. Enquanto o usuário está `pending`, qualquer agenda que o tenha edita nome e
+e-mail; depois de `active`, só o apelido. Cobranças apontam para `users.id`
+(`charges.debtor_user_id`); nome e e-mail são lidos ao vivo, só o Pix é snapshot. Rotas: `POST/GET /billings`,
 `GET /billings/{id}`, `GET /billings/{id}/preview`, `PATCH /billings/{id}`
 (edição e estado no mesmo corpo).
 
@@ -123,7 +139,7 @@ a Timeline mostra cada pessoa e vencimento. Rotas: `POST/GET /billings`,
 
 - `pnpm verify`: contrato do workspace, lint, tipos, 5 tarefas de teste e 4 builds
   passaram; o Next compilou e o Expo exportou as rotas web.
-- `pnpm --filter @receivy/api db:up`: Postgres 16 iniciou e ficou `healthy`.
+- `pnpm --filter @receivy/api docker:up`: Postgres 16 iniciou e ficou `healthy`.
 - API EZ4 e BFF retornaram `200` com
   `{"status":"ok","service":"receivy-api"}`. Como a porta 3000 já estava em
   uso, a prova do BFF foi executada em `http://127.0.0.1:3001/api/health`.

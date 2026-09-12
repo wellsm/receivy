@@ -1,7 +1,7 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { Order } from '@ez4/database';
-import { HttpConflictError, HttpNotFoundError } from '@ez4/gateway';
+import { HttpNotFoundError } from '@ez4/gateway';
 import type { BillingInput, BillingSplit } from '@receivy/common';
 import { billingDueLabel, DEFAULT_BILLING_REMINDERS, resolveBillingSplit } from '@receivy/common';
 import {
@@ -11,18 +11,20 @@ import {
   materializeNextOccurrence,
   patchBilling,
   previewBilling
-} from '../../src/billings/repository';
-import { getCharge } from '../../src/charges/repository';
-import { savePaymentMethod } from '../../src/payment-methods/repository';
-import { archivePerson, listPeople, savePerson } from '../../src/people/repository';
-import { getTimeline } from '../../src/timeline/repository';
+} from '../../src/billings/repositories/billing';
+import { getCharge } from '../../src/charges/repositories/charge';
+import { ApiError } from '../../src/common/errors';
+import { archiveContact, listContacts, saveContact } from '../../src/contacts/repositories/contact';
+import { savePaymentMethod } from '../../src/payment-methods/repositories/payment-method';
+import { getTimeline } from '../../src/timeline/repositories/timeline';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
 
 const OWNER = 'b1111111-1111-4111-8111-111111111111';
 const OTHER = 'b2222222-2222-4222-8222-222222222222';
 const date = (value: string) => new Date(`${value}T12:00:00Z`);
 
-let personId: string;
+let debtorId: string;
+let debtorContactId: string;
 let pixId: string;
 let sharesId: string;
 
@@ -34,7 +36,7 @@ function once(overrides: Partial<BillingInput> = {}): BillingInput {
     startDate: '2026-10-31',
     timezone: 'America/Sao_Paulo',
     paymentMethodId: pixId,
-    split: { mode: 'fixed', parts: [{ kind: 'person', personId, amountCents: 6_001 }] },
+    split: { mode: 'fixed', parts: [{ kind: 'user', userId: debtorId, amountCents: 6_001 }] },
     ...overrides
   };
 }
@@ -45,13 +47,15 @@ describe('billings on native PostgreSQL', () => {
     equal(database?.['name'], 'receivy_tests');
     await createUser(db, { id: OWNER, email: 'billing-owner@example.com', name: 'Dona' });
     await createUser(db, { id: OTHER, email: 'billing-other@example.com', name: 'Outra' });
-    personId = (await savePerson(db, OWNER, { name: 'Bruno', email: 'billing-debtor@example.com' })).id;
+    const debtor = await saveContact(db, OWNER, { name: 'Bruno', email: 'billing-debtor@example.com' });
+    debtorId = debtor.userId;
+    debtorContactId = debtor.id;
     pixId = (await savePaymentMethod(db, OWNER, { pixKeyType: 'cpf', pixKey: '52998224725', label: 'Principal' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, OTHER]));
 
-  it('creates a once billing with one numbered charge, immutable snapshots and idempotent replay', async () => {
+  it('creates a once billing with one numbered charge, a live recipient, Pix snapshots and idempotent replay', async () => {
     const created = await createBilling(db, OWNER, 'once-key', once());
     equal(created.type, 'once');
     equal(created.installmentCount, 1);
@@ -61,14 +65,16 @@ describe('billings on native PostgreSQL', () => {
     );
     equal(created.charges[0]!.billingType, 'once');
     equal((await createBilling(db, OWNER, 'once-key', once())).id, created.id);
-    await rejects(() => createBilling(db, OWNER, 'once-key', once({ totalCents: 9_001 })), HttpConflictError);
+    await rejects(() => createBilling(db, OWNER, 'once-key', once({ totalCents: 9_001 })), ApiError);
     await rejects(() => getBilling(db, OTHER, created.id), HttpNotFoundError);
-    await savePerson(db, OWNER, { name: 'Bruno Editado', email: 'billing-edited@example.com' }, personId);
+    // The counterpart is the account itself: a pending contact edit is read live, while the Pix key stays a snapshot.
+    await saveContact(db, OWNER, { name: 'Bruno Editado', email: 'billing-edited@example.com' }, debtorContactId);
     const snapshot = await getCharge(db, OWNER, created.charges[0]!.id);
-    deepEqual(snapshot.recipient, { name: 'Bruno', email: 'billing-debtor@example.com' });
+    deepEqual(snapshot.recipient, { userId: debtorId, name: 'Bruno Editado', email: 'billing-edited@example.com' });
+    equal(snapshot.debtorUserId, debtorId);
     equal(snapshot.pix?.key, '52998224725');
-    await savePerson(db, OWNER, { name: 'Bruno', email: 'billing-debtor@example.com' }, personId);
-    equal(await db.activity_events.count({ where: { aggregate_id: created.charges[0]!.id, type: 'charge.created' } }), 1);
+    await saveContact(db, OWNER, { name: 'Bruno', email: 'billing-debtor@example.com' }, debtorContactId);
+    equal(await db.events.count({ where: { eventable_id: created.charges[0]!.id, type: 'charge.created' } }), 1);
   });
 
   it('creates every occurrence of an until billing at once with exact per-occurrence cents and clamped days', async () => {
@@ -78,7 +84,7 @@ describe('billings on native PostgreSQL', () => {
       frequency: 'monthly',
       startDate: '2026-01-31',
       endDate: '2026-03-31',
-      split: { mode: 'equal', parts: [{ kind: 'person', personId }, { kind: 'owner' }] }
+      split: { mode: 'equal', parts: [{ kind: 'user', userId: debtorId }, { kind: 'owner' }] }
     });
     equal(created.installmentCount, 3);
     deepEqual(
@@ -111,14 +117,14 @@ describe('billings on native PostgreSQL', () => {
         }),
       RangeError
     );
-    await rejects(() => patchBilling(db, OWNER, created.id, { totalCents: 2_000 }), HttpConflictError);
+    await rejects(() => patchBilling(db, OWNER, created.id, { totalCents: 2_000 }), ApiError);
     const ended = await patchBilling(db, OWNER, created.id, { state: 'ended' });
     equal(ended.state, 'ended');
     deepEqual(
       ended.charges.map((charge) => charge.state),
       ['cancelled', 'cancelled', 'cancelled']
     );
-    await rejects(() => patchBilling(db, OWNER, created.id, { reminders: [] }), HttpConflictError);
+    await rejects(() => patchBilling(db, OWNER, created.id, { reminders: [] }), ApiError);
   });
 
   it('materializes indefinite billings one occurrence at a time without duplicates and honors pause', async () => {
@@ -131,7 +137,7 @@ describe('billings on native PostgreSQL', () => {
         type: 'indefinite',
         frequency: 'monthly',
         startDate: '2026-01-31',
-        split: { mode: 'equal', parts: [{ kind: 'person', personId }, { kind: 'owner' }] }
+        split: { mode: 'equal', parts: [{ kind: 'user', userId: debtorId }, { kind: 'owner' }] }
       },
       date('2026-01-01')
     );
@@ -150,8 +156,8 @@ describe('billings on native PostgreSQL', () => {
       RangeError
     );
     await Promise.all([
-      materializeNextOccurrence(db, created.id, undefined, date('2026-01-31')),
-      materializeNextOccurrence(db, created.id, undefined, date('2026-01-31'))
+      materializeNextOccurrence(db, created.id, date('2026-01-31')),
+      materializeNextOccurrence(db, created.id, date('2026-01-31'))
     ]);
     const charges = await db.charges.findMany({ select: { due_date: true, installment: true }, where: { billing_id: created.id } });
     equal(charges.records.length, 1);
@@ -159,10 +165,10 @@ describe('billings on native PostgreSQL', () => {
     ok(charges.records[0]!.installment == null);
     const paused = await patchBilling(db, OWNER, created.id, { state: 'paused' }, date('2026-02-01'));
     equal(paused.state, 'paused');
-    await materializeNextOccurrence(db, created.id, undefined, date('2026-03-31'));
+    await materializeNextOccurrence(db, created.id, date('2026-03-31'));
     equal(await db.charges.count({ where: { billing_id: created.id } }), 1);
     await patchBilling(db, OWNER, created.id, { state: 'active' }, date('2026-04-01'));
-    await materializeNextOccurrence(db, created.id, undefined, date('2026-04-30'));
+    await materializeNextOccurrence(db, created.id, date('2026-04-30'));
     deepEqual(
       (
         await db.charges.findMany({ select: { due_date: true }, where: { billing_id: created.id }, order: { due_date: Order.Asc } })
@@ -171,12 +177,12 @@ describe('billings on native PostgreSQL', () => {
     );
     const oncePreviewId = (await createBilling(db, OWNER, 'once-preview', once())).id;
 
-    await rejects(() => previewBilling(db, OWNER, oncePreviewId), HttpConflictError);
+    await rejects(() => previewBilling(db, OWNER, oncePreviewId), ApiError);
     await patchBilling(db, OWNER, created.id, { state: 'ended' });
   });
 
   it('edits future occurrences of an indefinite billing and rolls back unavailable recipients without starving others', async () => {
-    const archived = await savePerson(db, OWNER, { name: 'Arquivado' });
+    const archived = await saveContact(db, OWNER, { name: 'Arquivado', email: 'billing-archived@example.com' });
     const invalid = await createBilling(
       db,
       OWNER,
@@ -186,7 +192,7 @@ describe('billings on native PostgreSQL', () => {
         type: 'indefinite',
         frequency: 'monthly',
         startDate: '2026-01-15',
-        split: { mode: 'equal', parts: [{ kind: 'person', personId: archived.id }] }
+        split: { mode: 'equal', parts: [{ kind: 'user', userId: archived.userId }] }
       },
       date('2026-01-01')
     );
@@ -199,13 +205,13 @@ describe('billings on native PostgreSQL', () => {
         type: 'indefinite',
         frequency: 'monthly',
         startDate: '2026-01-15',
-        split: { mode: 'equal', parts: [{ kind: 'person', personId }] }
+        split: { mode: 'equal', parts: [{ kind: 'user', userId: debtorId }] }
       },
       date('2026-01-01')
     );
-    await archivePerson(db, OWNER, archived.id);
-    const skipped = await materializeNextOccurrence(db, invalid.id, undefined, date('2026-01-15'));
-    const done = await materializeNextOccurrence(db, valid.id, undefined, date('2026-01-15'));
+    await archiveContact(db, OWNER, archived.id);
+    const skipped = await materializeNextOccurrence(db, invalid.id, date('2026-01-15'));
+    const done = await materializeNextOccurrence(db, valid.id, date('2026-01-15'));
     ok(skipped.skipped, 'an archived recipient never throws out of the consumer');
     equal(done.materialized, true);
     equal((await db.billings.findOne({ select: { processed_through: true }, where: { id: invalid.id } }))?.processed_through, '2025-12-31');
@@ -232,17 +238,17 @@ describe('billings on native PostgreSQL', () => {
 
   it('persists a category and a shares split with one charge per quota', async () => {
     const [second, third, fourth] = await Promise.all([
-      savePerson(db, OWNER, { name: 'Cota Dois' }),
-      savePerson(db, OWNER, { name: 'Cota Tres' }),
-      savePerson(db, OWNER, { name: 'Cota Quatro' })
+      saveContact(db, OWNER, { name: 'Cota Dois', email: 'billing-quota-2@example.com' }),
+      saveContact(db, OWNER, { name: 'Cota Tres', email: 'billing-quota-3@example.com' }),
+      saveContact(db, OWNER, { name: 'Cota Quatro', email: 'billing-quota-4@example.com' })
     ]);
     const split = {
       mode: 'shares' as const,
       parts: [
-        { kind: 'person' as const, personId, shares: 2 },
-        { kind: 'person' as const, personId: second!.id, shares: 2 },
-        { kind: 'person' as const, personId: third!.id, shares: 1 },
-        { kind: 'person' as const, personId: fourth!.id, shares: 1 }
+        { kind: 'user' as const, userId: debtorId, shares: 2 },
+        { kind: 'user' as const, userId: second!.userId, shares: 2 },
+        { kind: 'user' as const, userId: third!.userId, shares: 1 },
+        { kind: 'user' as const, userId: fourth!.userId, shares: 1 }
       ]
     };
     const created = await createBilling(
@@ -288,7 +294,7 @@ describe('billings on native PostgreSQL', () => {
     await rejects(
       () =>
         createBilling(db, OWNER, 'shares-key', once({ description: 'Churrasco do sábado', totalCents: 12_000, category: 'travel', split })),
-      HttpConflictError
+      ApiError
     );
   });
 
@@ -306,17 +312,19 @@ describe('billings on native PostgreSQL', () => {
     const instant = new Date().toISOString();
 
     await db.charges.updateOne({ where: { id: charges.records[0]!.id }, data: { state: 'paid', paid_at: instant, updated_at: instant } });
-    await db.payment_proofs.insertOne({
+    await db.charges.updateOne({
+      where: { id: charges.records[1]!.id },
       data: {
-        id: crypto.randomUUID(),
-        charge: { id: charges.records[1]!.id },
-        object_key: `proofs/${sharesId}/counter.pdf`,
-        original_name: 'counter.pdf',
-        mime: 'application/pdf',
-        size: 1_024,
-        sha256: 'a'.repeat(64),
-        state: 'pending',
-        created_at: instant
+        proof_state: 'pending',
+        proof_file: {
+          key: `proofs/${sharesId}/counter.pdf`,
+          name: 'counter.pdf',
+          mime: 'application/pdf',
+          size: 1_024,
+          sha256: 'a'.repeat(64)
+        },
+        proof_sent_at: instant,
+        updated_at: instant
       }
     });
 
@@ -370,7 +378,7 @@ describe('billings on native PostgreSQL', () => {
   });
 
   it('reports the overdue due date while the share action still points at the next charge', async () => {
-    const solo = (await savePerson(db, OWNER, { name: 'Atrasado Solo' })).id;
+    const solo = (await saveContact(db, OWNER, { name: 'Atrasado Solo', email: 'billing-overdue-solo@example.com' })).userId;
     const created = await createBilling(
       db,
       OWNER,
@@ -379,7 +387,7 @@ describe('billings on native PostgreSQL', () => {
         ...once({
           description: 'Parcelas atrasadas',
           totalCents: 3_000,
-          split: { mode: 'equal', parts: [{ kind: 'person', personId: solo }] }
+          split: { mode: 'equal', parts: [{ kind: 'user', userId: solo }] }
         }),
         type: 'until',
         frequency: 'monthly',
@@ -403,7 +411,7 @@ describe('billings on native PostgreSQL', () => {
   });
 
   it('ignores cancelled charges so an ended billing with every paid occurrence reads as settled', async () => {
-    const solo = (await savePerson(db, OWNER, { name: 'Liquidado Solo' })).id;
+    const solo = (await saveContact(db, OWNER, { name: 'Liquidado Solo', email: 'billing-settled-solo@example.com' })).userId;
     const created = await createBilling(
       db,
       OWNER,
@@ -412,7 +420,7 @@ describe('billings on native PostgreSQL', () => {
         ...once({
           description: 'Encerrada liquidada',
           totalCents: 3_000,
-          split: { mode: 'equal', parts: [{ kind: 'person', personId: solo }] }
+          split: { mode: 'equal', parts: [{ kind: 'user', userId: solo }] }
         }),
         type: 'until',
         frequency: 'monthly',
@@ -437,9 +445,9 @@ describe('billings on native PostgreSQL', () => {
   });
 
   it('answers a page of billings with the same summaries the details report', async () => {
-    const solo = (await savePerson(db, OWNER, { name: 'Página Solo' })).id;
+    const solo = (await saveContact(db, OWNER, { name: 'Página Solo', email: 'billing-page-solo@example.com' })).userId;
     const forSolo = (description: string) =>
-      once({ description, totalCents: 3_000, split: { mode: 'equal', parts: [{ kind: 'person', personId: solo }] } });
+      once({ description, totalCents: 3_000, split: { mode: 'equal', parts: [{ kind: 'user', userId: solo }] } });
 
     for (const [index, description] of ['Página um', 'Página dois', 'Página três'].entries()) {
       await createBilling(db, OWNER, `page-summary-${index}`, forSolo(description), date('2026-03-01'));
@@ -458,14 +466,14 @@ describe('billings on native PostgreSQL', () => {
       equal(listed.state, detail.state);
       equal(listed.chargeCount, detail.charges.filter((charge) => charge.state !== 'cancelled').length);
       equal(listed.paidCount, detail.charges.filter((charge) => charge.state === 'paid').length);
-      equal(listed.participantCount, detail.allocations.filter((allocation) => allocation.kind === 'person').length);
+      equal(listed.participantCount, detail.allocations.filter((allocation) => allocation.kind === 'user').length);
       equal(listed.shareChargeId, detail.charges.find((charge) => charge.state === 'pending')!.id);
       equal(listed.proofsPending, 0);
     }
   });
 
   it('leaves proofs of cancelled charges out of the pending counter', async () => {
-    const solo = (await savePerson(db, OWNER, { name: 'Cancelado Solo' })).id;
+    const solo = (await saveContact(db, OWNER, { name: 'Cancelado Solo', email: 'billing-cancelled-solo@example.com' })).userId;
     const created = await createBilling(
       db,
       OWNER,
@@ -473,24 +481,26 @@ describe('billings on native PostgreSQL', () => {
       once({
         description: 'Comprovante cancelado',
         totalCents: 3_000,
-        split: { mode: 'equal', parts: [{ kind: 'person', personId: solo }] }
+        split: { mode: 'equal', parts: [{ kind: 'user', userId: solo }] }
       })
     );
     const charge = created.charges[0]!;
     const instant = new Date().toISOString();
     const listed = async () => (await listBillings(db, OWNER, { search: 'comprovante cancelado' })).billings[0]!;
 
-    await db.payment_proofs.insertOne({
+    await db.charges.updateOne({
+      where: { id: charge.id },
       data: {
-        id: crypto.randomUUID(),
-        charge: { id: charge.id },
-        object_key: `proofs/${created.id}/cancelled.pdf`,
-        original_name: 'cancelado.pdf',
-        mime: 'application/pdf',
-        size: 1_024,
-        sha256: 'b'.repeat(64),
-        state: 'pending',
-        created_at: instant
+        proof_state: 'pending',
+        proof_file: {
+          key: `proofs/${created.id}/cancelled.pdf`,
+          name: 'cancelado.pdf',
+          mime: 'application/pdf',
+          size: 1_024,
+          sha256: 'b'.repeat(64)
+        },
+        proof_sent_at: instant,
+        updated_at: instant
       }
     });
 
@@ -509,7 +519,7 @@ describe('billings on native PostgreSQL', () => {
     const stray = {
       mode: 'equal',
       parts: [
-        { kind: 'person', personId, shares: 7 },
+        { kind: 'user', userId: debtorId, shares: 7 },
         { kind: 'owner', shares: 3 }
       ]
     } as unknown as BillingSplit;
@@ -533,48 +543,48 @@ describe('billings on native PostgreSQL', () => {
     equal(patched.category, 'housing');
     equal((await getBilling(db, OWNER, created.id)).category, 'housing');
     ok((await listBillings(db, OWNER, { category: 'housing' })).billings.some((billing) => billing.id === created.id));
-    await rejects(() => patchBilling(db, OWNER, created.id, { category: 'loan', totalCents: 5_000 }), HttpConflictError);
+    await rejects(() => patchBilling(db, OWNER, created.id, { category: 'loan', totalCents: 5_000 }), ApiError);
   });
 
   it('sorts contacts by their latest billing and always exposes lastBilledAt', async () => {
-    const older = await savePerson(db, OWNER, { name: 'Alfa Antiga' });
-    const newer = await savePerson(db, OWNER, { name: 'Zeta Recente' });
-    const never = await savePerson(db, OWNER, { name: 'Bravo Sem Cobrança' });
-    const forPerson = (id: string) => once({ split: { mode: 'equal', parts: [{ kind: 'person', personId: id }] } });
+    const older = await saveContact(db, OWNER, { name: 'Alfa Antiga', email: 'billing-recent-older@example.com' });
+    const newer = await saveContact(db, OWNER, { name: 'Zeta Recente', email: 'billing-recent-newer@example.com' });
+    const never = await saveContact(db, OWNER, { name: 'Bravo Sem Cobrança', email: 'billing-recent-never@example.com' });
+    const forUser = (id: string) => once({ split: { mode: 'equal', parts: [{ kind: 'user', userId: id }] } });
 
-    await createBilling(db, OWNER, 'recent-older-key', forPerson(older.id), date('2026-05-01'));
-    await createBilling(db, OWNER, 'recent-newer-key', forPerson(newer.id), date('2026-06-01'));
+    await createBilling(db, OWNER, 'recent-older-key', forUser(older.userId), date('2026-05-01'));
+    await createBilling(db, OWNER, 'recent-newer-key', forUser(newer.userId), date('2026-06-01'));
 
-    const recent = await listPeople(db, OWNER, undefined, false, '', 'recent');
-    const ids = recent.people.map((person) => person.id);
+    const recent = await listContacts(db, OWNER, undefined, false, '', 'recent');
+    const ids = recent.contacts.map((contact) => contact.id);
 
     ok(ids.indexOf(newer.id) < ids.indexOf(older.id), 'the latest billed contact comes first');
     ok(ids.indexOf(older.id) < ids.indexOf(never.id), 'contacts without billings come last');
     equal(recent.nextCursor, null);
-    equal(recent.people.find((person) => person.id === never.id)?.lastBilledAt, null);
-    ok(recent.people.find((person) => person.id === newer.id)!.lastBilledAt!.startsWith('2026-06-01'));
+    equal(recent.contacts.find((contact) => contact.id === never.id)?.lastBilledAt, null);
+    ok(recent.contacts.find((contact) => contact.id === newer.id)!.lastBilledAt!.startsWith('2026-06-01'));
 
-    const alphabetical = await listPeople(db, OWNER);
+    const alphabetical = await listContacts(db, OWNER);
 
-    ok(alphabetical.people.find((person) => person.id === older.id)!.lastBilledAt!.startsWith('2026-05-01'));
-    equal(alphabetical.people.find((person) => person.id === never.id)?.lastBilledAt, null);
+    ok(alphabetical.contacts.find((contact) => contact.id === older.id)!.lastBilledAt!.startsWith('2026-05-01'));
+    equal(alphabetical.contacts.find((contact) => contact.id === never.id)?.lastBilledAt, null);
     // A date-like term must stay a text parameter here too.
-    equal((await listPeople(db, OWNER, undefined, false, '2026-10-31', 'recent')).people.length, 0);
+    equal((await listContacts(db, OWNER, undefined, false, '2026-10-31', 'recent')).contacts.length, 0);
 
-    await archivePerson(db, OWNER, never.id);
+    await archiveContact(db, OWNER, never.id);
 
-    const archived = await listPeople(db, OWNER, undefined, true, '', 'recent');
+    const archived = await listContacts(db, OWNER, undefined, true, '', 'recent');
 
     ok(
-      archived.people.some((person) => person.id === never.id),
+      archived.contacts.some((contact) => contact.id === never.id),
       'the recent order honors the archived flag'
     );
     equal(
-      archived.people.some((person) => person.id === newer.id),
+      archived.contacts.some((contact) => contact.id === newer.id),
       false
     );
     equal(
-      (await listPeople(db, OWNER, undefined, false, '', 'recent')).people.some((person) => person.id === never.id),
+      (await listContacts(db, OWNER, undefined, false, '', 'recent')).contacts.some((contact) => contact.id === never.id),
       false
     );
   });
@@ -592,21 +602,26 @@ describe('billings on native PostgreSQL', () => {
         frequency: 'monthly',
         startDate: local,
         reminders: [],
-        split: { mode: 'equal', parts: [{ kind: 'person', personId }, { kind: 'owner' }] }
+        split: { mode: 'equal', parts: [{ kind: 'user', userId: debtorId }, { kind: 'owner' }] }
       },
       now
     );
-    const before = await getTimeline(db, OWNER, { type: 'indefinite', from: local });
-    ok(before.items.some((item) => item.kind === 'billing_preview' && item.preview.billingId === rule.id));
-    await materializeNextOccurrence(db, rule.id, undefined, now);
-    const after = await getTimeline(db, OWNER, { type: 'indefinite', from: local });
-    equal(after.summary.receivable.amountCents - before.summary.receivable.amountCents, 501);
+    // The occurrence due today is materialized at creation: the timeline shows a charge, never a preview, for it.
+    equal(rule.charges.length, 1);
+    equal(rule.charges[0]!.dueDate, local);
+    const timeline = await getTimeline(db, OWNER, { type: ['indefinite'], from: local });
+    ok(timeline.items.some((item) => item.kind === 'charge' && item.charge.billingId === rule.id && item.charge.dueDate === local));
     equal(
-      after.items.some(
+      timeline.items.some(
         (item) => item.kind === 'billing_preview' && item.preview.billingId === rule.id && item.preview.occurrenceDate === local
       ),
       false
     );
+    ok(
+      timeline.items.some((item) => item.kind === 'billing_preview' && item.preview.billingId === rule.id),
+      'later occurrences stay projected'
+    );
+    deepEqual(await materializeNextOccurrence(db, rule.id, now), { materialized: false, remaining: false, noticeChargeIds: [] });
     await patchBilling(db, OWNER, rule.id, { state: 'ended' });
   });
 
@@ -614,7 +629,7 @@ describe('billings on native PostgreSQL', () => {
     const split = {
       mode: 'percentage' as const,
       parts: [
-        { kind: 'person' as const, personId, basisPoints: 3333 },
+        { kind: 'user' as const, userId: debtorId, basisPoints: 3333 },
         { kind: 'owner' as const, basisPoints: 6667 }
       ]
     };
@@ -629,7 +644,7 @@ describe('billings on native PostgreSQL', () => {
     deepEqual(
       persisted.map((row) => [row.kind, row.split_mode, row.basis_points]),
       [
-        ['person', 'percentage', 3333],
+        ['user', 'percentage', 3333],
         ['owner', 'percentage', 6667]
       ]
     );
@@ -638,7 +653,7 @@ describe('billings on native PostgreSQL', () => {
     deepEqual(fetched.split, split);
 
     const resolved = resolveBillingSplit(10_001, split);
-    const personCents = resolved.find((allocation) => allocation.kind === 'person')!.amountCents;
+    const personCents = resolved.find((allocation) => allocation.kind === 'user')!.amountCents;
     equal(personCents, 3_333);
     deepEqual(
       created.charges.map((charge) => charge.amount.amountCents),

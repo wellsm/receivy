@@ -8,7 +8,9 @@ const user = {
   id: "u1",
   email: "lucas@email.com",
   name: "Lucas Silveira",
+  phone: null,
   avatarUrl: null,
+  status: "active",
   locale: "pt-BR",
   timezone: "America/Sao_Paulo",
   country: "BR",
@@ -47,11 +49,10 @@ describe("ProfileScreen", () => {
     );
     expect(remember).toHaveBeenCalled();
     expect(await screen.findByText("Lucas S.")).toBeOnTheScreen();
-    expect(screen.getByText("Receivy v1.0.0")).toBeOnTheScreen();
   });
 
   it("navigates to contacts and pix keys", async () => {
-    const onOpenPeople = jest.fn();
+    const onOpenContacts = jest.fn();
     const onOpenPix = jest.fn();
 
     await render(
@@ -59,7 +60,7 @@ describe("ProfileScreen", () => {
         client={client()}
         store={store}
         version="1.0.0"
-        onOpenPeople={onOpenPeople}
+        onOpenContacts={onOpenContacts}
         onOpenPix={onOpenPix}
       />,
     );
@@ -70,7 +71,7 @@ describe("ProfileScreen", () => {
     expect(screen.getByText("Chaves cadastradas para receber pagamentos")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByLabelText("Gerenciar contatos"));
-    expect(onOpenPeople).toHaveBeenCalled();
+    expect(onOpenContacts).toHaveBeenCalled();
 
     await fireEvent.press(screen.getByLabelText("Gerenciar chaves Pix"));
     expect(onOpenPix).toHaveBeenCalled();

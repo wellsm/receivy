@@ -1,22 +1,26 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import type { AuthUser } from "@receivy/common";
 import { OnboardingScreen } from "@/components/screens/onboarding-screen";
 
-const user = {
+const user: AuthUser = {
   id: "user",
   email: "ana@example.com",
   name: null,
+  phone: null,
   avatarUrl: null,
-  locale: "pt-BR" as const,
+  status: "pending",
+  locale: "pt-BR",
   timezone: "America/Sao_Paulo",
-  country: "BR" as const,
-  currency: "BRL" as const,
+  country: "BR",
+  currency: "BRL",
 };
 
-async function setup(save = jest.fn().mockResolvedValue({ ...user, name: "Ana" })) {
+async function setup(save = jest.fn().mockResolvedValue({ ...user, name: "Ana", status: "active" }), profile: AuthUser = user) {
   const remember = jest.fn();
+  const load = jest.fn().mockResolvedValue(profile);
   const onComplete = jest.fn();
 
-  await render(<OnboardingScreen client={{ save }} store={{ remember }} onComplete={onComplete} />);
+  await render(<OnboardingScreen client={{ save }} store={{ load, remember }} onComplete={onComplete} />);
 
   return { save, remember, onComplete };
 }
@@ -51,6 +55,26 @@ describe("OnboardingScreen", () => {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
     expect(remember).toHaveBeenCalledWith(expect.objectContaining({ name: "Ana" }));
+  });
+
+  it("masks the optional phone and sends it as typed", async () => {
+    const { save } = await setup();
+
+    await fireEvent.changeText(screen.getByLabelText("Nome"), "Ana");
+    await fireEvent.changeText(screen.getByLabelText("Telefone (Opcional)"), "11987654321");
+
+    expect(screen.getByLabelText("Telefone (Opcional)")).toHaveDisplayValue("(11) 98765-4321");
+
+    await fireEvent.press(screen.getByRole("button", { name: "Continuar" }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ name: "Ana", phone: "(11) 98765-4321" })));
+  });
+
+  it("pre-fills the name an agenda already gave the account", async () => {
+    await setup(undefined, { ...user, name: "Ana Paula" });
+
+    await waitFor(() => expect(screen.getByLabelText("Nome")).toHaveDisplayValue("Ana Paula"));
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
   });
 
   it("keeps the person on the screen when saving fails", async () => {

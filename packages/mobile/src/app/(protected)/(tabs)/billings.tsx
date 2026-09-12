@@ -6,7 +6,7 @@ export default function BillingsRoute() {
 
   return (
     <BillingsScreen
-      onCreate={() => router.push("/charges/new")}
+      onCreate={() => router.push("/billings/new")}
       onOpenBilling={(id) => router.push({ pathname: "/billings/[id]", params: { id } })}
       onOpenCharge={(id) => router.push({ pathname: "/charges/[id]", params: { id } })}
     />

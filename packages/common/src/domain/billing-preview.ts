@@ -12,15 +12,12 @@ export type BillingSplitPreview = {
 
 /** Stable key for a party: the contact id, or `owner` for the account holder. */
 export function splitPartyKey(party: SplitParty): string {
-  return party.kind === 'owner' ? 'owner' : party.personId;
+  return party.kind === 'owner' ? 'owner' : party.userId;
 }
 
 /** Everyone who takes part in the draft: the selected contacts, then the owner. */
 export function splitParties(draft: BillingDraft): SplitParty[] {
-  return [
-    ...draft.selected.map((personId) => ({ kind: 'person' as const, personId })),
-    ...(draft.owner ? [{ kind: 'owner' as const }] : [])
-  ];
+  return [...draft.selected.map((userId) => ({ kind: 'user' as const, userId })), ...(draft.owner ? [{ kind: 'owner' as const }] : [])];
 }
 
 /**
@@ -35,10 +32,10 @@ function previewSplit(draft: BillingDraft): BillingSplit {
 
     return {
       mode: 'fixed',
-      parts: draft.selected.map((personId) => ({
-        kind: 'person',
-        personId,
-        amountCents: parseBRLCents(values[personId] ?? '')
+      parts: draft.selected.map((userId) => ({
+        kind: 'user',
+        userId,
+        amountCents: parseBRLCents(values[userId] ?? '')
       }))
     };
   }
@@ -81,7 +78,7 @@ function remainderHint(draft: BillingDraft, totalCents: number): string {
 
     try {
       const values = draft.values.fixed;
-      const used = draft.selected.reduce((total, personId) => total + parseBRLCents(values[personId] ?? ''), 0);
+      const used = draft.selected.reduce((total, userId) => total + parseBRLCents(values[userId] ?? ''), 0);
 
       return used < totalCents ? `Faltam ${formatMoney({ amountCents: totalCents - used, currency: 'BRL' })}` : '';
     } catch {

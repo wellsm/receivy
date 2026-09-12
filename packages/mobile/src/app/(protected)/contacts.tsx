@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { PeopleScreen } from "@/components/screens/people-screen";
+import { ContactsScreen } from "@/components/screens/contacts-screen";
 
-export default function PeopleRoute() {
+export default function ContactsRoute() {
   const router = useRouter();
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   // The billing form parked a draft before sending the user here, so the trip
@@ -9,9 +9,9 @@ export default function PeopleRoute() {
   const toBilling = returnTo === "new-billing";
 
   return (
-    <PeopleScreen
-      onOpenLedger={(id) => router.push({ pathname: "/people/[id]", params: { id } })}
-      onNewContact={() => router.push(toBilling ? "/people/new?returnTo=new-billing" : "/people/new")}
+    <ContactsScreen
+      onOpenLedger={(id) => router.push({ pathname: "/contacts/[id]", params: { id } })}
+      onNewContact={() => router.push(toBilling ? "/contacts/new?returnTo=new-billing" : "/contacts/new")}
     />
   );
 }

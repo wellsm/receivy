@@ -4,7 +4,11 @@ export type AuthUser = {
   id: string;
   email: string;
   name: string | null;
+  /** Filled at onboarding by the person; the base for future WhatsApp validation. */
+  phone: string | null;
   avatarUrl: string | null;
+  /** 'pending' until onboarding completes; 'active' afterwards; 'removed' after account deletion. */
+  status: 'pending' | 'active' | 'removed';
   locale: 'pt-BR';
   timezone: string;
   country: 'BR';

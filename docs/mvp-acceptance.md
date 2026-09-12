@@ -50,7 +50,7 @@ ambiente local ignorado ou no gerenciador de segredos do ambiente de execução.
 | Google/Apple | Providers desativados; callbacks agora entram pelo web (`/api/auth/{google,apple}/callback`) e são repassados à API | Cadastrar `https://receivy.wellsm.dev/api/auth/<provedor>/callback` nos consoles e gerar `OAUTH_PROVIDERS_CONFIG_B64` |
 | Domínio HTTPS | Dev definido em 2026-09-07: `receivy.wellsm.dev` (DNS na Cloudflare); produção no domínio real | Web dev ainda não publicado; `docs/environments.md` lista a ordem de ativação |
 | S3/Neon/AWS | Nenhum ambiente de produção provisionado por esta tarefa | Não executar deploy como parte da implementação |
-| IP original no EZ4 | Patches pinados (`docs/ez4-vendor-patches.md`) restauram `sourceIp` nos gateways AWS e local | Quotas por IP ativas em testes locais; comportamento no API Gateway real ainda não observado em produção |
+| IP do cliente | O gateway EZ4 de fábrica não expõe IP; nenhuma cota depende dele (`docs/api-errors.md`) | Cotas por e-mail, código e `public_id` do link verificado; sem patch de gateway |
 | Resend | Domínio de envio de dev definido: `receivy.wellsm.dev` (DKIM/SPF/DMARC pendentes na Cloudflare) | Entrega real depende da verificação do domínio e da chave restrita; passos em `docs/environments.md` |
 | Expo/EAS | Projeto e identificadores de publicação ainda não configurados | Push real e builds distribuíveis exigem configuração |
 
@@ -124,8 +124,8 @@ nos testes de domínio, não nesse percurso visual. A inspeção ocorreu antes d
 
 Os serviços e o banco descartáveis foram encerrados. Os dois arquivos fictícios
 foram retirados do storage local e preservados no diretório ignorado de QA.
-Recuperação durável de objetos órfãos, configuração do bucket de produção e
-limitação por IP confiável continuam pendências explícitas do aceite final.
+Recuperação durável de objetos órfãos e configuração do bucket de produção
+continuam pendências explícitas do aceite final.
 
 ## Evidência de recorrências — implementação e prova local
 
@@ -228,11 +228,12 @@ Revisão jurídica/contato do operador e provedores reais permanecem gates exter
 
 ## Fechamento entre fluxos — evidência local de 2026-09-07
 
-Endurecimento final: envelope de erro `{ code, message, correlationId }` com cópia
-do cliente derivada apenas do `code` (texto do backend nunca é exibido); listener
-de requisição que registra só correlação e status; quotas por IP confiável via
-patches EZ4 pinados; busca de contatos e selo de vínculo (`hasAccount`);
-OpenAPI gerada por reflexão e conferida por `openapi:check`;
+Endurecimento final: envelope de erro do EZ4 (`{ type, message, context: { code } }`,
+ver `docs/api-errors.md`) com cópia do cliente por status, exibindo `message` só em
+409/422/429; listener de requisição que registra só correlação e status; quotas por
+e-mail, código e link verificado (sem IP, sem patch de gateway); busca de contatos
+e selo de vínculo (`hasAccount`); OpenAPI gerada por `@ez4/docs-gateway` e
+conferida por `openapi:check`;
 smoke HTTP e specs de autenticação/pessoas migrados para a suíte `DatabaseTester`.
 
 Gate completo em 2026-09-07, tudo verde: `pnpm verify` (lint, tipos, build web/Expo,
@@ -300,7 +301,7 @@ encerrados ao final.
 
 ## Contrato OpenAPI × clientes e acessibilidade web — 2026-09-07
 
-`openapi-contract.test.ts` lê `docs/openapi.json` (reflexão EZ4, conferida por
+`openapi-contract.test.ts` lê `docs/api-oas.yml` (gerada por `@ez4/docs-gateway`, conferida por
 `openapi:check`) e prova três coisas: toda operação da API que o navegador precisa
 passa pela allowlist do proxy financeiro ou por uma rota dedicada do BFF (seis
 exclusões nomeadas: health, registro push, Apple nativo e callbacks de provedor);

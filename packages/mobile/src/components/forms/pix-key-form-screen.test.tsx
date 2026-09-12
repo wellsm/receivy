@@ -26,12 +26,14 @@ function client(items: PaymentMethod[] = []) {
   };
 }
 
-function profile(email = "conta@example.com") {
+function profile(email = "conta@example.com", phone: string | null = null) {
   const user = {
     id: "u1",
     email,
     name: null,
+    phone,
     avatarUrl: null,
+    status: "active",
     locale: "pt-BR",
     timezone: "America/Sao_Paulo",
     country: "BR",
@@ -56,6 +58,16 @@ describe("PixKeyFormScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("E-mail Pix"), "outra@example.com");
 
     expect(screen.getByLabelText("E-mail Pix")).toHaveDisplayValue("outra@example.com");
+  });
+
+  it("prefills the phone key with the account phone once that type is picked", async () => {
+    await render(<PixKeyFormScreen client={client()} profile={profile("conta@example.com", "+5511987654321")} />);
+
+    await waitFor(() => expect(screen.getByLabelText("E-mail Pix")).toHaveDisplayValue("conta@example.com"));
+
+    await fireEvent.press(screen.getByRole("radio", { name: "Celular" }));
+
+    expect(screen.getByLabelText("Telefone celular")).toHaveDisplayValue("(11) 98765-4321");
   });
 
   it("swaps the field label, placeholder and mask when the type changes", async () => {

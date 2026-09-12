@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
-import { PixSettingsScreen } from "./pix-settings-screen";
+import { PixSettingsScreen } from "@/components/screens/pix-settings-screen";
 
 const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
 
@@ -50,12 +50,13 @@ it("lists the active keys with the type label, the masked key and the main badge
   expect(screen.getByText("529.982.247-25")).toBeInTheDocument();
   expect(screen.getByText("CPF")).toBeInTheDocument();
   expect(screen.getByText("E-mail")).toBeInTheDocument();
-  expect(screen.getByText("Principal")).toBeInTheDocument();
-  expect(screen.getByText("Nubank")).toBeInTheDocument();
+  expect(screen.getByText("Padrão")).toBeInTheDocument();
+  expect(screen.getByText("Secundária")).toBeInTheDocument();
+  expect(screen.queryByText("Nubank")).not.toBeInTheDocument();
   expect(screen.getByText("Seus dados Pix ficam protegidos e nunca são compartilhados sem sua autorização.")).toBeInTheDocument();
 });
 
-it("copies a key to the clipboard and announces it", async () => {
+it("copies a key to the clipboard and confirms inline", async () => {
   api();
   render(<PixSettingsScreen />);
 
@@ -66,7 +67,7 @@ it("copies a key to the clipboard and announces it", async () => {
   await user.click((await screen.findAllByRole("button", { name: "Copiar chave" }))[0]!);
 
   expect(writeText).toHaveBeenCalledWith("52998224725");
-  expect(await screen.findByText("Chave copiada")).toBeInTheDocument();
+  expect(await screen.findByText("Copiado")).toBeInTheDocument();
 });
 
 it("reports a failure instead of announcing a copy the browser cannot make", async () => {
@@ -82,7 +83,7 @@ it("reports a failure instead of announcing a copy the browser cannot make", asy
     await user.click((await screen.findAllByRole("button", { name: "Copiar chave" }))[0]!);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível copiar a chave.");
-    expect(screen.queryByText("Chave copiada")).not.toBeInTheDocument();
+    expect(screen.queryByText("Copiado")).not.toBeInTheDocument();
   } finally {
     if (stub) {
       Object.defineProperty(navigator, "clipboard", stub);
@@ -90,20 +91,20 @@ it("reports a failure instead of announcing a copy the browser cannot make", asy
   }
 });
 
-it("closes the key menu on Escape and returns focus to its button", async () => {
+it("closes the delete dialog on Escape and returns focus to the trash button", async () => {
   api();
   render(<PixSettingsScreen />);
 
   const user = userEvent.setup();
-  const trigger = (await screen.findAllByRole("button", { name: /Mais ações/ }))[1]!;
+  const trigger = (await screen.findAllByRole("button", { name: "Excluir" }))[1]!;
 
   await user.click(trigger);
 
-  expect(screen.getByRole("button", { name: "Excluir" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Excluir chave Pix?" })).toBeInTheDocument();
 
   await user.keyboard("{Escape}");
 
-  expect(screen.queryByRole("button", { name: "Excluir" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Excluir chave Pix?" })).not.toBeInTheDocument();
   expect(trigger).toHaveFocus();
 });
 
@@ -121,12 +122,15 @@ it("asks for confirmation before deleting a key", async () => {
   render(<PixSettingsScreen />);
 
   const user = userEvent.setup();
-  await user.click((await screen.findAllByRole("button", { name: /Mais ações/ }))[1]!);
-  await user.click(screen.getByRole("button", { name: "Excluir" }));
+  await user.click((await screen.findAllByRole("button", { name: "Excluir" }))[1]!);
 
-  expect(screen.getByRole("alertdialog", { name: "Excluir chave Pix" })).toBeInTheDocument();
+  const dialog = screen.getByRole("dialog", { name: "Excluir chave Pix?" });
 
-  await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
+  expect(dialog).toBeInTheDocument();
+  expect(dialog).toHaveTextContent("ana@example.com");
+  expect(sent.some(entry => entry.path.endsWith("/archive"))).toBe(false);
+
+  await user.click(screen.getByRole("button", { name: "Remover" }));
 
   await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pix-2/archive")).toBe(true));
 });
@@ -142,12 +146,12 @@ it("shows the empty state and no inline form", async () => {
 
 it("carries the return path and the required flag into the key form", async () => {
   api([]);
-  render(<PixSettingsScreen returnTo="/charges/new" required />);
+  render(<PixSettingsScreen returnTo="/billings/new" required />);
 
   expect(await screen.findByText("Você precisa de uma chave Pix para criar cobranças.")).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: "Cadastrar nova chave" })[0]).toHaveAttribute(
     "href",
-    "/settings/pix/new?returnTo=%2Fcharges%2Fnew&required=1",
+    "/settings/pix/new?returnTo=%2Fbillings%2Fnew&required=1",
   );
 });
 

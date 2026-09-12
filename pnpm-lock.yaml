@@ -47,13 +47,6 @@ overrides:
   '@ez4/aws-common': file:./vendor/ez4-aws-common-0.52.0.tgz
   '@ez4/raw-pg': file:./vendor/ez4-raw-pg-0.52.0.tgz
 
-patchedDependencies:
-  '@ez4/aws-gateway@0.52.0': 76cb9d59f00810ab1899054c336421174999a5da63091b0b01fe6288ed726fc0
-  '@ez4/local-common@0.52.0': d3798e99bf23b021a759fb8e75ed6fecf0ab4caced18dbfbec1249e150615a46
-  '@ez4/local-gateway@0.52.0': 90c9e89be731eb7461d6f5cc081c8b970d0e4fae1d3ce18ecd09ac6c614e26f7
-  '@ez4/pgclient@0.52.0': 251ad8bc10b9eb226080e2e3edbd9a7f228474630c8fe8697395fb30a4856a20
-  '@ez4/project@0.52.0': e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4
-
 importers:
 
   .:
@@ -70,12 +63,6 @@ importers:
 
   packages/api:
     dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.1127.0
-        version: 3.1127.0
-      '@aws-sdk/s3-request-presigner':
-        specifier: ^3.1127.0
-        version: 3.1127.0
       '@ez4/common':
         specifier: 0.52.0
         version: 0.52.0
@@ -90,10 +77,10 @@ importers:
         version: 0.52.0
       '@ez4/pgclient':
         specifier: 0.52.0
-        version: 0.52.0(patch_hash=251ad8bc10b9eb226080e2e3edbd9a7f228474630c8fe8697395fb30a4856a20)
+        version: 0.52.0
       '@ez4/project':
         specifier: 0.52.0
-        version: 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+        version: 0.52.0
       '@ez4/queue':
         specifier: 0.52.0
         version: 0.52.0
@@ -109,6 +96,9 @@ importers:
       '@ez4/storage':
         specifier: 0.52.0
         version: 0.52.0
+      '@ez4/utils':
+        specifier: 0.52.0
+        version: 0.52.0
       '@receivy/common':
         specifier: workspace:*
         version: link:../common
@@ -118,8 +108,14 @@ importers:
         version: 0.52.0
       '@ez4/aws-gateway':
         specifier: 0.52.0
-        version: 0.52.0(patch_hash=76cb9d59f00810ab1899054c336421174999a5da63091b0b01fe6288ed726fc0)
+        version: 0.52.0
       '@ez4/aws-queue':
+        specifier: 0.52.0
+        version: 0.52.0
+      '@ez4/aws-scheduler':
+        specifier: 0.52.0
+        version: 0.52.0
+      '@ez4/docs-gateway':
         specifier: 0.52.0
         version: 0.52.0
       '@ez4/local-database':
@@ -127,7 +123,7 @@ importers:
         version: 0.52.0
       '@ez4/local-gateway':
         specifier: 0.52.0
-        version: 0.52.0(patch_hash=90c9e89be731eb7461d6f5cc081c8b970d0e4fae1d3ce18ecd09ac6c614e26f7)
+        version: 0.52.0
       '@ez4/local-queue':
         specifier: 0.52.0
         version: 0.52.0
@@ -161,6 +157,9 @@ importers:
       '@expo/ui':
         specifier: ~56.0.26
         version: 56.0.26(@babel/core@7.29.7)(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(expo@56.0.21)(react-dom@19.2.3(react@19.2.3))(react-native-worklets@0.8.3(@babel/core@7.29.7)(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+      '@react-native-community/datetimepicker':
+        specifier: 9.1.0
+        version: 9.1.0(expo@56.0.21)(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       '@receivy/common':
         specifier: workspace:*
         version: link:../common
@@ -236,9 +235,15 @@ importers:
       react-native:
         specifier: 0.85.3
         version: 0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3)
+      react-native-blob-util:
+        specifier: ^0.24.11
+        version: 0.24.11(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       react-native-gesture-handler:
         specifier: ~2.31.1
         version: 2.31.2(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+      react-native-pdf:
+        specifier: ^7.0.5
+        version: 7.0.5(react-native-blob-util@0.24.11(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       react-native-reanimated:
         specifier: 4.3.1
         version: 4.3.1(react-native-worklets@0.8.3(@babel/core@7.29.7)(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
@@ -364,6 +369,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 3.2.7(@types/node@24.13.3)(jiti@2.7.0)(jsdom@27.4.0)(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.0)
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
 
 packages:
 
@@ -422,6 +430,10 @@ packages:
     resolution: {integrity: sha512-0ZSAgmEda33xPqVPt+bx2KzrXV1cUCKRRVPGliLu+V7DzHPa04CqPSi1maGEM4O0LDP0iI6HRSW5ULloNwayNw==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-scheduler@3.1130.0':
+    resolution: {integrity: sha512-RRtaVEDh2dBS/ufhM+Pa0kZ39lhfIvEBb9qCj3ShGR6C9J+OEKjcZLvDps4C8zVIT4g6TQKBEaCke6uk+AiNKQ==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/client-sqs@3.1127.0':
     resolution: {integrity: sha512-M0CQ5fy/jDuK6kcUBVOpciqm4rjiSR1AEKGt875EcbSjGmDccTU8V8YDbEmWNcJlJnZTaRawj+WLREe4MTYKcQ==}
     engines: {node: '>=20.0.0'}
@@ -434,36 +446,72 @@ packages:
     resolution: {integrity: sha512-reqPFEQrZxDZpeGj4PFMepBeR5LGYHRqq/L0motTzgFkCRBA4rFdaVXDSLYyGHhxVz7sT2PDnPN9CluGSfgyJA==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/core@3.978.0':
+    resolution: {integrity: sha512-2yX9LUmxPklVjSGTb8dfnWRJSiFQ3TeH2nn7G1mdKHTfnabzF0+gfrS8rYfLWmZrQ8A3mEcxMJjRc51dL5KWaA==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/credential-provider-env@3.972.70':
     resolution: {integrity: sha512-H404B7dJl2mCrBqahDEYsanB0xhdDp6tXnXcTUnXmmpy2Q3J0Ho0bUajZ2jr/RdwzCyS59Gi8xXIFwPLGBl6Uw==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/credential-provider-env@3.972.71':
+    resolution: {integrity: sha512-JN+JHruYZw3GUZB8YGAlDk4wTDPOEAEEdEzj5nS0xodWR4smzHsN7PnK2j6IeOsDIj2aqua5DSbhXl9Gtf90FQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-http@3.972.72':
     resolution: {integrity: sha512-X98zYOrVOeuosCX+6ktf29FC2N2GHPLia7qv6mzPzTc+RPAuHWCDS++Z6JK7eGYqb/v6uaW7bAXaOvDBfol+0w==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/credential-provider-http@3.972.73':
+    resolution: {integrity: sha512-uyYYnJOnlis8uQzaYGPd7N1JoioCoNpXgnkXYixsWJXHXgXyYi8WXJSDfofxJeWfQIGWLe2Nwyq60Uc7MZdVOg==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/credential-provider-ini@3.973.15':
     resolution: {integrity: sha512-Rykg6s5ceBuynMOGWgoowO4N+27JfnqXAnVaSunZl0hOO1XodSrxGNz6sCEbnmS0lAfQZDKyb3fbr46gSuv6Sg==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/credential-provider-ini@3.973.16':
+    resolution: {integrity: sha512-i++ly+0Uxa+u3ebSSyr0S/3CFhFJDxCXT3+Zj+mW2bXenEx5bKGCdTIKFu39SgXBNhWDjex/8cXUx9MUTMCrTw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-login@3.972.77':
     resolution: {integrity: sha512-Jb59xfEISoN5mmbnA+HYqdtrSX3CgCtJoof+V5D8/TgUI56W63GEEd5Y58WijU3Ou6+WEgaLD1feVzaRXV5IDQ==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/credential-provider-login@3.972.78':
+    resolution: {integrity: sha512-eUtswnXu0+Ii9ieRK+0L7aPFV3Z/dnW2VntJzjBP9xs8s+8p5nBNuymIXtXwZ+5r5+XJP3e32nMkuZ/r0HozEA==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/credential-provider-node@3.972.82':
     resolution: {integrity: sha512-znDkEOGXB8W3kG1LJUKP3foBZY/9qLM0eil/DxWXSp37XsdsRLQHE/d/OaCGGVgKpA6znR38h/+INk8do1FjiA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/credential-provider-node@3.972.83':
+    resolution: {integrity: sha512-jdso7ejzfRnatxMUZK4S/U6KbaDPCvfIV4XL+IQAPFDBt5rj5Fq595euqlK8Le4lNCMFR9oUpt+1l0aMgaayOQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-process@3.972.70':
     resolution: {integrity: sha512-2ry03fGRJr4sV3jI+ocjj5JqALnFD6ymM5KiNCDZMvq8bX2GSbE0vji4aM43TVCl2nXqqLRZaUxdq/KeWRAY4Q==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/credential-provider-process@3.972.71':
+    resolution: {integrity: sha512-lYmXJa4gvq4xN1lrT5NiP5vIYYKcGWAdj8y+8o6dlcateB5eF3Dn8DtmjjHKfMBrTPAMr2pebIiX/UOj8c1/UA==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/credential-provider-sso@3.973.14':
     resolution: {integrity: sha512-jkhg/8ocAAoc0RFyLMhCw+/zZh7gystQgd4F4hznNa8P4Cc501PQmxd+jGLiMHodPJ+7Zv/3znM62gZojyasmA==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/credential-provider-sso@3.973.15':
+    resolution: {integrity: sha512-6Jhcf4v0pSFdjk1EW2kvzuEBKD+UZ2uNcHUIglKKLndD20YhvkL2kdmDOV5/j4mYuWWwe/a1FQ1aomU86/Cg5Q==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/credential-provider-web-identity@3.972.76':
     resolution: {integrity: sha512-d3AGyVu759PGr35mEB2s22xxlNEA5rpdxtSPJthfPFJvoQ8dt357iVPECqWfUxXp1toJAvKmbtcIYVGigaGsCA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/credential-provider-web-identity@3.972.77':
+    resolution: {integrity: sha512-uylIQSUWpfLuH2LovxEEfwzJGM/SabLOfLMg6YXu/E8jJEKUdpdILCVCQCdFvHyu/7dLJOHPMfrSwduxO56NkQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/dynamodb-codec@3.973.44':
@@ -500,6 +548,10 @@ packages:
     resolution: {integrity: sha512-NhEgryjlBF9w38ZXqGymQV28IhkYa1mKhlbYnqIis57AYwWGVYfUPgg/qC2rLRqOUfblxx++irvju10kVTa8Vw==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/nested-clients@3.997.45':
+    resolution: {integrity: sha512-mooq9Q+jLa18VoM7HouczmslZU60iiB0aKc/Ztnq/luIL1ud0z4DnYprLR/ZO1gp331S9tJctM1HZr7u6YKBXQ==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/s3-request-presigner@3.1127.0':
     resolution: {integrity: sha512-vl3WBaE2fMqfnEhyqulKT6ZIPNsCR2caCps92tyt1yGfLVlDXScSXBDXf4m3E2ejXBb4pplX0EdwBukJyBXtBg==}
     engines: {node: '>=20.0.0'}
@@ -510,6 +562,10 @@ packages:
 
   '@aws-sdk/token-providers@3.1116.0':
     resolution: {integrity: sha512-ygIivKqh8aHzNkucOCXHyIBgBpLPfrSI0mCqXF+vLBsPTUKqj0VSqAY0GFPe7lQl4HntjOcQ+KSyS7oUV2C54Q==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/token-providers@3.1129.0':
+    resolution: {integrity: sha512-Sbl3rpzQdsG4ZK2zh0JWUYyZPKKorJlVOddA2T0DVbKJFrsW8J6wgnslxxUH04+WaBMr4A1HzJZvZX0xUvkniA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/types@3.974.5':
@@ -1532,6 +1588,10 @@ packages:
     resolution: {integrity: sha512-3h4ypbD3CElL41EH4szFNGVSahN3hTtHbp0nOgPxdE+iJpIxDZRussVRtF2ZTgV4WxPu7U99elhjMYNIwwR9uA==}
     engines: {node: '>=22.7'}
 
+  '@ez4/aws-scheduler@0.52.0':
+    resolution: {integrity: sha512-hUvRScMNtuFIwmduE5AymHbZ9sabfCGfeso8mgywWI5Hmm6dYIZHg323PR3p/J/l77ayT3P5DI+U0thZJTXryw==}
+    engines: {node: '>=22.7'}
+
   '@ez4/aws-vpc@0.52.0':
     resolution: {integrity: sha512-pvQSh8ToR3dNB5IbfxXoGjzHeDVxCqAoPwuMV8kW7/tzcB1wC39VBGI1rfj3pCtMbpRtPUlFkmRt9cwcRHw6CA==}
     engines: {node: '>=22.7'}
@@ -1542,6 +1602,10 @@ packages:
 
   '@ez4/database@0.52.0':
     resolution: {integrity: sha512-Ps8rfmpmrERlQJ3ke2r3V9W5GOtu2HdxH3EseAbFOtg565E8PirNmxa7QDPclLueSK1B/CrfieLc3zn3I50VAw==}
+    engines: {node: '>=22.7'}
+
+  '@ez4/docs-gateway@0.52.0':
+    resolution: {integrity: sha512-lHKrBYICdDSjaHD2TzALdq/quVKR2m9lf6eZ7J9e7UJXAOdUoO6Vr5IdaJy7D9oAWnh8UeqfOC9xYnpz1qNMBw==}
     engines: {node: '>=22.7'}
 
   '@ez4/factory@0.52.0':
@@ -2247,6 +2311,19 @@ packages:
       '@types/react':
         optional: true
 
+  '@react-native-community/datetimepicker@9.1.0':
+    resolution: {integrity: sha512-eadbnk+I2vxvW30iTAsm/qlCnMMAadkifIMYNEB2lzhxN/SvlKc7S2V4k5DyrwjdCbqdcMk3t9K6fnUMcAV34w==}
+    peerDependencies:
+      expo: '>=52.0.0'
+      react: '*'
+      react-native: '*'
+      react-native-windows: '*'
+    peerDependenciesMeta:
+      expo:
+        optional: true
+      react-native-windows:
+        optional: true
+
   '@react-native-masked-view/masked-view@0.3.2':
     resolution: {integrity: sha512-XwuQoW7/GEgWRMovOQtX3A4PrXhyaZm0lVUiY8qJDvdngjLms9Cpdck6SmGAUNqQwcj2EadHC1HwL0bEyoa/SQ==}
     peerDependencies:
@@ -2320,6 +2397,9 @@ packages:
   '@react-native/metro-config@0.85.3':
     resolution: {integrity: sha512-sVo6HepUmCcpdfozEf91lA0FjpLNNZYu/Zi9FiYiAQTK8pzATXDVTqhvdxpFrQn435p5eUTSbllvbH/KN+bnyA==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
+
+  '@react-native/normalize-color@2.1.0':
+    resolution: {integrity: sha512-Z1jQI2NpdFJCVgpY+8Dq/Bt3d+YUi1928Q+/CZm/oh66fzM0RUl54vvuXlPJKybH4pdCZey1eDTPaLHkMPNgWA==}
 
   '@react-native/normalize-colors@0.74.89':
     resolution: {integrity: sha512-qoMMXddVKVhZ8PA1AbUCk83trpd6N+1nF2A6k1i6LsQObyS92fELuk8kU/lQs6M7BsMHwqyLCpQJ1uFgNvIQXg==}
@@ -3353,6 +3433,9 @@ packages:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
 
+  base-64@1.0.0:
+    resolution: {integrity: sha512-kwDPIFCGx0NZHog36dj+tHiwP4QMzsZ3AgMViUBKI0+V5n4U0ufTCUMhnQ04diaRI8EX/QcPfql7zlhZ7j4zgg==}
+
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
@@ -3592,6 +3675,10 @@ packages:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
 
+  crypto-js@4.2.0:
+    resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
+    deprecated: Active development of CryptoJS has been discontinued. This library is no longer maintained.
+
   css-in-js-utils@3.1.0:
     resolution: {integrity: sha512-fJAcud6B3rRu+KHYk+Bwf+WFL2MDCJJ1XG9x137tJQ0xYxor7XziQtuGFbWNdqrvF4Tk26O3H73nfVqXt/fW1A==}
 
@@ -3715,6 +3802,9 @@ packages:
   depd@2.0.0:
     resolution: {integrity: sha512-g7nH6P6dyDioJogAAGprGpCtVImJhpPk/roCzdb3fIh61/s/nPsfR6onyMwkCAR/OlC3yBC0lESvUoQEAssIrw==}
     engines: {node: '>= 0.8'}
+
+  deprecated-react-native-prop-types@2.3.0:
+    resolution: {integrity: sha512-pWD0voFtNYxrVqvBMYf5gq3NA2GCpfodS1yNynTPc93AYA/KEMGeWDqqeUB6R2Z9ZofVhks2aeJXiuQqKNpesA==}
 
   dequal@2.0.3:
     resolution: {integrity: sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==}
@@ -5917,6 +6007,12 @@ packages:
   react-is@19.2.8:
     resolution: {integrity: sha512-s5un28nYxKJw5gvUHyW5PCC28CvBqLu9r3cWgzHT4Vo/5fqqkFcdRYsGcKf50WMPpjjFZS5d76fn3YCo2njKwQ==}
 
+  react-native-blob-util@0.24.11:
+    resolution: {integrity: sha512-stwl/2Ye4Y7LJI/+u463H1fCu97qM+cwRMzjk2haLp9EgBMhRqUVj2IGdbW8BcxvRtprG8JIHK7dv1U7BcYo5g==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+
   react-native-drawer-layout@4.2.10:
     resolution: {integrity: sha512-O6TQdZ5LSm3dqnuR4rX9KPtE+9dVg7jsezEYz1l01rkQTe4fQvYZIoPu2sZFl5X2N70uhRdjnPULySVR3sBUwA==}
     peerDependencies:
@@ -5936,6 +6032,13 @@ packages:
     peerDependencies:
       react: '*'
       react-native: '*'
+
+  react-native-pdf@7.0.5:
+    resolution: {integrity: sha512-Dho2k2TKmplmd7XGgfW+rMAInaw6Pf6g88BSYPX423b/fCzLB5K/h+YaoW+YRUhtWO/cJ4EEnz5uD3RwwigDPQ==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+      react-native-blob-util: '>=0.13.7'
 
   react-native-reanimated@4.3.1:
     resolution: {integrity: sha512-KhGsS0YkCA+gusgyzlf9hnqzVPIR398KTpqXyqq/+yYJJPAvyEEPKcxlB0xtOOXSMrR2A9uRKVARVQhZwrOh+Q==}
@@ -7162,6 +7265,17 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-scheduler@3.1130.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
   '@aws-sdk/client-sqs@3.1127.0':
     dependencies:
       '@aws-sdk/core': 3.977.9
@@ -7197,6 +7311,17 @@ snapshots:
       bowser: 2.14.1
       tslib: 2.8.1
 
+  '@aws-sdk/core@3.978.0':
+    dependencies:
+      '@aws-sdk/types': 3.974.5
+      '@aws-sdk/xml-builder': 3.972.40
+      '@aws/lambda-invoke-store': 0.3.0
+      '@smithy/core': 3.33.3
+      '@smithy/signature-v4': 5.7.3
+      '@smithy/types': 4.18.0
+      bowser: 2.14.1
+      tslib: 2.8.1
+
   '@aws-sdk/credential-provider-env@3.972.70':
     dependencies:
       '@aws-sdk/core': 3.977.9
@@ -7205,9 +7330,27 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
+  '@aws-sdk/credential-provider-env@3.972.71':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
   '@aws-sdk/credential-provider-http@3.972.72':
     dependencies:
       '@aws-sdk/core': 3.977.9
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
+  '@aws-sdk/credential-provider-http@3.972.73':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.8.0
@@ -7231,10 +7374,35 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
+  '@aws-sdk/credential-provider-ini@3.973.16':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-env': 3.972.71
+      '@aws-sdk/credential-provider-http': 3.972.73
+      '@aws-sdk/credential-provider-login': 3.972.78
+      '@aws-sdk/credential-provider-process': 3.972.71
+      '@aws-sdk/credential-provider-sso': 3.973.15
+      '@aws-sdk/credential-provider-web-identity': 3.972.77
+      '@aws-sdk/nested-clients': 3.997.45
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/credential-provider-imds': 4.5.2
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
   '@aws-sdk/credential-provider-login@3.972.77':
     dependencies:
       '@aws-sdk/core': 3.977.9
       '@aws-sdk/nested-clients': 3.997.44
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
+  '@aws-sdk/credential-provider-login@3.972.78':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/nested-clients': 3.997.45
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
@@ -7254,9 +7422,31 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
+  '@aws-sdk/credential-provider-node@3.972.83':
+    dependencies:
+      '@aws-sdk/credential-provider-env': 3.972.71
+      '@aws-sdk/credential-provider-http': 3.972.73
+      '@aws-sdk/credential-provider-ini': 3.973.16
+      '@aws-sdk/credential-provider-process': 3.972.71
+      '@aws-sdk/credential-provider-sso': 3.973.15
+      '@aws-sdk/credential-provider-web-identity': 3.972.77
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/credential-provider-imds': 4.5.2
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
   '@aws-sdk/credential-provider-process@3.972.70':
     dependencies:
       '@aws-sdk/core': 3.977.9
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
+  '@aws-sdk/credential-provider-process@3.972.71':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
@@ -7272,10 +7462,29 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
+  '@aws-sdk/credential-provider-sso@3.973.15':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/nested-clients': 3.997.45
+      '@aws-sdk/token-providers': 3.1129.0
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
   '@aws-sdk/credential-provider-web-identity@3.972.76':
     dependencies:
       '@aws-sdk/core': 3.977.9
       '@aws-sdk/nested-clients': 3.997.44
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
+  '@aws-sdk/credential-provider-web-identity@3.972.77':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/nested-clients': 3.997.45
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
@@ -7346,6 +7555,17 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
+  '@aws-sdk/nested-clients@3.997.45':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/signature-v4-multi-region': 3.996.46
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
   '@aws-sdk/s3-request-presigner@3.1127.0':
     dependencies:
       '@aws-sdk/core': 3.977.9
@@ -7366,6 +7586,15 @@ snapshots:
     dependencies:
       '@aws-sdk/core': 3.977.9
       '@aws-sdk/nested-clients': 3.997.44
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
+  '@aws-sdk/token-providers@3.1129.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/nested-clients': 3.997.45
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
@@ -8560,7 +8789,7 @@ snapshots:
       '@ez4/aws-identity': 0.52.0
       '@ez4/aws-logs': 0.52.0
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/storage': 0.52.0
       '@ez4/utils': 0.52.0
@@ -8573,7 +8802,7 @@ snapshots:
       '@aws-sdk/client-sts': 3.1126.0
       '@aws-sdk/lib-dynamodb': 3.1126.0(@aws-sdk/client-dynamodb@3.1126.0)
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/reflection': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
@@ -8587,13 +8816,13 @@ snapshots:
       '@ez4/aws-logs': 0.52.0
       '@ez4/aws-vpc': 0.52.0
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
       '@types/adm-zip': 0.5.8
       adm-zip: 0.5.18
 
-  '@ez4/aws-gateway@0.52.0(patch_hash=76cb9d59f00810ab1899054c336421174999a5da63091b0b01fe6288ed726fc0)':
+  '@ez4/aws-gateway@0.52.0':
     dependencies:
       '@aws-sdk/client-apigatewaymanagementapi': 3.1126.0
       '@aws-sdk/client-apigatewayv2': 3.1126.0
@@ -8604,7 +8833,7 @@ snapshots:
       '@ez4/common': 0.52.0
       '@ez4/gateway': 0.52.0
       '@ez4/http': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/transform': 0.52.0
@@ -8616,7 +8845,7 @@ snapshots:
       '@aws-sdk/client-iam': 3.1126.0
       '@aws-sdk/client-sts': 3.1126.0
       '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -8625,7 +8854,7 @@ snapshots:
       '@aws-sdk/client-cloudwatch-logs': 3.1126.0
       '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
       '@ez4/aws-identity': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -8637,7 +8866,7 @@ snapshots:
       '@ez4/aws-identity': 0.52.0
       '@ez4/aws-logs': 0.52.0
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/queue': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/state': 0.52.0
@@ -8645,15 +8874,29 @@ snapshots:
       '@ez4/utils': 0.52.0
       '@ez4/validator': 0.52.0
 
+  '@ez4/aws-scheduler@0.52.0':
+    dependencies:
+      '@aws-sdk/client-scheduler': 3.1130.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
+      '@ez4/aws-function': 0.52.0
+      '@ez4/aws-identity': 0.52.0
+      '@ez4/aws-logs': 0.52.0
+      '@ez4/common': 0.52.0
+      '@ez4/project': 0.52.0
+      '@ez4/scheduler': 0.52.0
+      '@ez4/schema': 0.52.0
+      '@ez4/state': 0.52.0
+      '@ez4/utils': 0.52.0
+
   '@ez4/aws-vpc@0.52.0':
     dependencies:
       '@aws-sdk/client-ec2': 3.1126.0
       '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
 
   '@ez4/common@0.52.0':
     dependencies:
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/reflection': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
@@ -8661,15 +8904,23 @@ snapshots:
   '@ez4/database@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/reflection': 0.52.0
+      '@ez4/schema': 0.52.0
+      '@ez4/utils': 0.52.0
+
+  '@ez4/docs-gateway@0.52.0':
+    dependencies:
+      '@ez4/gateway': 0.52.0
+      '@ez4/logger': 0.52.0
+      '@ez4/project': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
 
   '@ez4/factory@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/reflection': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -8677,7 +8928,7 @@ snapshots:
     dependencies:
       '@ez4/common': 0.52.0
       '@ez4/http': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/reflection': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/transform': 0.52.0
@@ -8690,29 +8941,29 @@ snapshots:
       '@ez4/transform': 0.52.0
       '@ez4/utils': 0.52.0
 
-  '@ez4/local-common@0.52.0(patch_hash=d3798e99bf23b021a759fb8e75ed6fecf0ab4caced18dbfbec1249e150615a46)':
+  '@ez4/local-common@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/utils': 0.52.0
 
   '@ez4/local-database@0.52.0':
     dependencies:
       '@ez4/database': 0.52.0
-      '@ez4/local-common': 0.52.0(patch_hash=d3798e99bf23b021a759fb8e75ed6fecf0ab4caced18dbfbec1249e150615a46)
+      '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/utils': 0.52.0
 
-  '@ez4/local-gateway@0.52.0(patch_hash=90c9e89be731eb7461d6f5cc081c8b970d0e4fae1d3ce18ecd09ac6c614e26f7)':
+  '@ez4/local-gateway@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
       '@ez4/gateway': 0.52.0
       '@ez4/http': 0.52.0
-      '@ez4/local-common': 0.52.0(patch_hash=d3798e99bf23b021a759fb8e75ed6fecf0ab4caced18dbfbec1249e150615a46)
+      '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
       '@ez4/validator': 0.52.0
@@ -8720,9 +8971,9 @@ snapshots:
   '@ez4/local-queue@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/local-common': 0.52.0(patch_hash=d3798e99bf23b021a759fb8e75ed6fecf0ab4caced18dbfbec1249e150615a46)
+      '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/queue': 0.52.0
       '@ez4/utils': 0.52.0
       '@ez4/validator': 0.52.0
@@ -8730,9 +8981,9 @@ snapshots:
   '@ez4/local-scheduler@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/local-common': 0.52.0(patch_hash=d3798e99bf23b021a759fb8e75ed6fecf0ab4caced18dbfbec1249e150615a46)
+      '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/scheduler': 0.52.0
       '@ez4/utils': 0.52.0
       cron-parser: 5.10.0
@@ -8740,9 +8991,9 @@ snapshots:
   '@ez4/local-storage@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/local-common': 0.52.0(patch_hash=d3798e99bf23b021a759fb8e75ed6fecf0ab4caced18dbfbec1249e150615a46)
+      '@ez4/local-common': 0.52.0
       '@ez4/logger': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/storage': 0.52.0
       '@ez4/utils': 0.52.0
       file-type: 21.3.4
@@ -8753,12 +9004,12 @@ snapshots:
     dependencies:
       '@ez4/utils': 0.52.0
 
-  '@ez4/pgclient@0.52.0(patch_hash=251ad8bc10b9eb226080e2e3edbd9a7f228474630c8fe8697395fb30a4856a20)':
+  '@ez4/pgclient@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
       '@ez4/database': 0.52.0
       '@ez4/pgsql': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/transform': 0.52.0
       '@ez4/utils': 0.52.0
@@ -8771,7 +9022,7 @@ snapshots:
   '@ez4/pgmigration@0.52.0':
     dependencies:
       '@ez4/database': 0.52.0
-      '@ez4/pgclient': 0.52.0(patch_hash=251ad8bc10b9eb226080e2e3edbd9a7f228474630c8fe8697395fb30a4856a20)
+      '@ez4/pgclient': 0.52.0
       '@ez4/pgsql': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
@@ -8784,7 +9035,7 @@ snapshots:
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
 
-  '@ez4/project@0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)':
+  '@ez4/project@0.52.0':
     dependencies:
       '@ez4/logger': 0.52.0
       '@ez4/reflection': 0.52.0
@@ -8794,7 +9045,7 @@ snapshots:
   '@ez4/queue@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/reflection': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/transform': 0.52.0
@@ -8806,9 +9057,9 @@ snapshots:
       '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
       '@ez4/common': 0.52.0
       '@ez4/database': 0.52.0
-      '@ez4/pgclient': 0.52.0(patch_hash=251ad8bc10b9eb226080e2e3edbd9a7f228474630c8fe8697395fb30a4856a20)
+      '@ez4/pgclient': 0.52.0
       '@ez4/pgmigration': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/state': 0.52.0
       '@ez4/utils': 0.52.0
     transitivePeerDependencies:
@@ -8821,7 +9072,7 @@ snapshots:
   '@ez4/scheduler@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/reflection': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/transform': 0.52.0
@@ -8831,7 +9082,7 @@ snapshots:
   '@ez4/schema@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/reflection': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -8842,7 +9093,7 @@ snapshots:
   '@ez4/storage@0.52.0':
     dependencies:
       '@ez4/common': 0.52.0
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/reflection': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -8855,7 +9106,7 @@ snapshots:
 
   '@ez4/validator@0.52.0':
     dependencies:
-      '@ez4/project': 0.52.0(patch_hash=e9e6833e3f31fd47130d7294c4869360de32451188e33090a7da00d6e44736f4)
+      '@ez4/project': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
 
@@ -9447,6 +9698,14 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.18
 
+  '@react-native-community/datetimepicker@9.1.0(expo@56.0.21)(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      invariant: 2.2.4
+      react: 19.2.3
+      react-native: 0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3)
+    optionalDependencies:
+      expo: 56.0.21(@babel/core@7.29.7)(@expo/dom-webview@56.0.6)(@expo/metro-runtime@56.0.21)(expo-router@56.2.20)(react-dom@19.2.3(react@19.2.3))(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native-worklets@0.8.3(@babel/core@7.29.7)(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
+
   '@react-native-masked-view/masked-view@0.3.2(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)':
     dependencies:
       react: 19.2.3
@@ -9591,6 +9850,8 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+
+  '@react-native/normalize-color@2.1.0': {}
 
   '@react-native/normalize-colors@0.74.89': {}
 
@@ -10603,6 +10864,8 @@ snapshots:
 
   balanced-match@4.0.4: {}
 
+  base-64@1.0.0: {}
+
   base64-js@1.5.1: {}
 
   baseline-browser-mapping@2.11.21: {}
@@ -10858,6 +11121,8 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
+  crypto-js@4.2.0: {}
+
   css-in-js-utils@3.1.0:
     dependencies:
       hyphenate-style-name: 1.1.0
@@ -10962,6 +11227,12 @@ snapshots:
   delayed-stream@1.0.0: {}
 
   depd@2.0.0: {}
+
+  deprecated-react-native-prop-types@2.3.0:
+    dependencies:
+      '@react-native/normalize-color': 2.1.0
+      invariant: 2.2.4
+      prop-types: 15.8.1
 
   dequal@2.0.3: {}
 
@@ -13800,6 +14071,12 @@ snapshots:
 
   react-is@19.2.8: {}
 
+  react-native-blob-util@0.24.11(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
+    dependencies:
+      base-64: 1.0.0
+      react: 19.2.3
+      react-native: 0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3)
+
   react-native-drawer-layout@4.2.10(6ff537a51a4924dac639ee1795594912):
     dependencies:
       color: 4.2.3
@@ -13822,6 +14099,14 @@ snapshots:
     dependencies:
       react: 19.2.3
       react-native: 0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3)
+
+  react-native-pdf@7.0.5(react-native-blob-util@0.24.11(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
+    dependencies:
+      crypto-js: 4.2.0
+      deprecated-react-native-prop-types: 2.3.0
+      react: 19.2.3
+      react-native: 0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3)
+      react-native-blob-util: 0.24.11(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
 
   react-native-reanimated@4.3.1(react-native-worklets@0.8.3(@babel/core@7.29.7)(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
     dependencies:

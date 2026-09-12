@@ -1,31 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePerson } from './people';
+import { normalizeContact } from './contacts';
 
-describe('people', () => {
-  it('allows a contact without an account or communication channel', () => {
-    expect(normalizePerson({ name: '  Ana  Silva  ' })).toEqual({ name: 'Ana Silva' });
-  });
-  it('normalizes email and Brazilian phone without changing email aliases', () => {
-    expect(normalizePerson({ name: 'Ana', email: ' ANA+CASA@Example.COM ', phone: '(11) 99999-1234' })).toEqual({
-      name: 'Ana',
-      email: 'ana+casa@example.com',
-      phone: '+5511999991234'
+describe('contacts', () => {
+  it('normalizes the name and the e-mail without changing e-mail aliases', () => {
+    expect(normalizeContact({ name: '  Ana  Silva  ', email: ' ANA+CASA@Example.COM ' })).toEqual({
+      name: 'Ana Silva',
+      email: 'ana+casa@example.com'
     });
   });
   it('normalizes the nickname and drops an empty one', () => {
-    expect(normalizePerson({ name: 'Ana Silva', nickname: '  Aninha   Silva ' })).toEqual({ name: 'Ana Silva', nickname: 'Aninha Silva' });
-    expect(normalizePerson({ name: 'Ana Silva', nickname: '   ' })).toEqual({ name: 'Ana Silva' });
-    expect(normalizePerson({ name: 'Ana Silva', nickname: '' })).toEqual({ name: 'Ana Silva' });
+    expect(normalizeContact({ name: 'Ana Silva', nickname: '  Aninha   Silva ', email: 'ana@example.com' })).toEqual({
+      name: 'Ana Silva',
+      nickname: 'Aninha Silva',
+      email: 'ana@example.com'
+    });
+    expect(normalizeContact({ name: 'Ana Silva', nickname: '   ', email: 'ana@example.com' })).toEqual({
+      name: 'Ana Silva',
+      email: 'ana@example.com'
+    });
   });
   it('rejects a nickname longer than 60 characters', () => {
-    expect(() => normalizePerson({ name: 'Ana', nickname: 'a'.repeat(61) })).toThrow(
+    expect(() => normalizeContact({ name: 'Ana', nickname: 'a'.repeat(61), email: 'ana@example.com' })).toThrow(
       new RangeError('Informe um apelido com até 60 caracteres.')
     );
   });
-  it.each([{ name: ' ' }, { name: 'Ana', email: 'bad' }, { name: 'Ana', phone: '123' }, { name: 'Ana', phone: 'ligue 11999991234' }])(
-    'rejects invalid input %j',
-    (input) => {
-      expect(() => normalizePerson(input)).toThrow();
-    }
-  );
+  it('keeps a contact without e-mail: the person is reachable by link only', () => {
+    expect(normalizeContact({ name: 'Ana', email: '' })).toEqual({ name: 'Ana' });
+    expect(normalizeContact({ name: 'Ana' })).toEqual({ name: 'Ana' });
+  });
+  it.each([
+    { name: ' ', email: 'ana@example.com' },
+    { name: 'Ana', email: 'bad' },
+    { name: 'a'.repeat(121), email: 'ana@example.com' }
+  ])('rejects %j', (input) => {
+    expect(() => normalizeContact(input)).toThrow();
+  });
 });

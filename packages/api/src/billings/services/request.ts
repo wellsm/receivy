@@ -15,7 +15,10 @@ export function billingRequestFingerprint(input: NormalizedBillingInput): string
       timezone: input.timezone,
       paymentMethodId: input.paymentMethodId ?? null,
       reminders: input.reminders ?? null,
-      split: input.split
+      split: input.split,
+      direction: input.direction,
+      payeeUserId: input.payeeUserId ?? null,
+      pix: input.pix ?? null
     },
     (_key, value: unknown) =>
       value && typeof value === 'object' && !Array.isArray(value)

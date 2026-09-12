@@ -1,26 +1,20 @@
-import Link from "next/link";
-import { AppShell } from "@/components/app-shell";
-import { ContactForm } from "@/components/contact-form";
+import { AppShell } from "@/components/app/app-shell";
+import { ContactFormScreen } from "@/components/forms/contact-form-screen";
 import { safeNextPath } from "@/lib/auth/cookies";
-import { backLabelFor } from "@/lib/navigation";
 
-type EditPersonPageProps = {
+type EditContactPageProps = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ returnTo?: string }>;
 };
 
-export default async function EditPersonPage({ params, searchParams }: EditPersonPageProps) {
+export default async function EditContactPage({ params, searchParams }: EditContactPageProps) {
   const { id } = await params;
   const { returnTo } = await searchParams;
   const safeReturn = returnTo ? safeNextPath(returnTo) : undefined;
-  const back = safeReturn ?? "/people";
 
   return (
-    <AppShell activePath="/settings">
-      <Link className="back-link" href={back}>
-        ← {backLabelFor(back)}
-      </Link>
-      <ContactForm personId={id} returnTo={safeReturn} />
+    <AppShell activePath="/settings" title="Editar contato" back={safeReturn ?? `/contacts/${id}`}>
+      <ContactFormScreen contactId={id} returnTo={safeReturn} />
     </AppShell>
   );
 }

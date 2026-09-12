@@ -1,6 +1,6 @@
 import type { Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
-import type { EmailProvider } from '../../client';
+import type { EmailProvider } from '../client';
 
 /**
  * Silent by design: nothing is sent, printed or logged.

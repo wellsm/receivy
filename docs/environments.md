@@ -10,7 +10,7 @@ mobile fala com a API diretamente e abre o web para links públicos.
 | Web | `http://localhost:3000` | `https://receivy.wellsm.dev` | `https://<domínio real>` |
 | API | `http://127.0.0.1:3735/local-receivy-api` | `https://<id>.execute-api.<região>.amazonaws.com/dev-receivy-api` | stage `prd` (URL do `pnpm output:prd` ou domínio próprio) |
 | Postgres | Docker `receivy-pg` (55434) | instância gerenciada do stage | instância gerenciada do stage |
-| E-mail | `file`: arquivos `.eml` em `packages/api/.ez4/emails/` | Resend, remetente `@receivy.wellsm.dev` | Resend, remetente no domínio real |
+| E-mail | `mailpit`: caixa em <http://127.0.0.1:8025> (`file` grava `.eml` em `packages/api/.ez4/emails/`) | Resend, remetente `@receivy.wellsm.dev` | Resend, remetente no domínio real |
 | Comprovantes | adaptador local explícito | bucket `ProofFiles` do stage | bucket `ProofFiles` do stage |
 | Push | `disabled` | `disabled` até haver projeto Expo/APNs/FCM | idem |
 
@@ -31,8 +31,8 @@ API (`packages/api/dev.env.example` → `dev.env`, git-ignored; `prd.env` análo
   qualquer outro valor (padrão `false`) o mantém desligado mesmo com credenciais configuradas.
   Desligado, a API não anuncia nem aceita o provedor e web/mobile escondem o botão; com os dois
   desligados o login mostra só o e-mail.
-- `EMAIL_TRANSPORT=resend`, `NOTIFICATION_EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`,
-  `RESEND_FROM_EMAIL`.
+- `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`. O mesmo
+  `EMAIL_TRANSPORT` vale para código de login e para notificações.
 - CORS da API e do bucket são declarações estáticas do EZ4 (`src/api.ts`,
   `src/storage.ts`): incluem `localhost:3000` e `receivy.wellsm.dev`; adicionar o
   domínio real antes do primeiro deploy de produção.

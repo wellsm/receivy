@@ -5,5 +5,5 @@ export default function EditContactRoute() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  return <ContactFormScreen personId={id} onSaved={() => router.back()} />;
+  return <ContactFormScreen contactId={id} onSaved={() => router.back()} />;
 }

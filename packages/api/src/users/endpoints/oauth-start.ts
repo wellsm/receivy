@@ -2,10 +2,10 @@ import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import { beginOauth, OauthFlowError } from '../../auth/oauth-flow';
-import type { ApiProvider } from '../../provider';
-import { createAuthRepository } from '../../repositories/auth-repository';
-import { oauthDependencies } from './oauth-shared';
+import type { UserProvider } from '../provider';
+import { createAuthRepository } from '../repositories/auth';
+import { beginOauth, OauthFlowError } from '../services/oauth-flow';
+import { oauthDependencies } from '../utils/oauth';
 
 declare class OauthStartRequest implements Http.Request {
   body: {
@@ -20,7 +20,7 @@ declare class OauthStartResponse implements Http.Response {
   body: { authorizationUrl: string };
 }
 
-export async function oauthStartHandler(request: OauthStartRequest, context: Service.Context<ApiProvider>): Promise<OauthStartResponse> {
+export async function oauthStartHandler(request: OauthStartRequest, context: Service.Context<UserProvider>): Promise<OauthStartResponse> {
   const dependencies = oauthDependencies(request.body.provider, context);
   try {
     const body = await beginOauth(request.body, {

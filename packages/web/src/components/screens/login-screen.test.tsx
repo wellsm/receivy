@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PENDING_LOGIN_KEY } from "@/lib/auth/pending-login";
-import { EmailLoginForm } from "./email-login-form";
+import { LoginScreen } from "@/components/screens/login-screen";
 
 const push = vi.fn();
 const router = { push };
@@ -31,10 +31,10 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-describe("EmailLoginForm", () => {
+describe("LoginScreen", () => {
   it("uses only an e-mail field and never asks for a password", async () => {
     vi.stubGlobal("fetch", fetchMock());
-    render(<EmailLoginForm nextPath="/" providers={ALL} />);
+    render(<LoginScreen nextPath="/" providers={ALL} />);
 
     expect(await screen.findByLabelText("Seu e-mail")).toBeInTheDocument();
     expect(screen.queryByLabelText(/senha/i)).not.toBeInTheDocument();
@@ -43,7 +43,7 @@ describe("EmailLoginForm", () => {
   it("stores the pending login and navigates to the code screen on success", async () => {
     vi.stubGlobal("fetch", fetchMock());
     const user = userEvent.setup();
-    render(<EmailLoginForm nextPath="/charges" providers={ALL} />);
+    render(<LoginScreen nextPath="/charges" providers={ALL} />);
 
     await user.type(screen.getByLabelText("Seu e-mail"), "ana@example.com");
     await user.click(screen.getByRole("button", { name: "Continuar com E-mail" }));
@@ -59,7 +59,7 @@ describe("EmailLoginForm", () => {
   it("hides provider buttons and the e-mail divider when both providers are disabled, without fetching", async () => {
     const fetchSpy = fetchMock();
     vi.stubGlobal("fetch", fetchSpy);
-    render(<EmailLoginForm nextPath="/" providers={NONE} />);
+    render(<LoginScreen nextPath="/" providers={NONE} />);
 
     expect(screen.getByRole("button", { name: /Continuar com E-mail/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Continuar com Google/ })).toBeNull();
@@ -70,7 +70,7 @@ describe("EmailLoginForm", () => {
 
   it("shows only the providers resolved on the server", async () => {
     vi.stubGlobal("fetch", fetchMock());
-    render(<EmailLoginForm nextPath="/" providers={{ google: true, apple: false }} />);
+    render(<LoginScreen nextPath="/" providers={{ google: true, apple: false }} />);
 
     expect(screen.getByRole("button", { name: /Continuar com Google/ })).toBeEnabled();
     expect(screen.queryByRole("button", { name: /Continuar com Apple/ })).toBeNull();
@@ -79,7 +79,7 @@ describe("EmailLoginForm", () => {
 
   it("shows the oauth error alert inside the card", async () => {
     vi.stubGlobal("fetch", fetchMock());
-    render(<EmailLoginForm nextPath="/" providers={ALL} oauthError />);
+    render(<LoginScreen nextPath="/" providers={ALL} oauthError />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Não foi possível concluir o login. Tente novamente ou use seu e-mail.",

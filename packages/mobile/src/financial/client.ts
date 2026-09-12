@@ -1,4 +1,4 @@
-import type { BillingDetail, BillingInput, BillingInvite, BillingPatch, BillingsPage, ChargeDetail, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, PersonLedger, PublicLink, TimelinePage, ProofDetail, ProofUploadIntent, ProofUploadInput } from "@receivy/common";
+import type { BillingDetail, BillingGuestAction, BillingInput, BillingInvite, BillingPatch, BillingsPage, ChargeDetail, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, ContactLedger, PublicLink, TimelinePage, ProofUploadTicket, ProofUploadInput } from "@receivy/common";
 import { authClient } from "@/auth/client";
 import { apiErrorMessage } from "@receivy/common";
 
@@ -8,7 +8,7 @@ export class FinancialRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); this.name = "FinancialRequestError"; }
 }
 
-async function message(response: Response, fallback: string) { try { const body = await response.json() as { code?: unknown }; return apiErrorMessage(body.code, fallback); } catch { return fallback; } }
+async function message(response: Response, fallback: string) { try { return apiErrorMessage(response.status, await response.json(), fallback); } catch { return apiErrorMessage(response.status, null, fallback); } }
 
 export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: Options) {
   async function request<T>(path: string, init?: RequestInit, fallback = "Não foi possível acessar seus registros financeiros."): Promise<T> {
@@ -28,22 +28,25 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     },
     invite(id: string) { return request<BillingInvite>(`billings/${id}/invite`, { method: "POST" }, "Não foi possível criar o convite."); },
     revokeInvite(id: string) { return request<void>(`billings/${id}/invite`, { method: "DELETE" }, "Não foi possível revogar o convite."); },
+    resolveGuest(billingId: string, guestId: string, action: BillingGuestAction) {
+      return request<BillingDetail>(`billings/${billingId}/guests/${guestId}`, { method: "POST", body: JSON.stringify(action) }, "Não foi possível resolver o convidado.");
+    },
     timeline(query = "") { return request<TimelinePage>(`timeline${query ? `?${query}` : ""}`); },
     paymentMethods() { return request<PaymentMethodsPage>("payment-methods"); },
     savePaymentMethod(input: PaymentMethodInput, id?: string) { return request<PaymentMethod>(id ? `payment-methods/${id}` : "payment-methods", { method: id ? "PATCH" : "POST", body: JSON.stringify(input) }); },
     defaultPaymentMethod(id: string) { return request<PaymentMethod>(`payment-methods/${id}/default`, { method: "POST" }); },
     archivePaymentMethod(id: string) { return request<void>(`payment-methods/${id}/archive`, { method: "POST" }); },
     charge(id: string) { return request<ChargeDetail>(`charges/${id}`); },
-    proofs(id: string) { return request<{ proofs: ProofDetail[] }>(`charges/${id}/proofs`); },
-    uploadIntent(id: string, input: ProofUploadInput) { return request<ProofUploadIntent>(`charges/${id}/proofs/uploads`, { method: "POST", body: JSON.stringify(input) }); },
-    finalizeProof(id: string, intentId: string) { return request<ProofDetail>(`charges/${id}/proofs/uploads/${intentId}/finalize`, { method: "POST" }); },
-    reviewProof(id: string, proofId: string, decision: "accepted" | "rejected", reason?: string) { return request<ProofDetail>(`charges/${id}/proofs/${proofId}/review`, { method: "POST", body: JSON.stringify({ decision, reason }) }); },
-    downloadProof(id: string, proofId: string) { return request<{ url: string; expiresIn: number }>(`charges/${id}/proofs/${proofId}/download`, { method: "POST" }); },
+    startProofUpload(id: string, input: ProofUploadInput) { return request<ProofUploadTicket>(`charges/${id}/proof`, { method: "POST", body: JSON.stringify(input) }); },
+    reviewProof(id: string, decision: "accepted" | "rejected", reason?: string) { return request<ChargeDetail>(`charges/${id}/proof/review`, { method: "POST", body: JSON.stringify({ decision, reason }) }); },
+    withdrawProof(id: string) { return request<void>(`charges/${id}/proof`, { method: "DELETE" }, "Não foi possível apagar o comprovante."); },
+    downloadProof(id: string) { return request<{ url: string; expiresIn: number }>(`charges/${id}/proof/download`); },
     cancel(id: string) { return request<ChargeDetail>(`charges/${id}/cancel`, { method: "POST" }); },
-    pay(id: string, method: "pix" | "cash" | "transfer" | "other" = "pix") { return request<ChargeDetail>(`charges/${id}/payments`, { method: "POST", body: JSON.stringify({ method }) }); },
+    reopen(id: string) { return request<ChargeDetail>(`charges/${id}/reopen`, { method: "POST" }, "Não foi possível reabrir a cobrança."); },
+    pay(id: string) { return request<ChargeDetail>(`charges/${id}/pay`, { method: "POST" }); },
     publicLink(id: string, rotate = false, paymentMethodId?: string) { return request<PublicLink>(`charges/${id}/public-link${rotate ? "/rotate" : ""}`, { method: "POST", ...(paymentMethodId ? { body: JSON.stringify({ paymentMethodId }) } : {}) }); },
     revokePublicLink(id: string) { return request<void>(`charges/${id}/public-link`, { method: "DELETE" }); },
-    ledger(id: string, cursor?: string) { return request<PersonLedger>(`people/${id}/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`); },
+    ledger(id: string, cursor?: string) { return request<ContactLedger>(`contacts/${id}/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`); },
     publicChargeUrl(token: string) {
       if (!publicWebBaseUrl) throw new Error("Configure EXPO_PUBLIC_WEB_URL para compartilhar links públicos.");
       let base: URL; try { base = new URL(publicWebBaseUrl); } catch { throw new Error("EXPO_PUBLIC_WEB_URL precisa ser uma URL web válida."); }

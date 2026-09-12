@@ -37,6 +37,7 @@
     "eslint-config-next": "^16.2.6",
     "jsdom": "^27.0.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "2.9.0"
   }
 }

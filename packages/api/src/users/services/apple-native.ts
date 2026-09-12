@@ -1,8 +1,8 @@
 import { HttpUnauthorizedError } from '@ez4/gateway';
 import type { AuthSessionResponse } from '@receivy/common';
-import { lockAccountReferences } from '../account/locking';
-import type { DbClient } from '../database';
-import { createAuthRepository } from '../repositories/auth-repository';
+import type { DbClient } from '../../database';
+import { createAuthRepository } from '../repositories/auth';
+import { lockAccountReferences } from './locking';
 import { createOauthAttempt, hashOauthValue } from './oauth';
 import type { OauthProviderClient } from './oauth-flow';
 import { issueAccessToken } from './session';

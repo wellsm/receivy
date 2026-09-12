@@ -1,10 +1,10 @@
-import { AppShell } from "@/components/app-shell";
-import { ProfileScreen } from "@/components/profile-screen";
+import { AppShell } from "@/components/app/app-shell";
+import { ProfileScreen } from "@/components/screens/profile-screen";
 
 export default function SettingsPage() {
   return (
     <AppShell activePath="/settings">
-      <ProfileScreen version={process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"} />
+      <ProfileScreen />
     </AppShell>
   );
 }

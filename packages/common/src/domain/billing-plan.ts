@@ -7,10 +7,15 @@ export type BillingPlanInput = {
   dueDates: string[];
   /** `true` numbers charges k/N (once, until); `false` leaves both null (indefinite). */
   numbered: boolean;
+  /** `owner` plans a conta a pagar: one charge per due date for the whole total, the owner paying. Defaults to `person`. */
+  payer?: 'person' | 'owner';
+  /** Conta a pagar only: the contact who receives, or null when the bill is the owner's alone. */
+  payeeUserId?: string | null;
 };
 
 export type PlannedCharge = {
-  personId: string;
+  /** The contact on the other side; null only on a conta a pagar without a payee. */
+  userId: string | null;
   description: string;
   amountCents: number;
   currency: 'BRL';
@@ -36,23 +41,42 @@ export function planBillingCharges(input: BillingPlanInput): BillingPlan {
   }
 
   const allocations = resolveBillingSplit(input.totalCents, input.split);
-  const external = allocations.filter((allocation) => allocation.kind === 'person' && allocation.amountCents > 0);
   const charges: PlannedCharge[] = [];
+  const numbering = (index: number) => ({
+    installment: input.numbered ? index + 1 : null,
+    installmentCount: input.numbered ? input.dueDates.length : null
+  });
+
+  if (input.payer === 'owner') {
+    input.dueDates.forEach((dueDate, index) => {
+      charges.push({
+        userId: input.payeeUserId ?? null,
+        description,
+        amountCents: input.totalCents,
+        currency: 'BRL',
+        dueDate,
+        ...numbering(index)
+      });
+    });
+
+    return { description, currency: 'BRL', totalCents: input.totalCents, allocations, charges };
+  }
+
+  const external = allocations.filter((allocation) => allocation.kind === 'user' && allocation.amountCents > 0);
 
   input.dueDates.forEach((dueDate, index) => {
     for (const allocation of external) {
-      if (allocation.kind !== 'person') {
+      if (allocation.kind !== 'user') {
         continue;
       }
 
       charges.push({
-        personId: allocation.personId,
+        userId: allocation.userId,
         description,
         amountCents: allocation.amountCents,
         currency: 'BRL',
         dueDate,
-        installment: input.numbered ? index + 1 : null,
-        installmentCount: input.numbered ? input.dueDates.length : null
+        ...numbering(index)
       });
     }
   });

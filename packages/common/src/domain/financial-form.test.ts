@@ -20,12 +20,17 @@ describe('parseBRLCents', () => {
     expect(parseBRLCents(input)).toBe(expected);
   });
 
-  it.each(['1.2,34', '12,345', 'R$ 10,00', '10.00', '1,2,3', '-1,00', ''])(
-    'rejects malformed BRL input %s rather than partially parsing it',
-    (input) => {
-      expect(() => parseBRLCents(input)).toThrow('Informe um valor em reais');
-    }
-  );
+  it.each([
+    '1.2,34',
+    '12,345',
+    'R$ 10,00',
+    '10.00',
+    '1,2,3',
+    '-1,00',
+    ''
+  ])('rejects malformed BRL input %s rather than partially parsing it', (input) => {
+    expect(() => parseBRLCents(input)).toThrow('Informe um valor em reais');
+  });
 
   it('rejects values outside the API safe-integer contract', () => {
     expect(() => parseBRLCents('90.071.992.547.409,92')).toThrow('O valor ultrapassa o limite permitido.');
@@ -48,12 +53,18 @@ describe('parsePercentageBasisPoints', () => {
     expect(parsePercentageBasisPoints(input)).toBe(expected);
   });
 
-  it.each(['33,333', '66.667', '1e2', '+10', '-0,004', '100,01', '', ' 33,33 '])(
-    'rejects ambiguous or out-of-range percentage %s',
-    (input) => {
-      expect(() => parsePercentageBasisPoints(input)).toThrow('percentual');
-    }
-  );
+  it.each([
+    '33,333',
+    '66.667',
+    '1e2',
+    '+10',
+    '-0,004',
+    '100,01',
+    '',
+    ' 33,33 '
+  ])('rejects ambiguous or out-of-range percentage %s', (input) => {
+    expect(() => parsePercentageBasisPoints(input)).toThrow('percentual');
+  });
 });
 
 describe('amountInputToDigits', () => {

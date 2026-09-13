@@ -1,10 +1,10 @@
-export const enum ThemePreference {
+export enum ThemePreference {
   System = 'system',
   Light = 'light',
   Dark = 'dark'
 }
 
-export const enum ResolvedTheme {
+export enum ResolvedTheme {
   Light = 'light',
   Dark = 'dark'
 }

@@ -5,6 +5,7 @@ export * from './design/theme';
 export * from './design/tokens';
 export * from './domain/account';
 export * from './domain/api-error';
+export * from './domain/avatar';
 export * from './domain/billing';
 export * from './domain/billing-calendar';
 export * from './domain/billing-card';

@@ -1,4 +1,5 @@
 import { normalizeEmail } from '../auth/auth';
+import type { UserAvatar } from './avatar';
 
 /** A person as one agenda knows them: the account is the identity, the nickname is the owner's. */
 export const enum UserStatus {
@@ -24,6 +25,7 @@ export type Contact = {
   nickname: string | null;
   /** What every list, card and feed shows: the nickname when there is one, the person's name otherwise. */
   displayName: string;
+  avatar?: UserAvatar | null;
   /** Empty when the person has no e-mail yet: the contact is reachable by shared link only. */
   email: string;
   /** Filled by the person themself at onboarding; never by the owner. */

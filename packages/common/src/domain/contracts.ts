@@ -1,3 +1,4 @@
+import type { UserAvatar } from './avatar';
 import type { BillingType } from './billing';
 import type { Contact } from './contacts';
 
@@ -54,6 +55,8 @@ export type ChargeSummary = {
   installmentCount: number | null;
   /** Who is on the other side: the debtor for a receivable, the creditor for a payable. */
   counterpartName: string;
+  /** Photo of the counterpart; absent or null shows the initial. */
+  counterpartAvatar?: UserAvatar | null;
   /** State of the most recent proof on this charge, if any. */
   proofState: ProofState | null;
   /** Who pays: a contact (default) or the billing owner on a conta a pagar. Omitted by older payloads means 'person'. */
@@ -134,6 +137,7 @@ export type ChargeCounterpart = {
   userId: string | null;
   name: string;
   email: string | null;
+  avatar?: UserAvatar | null;
 };
 
 export type PixSnapshot = {

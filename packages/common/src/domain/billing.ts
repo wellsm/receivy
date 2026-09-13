@@ -1,3 +1,4 @@
+import type { UserAvatar } from './avatar';
 import type { BillingCategory } from './billing-category';
 import type { ChargeDetail, Direction, Money, PixKeyType, PixSnapshot, SplitMode } from './contracts';
 import type { BillingSplit } from './split';
@@ -47,7 +48,7 @@ export type BillingReminder = { offsetDays: number; enabled: boolean };
 /** A Pix key typed on a conta a pagar: it belongs to whoever receives, never to a wallet. */
 export type BillingPixInput = { keyType: PixKeyType; key: string; label?: string };
 
-export type BillingPayee = { userId: string; name: string };
+export type BillingPayee = { userId: string; name: string; avatar?: UserAvatar | null };
 
 export const DEFAULT_BILLING_REMINDERS: BillingReminder[] = [{ offsetDays: 0, enabled: true }];
 
@@ -182,9 +183,9 @@ export type BillingDetail = {
   linkableContacts: LinkableContact[];
 };
 
-export type BillingGuest = { id: string; userId: string; name: string; email: string; createdAt: string };
+export type BillingGuest = { id: string; userId: string; name: string; email: string; createdAt: string; avatar?: UserAvatar | null };
 
-export type LinkableContact = { contactId: string; displayName: string };
+export type LinkableContact = { contactId: string; displayName: string; avatar?: UserAvatar | null };
 
 /** What the owner decides about a waiting guest. */
 export type BillingGuestAction = { action: 'link'; contactId: string } | { action: 'add' } | { action: 'dismiss' };

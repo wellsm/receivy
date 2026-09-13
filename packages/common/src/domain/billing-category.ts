@@ -6,6 +6,9 @@ export const enum BillingCategory {
   Loan = 'loan',
   Housing = 'housing',
   Travel = 'travel',
+  Health = 'health',
+  Education = 'education',
+  Leisure = 'leisure',
   Other = 'other'
 }
 
@@ -17,6 +20,9 @@ export const BILLING_CATEGORIES: { value: BillingCategory; label: string }[] = [
   { value: BillingCategory.Loan, label: 'Empréstimo' },
   { value: BillingCategory.Housing, label: 'Moradia' },
   { value: BillingCategory.Travel, label: 'Viagem' },
+  { value: BillingCategory.Health, label: 'Saúde' },
+  { value: BillingCategory.Education, label: 'Educação' },
+  { value: BillingCategory.Leisure, label: 'Lazer' },
   { value: BillingCategory.Other, label: 'Outro' }
 ];
 
@@ -46,6 +52,9 @@ export const BILLING_CATEGORY_COLORS: Record<BillingCategory, string> = {
   loan: '#0FA3A3',
   housing: '#C2544D',
   travel: '#D6538C',
+  health: '#D94F70',
+  education: '#5B6BD6',
+  leisure: '#C9971C',
   other: '#64748B'
 };
 

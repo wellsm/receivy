@@ -1,7 +1,7 @@
 import { BillingType } from './billing';
 import { ChargePayer, ChargeState, type ChargeSummary, Direction, ProofState } from './contracts';
 
-export const enum BadgeTone {
+export enum BadgeTone {
   Danger = 'danger',
   Info = 'info',
   Success = 'success',
@@ -9,7 +9,7 @@ export const enum BadgeTone {
   Neutral = 'neutral'
 }
 
-export const enum ChargeActionKind {
+export enum ChargeActionKind {
   Open = 'open',
   Remind = 'remind'
 }

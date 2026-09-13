@@ -1,3 +1,4 @@
+import type { UserAvatar } from '../domain/avatar';
 import type { UserStatus } from '../domain/contacts';
 
 export const enum AuthProvider {
@@ -13,6 +14,7 @@ export type AuthUser = {
   /** Filled at onboarding by the person; the base for future WhatsApp validation. */
   phone: string | null;
   avatarUrl: string | null;
+  avatar?: UserAvatar | null;
   /** 'pending' until onboarding completes; 'active' afterwards; 'removed' after account deletion. */
   status: UserStatus;
   locale: 'pt-BR';

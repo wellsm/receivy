@@ -113,4 +113,20 @@ describe("ProfileScreen", () => {
     expect(await screen.findByText(ACCOUNT_DELETED)).toBeOnTheScreen();
     expect(onLoggedOut).toHaveBeenCalled();
   });
+
+  it("pins the dark theme from Aparência and stores it on the device", async () => {
+    const { Uniwind } = jest.requireMock("uniwind") as { Uniwind: { setTheme: jest.Mock } };
+    const SecureStore = jest.requireMock("expo-secure-store") as { setItem: jest.Mock };
+
+    await render(<ProfileScreen client={client()} store={store} version="1.0.0" />);
+    await screen.findByText("Lucas Silveira");
+
+    expect(screen.getByRole("radio", { name: "Sistema" })).toBeChecked();
+
+    await fireEvent.press(screen.getByRole("radio", { name: "Escuro" }));
+
+    expect(screen.getByRole("radio", { name: "Escuro" })).toBeChecked();
+    expect(SecureStore.setItem).toHaveBeenCalledWith("receivy.theme", "dark");
+    expect(Uniwind.setTheme).toHaveBeenCalledWith("dark");
+  });
 });

@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, type AuthUser } from "@receivy/common";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, THEME_PREFERENCE_OPTIONS, type AuthUser } from "@receivy/common";
 import { accountClient, type AccountClient } from "@/account/client";
 import { profileStore, type ProfileStore } from "@/account/profile";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { LegalSheet, type LegalKind } from "@/components/app/legal-sheet";
 import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
+import { useThemePreference } from "@/theme/preference";
 
 type ProfileScreenProps = {
   client?: Pick<AccountClient, "profile" | "save" | "logout" | "erase">;
@@ -95,6 +96,7 @@ export function ProfileScreen({
   const [busy, setBusy] = useState(false);
   const [ended, setEnded] = useState(false);
   const [legal, setLegal] = useState<LegalKind | null>(null);
+  const [themePreference, chooseTheme] = useThemePreference();
 
   useEffect(() => {
     let active = true;
@@ -276,6 +278,29 @@ export function ProfileScreen({
                     subtitle="Chaves cadastradas para receber pagamentos"
                     onPress={onOpenPix}
                   />
+                </View>
+              </View>
+
+              <View className="gap-2">
+                <Text className="px-1 text-xs font-bold tracking-wider text-muted">APARÊNCIA</Text>
+
+                <View accessibilityRole="radiogroup" accessibilityLabel="Aparência" className="flex-row gap-2 rounded-3xl border border-outline/40 bg-surface p-2">
+                  {THEME_PREFERENCE_OPTIONS.map((option) => {
+                    const selected = option.value === themePreference;
+
+                    return (
+                      <Pressable
+                        key={option.value}
+                        accessibilityRole="radio"
+                        accessibilityLabel={option.label}
+                        accessibilityState={{ checked: selected }}
+                        onPress={() => chooseTheme(option.value)}
+                        className={`min-h-11 flex-1 items-center justify-center rounded-2xl ${selected ? "bg-primary-soft/60" : ""}`}
+                      >
+                        <Text className={`text-sm font-semibold ${selected ? "text-primary-strong" : "text-muted"}`}>{option.label}</Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
               </View>
 

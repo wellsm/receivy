@@ -3,7 +3,7 @@ import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type PixKeyFieldsProps = {
   type: PixKeyType;
@@ -42,6 +42,7 @@ const KEYBOARDS = {
 
 /** The key type chips plus the masked key input, shared by the Pix key form and the conta a pagar form. */
 export function PixKeyFields({ type, value, disabled = false, onPickType, onChangeKey, onClear }: PixKeyFieldsProps) {
+  const colors = useThemeColors();
   const [focused, setFocused] = useState(false);
   const spec = pixKeyField(type);
 
@@ -75,7 +76,7 @@ export function PixKeyFields({ type, value, disabled = false, onPickType, onChan
                   active ? "border-2 border-primary" : "border-outline/60"
                 } ${disabled ? "opacity-50" : ""}`}
               >
-                <Image source={PIX_TYPE_ICONS[option.value]} tintColor={active ? ACTIVE_TINT : MUTED_TINT} style={{ width: 22, height: 22 }} />
+                <Image source={PIX_TYPE_ICONS[option.value]} tintColor={active ? colors.primaryStrong : colors.muted} style={{ width: 22, height: 22 }} />
                 <Text className="text-xs font-bold text-ink">{option.label}</Text>
               </Pressable>
             );
@@ -86,12 +87,12 @@ export function PixKeyFields({ type, value, disabled = false, onPickType, onChan
       <View className="gap-2">
         <Text className="text-sm font-semibold text-ink">{spec.label}</Text>
         <View className="h-[52px] flex-row items-center rounded-xl border border-outline bg-surface pl-3.5 pr-2">
-          <Image source={PIX_TYPE_ICONS[type]} tintColor={MUTED_TINT} style={{ width: 20, height: 20 }} />
+          <Image source={PIX_TYPE_ICONS[type]} tintColor={colors.muted} style={{ width: 20, height: 20 }} />
           <TextInput
             accessibilityLabel={spec.label}
             editable={!disabled}
             placeholder={spec.placeholder}
-            placeholderTextColor={MUTED_TINT}
+            placeholderTextColor={colors.muted}
             keyboardType={KEYBOARDS[spec.keyboard]}
             autoCapitalize="none"
             autoCorrect={false}
@@ -104,7 +105,7 @@ export function PixKeyFields({ type, value, disabled = false, onPickType, onChan
           />
           {focused && value ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Limpar" disabled={disabled} onPress={onClear} className="h-9 w-9 items-center justify-center rounded-full">
-              <Image source={plusMark} tintColor={MUTED_TINT} style={{ width: 16, height: 16, transform: [{ rotate: "45deg" }] }} />
+              <Image source={plusMark} tintColor={colors.muted} style={{ width: 16, height: 16, transform: [{ rotate: "45deg" }] }} />
             </Pressable>
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Colar" disabled={disabled} onPress={() => void paste()} className="h-9 items-center justify-center rounded-full px-2">

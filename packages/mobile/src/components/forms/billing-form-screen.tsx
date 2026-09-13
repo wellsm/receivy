@@ -43,7 +43,7 @@ import { useFocusEffect, useNavigation } from "expo-router";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Image } from "expo-image";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, useColorScheme, View } from "react-native";
 import { MonthSelect } from "@/components/app/month-select";
 import { ScopeModal } from "@/components/app/scope-modal";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
@@ -55,7 +55,7 @@ import { CategorySelect } from "@/components/app/category-select";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { SplitEditor, type SplitRow } from "@/components/app/split-editor";
-import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 const closeMark = require("../../../assets/images/auth/plus.svg");
 const keyMark = require("../../../assets/images/auth/key.svg");
@@ -290,6 +290,8 @@ function Chip({ label, active, disabled, icon, onPress }: { label: string; activ
 }
 
 function Segment({ label, name, active, disabled, onPress }: { label: string; name: string; active: boolean; disabled: boolean; onPress: () => void }) {
+  const colors = useThemeColors();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -298,7 +300,7 @@ function Segment({ label, name, active, disabled, onPress }: { label: string; na
       disabled={disabled}
       onPress={onPress}
       className={`min-h-9 flex-1 items-center justify-center rounded-lg ${active ? "bg-surface" : ""}`}
-      style={active ? { shadowColor: "#003828", shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 } : undefined}
+      style={active ? { shadowColor: colors.primaryStrong, shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 } : undefined}
     >
       <Text className={`text-[11px] ${active ? "font-extrabold text-primary-strong" : "font-medium text-muted"}`}>{label}</Text>
     </Pressable>
@@ -315,13 +317,15 @@ function TypeButton({ label, active, disabled, onPress }: { label: string; activ
       onPress={onPress}
       className={`min-h-12 flex-1 items-center justify-center rounded-xl border px-2 ${active ? "border-primary bg-primary" : "border-outline/40 bg-surface"} ${disabled ? "opacity-50" : ""}`}
     >
-      <Text className={`text-xs font-semibold ${active ? "text-white" : "text-ink"}`}>{label}</Text>
+      <Text className={`text-xs font-semibold ${active ? "text-on-primary" : "text-ink"}`}>{label}</Text>
     </Pressable>
   );
 }
 
 export function BillingFormScreen({ client = financialClient, contacts = contactsClient, billing = null, onSaved, onBack, onCreateContact, onCreatePix }: BillingFormScreenProps) {
   const navigation = useNavigation();
+  const colors = useThemeColors();
+  const scheme = useColorScheme();
   const [draft, setDraft] = useState<BillingDraft>(() =>
     billing ? draftFromBilling(billing) : EMPTY_BILLING_DRAFT("America/Sao_Paulo", calendarDate()),
   );
@@ -726,7 +730,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
         {blocked ? (
           <View className="items-center gap-3 rounded-3xl border border-outline/40 bg-surface px-6 py-10">
             <View className="h-14 w-14 items-center justify-center rounded-full bg-primary-soft/60">
-              <Image source={keyMark} tintColor={ACTIVE_TINT} style={{ width: 26, height: 26 }} />
+              <Image source={keyMark} tintColor={colors.primaryStrong} style={{ width: 26, height: 26 }} />
             </View>
             <Text accessibilityRole="header" className="text-center text-xl font-bold text-primary-strong">
               {PIX_GATE_TITLE}
@@ -740,12 +744,12 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
               onPress={() => onCreatePix && leaveTo(() => onCreatePix(true))}
               className="mt-2 h-12 w-full items-center justify-center rounded-xl bg-primary"
             >
-              <Text className="font-bold text-white">Cadastrar chave Pix</Text>
+              <Text className="font-bold text-on-primary">Cadastrar chave Pix</Text>
             </Pressable>
           </View>
         ) : (
           <>
-        {!ready && !error && <ActivityIndicator accessibilityLabel="Carregando dados" color={ACTIVE_TINT} />}
+        {!ready && !error && <ActivityIndicator accessibilityLabel="Carregando dados" color={colors.primaryStrong} />}
 
         {/* Para quem: the single contact a conta a pagar is owed to */}
         {payable && (
@@ -760,7 +764,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 onPress={() => setPicker(true)}
                 className="min-h-10 flex-row items-center gap-1 px-1"
               >
-                <Image source={closeMark} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
+                <Image source={closeMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
                 <Text className="text-xs font-semibold text-primary">{payee ? "Trocar" : "Escolher"}</Text>
               </Pressable>
             </View>
@@ -778,7 +782,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 >
                   <InitialsAvatar name={payee.displayName} size={24} />
                   <Text className="text-xs font-semibold text-ink">{payee.displayName}</Text>
-                  <Image source={closeMark} tintColor={MUTED_TINT} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
+                  <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
                 </Pressable>
               </View>
             ) : (
@@ -805,7 +809,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 onPress={() => setPicker(true)}
                 className="min-h-10 flex-row items-center gap-1 px-1"
               >
-                <Image source={closeMark} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
+                <Image source={closeMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
                 <Text className="text-xs font-semibold text-primary">Adicionar</Text>
               </Pressable>
             </View>
@@ -825,7 +829,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                   >
                     <InitialsAvatar name={contact.displayName} size={24} />
                     <Text className="text-xs font-semibold text-ink">{contact.displayName}</Text>
-                    <Image source={closeMark} tintColor={MUTED_TINT} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
+                    <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
                   </Pressable>
                 ))}
               </View>
@@ -846,7 +850,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 disabled={locked || frozen}
                 value={draft.owner}
                 onValueChange={(value) => update({ owner: value })}
-                trackColor={{ true: "#0B513D" }}
+                trackColor={{ true: colors.primary }}
               />
             </View>
           </View>
@@ -861,7 +865,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
               accessibilityLabel="Valor"
               editable={!locked && !frozen}
               keyboardType="number-pad"
-              placeholderTextColor={MUTED_TINT}
+              placeholderTextColor={colors.muted}
               value={formatAmountDigits(amountInputToDigits(draft.amount))}
               onChangeText={typeAmount}
               textAlign="center"
@@ -879,7 +883,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
               editable={!locked && !frozen}
               maxLength={500}
               placeholder="Ex: Aluguel do sítio, Pizzaria..."
-              placeholderTextColor={MUTED_TINT}
+              placeholderTextColor={colors.muted}
               value={draft.description}
               onChangeText={(value) => update({ description: value })}
               className="h-12 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] text-ink"
@@ -942,7 +946,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 editable={!locked && !scheduled}
                 inputMode="numeric"
                 placeholder="2 a 120"
-                placeholderTextColor={MUTED_TINT}
+                placeholderTextColor={colors.muted}
                 value={draft.occurrences}
                 onChangeText={(value) => update({ occurrences: value })}
                 className="h-11 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] text-ink"
@@ -970,7 +974,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 accessibilityLabel="Vencimento"
                 editable={!locked && !dueLocked}
                 placeholder="AAAA-MM-DD"
-                placeholderTextColor={MUTED_TINT}
+                placeholderTextColor={colors.muted}
                 value={draft.start}
                 onChangeText={(value) => update({ start: value })}
                 className="h-11 flex-1 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] font-semibold text-ink"
@@ -1014,7 +1018,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 onPress={() => setCalendarOpen((open) => !open)}
                 className={`h-11 w-11 items-center justify-center rounded-xl border border-outline/50 bg-surface ${locked || dueLocked ? "opacity-50" : ""}`}
               >
-                <Image source={calendarMark} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+                <Image source={calendarMark} tintColor={colors.primaryStrong} style={{ width: 20, height: 20 }} />
               </Pressable>
             )}
           </View>
@@ -1024,13 +1028,14 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
               value={dateFromCalendar(draft.start, today)}
               mode="date"
               display="default"
+              themeVariant={scheme === "dark" ? "dark" : "light"}
               onValueChange={pickDate}
               onDismiss={() => setCalendarOpen(false)}
             />
           )}
           {calendarOpen && Platform.OS === "ios" && (
             <Modal transparent animationType="slide" visible onRequestClose={() => setCalendarOpen(false)}>
-              <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setCalendarOpen(false)}>
+              <Pressable className="flex-1 justify-end bg-scrim" onPress={() => setCalendarOpen(false)}>
                 <Pressable className="gap-2 rounded-t-3xl bg-canvas p-5 pb-10" onPress={() => undefined}>
                   <Text accessibilityRole="header" className="text-lg font-semibold text-primary-strong">
                     Data de vencimento
@@ -1041,7 +1046,8 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                     mode="date"
                     display="inline"
                     locale="pt-BR"
-                    accentColor="#0B513D"
+                    accentColor={colors.primary}
+                    themeVariant={scheme === "dark" ? "dark" : "light"}
                     onValueChange={pickDate}
                   />
                   <Pressable
@@ -1050,7 +1056,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                     onPress={() => setCalendarOpen(false)}
                     className="h-12 items-center justify-center rounded-xl bg-primary"
                   >
-                    <Text className="text-sm font-bold text-white">Concluir</Text>
+                    <Text className="text-sm font-bold text-on-primary">Concluir</Text>
                   </Pressable>
                 </Pressable>
               </Pressable>
@@ -1070,7 +1076,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 editable={!locked}
                 maxLength={60}
                 placeholder="Ex: Nubank, Inter..."
-                placeholderTextColor={MUTED_TINT}
+                placeholderTextColor={colors.muted}
                 value={draft.pixInline.label}
                 onChangeText={(label) => updatePix({ label })}
                 className="h-11 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] text-ink"
@@ -1100,7 +1106,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
             >
               <View className="flex-1 flex-row items-center gap-3">
                 <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
-                  <Image source={selectedPix ? PIX_ICONS[selectedPix.pixKeyType] : keyMark} tintColor={ACTIVE_TINT} style={{ width: 18, height: 18 }} />
+                  <Image source={selectedPix ? PIX_ICONS[selectedPix.pixKeyType] : keyMark} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
                 </View>
                 <View className="flex-1">
                   <Text className="text-xs font-semibold text-ink" numberOfLines={1}>
@@ -1111,14 +1117,14 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                   </Text>
                 </View>
               </View>
-              {switchable && <Image source={chevronMark} tintColor={MUTED_TINT} style={{ width: 16, height: 16, transform: [{ rotate: "90deg" }] }} />}
+              {switchable && <Image source={chevronMark} tintColor={colors.muted} style={{ width: 16, height: 16, transform: [{ rotate: "90deg" }] }} />}
             </Pressable>
           </View>
         )}
 
         {pixOpen && (
           <Modal transparent animationType="slide" visible onRequestClose={() => setPixOpen(false)}>
-            <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setPixOpen(false)}>
+            <Pressable className="flex-1 justify-end bg-scrim" onPress={() => setPixOpen(false)}>
               <Pressable className="max-h-[80%] gap-2 rounded-t-3xl bg-canvas p-5 pb-10" onPress={() => undefined}>
                 <Text accessibilityRole="header" className="text-lg font-semibold text-primary-strong">
                   Receber via Pix
@@ -1140,7 +1146,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                         className={`min-h-16 flex-row items-center gap-3 rounded-2xl border px-4 py-3 ${active ? "border-primary bg-primary-soft/40" : "border-outline/40 bg-surface"}`}
                       >
                         <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
-                          <Image source={PIX_ICONS[method.pixKeyType]} tintColor={ACTIVE_TINT} style={{ width: 18, height: 18 }} />
+                          <Image source={PIX_ICONS[method.pixKeyType]} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
                         </View>
                         <View className="flex-1">
                           <View className="flex-row items-center gap-2">
@@ -1153,7 +1159,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                             {method.pixKey}
                           </Text>
                         </View>
-                        {active && <Image source={checkMark} tintColor={ACTIVE_TINT} style={{ width: 18, height: 18 }} />}
+                        {active && <Image source={checkMark} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />}
                       </Pressable>
                     );
                   })}
@@ -1164,7 +1170,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
         )}
 
         {error ? (
-          <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+          <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-4 text-danger">
             {error}
           </Text>
         ) : null}
@@ -1192,7 +1198,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
           onPress={submit}
           className={`h-[52px] items-center justify-center rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
         >
-          {busy ? <ActivityIndicator color="white" /> : <Text className="text-sm font-bold text-white">{action}</Text>}
+          {busy ? <ActivityIndicator color={colors.onPrimary} /> : <Text className="text-sm font-bold text-on-primary">{action}</Text>}
         </Pressable>
       </View>
       )}

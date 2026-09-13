@@ -36,7 +36,7 @@ function ChipGroup<T extends string>({ group, options, selected, everyLabel, onP
             onPress={onClear}
             className={`min-h-10 justify-center rounded-full border px-4 ${every ? "border-primary bg-primary" : "border-outline bg-surface"}`}
           >
-            <Text className={`text-sm font-semibold ${every ? "text-white" : "text-ink"}`}>{everyLabel}</Text>
+            <Text className={`text-sm font-semibold ${every ? "text-on-primary" : "text-ink"}`}>{everyLabel}</Text>
           </Pressable>
         )}
 
@@ -52,7 +52,7 @@ function ChipGroup<T extends string>({ group, options, selected, everyLabel, onP
               onPress={() => onPick(option.value)}
               className={`min-h-10 justify-center rounded-full border px-4 ${active ? "border-primary bg-primary" : "border-outline bg-surface"}`}
             >
-              <Text className={`text-sm font-semibold ${active ? "text-white" : "text-ink"}`}>{option.label}</Text>
+              <Text className={`text-sm font-semibold ${active ? "text-on-primary" : "text-ink"}`}>{option.label}</Text>
             </Pressable>
           );
         })}
@@ -73,7 +73,7 @@ export function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetPr
 
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Fechar filtros" onPress={onClose} className="flex-1 bg-black/40" />
+      <Pressable accessibilityRole="button" accessibilityLabel="Fechar filtros" onPress={onClose} className="flex-1 bg-scrim" />
 
       <View className="gap-5 rounded-t-3xl bg-surface px-5 pb-10 pt-5">
         <View className="flex-row items-center justify-between gap-2">
@@ -125,7 +125,7 @@ export function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetPr
           onPress={() => onApply(draft)}
           className="min-h-14 items-center justify-center rounded-2xl bg-primary"
         >
-          <Text className="font-bold text-white">Aplicar</Text>
+          <Text className="font-bold text-on-primary">Aplicar</Text>
         </Pressable>
       </View>
     </Modal>

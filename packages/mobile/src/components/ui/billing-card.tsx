@@ -10,14 +10,14 @@ import {
   formatMoney,
 } from "@receivy/common";
 import { CategoryIcon } from "@/components/ui/category-icon";
-import { ACTIVE_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 const shareMark = require("../../../assets/images/auth/share.svg");
 
 const BADGE_CLASS: Record<BadgeTone, string> = {
-  danger: "bg-red-50 text-red-700",
-  info: "bg-blue-50 text-blue-800",
-  warning: "bg-amber-50 text-amber-900",
+  danger: "bg-danger-soft text-danger",
+  info: "bg-info-soft text-info",
+  warning: "bg-warning-soft text-warning",
   success: "bg-primary-soft/50 text-primary-strong",
   neutral: "bg-surface-muted text-muted",
 };
@@ -54,6 +54,7 @@ type BillingCardProps = {
 
 /** One billing on the list: category, description, due label, badges, amount and the share action. */
 export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProps) {
+  const colors = useThemeColors();
   const dueLabel = billingDueLabel(billing, today);
   const overdue = dueLabel.startsWith("Atrasado");
   const badges = billingBadges(billing);
@@ -77,7 +78,7 @@ export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProp
             <Text className="flex-1 text-sm font-bold text-ink" numberOfLines={1}>
               {billing.description}
             </Text>
-            <Text className={`text-xs font-semibold ${overdue ? "text-red-700" : "text-muted"}`}>{dueLabel}</Text>
+            <Text className={`text-xs font-semibold ${overdue ? "text-danger" : "text-muted"}`}>{dueLabel}</Text>
           </View>
 
           {badges.length > 0 && (
@@ -105,7 +106,7 @@ export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProp
             onPress={() => onShare(billing)}
             className="min-h-10 flex-row items-center gap-1.5 rounded-lg bg-primary-soft/40 px-3"
           >
-            <Image source={shareMark} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
+            <Image source={shareMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
             <Text className="text-xs font-bold text-primary-strong">Compartilhar</Text>
           </Pressable>
         )}

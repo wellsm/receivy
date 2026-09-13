@@ -81,7 +81,7 @@ function ChipGroup<T extends string>({ group, options, selected, onSelect }: Chi
               onPress={() => onSelect(option.value)}
               className={`min-h-10 justify-center rounded-full border px-4 ${active ? "border-primary bg-primary" : "border-outline bg-surface"}`}
             >
-              <Text className={`text-sm font-semibold ${active ? "text-white" : "text-ink"}`}>{option.label}</Text>
+              <Text className={`text-sm font-semibold ${active ? "text-on-primary" : "text-ink"}`}>{option.label}</Text>
             </Pressable>
           );
         })}
@@ -102,7 +102,7 @@ export function BillingFiltersSheet({ value, onApply, onClose }: BillingFiltersS
 
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Fechar filtros" onPress={onClose} className="flex-1 bg-black/40" />
+      <Pressable accessibilityRole="button" accessibilityLabel="Fechar filtros" onPress={onClose} className="flex-1 bg-scrim" />
 
       <View className="gap-5 rounded-t-3xl bg-surface px-5 pb-10 pt-5">
         <Text accessibilityRole="header" className="text-xl font-extrabold text-ink">
@@ -122,7 +122,7 @@ export function BillingFiltersSheet({ value, onApply, onClose }: BillingFiltersS
           onPress={() => onApply(draft)}
           className="min-h-14 items-center justify-center rounded-2xl bg-primary"
         >
-          <Text className="font-bold text-white">Aplicar</Text>
+          <Text className="font-bold text-on-primary">Aplicar</Text>
         </Pressable>
       </View>
     </Modal>

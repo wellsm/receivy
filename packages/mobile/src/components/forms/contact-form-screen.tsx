@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { patchDraft } from "@/financial/draft-store";
 import { contactsClient, ContactsRequestError } from "@/contacts/client";
-import { MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type ContactFormClient = Pick<typeof contactsClient, "get" | "save">;
 
@@ -73,6 +73,7 @@ function saveError(reason: unknown, linked: boolean, editing: boolean): string {
 
 /** The contact form on its own screen: create from `/contacts/new`, edit from `/contacts/[id]/edit`. */
 export function ContactFormScreen({ contactId, client = contactsClient, returnTo, onSaved }: ContactFormScreenProps) {
+  const colors = useThemeColors();
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
@@ -147,7 +148,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 px-5 pb-8 pt-3" showsVerticalScrollIndicator={false}>
         <Text className="leading-6 text-muted">{INTRO}</Text>
 
-        {linked ? <Text className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900">{LINKED_NOTE}</Text> : null}
+        {linked ? <Text className="rounded-xl bg-warning-soft p-4 text-sm font-semibold text-warning">{LINKED_NOTE}</Text> : null}
 
         <View className="gap-4 rounded-3xl border border-outline/40 bg-surface p-5">
           <Field label="Nome completo">
@@ -155,7 +156,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
               accessibilityLabel="Nome completo"
               accessibilityState={{ disabled: linked }}
               placeholder="Maria Silva"
-              placeholderTextColor={MUTED_TINT}
+              placeholderTextColor={colors.muted}
               maxLength={120}
               autoComplete="name"
               editable={!linked}
@@ -169,7 +170,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
             <TextInput
               accessibilityLabel="Apelido"
               placeholder="Como prefere chamar"
-              placeholderTextColor={MUTED_TINT}
+              placeholderTextColor={colors.muted}
               maxLength={60}
               value={nickname}
               onChangeText={setNickname}
@@ -182,7 +183,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
               accessibilityLabel="E-mail"
               accessibilityState={{ disabled: linked }}
               placeholder="contato@email.com"
-              placeholderTextColor={MUTED_TINT}
+              placeholderTextColor={colors.muted}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -196,7 +197,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
         </View>
 
         {error ? (
-          <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+          <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-4 text-danger">
             {error}
           </Text>
         ) : null}
@@ -211,7 +212,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
           onPress={() => void save()}
           className="min-h-12 items-center justify-center rounded-xl bg-primary"
         >
-          {busy ? <ActivityIndicator color="#ffffff" /> : <Text className="font-bold text-white">Salvar contato</Text>}
+          {busy ? <ActivityIndicator color={colors.onPrimary} /> : <Text className="font-bold text-on-primary">Salvar contato</Text>}
         </Pressable>
       </View>
     </SafeAreaView>

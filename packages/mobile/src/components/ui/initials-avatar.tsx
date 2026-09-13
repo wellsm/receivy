@@ -18,7 +18,7 @@ export function InitialsAvatar({ name, size = 28, inverted = false }: InitialsAv
       className={`items-center justify-center rounded-full ${inverted ? "bg-primary" : "bg-primary-soft/60"}`}
       style={{ width: size, height: size }}
     >
-      <Text className={`font-extrabold ${inverted ? "text-white" : "text-primary-strong"}`} style={{ fontSize: size * 0.42 }}>
+      <Text className={`font-extrabold ${inverted ? "text-on-primary" : "text-primary-strong"}`} style={{ fontSize: size * 0.42 }}>
         {initialOf(name)}
       </Text>
     </View>

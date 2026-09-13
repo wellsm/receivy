@@ -5,6 +5,7 @@ import { accountClient, type AccountClient } from "@/account/client";
 import { profileStore, type ProfileStore } from "@/account/profile";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { LegalText } from "@/components/ui/legal-text";
+import { useThemeColors } from "@/theme/colors";
 
 type LegalKind = "terms" | "privacy";
 
@@ -15,6 +16,7 @@ type OnboardingScreenProps = {
 };
 
 export function OnboardingScreen({ client = accountClient, store = profileStore, onComplete }: OnboardingScreenProps) {
+  const colors = useThemeColors();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -102,11 +104,11 @@ export function OnboardingScreen({ client = accountClient, store = profileStore,
               onChangeText={setName}
               onSubmitEditing={() => void submit()}
               placeholder="Seu nome"
-              placeholderTextColor="#7D8794"
+              placeholderTextColor={colors.muted}
               returnKeyType="done"
               textContentType="name"
               value={name}
-              className="h-14 rounded-2xl border border-outline bg-white px-4 text-base tracking-normal text-ink"
+              className="h-14 rounded-2xl border border-outline bg-surface px-4 text-base tracking-normal text-ink"
             />
 
             <Text className="mb-2 mt-5 text-sm font-bold text-ink">Telefone</Text>
@@ -118,11 +120,11 @@ export function OnboardingScreen({ client = accountClient, store = profileStore,
               onChangeText={(value) => setPhone(formatPhoneBR(value))}
               onSubmitEditing={() => void submit()}
               placeholder="(11) 98765-4321"
-              placeholderTextColor="#7D8794"
+              placeholderTextColor={colors.muted}
               returnKeyType="done"
               textContentType="telephoneNumber"
               value={phone}
-              className="h-14 rounded-2xl border border-outline bg-white px-4 text-base tracking-normal text-ink"
+              className="h-14 rounded-2xl border border-outline bg-surface px-4 text-base tracking-normal text-ink"
             />
 
             <Pressable
@@ -132,11 +134,11 @@ export function OnboardingScreen({ client = accountClient, store = profileStore,
               onPress={() => void submit()}
               className="mt-4 h-14 items-center justify-center rounded-2xl bg-primary active:opacity-80 disabled:opacity-50"
             >
-              {busy ? <ActivityIndicator color="white" /> : <Text className="text-base font-bold text-white">Continuar</Text>}
+              {busy ? <ActivityIndicator color={colors.onPrimary} /> : <Text className="text-base font-bold text-on-primary">Continuar</Text>}
             </Pressable>
 
             {error && (
-              <Text accessibilityRole="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm leading-5 text-red-700">
+              <Text accessibilityRole="alert" className="mt-4 rounded-xl bg-danger-soft p-3 text-sm leading-5 text-danger">
                 {error}
               </Text>
             )}

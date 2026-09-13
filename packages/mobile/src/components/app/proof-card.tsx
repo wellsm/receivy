@@ -2,7 +2,7 @@ import { Image } from "expo-image";
 import { Pressable, Text, View } from "react-native";
 import { canMarkPaid, canUploadProof, canWithdrawProof, fileSizeText, momentText, proofNote, proofStateLabel, type ChargeDetail } from "@receivy/common";
 import { StatusTag } from "@/components/ui/status-tag";
-import { ACTIVE_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 const ICONS = {
   receipt: require("../../../assets/images/auth/receipt.svg"),
@@ -25,6 +25,8 @@ type ProofCardProps = {
 };
 
 function UploadButton({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) {
+  const colors = useThemeColors();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -34,7 +36,7 @@ function UploadButton({ label, disabled, onPress }: { label: string; disabled: b
       onPress={onPress}
       className={`min-h-12 flex-row items-center justify-center gap-2 rounded-xl border-2 border-dashed border-outline/60 bg-surface-muted/50 px-4 ${disabled ? "opacity-50" : ""}`}
     >
-      <Image source={ICONS.upload} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+      <Image source={ICONS.upload} tintColor={colors.primaryStrong} style={{ width: 20, height: 20 }} />
       <Text className="text-sm font-semibold text-ink">{label}</Text>
     </Pressable>
   );
@@ -42,6 +44,7 @@ function UploadButton({ label, disabled, onPress }: { label: string; disabled: b
 
 /** The proof section of a charge: the latest file with "Ver", plus accept/reject (creditor) or replace (debtor) when allowed. */
 export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw }: ProofCardProps) {
+  const colors = useThemeColors();
   const proof = charge.proof;
   const upload = canUploadProof(charge);
   // Whoever collects settles from here: accepting the file under review, or by hand when there is none to accept.
@@ -52,7 +55,7 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
     return (
       <View className="gap-3 rounded-2xl border border-outline/30 bg-surface p-4">
         <View className="flex-row items-center gap-2">
-          <Image source={ICONS.receipt} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+          <Image source={ICONS.receipt} tintColor={colors.primaryStrong} style={{ width: 20, height: 20 }} />
           <Text accessibilityRole="header" className="text-base font-bold text-ink">
             Comprovante
           </Text>
@@ -76,8 +79,8 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
             onPress={onAccept}
             className={`min-h-11 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
           >
-            <Image source={ICONS.check} tintColor="#FFFFFF" style={{ width: 16, height: 16 }} />
-            <Text className="text-xs font-semibold text-white">Marcar como pago</Text>
+            <Image source={ICONS.check} tintColor={colors.onPrimary} style={{ width: 16, height: 16 }} />
+            <Text className="text-xs font-semibold text-on-primary">Marcar como pago</Text>
           </Pressable>
         )}
       </View>
@@ -92,7 +95,7 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
     <View className="gap-3 rounded-2xl border border-outline/30 bg-surface p-4">
       <View className="flex-row items-center justify-between gap-2">
         <View className="flex-row items-center gap-2">
-          <Image source={ICONS.receipt} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+          <Image source={ICONS.receipt} tintColor={colors.primaryStrong} style={{ width: 20, height: 20 }} />
           <Text accessibilityRole="header" className="text-base font-bold text-ink">
             Comprovante
           </Text>
@@ -102,7 +105,7 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
 
       <View className="flex-row items-center gap-3 rounded-xl border border-outline/30 bg-surface-muted p-3">
         <View className="h-10 w-10 items-center justify-center rounded-lg bg-surface">
-          <Image source={proof.file.mime === "application/pdf" ? ICONS.file : ICONS.image} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+          <Image source={proof.file.mime === "application/pdf" ? ICONS.file : ICONS.image} tintColor={colors.primaryStrong} style={{ width: 20, height: 20 }} />
         </View>
         <View className="flex-1">
           <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
@@ -125,7 +128,7 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
           onPress={onView}
           className={`min-h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-outline/50 ${busy ? "opacity-50" : ""}`}
         >
-          <Image source={ICONS.eye} tintColor={ACTIVE_TINT} style={{ width: 16, height: 16 }} />
+          <Image source={ICONS.eye} tintColor={colors.primaryStrong} style={{ width: 16, height: 16 }} />
           <Text className="text-xs font-semibold text-ink">Ver comprovante</Text>
         </Pressable>
 
@@ -136,10 +139,10 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
             accessibilityState={{ disabled: busy }}
             disabled={busy}
             onPress={onWithdraw}
-            className={`min-h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-red-200 ${busy ? "opacity-50" : ""}`}
+            className={`min-h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-danger/30 ${busy ? "opacity-50" : ""}`}
           >
-            <Image source={ICONS.trash} tintColor="#B91C1C" style={{ width: 16, height: 16 }} />
-            <Text className="text-xs font-semibold text-red-700">Apagar e enviar outro</Text>
+            <Image source={ICONS.trash} tintColor={colors.danger} style={{ width: 16, height: 16 }} />
+            <Text className="text-xs font-semibold text-danger">Apagar e enviar outro</Text>
           </Pressable>
         )}
 
@@ -152,8 +155,8 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
             onPress={settle ? onAccept : onUpload}
             className={`min-h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
           >
-            <Image source={settle ? ICONS.check : ICONS.upload} tintColor="#FFFFFF" style={{ width: 16, height: 16 }} />
-            <Text className="text-xs font-semibold text-white">{secondary}</Text>
+            <Image source={settle ? ICONS.check : ICONS.upload} tintColor={colors.onPrimary} style={{ width: 16, height: 16 }} />
+            <Text className="text-xs font-semibold text-on-primary">{secondary}</Text>
           </Pressable>
         )}
       </View>

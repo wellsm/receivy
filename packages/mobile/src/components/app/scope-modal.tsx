@@ -15,7 +15,7 @@ type ScopeModalProps = {
 };
 
 const SECONDARY = {
-  danger: { button: "bg-red-600", label: "text-white" },
+  danger: { button: "bg-danger-solid", label: "text-on-danger" },
   neutral: { button: "border border-outline", label: "text-ink" },
 } as const;
 
@@ -25,7 +25,7 @@ export function ScopeModal({ title, subtitle, explanation, primaryLabel, seconda
 
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onCancel}>
-      <View className="flex-1 items-center justify-center bg-black/40 px-6">
+      <View className="flex-1 items-center justify-center bg-scrim px-6">
         <View className="w-full max-w-xs gap-3 rounded-2xl border border-outline/40 bg-surface p-5">
           <Text accessibilityRole="header" className="text-center text-lg font-semibold text-ink">
             {title}
@@ -34,7 +34,7 @@ export function ScopeModal({ title, subtitle, explanation, primaryLabel, seconda
           <Text className="text-center text-xs leading-4 text-muted">{explanation}</Text>
           <View className="gap-2 pt-1">
             <Pressable accessibilityRole="button" accessibilityLabel={primaryLabel} disabled={busy} onPress={onPrimary} className="h-11 items-center justify-center rounded-lg bg-primary">
-              <Text className="text-xs font-semibold text-white">{primaryLabel}</Text>
+              <Text className="text-xs font-semibold text-on-primary">{primaryLabel}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel={secondaryLabel} disabled={busy} onPress={onSecondary} className={`h-11 items-center justify-center rounded-lg ${secondary.button}`}>
               <Text className={`text-xs font-semibold ${secondary.label}`}>{secondaryLabel}</Text>

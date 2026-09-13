@@ -28,7 +28,7 @@ import { CategoryIcon } from "@/components/ui/category-icon";
 import { CopyButton } from "@/components/ui/copy-button";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { financialClient, type FinancialClient } from "@/financial/client";
-import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type Client = Pick<
   FinancialClient,
@@ -179,17 +179,18 @@ function typeTag(billing: BillingDetail, current: Cycle | null): string {
 
 function Tag({ label, tone }: { label: string; tone: "success" | "warning" | "info" | "neutral" | "danger" }) {
   const classes = {
-    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    warning: "border-amber-200 bg-amber-50 text-amber-800",
-    info: "border-blue-200 bg-blue-50 text-blue-800",
+    success: "border-success/30 bg-success-soft text-success",
+    warning: "border-warning/30 bg-warning-soft text-warning",
+    info: "border-info/30 bg-info-soft text-info",
     neutral: "border-outline/30 bg-surface-muted text-muted",
-    danger: "border-red-200 bg-red-50 text-red-700",
+    danger: "border-danger/30 bg-danger-soft text-danger",
   }[tone];
 
   return <Text className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${classes}`}>{label}</Text>;
 }
 
 export function BillingDetailScreen({ id, client = financialClient, onOpenCharge, onEdit }: BillingDetailScreenProps) {
+  const colors = useThemeColors();
   const [billing, setBilling] = useState<BillingDetail | null>(null);
   const [invite, setInvite] = useState<BillingInvite | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -378,7 +379,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
       <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["bottom"]}>
         {error ? (
           <View className="gap-3 px-5">
-            <Text accessibilityRole="alert" className="text-center text-red-700">
+            <Text accessibilityRole="alert" className="text-center text-danger">
               {error}
             </Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Tentar novamente" onPress={load} className="min-h-12 items-center justify-center">
@@ -386,7 +387,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             </Pressable>
           </View>
         ) : (
-          <ActivityIndicator accessibilityLabel="Carregando conta" color={ACTIVE_TINT} size="large" />
+          <ActivityIndicator accessibilityLabel="Carregando conta" color={colors.primaryStrong} size="large" />
         )}
       </SafeAreaView>
     );
@@ -430,7 +431,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView contentContainerClassName="gap-5 px-5 pb-10 pt-4" showsVerticalScrollIndicator={false}>
         {error ? (
-          <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+          <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
             {error}
           </Text>
         ) : null}
@@ -443,8 +444,8 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                 <CategoryIcon category={billing.category} size={14} />
                 <Text className="text-[11px] font-medium text-muted">{billingCategoryLabel(billing.category)}</Text>
               </View>
-              <Text className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">{typeTag(billing, current)}</Text>
-              {payable && <Text className="rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-semibold text-violet-900">A pagar</Text>}
+              <Text className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">{typeTag(billing, current)}</Text>
+              {payable && <Text className="rounded-full bg-danger-soft px-2.5 py-1 text-[11px] font-semibold text-danger">A pagar</Text>}
             </View>
             <Tag label={STATE_LABELS[billing.state]} tone={stateTone} />
           </View>
@@ -480,7 +481,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
 
           <View className="flex-row items-center justify-between border-t border-outline/20 pt-3">
             <View className="flex-1 flex-row items-center gap-1.5">
-              <Image source={ICONS.key} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
+              <Image source={ICONS.key} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
               {/* Only the owner reaches this screen, so the key itself is safe to show here. */}
               <Text className="flex-1 text-[11px] text-muted" numberOfLines={1}>
                 {pix ? (
@@ -525,7 +526,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
               <View className="flex-row items-center justify-between px-1">
                 <Text className="text-[11px] text-muted">Convite ativo até {dayMonth(invite.expiresAt.slice(0, 10))}</Text>
                 <Pressable accessibilityRole="button" accessibilityLabel="Revogar convite" disabled={busy} onPress={() => void revokeInvite(billing)} className="min-h-8 justify-center">
-                  <Text className="text-[11px] font-semibold text-red-700">Revogar convite</Text>
+                  <Text className="text-[11px] font-semibold text-danger">Revogar convite</Text>
                 </Pressable>
               </View>
             )}
@@ -580,7 +581,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                       onPress={() => void resolveGuest(billing, guest, { action: "add" })}
                       className={`min-h-9 justify-center rounded-lg bg-primary px-3 ${locked ? "opacity-50" : ""}`}
                     >
-                      <Text className="text-xs font-semibold text-white">Novo participante</Text>
+                      <Text className="text-xs font-semibold text-on-primary">Novo participante</Text>
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
@@ -620,13 +621,13 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             const isPending = charge.state === "pending";
             // A file under review changes what the row asks of the owner: review it, never nag.
             const reviewing = isPending && charge.proofState === "pending";
-            const statusColor = { success: "text-primary", warning: "text-amber-700", danger: "text-red-700", neutral: "text-muted" }[status.tone];
+            const statusColor = { success: "text-primary", warning: "text-warning", danger: "text-danger", neutral: "text-muted" }[status.tone];
             const name = payable ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
 
             return (
               <View
                 key={charge.id}
-                className={`gap-2.5 rounded-xl border border-outline/30 bg-surface p-3.5 ${isPending ? "border-l-4 border-l-amber-400" : ""}`}
+                className={`gap-2.5 rounded-xl border border-outline/30 bg-surface p-3.5 ${isPending ? "border-l-4 border-l-warning" : ""}`}
               >
                 <Pressable
                   accessibilityRole="button"
@@ -655,7 +656,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                 {reviewing && (
                   <View className="flex-row items-center justify-between border-t border-outline/20 pt-2.5">
                     <View className="flex-row items-center gap-1">
-                      <Image source={ICONS.receipt} tintColor={ACTIVE_TINT} style={{ width: 13, height: 13 }} />
+                      <Image source={ICONS.receipt} tintColor={colors.primaryStrong} style={{ width: 13, height: 13 }} />
                       <Text className="text-[11px] font-medium text-primary-strong">Comprovante em revisão</Text>
                     </View>
                     <View className="flex-row items-center gap-2">
@@ -675,7 +676,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                         onPress={() => onOpenCharge?.(charge.id)}
                         className="min-h-8 flex-row items-center gap-1.5 rounded-lg bg-primary px-3"
                       >
-                        <Text className="text-[11px] font-semibold text-white">Revisar</Text>
+                        <Text className="text-[11px] font-semibold text-on-primary">Revisar</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -684,8 +685,8 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                 {isPending && !reviewing && collecting && (
                   <View className="flex-row items-center justify-between border-t border-outline/20 pt-2.5">
                     <View className="flex-row items-center gap-1">
-                      <Image source={ICONS.bell} tintColor="#92400e" style={{ width: 13, height: 13 }} />
-                      <Text className="text-[11px] font-medium text-amber-800">Aguardando pagamento</Text>
+                      <Image source={ICONS.bell} tintColor={colors.warning} style={{ width: 13, height: 13 }} />
+                      <Text className="text-[11px] font-medium text-warning">Aguardando pagamento</Text>
                     </View>
                     <View className="flex-row items-center gap-2">
                       <Pressable
@@ -706,7 +707,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                         onPress={() => void shareCharge(charge)}
                         className={`h-8 w-8 items-center justify-center rounded-lg bg-primary ${busy ? "opacity-50" : ""}`}
                       >
-                        <Image source={ICONS.share} tintColor="#FFFFFF" style={{ width: 14, height: 14 }} />
+                        <Image source={ICONS.share} tintColor={colors.onPrimary} style={{ width: 14, height: 14 }} />
                       </Pressable>
                     </View>
                   </View>
@@ -745,7 +746,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
               <View key={preview.occurrenceDate} className="flex-row items-center justify-between rounded-xl border border-dashed border-outline/40 bg-surface/70 p-3.5">
                 <View className="flex-row items-center gap-3">
                   <View className="h-9 w-9 items-center justify-center rounded-lg bg-surface-muted">
-                    <Image source={ICONS.more} tintColor={MUTED_TINT} style={{ width: 18, height: 18 }} />
+                    <Image source={ICONS.more} tintColor={colors.muted} style={{ width: 18, height: 18 }} />
                   </View>
                   <View>
                     <Text className="text-xs font-semibold text-ink">Próxima • {dateText(preview.occurrenceDate)}</Text>
@@ -778,10 +779,10 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                 className={`flex-row items-center justify-between rounded-xl border bg-surface p-3.5 ${state === "open" ? "border-primary/20" : "border-outline/30 opacity-90"}`}
               >
                 <View className="flex-1 flex-row items-center gap-3">
-                  <View className={`h-9 w-9 items-center justify-center rounded-lg ${state === "done" ? "bg-emerald-50" : state === "open" ? "bg-blue-50" : "bg-surface-muted"}`}>
+                  <View className={`h-9 w-9 items-center justify-center rounded-lg ${state === "done" ? "bg-success-soft" : state === "open" ? "bg-info-soft" : "bg-surface-muted"}`}>
                     <Image
                       source={state === "done" ? ICONS.check : ICONS.more}
-                      tintColor={state === "done" ? "#065f46" : state === "open" ? "#1e40af" : MUTED_TINT}
+                      tintColor={state === "done" ? colors.success : state === "open" ? colors.info : colors.muted}
                       style={{ width: 18, height: 18 }}
                     />
                   </View>
@@ -813,18 +814,18 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             onPress={() => (pending.length === 1 ? void shareCharge(pending[0]!) : setChooser(true))}
             className={`h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
           >
-            <Image source={ICONS.share} tintColor="#FFFFFF" style={{ width: 18, height: 18 }} />
-            <Text className="text-sm font-bold text-white">Compartilhar Link de Pagamento</Text>
+            <Image source={ICONS.share} tintColor={colors.onPrimary} style={{ width: 18, height: 18 }} />
+            <Text className="text-sm font-bold text-on-primary">Compartilhar Link de Pagamento</Text>
           </Pressable>
         )}
       </ScrollView>
 
       {confirmEnd && (
         <Modal transparent animationType="fade" visible onRequestClose={() => setConfirmEnd(false)}>
-          <View className="flex-1 items-center justify-center bg-black/40 px-6">
+          <View className="flex-1 items-center justify-center bg-scrim px-6">
             <View className="w-full max-w-xs gap-3 rounded-2xl border border-outline/40 bg-surface p-5">
-              <View className="h-12 w-12 items-center justify-center self-center rounded-full bg-red-100">
-                <Image source={ICONS.warning} tintColor="#b91c1c" style={{ width: 22, height: 22 }} />
+              <View className="h-12 w-12 items-center justify-center self-center rounded-full bg-danger-soft">
+                <Image source={ICONS.warning} tintColor={colors.danger} style={{ width: 22, height: 22 }} />
               </View>
               <Text accessibilityRole="header" className="text-center text-lg font-semibold text-ink">
                 Encerrar conta?
@@ -846,9 +847,9 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                   accessibilityLabel="Confirmar encerramento"
                   disabled={busy}
                   onPress={() => void transition(billing, BillingState.Ended)}
-                  className="h-11 flex-1 items-center justify-center rounded-lg bg-red-600"
+                  className="h-11 flex-1 items-center justify-center rounded-lg bg-danger-solid"
                 >
-                  <Text className="text-xs font-semibold text-white">Encerrar</Text>
+                  <Text className="text-xs font-semibold text-on-danger">Encerrar</Text>
                 </Pressable>
               </View>
             </View>
@@ -877,7 +878,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
 
       {chooser && (
         <Modal transparent animationType="slide" visible onRequestClose={() => setChooser(false)}>
-          <Pressable className="flex-1 justify-end bg-black/40" onPress={() => setChooser(false)}>
+          <Pressable className="flex-1 justify-end bg-scrim" onPress={() => setChooser(false)}>
             <View className="gap-2 rounded-t-3xl bg-canvas p-5 pb-10">
               <Text accessibilityRole="header" className="text-lg font-semibold text-primary-strong">
                 Compartilhar link de quem?

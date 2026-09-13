@@ -8,7 +8,7 @@ import { profileStore, type ProfileStore } from "@/account/profile";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { LegalSheet, type LegalKind } from "@/components/app/legal-sheet";
-import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 import { useThemePreference } from "@/theme/preference";
 
 type ProfileScreenProps = {
@@ -34,7 +34,6 @@ const ICONS = {
   warning: require("../../../assets/images/auth/warning.svg"),
 } as const;
 
-const DANGER_TINT = "#B91C1C";
 const FALLBACK_TIMEZONE = "America/Sao_Paulo";
 
 function deviceTimezone(): string {
@@ -56,6 +55,8 @@ type RowProps = {
 };
 
 function Row({ icon, label, title, subtitle, danger = false, disabled = false, onPress }: RowProps) {
+  const colors = useThemeColors();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -65,16 +66,16 @@ function Row({ icon, label, title, subtitle, danger = false, disabled = false, o
       onPress={onPress}
       className="min-h-14 flex-row items-center gap-3 px-4 py-3"
     >
-      <View className={`h-10 w-10 items-center justify-center rounded-xl ${danger ? "bg-red-50" : "bg-surface-muted"}`}>
-        <Image source={ICONS[icon]} tintColor={danger ? DANGER_TINT : ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+      <View className={`h-10 w-10 items-center justify-center rounded-xl ${danger ? "bg-danger-soft" : "bg-surface-muted"}`}>
+        <Image source={ICONS[icon]} tintColor={danger ? colors.danger : colors.primaryStrong} style={{ width: 20, height: 20 }} />
       </View>
 
       <View className="flex-1 gap-0.5">
-        <Text className={`text-base font-bold ${danger ? "text-red-700" : "text-ink"}`}>{title}</Text>
+        <Text className={`text-base font-bold ${danger ? "text-danger" : "text-ink"}`}>{title}</Text>
         <Text className="text-xs leading-4 text-muted">{subtitle}</Text>
       </View>
 
-      <Image source={ICONS.chevron} tintColor={MUTED_TINT} style={{ width: 18, height: 18 }} />
+      <Image source={ICONS.chevron} tintColor={colors.muted} style={{ width: 18, height: 18 }} />
     </Pressable>
   );
 }
@@ -87,6 +88,7 @@ export function ProfileScreen({
   onOpenPix,
   onLoggedOut,
 }: ProfileScreenProps) {
+  const colors = useThemeColors();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -228,7 +230,7 @@ export function ProfileScreen({
                       onPress={() => void saveName()}
                       className="h-12 w-12 items-center justify-center rounded-xl bg-primary"
                     >
-                      <Image source={ICONS.check} tintColor="#ffffff" style={{ width: 20, height: 20 }} />
+                      <Image source={ICONS.check} tintColor={colors.onPrimary} style={{ width: 20, height: 20 }} />
                     </Pressable>
                   </View>
                 ) : (
@@ -246,13 +248,13 @@ export function ProfileScreen({
                       }}
                       className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted"
                     >
-                      <Image source={ICONS.edit} tintColor={ACTIVE_TINT} style={{ width: 18, height: 18 }} />
+                      <Image source={ICONS.edit} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
                     </Pressable>
                   </View>
                 )}
 
                 <View className="flex-row items-center gap-2">
-                  <Image source={ICONS.mail} tintColor={MUTED_TINT} style={{ width: 16, height: 16 }} />
+                  <Image source={ICONS.mail} tintColor={colors.muted} style={{ width: 16, height: 16 }} />
                   <Text className="text-sm text-muted">{user.email}</Text>
                 </View>
               </View>
@@ -367,7 +369,7 @@ export function ProfileScreen({
 
       {dialog === "logout" ? (
         <Modal transparent animationType="fade" visible onRequestClose={closeDialog}>
-          <View className="flex-1 items-center justify-center bg-black/40 px-6">
+          <View className="flex-1 items-center justify-center bg-scrim px-6">
             <View className="w-full gap-4 rounded-3xl bg-surface p-6">
               <Text accessibilityRole="header" className="text-xl font-extrabold text-ink">
                 Deseja sair da sua conta?
@@ -393,7 +395,7 @@ export function ProfileScreen({
                   onPress={() => void logout()}
                   className="min-h-12 flex-1 items-center justify-center rounded-xl bg-primary"
                 >
-                  <Text className="font-bold text-white">Sair</Text>
+                  <Text className="font-bold text-on-primary">Sair</Text>
                 </Pressable>
               </View>
             </View>
@@ -403,10 +405,10 @@ export function ProfileScreen({
 
       {dialog === "delete" ? (
         <Modal transparent animationType="fade" visible onRequestClose={closeDialog}>
-          <View className="flex-1 items-center justify-center bg-black/40 px-6">
+          <View className="flex-1 items-center justify-center bg-scrim px-6">
             <View className="w-full gap-4 rounded-3xl bg-surface p-6">
-              <View className="h-12 w-12 items-center justify-center rounded-full bg-red-50">
-                <Image source={ICONS.warning} tintColor={DANGER_TINT} style={{ width: 24, height: 24 }} />
+              <View className="h-12 w-12 items-center justify-center rounded-full bg-danger-soft">
+                <Image source={ICONS.warning} tintColor={colors.danger} style={{ width: 24, height: 24 }} />
               </View>
 
               <Text accessibilityRole="header" className="text-xl font-extrabold text-ink">
@@ -445,9 +447,9 @@ export function ProfileScreen({
                   accessibilityState={{ disabled: confirmation !== "EXCLUIR" || busy }}
                   disabled={confirmation !== "EXCLUIR" || busy}
                   onPress={() => void erase()}
-                  className="min-h-12 flex-1 items-center justify-center rounded-xl bg-red-700"
+                  className="min-h-12 flex-1 items-center justify-center rounded-xl bg-danger-solid"
                 >
-                  <Text className="font-bold text-white">Confirmar exclusão</Text>
+                  <Text className="font-bold text-on-danger">Confirmar exclusão</Text>
                 </Pressable>
               </View>
             </View>

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { contactsClient } from "@/contacts/client";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
-import { MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type ContactPickerSheetProps = {
   /** User ids: a billing seats the account behind the agenda entry, so two agendas agree on who is who. */
@@ -21,6 +21,7 @@ const LOAD_ERROR = "Não foi possível carregar os contatos.";
 
 /** The whole agenda in a sheet: server-side search plus cursor paging, multi selection. */
 export function ContactPickerSheet({ selected, contacts = contactsClient, onToggle, onSeen, onClose, onNew }: ContactPickerSheetProps) {
+  const colors = useThemeColors();
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
   const [found, setFound] = useState<Contact[]>([]);
@@ -55,7 +56,7 @@ export function ContactPickerSheet({ selected, contacts = contactsClient, onTogg
 
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose}>
-      <View className="flex-1 justify-end bg-black/40">
+      <View className="flex-1 justify-end bg-scrim">
         <View className="max-h-[85%] gap-3 rounded-t-3xl bg-canvas p-5">
           <Text accessibilityRole="header" className="text-xl font-extrabold text-primary-strong">
             Contatos
@@ -63,7 +64,7 @@ export function ContactPickerSheet({ selected, contacts = contactsClient, onTogg
           <TextInput
             accessibilityLabel="Buscar contatos"
             placeholder="Buscar contatos…"
-            placeholderTextColor={MUTED_TINT}
+            placeholderTextColor={colors.muted}
             maxLength={254}
             autoCorrect={false}
             value={term}
@@ -85,7 +86,7 @@ export function ContactPickerSheet({ selected, contacts = contactsClient, onTogg
           )}
 
           {error ? (
-            <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+            <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-4 text-danger">
               {error}
             </Text>
           ) : null}
@@ -133,7 +134,7 @@ export function ContactPickerSheet({ selected, contacts = contactsClient, onTogg
             onPress={onClose}
             className="min-h-14 items-center justify-center rounded-2xl bg-primary"
           >
-            <Text className="font-bold text-white">Concluir</Text>
+            <Text className="font-bold text-on-primary">Concluir</Text>
           </Pressable>
         </View>
       </View>

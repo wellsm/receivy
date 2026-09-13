@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { contactsClient } from "@/contacts/client";
-import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type ContactsScreenProps = {
   client?: Pick<typeof contactsClient, "list">;
@@ -23,9 +23,9 @@ const plusMark = require("../../../assets/images/auth/plus.svg");
 const searchMark = require("../../../assets/images/auth/search.svg");
 
 const BADGE_CLASS: Record<BadgeTone, string> = {
-  danger: "bg-red-50 text-red-700",
-  info: "bg-blue-50 text-blue-800",
-  warning: "bg-amber-50 text-amber-900",
+  danger: "bg-danger-soft text-danger",
+  info: "bg-info-soft text-info",
+  warning: "bg-warning-soft text-warning",
   success: "bg-primary-soft/50 text-primary-strong",
   neutral: "bg-surface-muted text-muted",
 };
@@ -52,6 +52,7 @@ function Badge({ label, tone }: { label: string; tone: BadgeTone }) {
 }
 
 function ContactCard({ contact, onPress }: { contact: Contact; onPress: () => void }) {
+  const colors = useThemeColors();
   const badge = contactBadge(contact.activeCharges);
 
   return (
@@ -81,13 +82,14 @@ function ContactCard({ contact, onPress }: { contact: Contact; onPress: () => vo
         </Text>
       </View>
 
-      <Image source={chevronMark} tintColor={MUTED_TINT} style={{ width: 18, height: 18 }} />
+      <Image source={chevronMark} tintColor={colors.muted} style={{ width: 18, height: 18 }} />
     </Pressable>
   );
 }
 
 /** The agenda: server-side search, pending badges and a FAB towards the contact form. */
 export function ContactsScreen({ client = contactsClient, onOpenLedger, onNewContact }: ContactsScreenProps) {
+  const colors = useThemeColors();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [term, setTerm] = useState("");
@@ -159,12 +161,12 @@ export function ContactsScreen({ client = contactsClient, onOpenLedger, onNewCon
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 px-5 pb-32 pt-3" showsVerticalScrollIndicator={false}>
         <View className="flex-row items-center gap-2 rounded-2xl border border-outline/40 bg-surface px-4">
-          <Image source={searchMark} tintColor={MUTED_TINT} style={{ width: 16, height: 16 }} />
+          <Image source={searchMark} tintColor={colors.muted} style={{ width: 16, height: 16 }} />
 
           <TextInput
             accessibilityLabel="Buscar contatos"
             placeholder="Buscar por nome ou e-mail..."
-            placeholderTextColor={MUTED_TINT}
+            placeholderTextColor={colors.muted}
             maxLength={254}
             autoCorrect={false}
             value={term}
@@ -181,8 +183,8 @@ export function ContactsScreen({ client = contactsClient, onOpenLedger, onNewCon
         </View>
 
         {error ? (
-          <View className="gap-2 rounded-2xl bg-red-50 p-4">
-            <Text accessibilityRole="alert" className="text-red-700">
+          <View className="gap-2 rounded-2xl bg-danger-soft p-4">
+            <Text accessibilityRole="alert" className="text-danger">
               {error}
             </Text>
 
@@ -200,7 +202,7 @@ export function ContactsScreen({ client = contactsClient, onOpenLedger, onNewCon
           </View>
         ) : null}
 
-        {loading && !contacts.length ? <ActivityIndicator accessibilityLabel="Carregando contatos" color={ACTIVE_TINT} /> : null}
+        {loading && !contacts.length ? <ActivityIndicator accessibilityLabel="Carregando contatos" color={colors.primaryStrong} /> : null}
 
         {!loading && !error && !contacts.length ? (
           <View className="items-center gap-2 rounded-3xl border border-outline/40 bg-surface p-8">
@@ -239,8 +241,8 @@ export function ContactsScreen({ client = contactsClient, onOpenLedger, onNewCon
           onPress={onNewContact}
           className="absolute bottom-8 right-5 h-14 flex-row items-center gap-2 rounded-full bg-primary px-5"
         >
-          <Image source={plusMark} tintColor="#ffffff" style={{ width: 18, height: 18 }} />
-          <Text className="font-bold text-white">Novo contato</Text>
+          <Image source={plusMark} tintColor={colors.onPrimary} style={{ width: 18, height: 18 }} />
+          <Text className="font-bold text-on-primary">Novo contato</Text>
         </Pressable>
       ) : null}
     </SafeAreaView>

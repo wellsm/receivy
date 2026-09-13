@@ -7,7 +7,7 @@ import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { BillingCard } from "@/components/ui/billing-card";
-import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type Client = Pick<
   FinancialClient,
@@ -76,12 +76,13 @@ function Button({ label, onPress, disabled = false, primary = false }: { label: 
       onPress={onPress}
       className={`min-h-12 items-center justify-center rounded-xl border border-primary px-4 py-3 ${primary ? "bg-primary" : "bg-surface"} ${disabled ? "opacity-40" : ""}`}
     >
-      <Text className={`font-bold ${primary ? "text-white" : "text-primary"}`}>{label}</Text>
+      <Text className={`font-bold ${primary ? "text-on-primary" : "text-primary"}`}>{label}</Text>
     </Pressable>
   );
 }
 
 export function BillingsScreen({ client = financialClient, onCreate, onOpenBilling, onOpenCharge }: BillingsScreenProps) {
+  const colors = useThemeColors();
   const [page, setPage] = useState<BillingsPage | null>(null);
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
@@ -166,7 +167,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
         <TextInput
           accessibilityLabel="Buscar por título ou descrição"
           placeholder="Buscar por título ou descrição…"
-          placeholderTextColor={MUTED_TINT}
+          placeholderTextColor={colors.muted}
           value={term}
           onChangeText={setTerm}
           className="min-h-12 rounded-xl border border-outline bg-surface px-4 text-ink"
@@ -214,18 +215,18 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={ACTIVE_TINT} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={colors.primaryStrong} />}
       >
         <View className="gap-3 px-5 pt-2">
-          {!page && !error && <ActivityIndicator accessibilityLabel="Carregando contas" className="my-6" color={ACTIVE_TINT} />}
+          {!page && !error && <ActivityIndicator accessibilityLabel="Carregando contas" className="my-6" color={colors.primaryStrong} />}
 
           {error ? (
-            <View className="gap-2 rounded-xl bg-red-50 p-4">
-              <Text accessibilityRole="alert" className="text-red-700">
+            <View className="gap-2 rounded-xl bg-danger-soft p-4">
+              <Text accessibilityRole="alert" className="text-danger">
                 {error}
               </Text>
               <Pressable accessibilityRole="button" accessibilityLabel="Tentar novamente" onPress={() => void load()} className="min-h-12 justify-center">
-                <Text className="font-bold text-red-700">Tentar novamente</Text>
+                <Text className="font-bold text-danger">Tentar novamente</Text>
               </Pressable>
             </View>
           ) : null}
@@ -271,8 +272,8 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
           onPress={() => onCreate?.()}
           className="h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary-strong"
         >
-          <Image source={plusMark} tintColor="#FFFFFF" style={{ width: 20, height: 20 }} />
-          <Text className="text-base font-bold text-white">Cadastrar Nova Conta</Text>
+          <Image source={plusMark} tintColor={colors.onPrimary} style={{ width: 20, height: 20 }} />
+          <Text className="text-base font-bold text-on-primary">Cadastrar Nova Conta</Text>
         </Pressable>
       </View>
     </SafeAreaView>

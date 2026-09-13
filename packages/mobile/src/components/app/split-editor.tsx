@@ -1,7 +1,7 @@
 import type { SplitMode } from "@receivy/common";
 import { Text, TextInput, View } from "react-native";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
-import { MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 export type SplitRow = {
   key: string;
@@ -33,6 +33,8 @@ const FIELD_SUFFIX: Record<Exclude<SplitMode, "equal">, string> = {
 };
 
 export function SplitEditor({ mode, rows, hint, disabled, onChange }: SplitEditorProps) {
+  const colors = useThemeColors();
+
   return (
     <View className="gap-2">
       {rows.map((row) => {
@@ -57,7 +59,7 @@ export function SplitEditor({ mode, rows, hint, disabled, onChange }: SplitEdito
                   editable={!disabled}
                   inputMode={mode === "shares" ? "numeric" : "decimal"}
                   placeholder={mode === "shares" ? "1" : "0"}
-                  placeholderTextColor={MUTED_TINT}
+                  placeholderTextColor={colors.muted}
                   value={row.value}
                   onChangeText={(value) => onChange(row.key, value)}
                   className={`h-9 rounded-lg border border-outline/40 bg-surface px-2 py-0 text-right text-[13px] font-bold text-primary-strong ${mode === "fixed" ? "w-24" : "w-14"}`}
@@ -69,7 +71,7 @@ export function SplitEditor({ mode, rows, hint, disabled, onChange }: SplitEdito
           </View>
         );
       })}
-      {hint ? <Text className="text-sm font-semibold text-amber-700">{hint}</Text> : null}
+      {hint ? <Text className="text-sm font-semibold text-warning">{hint}</Text> : null}
     </View>
   );
 }

@@ -7,6 +7,7 @@ import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { authClient } from "@/auth/client";
 import { loginWithProvider } from "@/auth/oauth";
 import { LegalSheet, type LegalKind } from "@/components/app/legal-sheet";
+import { useThemeColors } from "@/theme/colors";
 
 type Client = Pick<typeof authClient, "requestEmailCode">;
 
@@ -21,6 +22,7 @@ const mailMark = require("../../../assets/images/auth/mail.svg");
 const logoMark = require("../../../assets/icons/ios-light.png");
 
 export function LoginScreen({ client = authClient, onCodeRequested }: LoginScreenProps) {
+  const colors = useThemeColors();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
           <View className="items-center">
             <View
               accessible={false}
-              style={{ shadowColor: "#003828", shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8 }}
+              style={{ shadowColor: colors.primaryStrong, shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 8 }}
             >
               <Image source={logoMark} style={{ width: 96, height: 96, borderRadius: 24 }} />
             </View>
@@ -140,10 +142,10 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
                 accessibilityState={{ disabled: busy || Platform.OS === "ios" }}
                 disabled={busy || Platform.OS === "ios"}
                 onPress={() => void socialLogin("apple")}
-                className="h-14 flex-row items-center justify-center gap-3 rounded-2xl bg-black disabled:opacity-40"
+                className="h-14 flex-row items-center justify-center gap-3 rounded-2xl bg-ink disabled:opacity-40"
               >
                 <Image source={appleMark} style={{ width: 20, height: 20 }} />
-                <Text className="text-base font-bold text-white">Continuar com Apple</Text>
+                <Text className="text-base font-bold text-surface">Continuar com Apple</Text>
               </Pressable>
             )}
 
@@ -169,7 +171,7 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
                 onChangeText={setEmail}
                 onSubmitEditing={() => void submit()}
                 placeholder="seu.email@exemplo.com"
-                placeholderTextColor="#7D8794"
+                placeholderTextColor={colors.muted}
                 textAlignVertical="center"
                 className="h-full flex-1 py-0 text-[16px] tracking-normal text-ink"
               />
@@ -184,17 +186,17 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
               className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary active:opacity-80 disabled:opacity-50"
             >
               {busy ? (
-                <ActivityIndicator color="white" />
+                <ActivityIndicator color={colors.onPrimary} />
               ) : (
                 <>
-                  <Text className="text-base font-extrabold text-white">Continuar com E-mail</Text>
-                  <Text className="text-xl font-extrabold text-white">→</Text>
+                  <Text className="text-base font-extrabold text-on-primary">Continuar com E-mail</Text>
+                  <Text className="text-xl font-extrabold text-on-primary">→</Text>
                 </>
               )}
             </Pressable>
 
             {error && (
-              <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-3 text-sm leading-5 text-red-700">
+              <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-3 text-sm leading-5 text-danger">
                 {error}
               </Text>
             )}

@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { financialClient, type FinancialClient } from "@/financial/client";
-import { ACTIVE_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type PixSettingsClient = Pick<FinancialClient, "paymentMethods" | "defaultPaymentMethod" | "archivePaymentMethod">;
 
@@ -48,6 +48,7 @@ const SAFETY_NOTE = "Seus dados Pix ficam protegidos e nunca são compartilhados
 
 /** The Pix key agenda: copy, promote and delete. Registering happens on `/settings/pix/new`. */
 export function PixSettingsScreen({ client = financialClient, required = false, onNewKey }: PixSettingsScreenProps) {
+  const colors = useThemeColors();
   const [items, setItems] = useState<PaymentMethod[]>([]);
   const [removing, setRemoving] = useState<PaymentMethod | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,12 +96,12 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView contentContainerClassName="gap-4 px-5 pb-32 pt-4" showsVerticalScrollIndicator={false}>
-        {required ? <Text className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900">{REQUIRED_NOTICE}</Text> : null}
+        {required ? <Text className="rounded-xl bg-warning-soft p-4 text-sm font-semibold text-warning">{REQUIRED_NOTICE}</Text> : null}
 
         <Text className="px-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Chaves ativas ({items.length})</Text>
 
         {error ? (
-          <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+          <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-4 text-danger">
             {error}
           </Text>
         ) : null}
@@ -111,7 +112,7 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
           </Text>
         ) : null}
 
-        {loading && !items.length ? <ActivityIndicator accessibilityLabel="Carregando chaves Pix" color={ACTIVE_TINT} /> : null}
+        {loading && !items.length ? <ActivityIndicator accessibilityLabel="Carregando chaves Pix" color={colors.primaryStrong} /> : null}
 
         {!loading && !error && !items.length ? (
           <View className="items-center gap-2 rounded-2xl border border-outline/40 bg-surface p-8">
@@ -125,14 +126,14 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
             <View className="flex-row items-start justify-between">
               <View className="flex-1 flex-row items-center gap-3">
                 <View className={`h-10 w-10 items-center justify-center rounded-xl ${method.isDefault ? "bg-primary" : "bg-surface-muted"}`}>
-                  <Image source={ICONS[method.pixKeyType]} tintColor={method.isDefault ? "#FFFFFF" : ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+                  <Image source={ICONS[method.pixKeyType]} tintColor={method.isDefault ? colors.onPrimary : colors.primaryStrong} style={{ width: 20, height: 20 }} />
                 </View>
                 <View className="flex-1 gap-0.5">
                   <Text className="text-base font-bold text-ink">{LABELS[method.pixKeyType]}</Text>
                   <View className="flex-row">
                     {method.isDefault ? (
                       <View className="flex-row items-center gap-1 rounded-full bg-primary-soft/70 px-2 py-0.5">
-                        <Image source={checkMark} tintColor={ACTIVE_TINT} style={{ width: 11, height: 11 }} />
+                        <Image source={checkMark} tintColor={colors.primaryStrong} style={{ width: 11, height: 11 }} />
                         <Text className="text-[11px] font-semibold text-primary-strong">Padrão</Text>
                       </View>
                     ) : (
@@ -151,7 +152,7 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
                 onPress={() => setRemoving(method)}
                 className="h-9 w-9 items-center justify-center rounded-lg"
               >
-                <Image source={trashMark} tintColor="#b91c1c" style={{ width: 18, height: 18 }} />
+                <Image source={trashMark} tintColor={colors.danger} style={{ width: 18, height: 18 }} />
               </Pressable>
             </View>
 
@@ -172,7 +173,7 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
                   onPress={() => void act(() => client.defaultPaymentMethod(method.id), "Chave principal atualizada.")}
                   className="min-h-10 flex-row items-center gap-1.5 rounded-lg border border-outline/40 px-3"
                 >
-                  <Image source={checkMark} tintColor="#006c49" style={{ width: 16, height: 16 }} />
+                  <Image source={checkMark} tintColor={colors.success} style={{ width: 16, height: 16 }} />
                   <Text className="text-xs font-semibold text-primary">Tornar padrão</Text>
                 </Pressable>
               </View>
@@ -182,7 +183,7 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
 
         <View className="flex-row items-start gap-3 rounded-2xl border border-outline/30 bg-surface-muted/70 p-4">
           <View className="h-8 w-8 items-center justify-center rounded-lg bg-primary-soft/60">
-            <Image source={lockMark} tintColor="#006c49" style={{ width: 18, height: 18 }} />
+            <Image source={lockMark} tintColor={colors.success} style={{ width: 18, height: 18 }} />
           </View>
           <View className="flex-1 gap-0.5">
             <Text className="text-xs font-bold text-ink">Privacidade</Text>
@@ -199,19 +200,19 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
             onPress={onNewKey}
             className="h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary"
           >
-            <Image source={plusMark} tintColor="#ffffff" style={{ width: 20, height: 20 }} />
-            <Text className="text-base font-bold text-white">Cadastrar Nova Chave</Text>
+            <Image source={plusMark} tintColor={colors.onPrimary} style={{ width: 20, height: 20 }} />
+            <Text className="text-base font-bold text-on-primary">Cadastrar Nova Chave</Text>
           </Pressable>
         </View>
       ) : null}
 
       {removing && (
         <Modal transparent animationType="fade" visible onRequestClose={() => setRemoving(null)}>
-          <View className="flex-1 items-center justify-center bg-black/60 px-4">
+          <View className="flex-1 items-center justify-center bg-scrim px-4">
             <View className="w-full max-w-sm gap-4 rounded-2xl border border-outline/30 bg-surface p-5">
               <View className="flex-row items-center gap-3">
-                <View className="h-11 w-11 items-center justify-center rounded-full bg-red-100">
-                  <Image source={trashMark} tintColor="#b91c1c" style={{ width: 22, height: 22 }} />
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-danger-soft">
+                  <Image source={trashMark} tintColor={colors.danger} style={{ width: 22, height: 22 }} />
                 </View>
                 <View className="flex-1">
                   <Text accessibilityRole="header" className="text-[17px] font-bold text-ink">
@@ -240,10 +241,10 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
                   accessibilityState={{ disabled: busy }}
                   disabled={busy}
                   onPress={() => void act(() => client.archivePaymentMethod(removing.id), "Chave excluída.")}
-                  className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-red-600"
+                  className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-danger-solid"
                 >
-                  <Image source={trashMark} tintColor="#FFFFFF" style={{ width: 16, height: 16 }} />
-                  <Text className="text-sm font-semibold text-white">Remover</Text>
+                  <Image source={trashMark} tintColor="white" style={{ width: 16, height: 16 }} />
+                  <Text className="text-sm font-semibold text-on-danger">Remover</Text>
                 </Pressable>
               </View>
             </View>

@@ -3,7 +3,7 @@ import { Image } from "expo-image";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { BILLING_CATEGORIES, billingCategoryColor, billingCategoryLabel, type BillingCategory } from "@receivy/common";
 import { CategoryIcon } from "@/components/ui/category-icon";
-import { MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 const chevronMark = require("../../../assets/images/auth/chevron.svg");
 const checkMark = require("../../../assets/images/auth/check.svg");
@@ -16,6 +16,7 @@ type CategorySelectProps = {
 
 /** Select-shaped trigger over a bottom sheet: the eight categories never fit a row of chips. */
 export function CategorySelect({ value, onSelect, disabled }: CategorySelectProps) {
+  const colors = useThemeColors();
   const [open, setOpen] = useState(false);
 
   function choose(category: BillingCategory) {
@@ -41,12 +42,12 @@ export function CategorySelect({ value, onSelect, disabled }: CategorySelectProp
           {billingCategoryLabel(value)}
         </Text>
 
-        <Image source={chevronMark} tintColor={MUTED_TINT} style={{ width: 14, height: 14, transform: [{ rotate: "90deg" }] }} />
+        <Image source={chevronMark} tintColor={colors.muted} style={{ width: 14, height: 14, transform: [{ rotate: "90deg" }] }} />
       </Pressable>
 
       {open && (
         <Modal transparent animationType="slide" visible onRequestClose={() => setOpen(false)}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Fechar categorias" onPress={() => setOpen(false)} className="flex-1 bg-black/40" />
+          <Pressable accessibilityRole="button" accessibilityLabel="Fechar categorias" onPress={() => setOpen(false)} className="flex-1 bg-scrim" />
 
           <View className="gap-4 rounded-t-3xl bg-surface px-5 pb-10 pt-5">
             <Text accessibilityRole="header" className="text-xl font-extrabold text-ink">

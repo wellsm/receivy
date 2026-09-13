@@ -9,7 +9,7 @@ import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { StatusTag } from "@/components/ui/status-tag";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { pickAndUploadProof } from "@/financial/proof-upload";
-import { ACTIVE_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type Client = Pick<FinancialClient, "charge" | "startProofUpload" | "completeProofUpload" | "reviewProof" | "downloadProof">;
 
@@ -29,6 +29,7 @@ const ICONS = {
 } as const;
 
 export function ProofViewerScreen({ chargeId, client = financialClient, onDone }: ProofViewerScreenProps) {
+  const colors = useThemeColors();
   const [charge, setCharge] = useState<ChargeDetail | null>(null);
   const [url, setUrl] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -125,7 +126,7 @@ export function ProofViewerScreen({ chargeId, client = financialClient, onDone }
   if (!loaded) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["bottom"]}>
-        <ActivityIndicator accessibilityLabel="Carregando comprovante" color={ACTIVE_TINT} size="large" />
+        <ActivityIndicator accessibilityLabel="Carregando comprovante" color={colors.primaryStrong} size="large" />
       </SafeAreaView>
     );
   }
@@ -159,7 +160,7 @@ export function ProofViewerScreen({ chargeId, client = financialClient, onDone }
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView contentContainerClassName="gap-4 px-5 pb-6 pt-4" showsVerticalScrollIndicator={false}>
         {error ? (
-          <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+          <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
             {error}
           </Text>
         ) : null}
@@ -207,7 +208,7 @@ export function ProofViewerScreen({ chargeId, client = financialClient, onDone }
             <TextInput
               accessibilityLabel="Motivo opcional"
               placeholder="Usado apenas se você rejeitar"
-              placeholderTextColor="#8A94A6"
+              placeholderTextColor={colors.muted}
               maxLength={500}
               value={reason}
               onChangeText={setReason}
@@ -229,8 +230,8 @@ export function ProofViewerScreen({ chargeId, client = financialClient, onDone }
                 onPress={() => void review("rejected")}
                 className={`h-[52px] flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-outline/50 ${busy ? "opacity-50" : ""}`}
               >
-                <Image source={ICONS.x} tintColor="#b91c1c" style={{ width: 18, height: 18 }} />
-                <Text className="text-sm font-bold text-red-700">Rejeitar</Text>
+                <Image source={ICONS.x} tintColor={colors.danger} style={{ width: 18, height: 18 }} />
+                <Text className="text-sm font-bold text-danger">Rejeitar</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -240,8 +241,8 @@ export function ProofViewerScreen({ chargeId, client = financialClient, onDone }
                 onPress={confirmAccept}
                 className={`h-[52px] flex-[2] flex-row items-center justify-center gap-2 rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
               >
-                <Image source={ICONS.check} tintColor="#FFFFFF" style={{ width: 18, height: 18 }} />
-                <Text className="text-sm font-bold text-white">Marcar como pago</Text>
+                <Image source={ICONS.check} tintColor={colors.onPrimary} style={{ width: 18, height: 18 }} />
+                <Text className="text-sm font-bold text-on-primary">Marcar como pago</Text>
               </Pressable>
             </>
           ) : (
@@ -253,8 +254,8 @@ export function ProofViewerScreen({ chargeId, client = financialClient, onDone }
               onPress={() => void replace()}
               className={`h-[52px] flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
             >
-              <Image source={ICONS.upload} tintColor="#FFFFFF" style={{ width: 18, height: 18 }} />
-              <Text className="text-sm font-bold text-white">Enviar novo comprovante</Text>
+              <Image source={ICONS.upload} tintColor={colors.onPrimary} style={{ width: 18, height: 18 }} />
+              <Text className="text-sm font-bold text-on-primary">Enviar novo comprovante</Text>
             </Pressable>
           )}
         </View>

@@ -5,6 +5,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { authClient } from "@/auth/client";
 import { CODE_LENGTH, CodeBoxes } from "@/components/ui/code-boxes";
+import { useThemeColors } from "@/theme/colors";
 
 type Client = Pick<typeof authClient, "confirmEmailCode" | "requestEmailCode">;
 
@@ -37,6 +38,7 @@ function useClock(now: () => number, running: boolean): number {
 }
 
 export function CodeScreen({ client = authClient, email, sentAt, onAuthenticated, now = Date.now }: CodeScreenProps) {
+  const colors = useThemeColors();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +119,7 @@ export function CodeScreen({ client = authClient, email, sentAt, onAuthenticated
           <View className="mt-3 flex-row items-center gap-2">
             <Image source={lockMark} style={{ width: 16, height: 16 }} />
             {expired ? (
-              <Text className="text-sm font-semibold text-red-700">Código expirado. Peça um novo código.</Text>
+              <Text className="text-sm font-semibold text-danger">Código expirado. Peça um novo código.</Text>
             ) : (
               <Text className="text-sm text-muted">
                 Expira em <Text className="font-extrabold text-ink">{formatRemaining(remaining)}</Text>
@@ -134,17 +136,17 @@ export function CodeScreen({ client = authClient, email, sentAt, onAuthenticated
             className="mt-6 h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary active:opacity-80 disabled:opacity-50"
           >
             {busy ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={colors.onPrimary} />
             ) : (
               <>
-                <Text className="text-base font-extrabold text-white">Confirmar e Entrar</Text>
-                <Text className="text-xl font-extrabold text-white">→</Text>
+                <Text className="text-base font-extrabold text-on-primary">Confirmar e Entrar</Text>
+                <Text className="text-xl font-extrabold text-on-primary">→</Text>
               </>
             )}
           </Pressable>
 
           {error && (
-            <Text accessibilityRole="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm leading-5 text-red-700">
+            <Text accessibilityRole="alert" className="mt-4 rounded-xl bg-danger-soft p-3 text-sm leading-5 text-danger">
               {error}
             </Text>
           )}

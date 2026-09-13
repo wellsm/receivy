@@ -23,7 +23,7 @@ import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { notificationClient } from "@/notifications/client";
-import { ACTIVE_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type FeedScreenProps = {
   client?: Pick<FinancialClient, "timeline">;
@@ -33,9 +33,9 @@ type FeedScreenProps = {
 
 
 const BADGE_CLASS: Record<BadgeTone, string> = {
-  danger: "bg-red-50 text-red-700",
-  info: "bg-blue-50 text-blue-800",
-  warning: "bg-amber-50 text-amber-900",
+  danger: "bg-danger-soft text-danger",
+  info: "bg-info-soft text-info",
+  warning: "bg-warning-soft text-warning",
   success: "bg-primary-soft/50 text-primary-strong",
   neutral: "bg-surface-muted text-muted",
 };
@@ -61,14 +61,14 @@ function TotalCard({ label, amount, count, tone }: { label: string; amount: stri
 
   return (
     <View className="flex-1 overflow-hidden rounded-2xl border border-outline/40 bg-surface p-4">
-      <View className={`absolute left-0 right-0 top-0 h-1 ${receivable ? "bg-primary" : "bg-red-600"}`} />
+      <View className={`absolute left-0 right-0 top-0 h-1 ${receivable ? "bg-primary" : "bg-danger-solid"}`} />
       <View className="flex-row items-center justify-between">
         <Text className="text-[11px] font-bold tracking-widest text-muted">{label}</Text>
-        <Text className={`text-base font-extrabold ${receivable ? "text-primary" : "text-red-600"}`}>{receivable ? "↙" : "↗"}</Text>
+        <Text className={`text-base font-extrabold ${receivable ? "text-primary" : "text-danger"}`}>{receivable ? "↙" : "↗"}</Text>
       </View>
-      <Text className={`mt-2 text-xl font-extrabold tracking-tight ${receivable ? "text-primary" : "text-red-700"}`}>{amount}</Text>
+      <Text className={`mt-2 text-xl font-extrabold tracking-tight ${receivable ? "text-primary" : "text-danger"}`}>{amount}</Text>
       <View className="mt-3 flex-row items-center gap-1.5 border-t border-outline/30 pt-2">
-        <View className={`h-1.5 w-1.5 rounded-full ${receivable ? "bg-primary" : "bg-red-600"}`} />
+        <View className={`h-1.5 w-1.5 rounded-full ${receivable ? "bg-primary" : "bg-danger-solid"}`} />
         <Text className="text-[11px] font-semibold text-muted">{pluralize(count)}</Text>
       </View>
     </View>
@@ -93,7 +93,7 @@ function ChargeCard({
   const badges = chargeBadges(charge, today);
   const action = chargeAction(charge, direction);
   const settled = charge.state !== "pending";
-  const amountClass = settled ? "text-muted" : direction === "receivable" ? "text-primary" : "text-red-700";
+  const amountClass = settled ? "text-muted" : direction === "receivable" ? "text-primary" : "text-danger";
 
   return (
     <Pressable
@@ -144,7 +144,7 @@ function ChargeCard({
             onPress={onOpen}
             className={`min-h-10 justify-center rounded-lg px-3 ${action.label === "Pagar" ? "bg-primary" : "bg-surface-muted"}`}
           >
-            <Text className={`text-xs font-bold ${action.label === "Pagar" ? "text-white" : "text-primary-strong"}`}>{action.label}</Text>
+            <Text className={`text-xs font-bold ${action.label === "Pagar" ? "text-on-primary" : "text-primary-strong"}`}>{action.label}</Text>
           </Pressable>
         )}
       </View>
@@ -157,6 +157,7 @@ export function FeedScreen({
   notifications = notificationClient,
   onOpenCharge,
 }: FeedScreenProps) {
+  const colors = useThemeColors();
   const [data, setData] = useState<TimelinePage | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -256,7 +257,7 @@ export function FeedScreen({
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 32 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={ACTIVE_TINT} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={colors.primaryStrong} />}
       >
         <View className="gap-5 px-5 pt-2">
           <View className="flex-row gap-3">
@@ -272,18 +273,18 @@ export function FeedScreen({
           >
             <Text className={`text-sm font-bold ${changedFilters ? "text-primary-strong" : "text-ink"}`}>Filtros</Text>
             {changedFilters > 0 && (
-              <Text className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">{changedFilters}</Text>
+              <Text className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-on-primary">{changedFilters}</Text>
             )}
           </Pressable>
 
-          {loading && <ActivityIndicator accessibilityLabel="Carregando feed" className="my-6" color="#0B513D" />}
+          {loading && <ActivityIndicator accessibilityLabel="Carregando feed" className="my-6" color={colors.primary} />}
           {error ? (
-            <View className="gap-2 rounded-xl bg-red-50 p-4">
-              <Text accessibilityRole="alert" className="text-red-700">
+            <View className="gap-2 rounded-xl bg-danger-soft p-4">
+              <Text accessibilityRole="alert" className="text-danger">
                 {error}
               </Text>
               <Pressable accessibilityRole="button" onPress={() => void load()} className="min-h-12 justify-center">
-                <Text className="font-bold text-red-700">Tentar novamente</Text>
+                <Text className="font-bold text-danger">Tentar novamente</Text>
               </Pressable>
             </View>
           ) : null}

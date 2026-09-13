@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { Pressable, Text } from "react-native";
-import { ACTIVE_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type CopyButtonProps = {
   value: string;
@@ -21,6 +21,7 @@ const checkMark = require("../../../assets/images/auth/check.svg");
 
 /** Copies `value` and confirms inline as "Copiado" for a few seconds before returning to its label. */
 export function CopyButton({ value, accessibilityLabel, label = "Copiar", variant = "link", onRefused }: CopyButtonProps) {
+  const colors = useThemeColors();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -67,7 +68,7 @@ export function CopyButton({ value, accessibilityLabel, label = "Copiar", varian
       onPress={() => void copy()}
       className={outline ? "min-h-11 flex-row items-center gap-2 rounded-xl border border-outline/60 px-3" : "min-h-8 flex-row items-center gap-1 pl-2"}
     >
-      <Image source={copied ? checkMark : copyMark} tintColor={ACTIVE_TINT} style={outline ? { width: 14, height: 14 } : { width: 13, height: 13 }} />
+      <Image source={copied ? checkMark : copyMark} tintColor={colors.primaryStrong} style={outline ? { width: 14, height: 14 } : { width: 13, height: 13 }} />
       <Text className={outline ? "text-sm font-bold text-primary" : "text-[11px] font-semibold text-primary"}>{copied ? "Copiado" : label}</Text>
     </Pressable>
   );

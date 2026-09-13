@@ -7,7 +7,7 @@ import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { patchDraft } from "@/financial/draft-store";
-import { ACTIVE_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type PixKeyFormClient = Pick<FinancialClient, "paymentMethods" | "savePaymentMethod" | "defaultPaymentMethod">;
 
@@ -29,6 +29,7 @@ const EMPTY_ERROR = "Informe a chave Pix.";
 
 /** The Pix key form on its own screen, reached from the key list or the billing gate. */
 export function PixKeyFormScreen({ client = financialClient, profile = profileStore, returnTo, required = false, onSaved }: PixKeyFormScreenProps) {
+  const colors = useThemeColors();
   const [type, setType] = useState<PixKeyType>(PixKeyType.Email);
   const [key, setKey] = useState("");
   const [touched, setTouched] = useState(false);
@@ -152,14 +153,14 @@ export function PixKeyFormScreen({ client = financialClient, profile = profileSt
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-6 px-5 pb-32 pt-5" showsVerticalScrollIndicator={false}>
-        {required ? <Text className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900">{REQUIRED_NOTICE}</Text> : null}
+        {required ? <Text className="rounded-xl bg-warning-soft p-4 text-sm font-semibold text-warning">{REQUIRED_NOTICE}</Text> : null}
 
         <PixKeyFields type={type} value={value} onPickType={pick} onChangeKey={change} onClear={clear} />
 
         <View className="flex-row items-center justify-between gap-4 rounded-xl border border-outline/40 bg-surface p-4">
           <View className="flex-1 gap-1">
             <View className="flex-row items-center gap-1.5">
-              <Image source={starMark} tintColor="#006c49" style={{ width: 16, height: 16 }} />
+              <Image source={starMark} tintColor={colors.success} style={{ width: 16, height: 16 }} />
               <Text className="text-sm font-bold text-ink">Definir como chave principal</Text>
             </View>
             <Text className="text-xs leading-5 text-muted">Esta chave será usada como padrão ao criar novas cobranças e links Pix.</Text>
@@ -167,7 +168,7 @@ export function PixKeyFormScreen({ client = financialClient, profile = profileSt
           <Switch
             accessibilityLabel="Definir como chave principal"
             value={makeDefault}
-            trackColor={{ true: ACTIVE_TINT, false: undefined }}
+            trackColor={{ true: colors.primaryStrong, false: undefined }}
             onValueChange={(next) => {
               defaultTouched.current = true;
               setMakeDefault(next);
@@ -176,7 +177,7 @@ export function PixKeyFormScreen({ client = financialClient, profile = profileSt
         </View>
 
         {error ? (
-          <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+          <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-4 text-danger">
             {error}
           </Text>
         ) : null}
@@ -192,11 +193,11 @@ export function PixKeyFormScreen({ client = financialClient, profile = profileSt
           className={`h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary ${busy ? "opacity-60" : ""}`}
         >
           {busy ? (
-            <ActivityIndicator color="#ffffff" />
+            <ActivityIndicator color={colors.onPrimary} />
           ) : (
             <>
-              <Image source={checkMark} tintColor="#FFFFFF" style={{ width: 18, height: 18 }} />
-              <Text className="text-sm font-bold text-white">Salvar Chave Pix</Text>
+              <Image source={checkMark} tintColor={colors.onPrimary} style={{ width: 18, height: 18 }} />
+              <Text className="text-sm font-bold text-on-primary">Salvar Chave Pix</Text>
             </>
           )}
         </Pressable>

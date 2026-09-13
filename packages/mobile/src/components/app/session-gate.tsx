@@ -6,6 +6,7 @@ import { profileStore, type ProfileStore } from "@/account/profile";
 import { authClient } from "@/auth/client";
 import { notificationClient } from "@/notifications/client";
 import { registerPushDevice } from "@/notifications/register";
+import { useThemeColors } from "@/theme/colors";
 
 type SessionGateProps = {
   client?: Pick<typeof authClient, "getAccessToken" | "refresh">;
@@ -22,6 +23,7 @@ type Stage = "restoring" | "checking-profile" | "ready";
  */
 export function SessionGate({ client = authClient, store = profileStore, children }: SessionGateProps) {
   const router = useRouter();
+  const colors = useThemeColors();
   const [stage, setStage] = useState<Stage>(() => (client.getAccessToken() ? "checking-profile" : "restoring"));
   const pushRegistered = useRef(false);
 
@@ -85,7 +87,7 @@ export function SessionGate({ client = authClient, store = profileStore, childre
   if (stage !== "ready") {
     return (
       <View className="flex-1 items-center justify-center bg-canvas">
-        <ActivityIndicator color="#0B513D" size="large" />
+        <ActivityIndicator color={colors.primary} size="large" />
       </View>
     );
   }

@@ -8,7 +8,7 @@ import { ActionTile } from "@/components/ui/action-tile";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { notificationClient } from "@/notifications/client";
 import { contactsClient } from "@/contacts/client";
-import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 type Client = Pick<FinancialClient, "ledger" | "publicLink" | "publicChargeUrl">;
 
@@ -77,11 +77,11 @@ function firstName(name: string): string {
 
 function Tag({ label, tone }: { label: string; tone: "success" | "warning" | "info" | "neutral" | "danger" }) {
   const classes = {
-    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    warning: "border-amber-200 bg-amber-50 text-amber-800",
-    info: "border-blue-200 bg-blue-50 text-blue-800",
+    success: "border-success/30 bg-success-soft text-success",
+    warning: "border-warning/30 bg-warning-soft text-warning",
+    info: "border-info/30 bg-info-soft text-info",
     neutral: "border-outline/30 bg-surface-muted text-muted",
-    danger: "border-red-200 bg-red-50 text-red-700",
+    danger: "border-danger/30 bg-danger-soft text-danger",
   }[tone];
 
   return <Text className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classes}`}>{label}</Text>;
@@ -96,6 +96,7 @@ export function ContactLedgerScreen({
   onNewCharge,
   onEdit,
 }: ContactLedgerScreenProps) {
+  const colors = useThemeColors();
   const [data, setData] = useState<ContactLedger | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -180,7 +181,7 @@ export function ContactLedgerScreen({
       <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["bottom"]}>
         {error ? (
           <View className="gap-3 px-5">
-            <Text accessibilityRole="alert" className="text-center text-red-700">
+            <Text accessibilityRole="alert" className="text-center text-danger">
               {error}
             </Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Tentar novamente" onPress={() => void load()} className="min-h-12 items-center justify-center">
@@ -188,7 +189,7 @@ export function ContactLedgerScreen({
             </Pressable>
           </View>
         ) : (
-          <ActivityIndicator accessibilityLabel="Carregando histórico" color={ACTIVE_TINT} size="large" />
+          <ActivityIndicator accessibilityLabel="Carregando histórico" color={colors.primaryStrong} size="large" />
         )}
       </SafeAreaView>
     );
@@ -210,7 +211,7 @@ export function ContactLedgerScreen({
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView contentContainerClassName="gap-5 px-5 pb-10 pt-2" showsVerticalScrollIndicator={false}>
         {error ? (
-          <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+          <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
             {error}
           </Text>
         ) : null}
@@ -233,12 +234,12 @@ export function ContactLedgerScreen({
           <View className="mt-1 items-center gap-0.5">
             {contact.phone ? (
               <View className="flex-row items-center gap-1.5">
-                <Image source={ICONS.phone} tintColor={ACTIVE_TINT} style={{ width: 15, height: 15 }} />
+                <Image source={ICONS.phone} tintColor={colors.primaryStrong} style={{ width: 15, height: 15 }} />
                 <Text className="text-xs font-semibold text-ink">{formatPhoneBR(contact.phone)}</Text>
               </View>
             ) : null}
             <View className="flex-row items-center gap-1.5">
-              <Image source={ICONS.mail} tintColor={MUTED_TINT} style={{ width: 15, height: 15 }} />
+              <Image source={ICONS.mail} tintColor={colors.muted} style={{ width: 15, height: 15 }} />
               <Text className="text-xs text-muted">{contact.email || "Só por link"}</Text>
             </View>
           </View>
@@ -247,9 +248,9 @@ export function ContactLedgerScreen({
             {archived ? (
               <Tag label="Contato removido" tone="neutral" />
             ) : active.length ? (
-              <View className="flex-row items-center gap-1.5 rounded-full border border-amber-200/60 bg-amber-50 px-3 py-1">
-                <View className="h-2 w-2 rounded-full bg-amber-500" />
-                <Text className="text-xs font-semibold text-amber-900">
+              <View className="flex-row items-center gap-1.5 rounded-full border border-warning/30 bg-warning-soft px-3 py-1">
+                <View className="h-2 w-2 rounded-full bg-warning" />
+                <Text className="text-xs font-semibold text-warning">
                   {active.length} cobrança{active.length === 1 ? "" : "s"} ativa{active.length === 1 ? "" : "s"}
                 </Text>
               </View>
@@ -280,7 +281,7 @@ export function ContactLedgerScreen({
             <View className="flex-1 gap-1 rounded-lg border border-outline/20 bg-surface-muted/80 p-3">
               <Text className="text-[11px] text-muted">A receber</Text>
               <Text className="text-2xl font-extrabold text-primary">{formatMoney(data.receivable)}</Text>
-              <Text className="text-[11px] text-amber-800">
+              <Text className="text-[11px] text-warning">
                 {pendingCount} pendência{pendingCount === 1 ? "" : "s"}
               </Text>
             </View>
@@ -305,7 +306,7 @@ export function ContactLedgerScreen({
             <View className="flex-row items-center gap-2">
               <Text className="text-lg font-bold text-ink">Cobranças Ativas</Text>
               <View className="h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1">
-                <Text className="text-[11px] font-bold text-white">{active.length}</Text>
+                <Text className="text-[11px] font-bold text-on-primary">{active.length}</Text>
               </View>
             </View>
             <Text className="text-[11px] text-muted">Total: {formatMoney({ amountCents: activeCents, currency })}</Text>
@@ -319,7 +320,7 @@ export function ContactLedgerScreen({
             const receivable = charge.direction === "receivable";
 
             return (
-              <View key={charge.id} className={`gap-3 rounded-xl border border-outline/30 bg-surface p-4 ${due.late ? "border-l-4 border-l-red-500" : receivable ? "border-l-4 border-l-amber-500" : ""}`}>
+              <View key={charge.id} className={`gap-3 rounded-xl border border-outline/30 bg-surface p-4 ${due.late ? "border-l-4 border-l-danger" : receivable ? "border-l-4 border-l-warning" : ""}`}>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Abrir cobrança ${charge.description}`} onPress={() => onOpenCharge?.(charge.id)} className="flex-row items-start justify-between gap-2">
                   <View className="flex-1 gap-1">
                     <View className="flex-row flex-wrap items-center gap-2">
@@ -338,7 +339,7 @@ export function ContactLedgerScreen({
                 </Pressable>
 
                 <View className="flex-row items-center justify-between gap-2 border-t border-outline/20 pt-3">
-                  <Text className={`rounded px-2 py-0.5 text-[11px] font-medium ${due.late ? "bg-red-50 text-red-700" : "bg-amber-100/50 text-amber-900"}`}>{due.text}</Text>
+                  <Text className={`rounded px-2 py-0.5 text-[11px] font-medium ${due.late ? "bg-danger-soft text-danger" : "bg-warning-soft text-warning"}`}>{due.text}</Text>
                   {receivable && (
                     <View className="flex-row items-center gap-2">
                       {charge.sharingState === "ready" && (
@@ -349,7 +350,7 @@ export function ContactLedgerScreen({
                           onPress={() => void shareLink(charge)}
                           className="h-9 flex-row items-center gap-1 rounded-lg bg-surface-muted px-3"
                         >
-                          <Image source={ICONS.share} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
+                          <Image source={ICONS.share} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
                           <Text className="text-xs font-semibold text-ink">Link</Text>
                         </Pressable>
                       )}
@@ -360,8 +361,8 @@ export function ContactLedgerScreen({
                         onPress={() => void remind(charge)}
                         className="h-9 flex-row items-center gap-1.5 rounded-lg bg-primary px-3.5"
                       >
-                        <Image source={ICONS.bell} tintColor="#FFFFFF" style={{ width: 14, height: 14 }} />
-                        <Text className="text-xs font-semibold text-white">Lembrar Pix</Text>
+                        <Image source={ICONS.bell} tintColor={colors.onPrimary} style={{ width: 14, height: 14 }} />
+                        <Text className="text-xs font-semibold text-on-primary">Lembrar Pix</Text>
                       </Pressable>
                     </View>
                   )}
@@ -394,8 +395,8 @@ export function ContactLedgerScreen({
                 className="flex-row items-center justify-between gap-3 rounded-xl border border-outline/20 bg-surface p-4"
               >
                 <View className="flex-1 flex-row items-center gap-3">
-                  <View className={`h-9 w-9 items-center justify-center rounded-full ${paid ? "bg-emerald-50" : "bg-surface-muted"}`}>
-                    <Image source={paid ? ICONS.check : ICONS.trash} tintColor={paid ? "#006c49" : MUTED_TINT} style={{ width: 18, height: 18 }} />
+                  <View className={`h-9 w-9 items-center justify-center rounded-full ${paid ? "bg-success-soft" : "bg-surface-muted"}`}>
+                    <Image source={paid ? ICONS.check : ICONS.trash} tintColor={paid ? colors.success : colors.muted} style={{ width: 18, height: 18 }} />
                   </View>
                   <View className="flex-1">
                     <Text className="text-sm font-bold text-ink" numberOfLines={1}>
@@ -408,7 +409,7 @@ export function ContactLedgerScreen({
                 </View>
                 <View className="items-end gap-1">
                   <Text className="text-base font-bold text-ink">{formatMoney(charge.amount)}</Text>
-                  <Text className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${paid ? "bg-emerald-50 text-emerald-800" : "bg-surface-muted text-muted"}`}>
+                  <Text className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${paid ? "bg-success-soft text-success" : "bg-surface-muted text-muted"}`}>
                     {paid ? "Pago" : "Cancelada"}
                   </Text>
                 </View>
@@ -417,7 +418,7 @@ export function ContactLedgerScreen({
           })}
         </View>
 
-        {loading && <ActivityIndicator accessibilityLabel="Carregando histórico" color={ACTIVE_TINT} />}
+        {loading && <ActivityIndicator accessibilityLabel="Carregando histórico" color={colors.primaryStrong} />}
         {data.nextCursor && (
           <Pressable accessibilityRole="button" accessibilityLabel="Carregar mais" onPress={() => void load(data.nextCursor ?? undefined)} className="min-h-12 items-center justify-center">
             <Text className="font-bold text-primary">Carregar mais</Text>
@@ -428,11 +429,11 @@ export function ContactLedgerScreen({
 
       {confirmRemoval && (
         <Modal transparent animationType="fade" visible onRequestClose={() => setConfirmRemoval(false)}>
-          <View className="flex-1 items-center justify-center bg-black/60 px-4">
+          <View className="flex-1 items-center justify-center bg-scrim px-4">
             <View className="w-full max-w-sm gap-4 rounded-2xl border border-outline/30 bg-surface p-5">
               <View className="flex-row items-center gap-3">
-                <View className="h-11 w-11 items-center justify-center rounded-full bg-red-100">
-                  <Image source={ICONS.trash} tintColor="#b91c1c" style={{ width: 22, height: 22 }} />
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-danger-soft">
+                  <Image source={ICONS.trash} tintColor={colors.danger} style={{ width: 22, height: 22 }} />
                 </View>
                 <View className="flex-1">
                   <Text accessibilityRole="header" className="text-[17px] font-bold text-ink">
@@ -452,9 +453,9 @@ export function ContactLedgerScreen({
                   accessibilityState={{ disabled: busy }}
                   disabled={busy}
                   onPress={() => void archive()}
-                  className="h-11 flex-1 items-center justify-center rounded-xl bg-red-600"
+                  className="h-11 flex-1 items-center justify-center rounded-xl bg-danger-solid"
                 >
-                  <Text className="text-sm font-semibold text-white">Remover</Text>
+                  <Text className="text-sm font-semibold text-on-danger">Remover</Text>
                 </Pressable>
               </View>
             </View>

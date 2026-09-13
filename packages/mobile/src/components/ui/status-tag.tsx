@@ -9,11 +9,11 @@ type StatusTagProps = {
 };
 
 const TONES: Record<Tone, string> = {
-  success: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  warning: "border-amber-200 bg-amber-50 text-amber-800",
-  info: "border-blue-200 bg-blue-50 text-blue-800",
+  success: "border-success/30 bg-success-soft text-success",
+  warning: "border-warning/30 bg-warning-soft text-warning",
+  info: "border-info/30 bg-info-soft text-info",
   neutral: "border-outline/30 bg-surface-muted text-muted",
-  danger: "border-red-200 bg-red-50 text-red-700",
+  danger: "border-danger/30 bg-danger-soft text-danger",
 };
 
 /** The small state pill shared by the charge hero, the proof card and the viewer; mirrors the web `StatusTag`. */

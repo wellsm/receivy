@@ -31,7 +31,7 @@ import { StatusTag } from "@/components/ui/status-tag";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { pickAndUploadProof } from "@/financial/proof-upload";
 import { notificationClient } from "@/notifications/client";
-import { ACTIVE_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 export type ProofClient = Pick<FinancialClient, "startProofUpload" | "completeProofUpload" | "reviewProof" | "downloadProof" | "withdrawProof">;
 
@@ -64,10 +64,10 @@ const ICONS = {
 
 const STATUS_COLOR = {
   success: "text-primary",
-  warning: "text-amber-700",
-  danger: "text-red-700",
+  warning: "text-warning",
+  danger: "text-danger",
   neutral: "text-muted",
-  info: "text-blue-800",
+  info: "text-info",
 } as const;
 
 /** What a debtor sees instead of actions once the charge no longer accepts a payment. */
@@ -93,6 +93,7 @@ function payableGuidance(charge: ChargeDetail): string | null {
 }
 
 export function ChargeDetailScreen({ id, client = financialClient, notifications = notificationClient, onOpenProof }: ChargeDetailScreenProps) {
+  const colors = useThemeColors();
   const [charge, setCharge] = useState<ChargeDetail | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -281,7 +282,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
       <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["bottom"]}>
         {error ? (
           <View className="gap-3 px-5">
-            <Text accessibilityRole="alert" className="text-center text-red-700">
+            <Text accessibilityRole="alert" className="text-center text-danger">
               {error}
             </Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Tentar novamente" onPress={load} className="min-h-12 items-center justify-center">
@@ -289,7 +290,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
             </Pressable>
           </View>
         ) : (
-          <ActivityIndicator accessibilityLabel="Carregando cobrança" color={ACTIVE_TINT} size="large" />
+          <ActivityIndicator accessibilityLabel="Carregando cobrança" color={colors.primaryStrong} size="large" />
         )}
       </SafeAreaView>
     );
@@ -320,7 +321,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView contentContainerClassName="gap-4 px-5 pb-6 pt-4" showsVerticalScrollIndicator={false}>
         {error ? (
-          <Text accessibilityRole="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+          <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-3 text-sm text-danger">
             {error}
           </Text>
         ) : null}
@@ -329,10 +330,10 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
         <View className="gap-3 rounded-2xl border border-outline/30 bg-surface p-5">
           <View className="flex-row flex-wrap items-center justify-between gap-2">
             <View className="flex-row flex-wrap items-center gap-2">
-              <Text className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${receivable ? "bg-primary-soft/50 text-primary-strong" : "bg-violet-100 text-violet-900"}`}>
+              <Text className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${receivable ? "bg-primary-soft/50 text-primary-strong" : "bg-danger-soft text-danger"}`}>
                 {receivable ? "A receber" : "A pagar"}
               </Text>
-              <Text className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">{chargeTypeLabel(charge)}</Text>
+              <Text className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">{chargeTypeLabel(charge)}</Text>
               {ownBill && <Text className="rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-semibold text-muted">Minha conta</Text>}
             </View>
             <StatusTag label={state.label} tone={state.tone} compact />
@@ -353,7 +354,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
           </View>
 
           <View className="flex-row items-center gap-1.5">
-            <Image source={ICONS.calendar} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
+            <Image source={ICONS.calendar} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
             <Text className="text-xs text-muted">
               Vencimento: <Text className="font-semibold text-ink">{chargeDateText(charge.dueDate)}</Text>
               {pending && <Text className={STATUS_COLOR[status.tone]}> ({status.text.toLocaleLowerCase("pt-BR")})</Text>}
@@ -450,8 +451,8 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
             onPress={() => (uploadProofAllowed ? void uploadProof() : onOpenProof?.())}
             className={`h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
           >
-            <Image source={uploadProofAllowed ? ICONS.upload : ICONS.eye} tintColor="#FFFFFF" style={{ width: 18, height: 18 }} />
-            <Text className="text-sm font-bold text-white">{uploadProofAllowed ? (proof ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado"}</Text>
+            <Image source={uploadProofAllowed ? ICONS.upload : ICONS.eye} tintColor={colors.onPrimary} style={{ width: 18, height: 18 }} />
+            <Text className="text-sm font-bold text-on-primary">{uploadProofAllowed ? (proof ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado"}</Text>
           </Pressable>
         </View>
       )}

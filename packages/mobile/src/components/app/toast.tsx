@@ -25,7 +25,7 @@ export function Toast({ message, onDismiss, duration = 3000 }: ToastProps) {
   return (
     <View pointerEvents="box-none" className="absolute inset-x-0 bottom-6 items-center px-4">
       <Pressable onPress={onDismiss} className="rounded-xl bg-ink px-4 py-3 shadow-lg">
-        <Text role="status" className="text-sm font-semibold text-white">
+        <Text role="status" className="text-sm font-semibold text-surface">
           {message}
         </Text>
       </Pressable>

@@ -19,7 +19,7 @@ type ScopeDialogProps = {
 };
 
 const SECONDARY_STYLES = {
-  danger: "bg-danger-solid text-on-primary",
+  danger: "bg-danger-solid text-on-danger",
   neutral: "border border-outline/50 bg-surface text-ink",
 } as const;
 

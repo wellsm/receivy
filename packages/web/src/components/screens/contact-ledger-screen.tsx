@@ -337,7 +337,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
                 <article
                   key={item.id}
                   aria-label={`Cobrança ${item.description}`}
-                  className={`flex flex-col gap-3 rounded-xl border border-outline/30 bg-surface p-4 ${due.late ? "border-l-4 border-l-red-500" : receivable ? "border-l-4 border-l-amber-500" : ""}`}
+                  className={`flex flex-col gap-3 rounded-xl border border-outline/30 bg-surface p-4 ${due.late ? "border-l-4 border-l-danger" : receivable ? "border-l-4 border-l-warning" : ""}`}
                 >
                   <Link href={`/charges/${item.id}`} className="flex items-start justify-between gap-2 text-inherit no-underline">
                     <span className="flex min-w-0 flex-1 flex-col gap-1">

@@ -10,7 +10,8 @@ import { expect, it } from "vitest";
  */
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const EXCEPTIONS = new Set(["components/app/brand-marks.tsx"]);
-const PALETTE = /\b(?:bg|text|border|ring|fill|stroke|divide|placeholder|outline|decoration|accent|caret)-(?:white|black|red|amber|blue|green|emerald|gray|slate|zinc|neutral|yellow|orange|sky|rose)(?:-\d{2,3})?(?:\/\d{1,3})?\b/;
+const PALETTE =
+  /\b(?:bg|text|border|border-[xytrbl]|ring|fill|stroke|divide|placeholder|outline|decoration|accent|caret)-(?:white|black|red|amber|blue|green|emerald|gray|slate|zinc|neutral|yellow|orange|sky|rose|violet|purple|indigo|pink|fuchsia|teal|cyan|lime)(?:-\d{2,3})?(?:\/\d{1,3})?\b/;
 const ARBITRARY_HEX = /-\[#[0-9a-fA-F]{3,8}\]/;
 
 function sources(directory: string, found: string[] = []): string[] {

@@ -299,7 +299,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
           <article className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${receivable ? "bg-primary-soft/50 text-primary-strong" : "bg-violet-100 text-violet-900"}`}>
+                <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${receivable ? "bg-primary-soft/50 text-primary-strong" : "bg-danger-soft text-danger"}`}>
                   {receivable ? "A receber" : "A pagar"}
                 </span>
                 <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">{chargeTypeLabel(charge)}</span>

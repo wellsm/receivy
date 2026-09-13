@@ -22,7 +22,7 @@ const TONE_STYLES = {
   danger: {
     badge: "bg-danger-soft text-danger",
     confirm: "bg-danger-solid",
-    confirmText: "text-on-primary",
+    confirmText: "text-on-danger",
   },
   primary: {
     badge: "bg-primary-soft text-primary-strong",

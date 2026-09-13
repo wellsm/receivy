@@ -593,7 +593,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
               }[status.tone];
 
               return (
-                <article key={charge.id} className={`flex flex-col gap-2.5 rounded-xl border border-outline/30 bg-surface p-3.5 ${isPending ? "border-l-4 border-l-amber-400" : ""}`}>
+                <article key={charge.id} className={`flex flex-col gap-2.5 rounded-xl border border-outline/30 bg-surface p-3.5 ${isPending ? "border-l-4 border-l-warning" : ""}`}>
                   <button
                     type="button"
                     aria-label={`Abrir cobrança de ${name}`}

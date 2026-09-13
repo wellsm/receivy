@@ -470,7 +470,7 @@ export function ProfileScreen() {
             <button ref={cancel} type="button" className={`${DIALOG_ACTION} border border-outline text-primary`} onClick={closeDialog}>
               Cancelar
             </button>
-            <button type="button" className={`${DIALOG_ACTION} bg-danger-solid text-on-primary disabled:opacity-50`} disabled={busy || confirmation !== "EXCLUIR"} onClick={() => void erase()}>
+            <button type="button" className={`${DIALOG_ACTION} bg-danger-solid text-on-danger disabled:opacity-50`} disabled={busy || confirmation !== "EXCLUIR"} onClick={() => void erase()}>
               Confirmar exclusão
             </button>
           </div>

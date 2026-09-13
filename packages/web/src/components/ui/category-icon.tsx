@@ -1,5 +1,5 @@
 import { billingCategoryColor, type BillingCategory } from "@receivy/common";
-import { Car, Handshake, House, Plane, Repeat, ShoppingCart, Tag, Utensils, type LucideIcon } from "lucide-react";
+import { Car, GraduationCap, Handshake, HeartPulse, House, Plane, Repeat, ShoppingCart, Tag, Ticket, Utensils, type LucideIcon } from "lucide-react";
 
 export const CATEGORY_ICONS: Record<BillingCategory, LucideIcon> = {
   food: Utensils,
@@ -9,6 +9,9 @@ export const CATEGORY_ICONS: Record<BillingCategory, LucideIcon> = {
   loan: Handshake,
   housing: House,
   travel: Plane,
+  health: HeartPulse,
+  education: GraduationCap,
+  leisure: Ticket,
   other: Tag,
 };
 

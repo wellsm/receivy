@@ -1,6 +1,6 @@
 "use client";
 
-import type { SplitMode } from "@receivy/common";
+import type { SplitMode, UserAvatar } from "@receivy/common";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 export type SplitRow = {
@@ -10,6 +10,7 @@ export type SplitRow = {
   amountText: string;
   /** Set on a row the user cannot edit, such as the owner's remainder on a fixed split. */
   readonlyText?: string;
+  avatar?: UserAvatar | null;
 };
 
 type SplitEditorProps = {
@@ -47,7 +48,7 @@ export function SplitEditor({ mode, rows, hint, disabled, onChange }: SplitEdito
 
           return (
             <li key={row.key} className="flex min-h-12 items-center gap-2 rounded-xl border border-outline/20 bg-surface-muted/60 px-2.5 py-2">
-              <InitialsAvatar name={row.name} />
+              <InitialsAvatar name={row.name} avatar={row.avatar} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{row.name}</span>
               {mode !== "equal" && (
                 <span className="flex items-center gap-1">

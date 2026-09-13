@@ -527,7 +527,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
               {billing.guests.map((guest) => (
                 <article key={guest.id} className="flex flex-col gap-2.5 rounded-xl border border-outline/30 border-l-4 border-l-primary bg-surface p-3.5">
                   <div className="flex items-center gap-3">
-                    <InitialsAvatar name={guest.name} size={40} />
+                    <InitialsAvatar name={guest.name} size={40} avatar={guest.avatar} />
                     <div className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold text-ink">{guest.name}</span>
                       <span className="block truncate text-[11px] text-muted">{guest.email}</span>
@@ -585,6 +585,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
               // A file under review changes what the row asks of the owner: review it, never nag.
               const reviewing = isPending && charge.proofState === "pending";
               const name = payable ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
+              const avatar = payable ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
               const statusColor = {
                 success: "text-primary",
                 warning: "text-warning",
@@ -601,7 +602,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                     className="flex w-full items-center justify-between gap-3 text-left"
                   >
                     <span className="flex min-w-0 flex-1 items-center gap-3">
-                      <InitialsAvatar name={name} size={40} />
+                      <InitialsAvatar name={name} size={40} avatar={avatar} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold text-ink">{name}</span>
                         <span className={`block text-[11px] font-medium ${statusColor}`}>{status.text}</span>
@@ -789,7 +790,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                   onClick={() => void shareCharge(charge)}
                   className="flex min-h-14 items-center gap-3 rounded-2xl border border-outline/40 bg-surface px-4 text-left"
                 >
-                  <InitialsAvatar name={charge.recipient.name} size={36} />
+                  <InitialsAvatar name={charge.recipient.name} size={36} avatar={charge.recipient.avatar} />
                   <span className="flex-1 font-semibold text-ink">{charge.recipient.name}</span>
                   <span className="text-sm font-semibold text-primary">{formatMoney(charge.amount)}</span>
                 </button>

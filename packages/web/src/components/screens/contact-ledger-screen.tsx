@@ -10,6 +10,7 @@ import { saveDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 import { ActionTile } from "@/components/ui/action-tile";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { StatusTag } from "@/components/ui/status-tag";
 
 const LEDGER_ERROR = "Não foi possível carregar o histórico.";
@@ -239,9 +240,15 @@ export function ContactLedgerScreen({ id }: { id: string }) {
           {/* Perfil */}
           <header className="relative flex flex-col items-center overflow-hidden rounded-xl border border-outline/30 bg-surface p-5 text-center">
             <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1.5 bg-primary" />
-            <span aria-hidden="true" className="mb-3 flex h-20 w-20 items-center justify-center rounded-full border-2 border-surface bg-primary-soft/60 text-[22px] font-bold text-primary-strong">
-              {initialsOf(contact.displayName)}
-            </span>
+            {contact.avatar ? (
+              <span className="mb-3 rounded-full border-2 border-surface">
+                <InitialsAvatar name={contact.displayName} size={80} avatar={contact.avatar} />
+              </span>
+            ) : (
+              <span aria-hidden="true" className="mb-3 flex h-20 w-20 items-center justify-center rounded-full border-2 border-surface bg-primary-soft/60 text-[22px] font-bold text-primary-strong">
+                {initialsOf(contact.displayName)}
+              </span>
+            )}
             <h2 className="m-0 text-[22px] font-bold text-ink">{contact.displayName}</h2>
             {contact.nickname && <p className="m-0 text-xs text-muted">{contact.name}</p>}
             <div className="mt-1 flex flex-col items-center gap-0.5">

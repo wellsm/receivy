@@ -503,6 +503,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     return {
       key,
       name: nameOf(key),
+      avatar: key === "owner" ? null : contactFor(key).avatar,
       value: modeValues[key] ?? "",
       // A fixed row is the amount itself, so repeating it beside the field says nothing.
       amountText: draft.mode === "fixed" || cents === undefined ? "" : money(cents),
@@ -616,7 +617,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
                 onClick={() => update({ payee: "" })}
                 className="flex items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
               >
-                <InitialsAvatar name={payee.displayName} size={24} />
+                <InitialsAvatar name={payee.displayName} size={24} avatar={payee.avatar} />
                 <span className="text-xs font-semibold text-ink">{payee.displayName}</span>
                 <X size={12} aria-hidden="true" className="text-muted" />
               </button>
@@ -673,7 +674,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
                 onClick={() => toggle(contact.userId)}
                 className="flex items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
               >
-                <InitialsAvatar name={contact.displayName} size={24} />
+                <InitialsAvatar name={contact.displayName} size={24} avatar={contact.avatar} />
                 <span className="text-xs font-semibold text-ink">{contact.displayName}</span>
                 <X size={12} aria-hidden="true" className="text-muted" />
               </button>

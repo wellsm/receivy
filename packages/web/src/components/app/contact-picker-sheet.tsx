@@ -134,7 +134,7 @@ export function ContactPickerSheet({ selected, onToggle, onSeen, onClose, onNew,
               <li key={contact.id}>
                 <label className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border px-4 ${checked ? "border-primary bg-primary-soft/40" : "border-outline bg-surface"}`}>
                   <input type="checkbox" className="sr-only" checked={checked} onChange={() => onToggle(contact.userId)} />
-                  <InitialsAvatar name={contact.displayName} size={36} />
+                  <InitialsAvatar name={contact.displayName} size={36} avatar={contact.avatar} />
                   <span className="flex-1 font-semibold text-ink">{contact.displayName}</span>
                   {checked && <Check size={18} aria-hidden="true" className="text-primary" />}
                 </label>

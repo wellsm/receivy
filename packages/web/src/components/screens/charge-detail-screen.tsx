@@ -317,7 +317,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
             <h2 className="m-0 text-[22px] font-bold tracking-tight text-primary-strong">{charge.description}</h2>
 
             <div className="flex items-center gap-3">
-              <InitialsAvatar name={charge.recipient.name} size={40} />
+              <InitialsAvatar name={charge.recipient.name} size={40} avatar={charge.recipient.avatar} />
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate text-sm font-semibold text-ink">{charge.recipient.name}</p>
                 <p className="m-0 text-[11px] text-muted">{counterpartRoleLabel(charge)}</p>

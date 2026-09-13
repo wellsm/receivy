@@ -88,7 +88,7 @@ function ChargeCard({
   const content = (
     <>
       <div className="flex items-center gap-3">
-        <InitialsAvatar name={charge.counterpartName} size={44} />
+        <InitialsAvatar name={charge.counterpartName} size={44} avatar={charge.counterpartAvatar} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="m-0 truncate text-sm text-muted">
             <strong className="font-bold text-ink">{charge.counterpartName}</strong> · {charge.description}

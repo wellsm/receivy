@@ -5,6 +5,7 @@ import { ChevronRight, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { StatusTag } from "@/components/ui/status-tag";
 
 const LIST_ERROR = "Não foi possível carregar os contatos.";
@@ -35,9 +36,13 @@ function ContactCard({ contact }: { contact: Contact }) {
       aria-label={`Contato ${contact.displayName}`}
       className="flex min-h-16 items-center gap-3 rounded-2xl border border-outline/40 bg-surface p-4 transition hover:border-outline"
     >
-      <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-extrabold text-primary-strong">
-        {initialsOf(contact.displayName)}
-      </span>
+      {contact.avatar ? (
+        <InitialsAvatar name={contact.displayName} size={44} avatar={contact.avatar} />
+      ) : (
+        <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-extrabold text-primary-strong">
+          {initialsOf(contact.displayName)}
+        </span>
+      )}
 
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2">

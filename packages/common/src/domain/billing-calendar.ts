@@ -50,10 +50,26 @@ export function endOfMonth(value: string): string {
   return `${value.slice(0, 7)}-${String(day).padStart(2, '0')}`;
 }
 
-export function materializationDate(dueDate: string, reminders: BillingReminder[]): string {
+function earliestOffset(reminders: BillingReminder[]): number {
   const offsets = reminders.filter((reminder) => reminder.enabled).map((reminder) => reminder.offsetDays);
 
-  return addCalendarDays(dueDate, offsets.length ? Math.min(...offsets) : 0);
+  return offsets.length ? Math.min(...offsets) : 0;
+}
+
+/** The day an occurrence becomes a charge: the first day of its month, or earlier when a reminder fires before that. */
+export function materializationDate(dueDate: string, reminders: BillingReminder[]): string {
+  const byReminder = addCalendarDays(dueDate, earliestOffset(reminders));
+  const monthStart = `${dueDate.slice(0, 7)}-01`;
+
+  return byReminder < monthStart ? byReminder : monthStart;
+}
+
+/** The last due date that must already exist today: the month end, or later when an early reminder reaches next month. */
+export function materializationHorizon(today: string, reminders: BillingReminder[]): string {
+  const byReminder = addCalendarDays(today, -earliestOffset(reminders));
+  const monthEnd = endOfMonth(today);
+
+  return byReminder > monthEnd ? byReminder : monthEnd;
 }
 
 /** Civil due dates of a rule between `from` and `to` (inclusive). Day and month come from `startDate`, or the month end. */

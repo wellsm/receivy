@@ -7,6 +7,7 @@ import {
   civilHour,
   endOfMonth,
   materializationDate,
+  materializationHorizon,
   normalizeBillingInput,
   zonedInstant
 } from './billing-calendar';
@@ -107,15 +108,23 @@ describe('billing calendar', () => {
     );
   });
 
-  it('uses the earliest enabled reminder for materialization', () => {
+  it('materializes an occurrence on the first day of its month, or earlier for a reminder that crosses the month', () => {
     expect(
       materializationDate('2026-03-10', [
         { offsetDays: -3, enabled: true },
         { offsetDays: 2, enabled: true }
       ])
-    ).toBe('2026-03-07');
-    expect(materializationDate('2026-03-10', [{ offsetDays: -3, enabled: false }])).toBe('2026-03-10');
+    ).toBe('2026-03-01');
+    expect(materializationDate('2026-03-03', [{ offsetDays: -5, enabled: true }])).toBe('2026-02-26');
+    expect(materializationDate('2026-03-10', [{ offsetDays: -3, enabled: false }])).toBe('2026-03-01');
     expect(addCalendarDays('2026-03-01', -1)).toBe('2026-02-28');
+  });
+
+  it('reaches the month end, or further when an early reminder needs next month charges', () => {
+    expect(materializationHorizon('2026-03-05', [{ offsetDays: 0, enabled: true }])).toBe('2026-03-31');
+    expect(materializationHorizon('2026-03-28', [{ offsetDays: -5, enabled: true }])).toBe('2026-04-02');
+    expect(materializationHorizon('2026-03-05', [])).toBe('2026-03-31');
+    expect(materializationHorizon('2026-02-10', [{ offsetDays: 3, enabled: true }])).toBe('2026-02-28');
   });
 
   it('normalizes input per type and rejects incompatible fields', () => {

@@ -30,6 +30,18 @@ export const enum SplitPartKind {
   User = 'user'
 }
 
+/** What Pausar/Encerrar do with pending charges: keep this month's, or cancel every pending one. */
+export const enum PendingChargesAction {
+  Keep = 'keep',
+  Cancel = 'cancel'
+}
+
+/** Whether an edit of a recorrente also rewrites this month's charges that are not due yet. */
+export const enum EditScope {
+  CurrentMonth = 'current_month',
+  NextMonth = 'next_month'
+}
+
 export type BillingReminder = { offsetDays: number; enabled: boolean };
 
 /** A Pix key typed on a conta a pagar: it belongs to whoever receives, never to a wallet. */
@@ -82,6 +94,10 @@ export type BillingPatch = {
   dueRule?: BillingDueRule;
   reminders?: BillingReminder[];
   state?: BillingState;
+  /** Only with state paused/ended. Absent keeps the old behavior: pausing keeps, ending cancels. */
+  pendingCharges?: PendingChargesAction;
+  /** Recorrente only. Absent means next month. */
+  applyTo?: EditScope;
   category?: BillingCategory;
 };
 

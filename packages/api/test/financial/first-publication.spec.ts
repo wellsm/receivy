@@ -29,7 +29,7 @@ describe('explicit first Pix publication', () => {
     await createUser(db, { id: owner, name: 'Owner', email: `${owner}@example.com` });
     await createUser(db, { id: other, name: 'Other', email: `${other}@example.com` });
     const person = await ContactRepository.save(db, owner, { name: 'Debtor', email: 'publication-debtor@example.com' });
-    chargeId = (await createOnceCharge(db, owner, 'first-pix', { userId: person.userId, amountCents: 100, dueDate: '2030-01-01' }, context))
+    chargeId = (await createOnceCharge(db, owner, 'first-pix', { userId: person.userId, amountCents: 100, dueDate: '2026-01-01' }, context))
       .chargeId;
   });
   after(async () => cleanupUsers(db, [owner, other]));

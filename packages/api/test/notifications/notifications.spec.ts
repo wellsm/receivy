@@ -289,8 +289,8 @@ describe('charge notices, follow-ups and devices', () => {
     });
   });
 
-  it('announces a new charge by push and arms the e-mail follow-up two hours later', async () => {
-    clock = start;
+  it('announces a charge due today by push and arms the e-mail follow-up two hours later', async () => {
+    clock = Date.parse(`${DUE_DATE}T11:00:00Z`);
     sent.reset();
 
     await soleDevice(DEBTOR, 'ExpoPushToken[announce]', 'announce');
@@ -301,7 +301,7 @@ describe('charge notices, follow-ups and devices', () => {
     equal(sent.emails.length, 0);
     deepEqual((await EventRepository.list(db, id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['push'] });
     deepEqual(notify.events.get(notifyIdentifier(id)), followUp(id));
-    equal(followUp(id).date.toISOString(), '2029-01-01T13:00:00.000Z');
+    equal(followUp(id).date.toISOString(), `${DUE_DATE}T13:00:00.000Z`);
 
     // Without a device the e-mail goes out right away: nothing is left to follow up.
     const plain = await charge(OWNER, undefined, true);
@@ -315,6 +315,17 @@ describe('charge notices, follow-ups and devices', () => {
     await announceCharges(db, context, [crypto.randomUUID()], clock);
     equal(sent.emails.length, 0);
     equal(sent.pushes.length, 0);
+  });
+
+  it('leaves a charge due later to its first reminder', async () => {
+    clock = start;
+    sent.reset();
+
+    const { id } = await charge(OWNER, undefined, true);
+
+    equal(sent.emails.length + sent.pushes.length, 0);
+    deepEqual(await EventRepository.list(db, id, 'notice.sent'), []);
+    equal(notify.events.has(notifyIdentifier(id)), false);
   });
 
   it('arms the follow-up for a scheduled reminder only when the push went out', async () => {

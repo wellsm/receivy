@@ -1,3 +1,5 @@
+import { addCalendarDays, type BillingReminder } from '@receivy/common';
+
 export interface NotificationConfig {
   publicOrigin: string;
   secret: string;
@@ -57,4 +59,23 @@ export function instantAt(date: string, hour: number, timezone: string): Date {
   const asUtc = Date.UTC(read('year'), read('month') - 1, read('day'), read('hour'), read('minute'));
 
   return new Date(guess - (asUtc - guess));
+}
+
+export type InitialNoticeInput = { dueDate: string; now: number; timezone: string; reminders: BillingReminder[] };
+
+/** A charge due today or earlier is announced at once; a later one waits for its first reminder, unless none is left to fire. */
+export function shouldSendInitialNotice({ dueDate, now, timezone, reminders }: InitialNoticeInput): boolean {
+  if (dueDate <= civilDate(now, timezone)) {
+    return true;
+  }
+
+  const reachable = reminders.some((reminder) => {
+    if (!reminder.enabled) {
+      return false;
+    }
+
+    return instantAt(addCalendarDays(dueDate, reminder.offsetDays), REMINDER_HOUR, timezone).getTime() >= now;
+  });
+
+  return !reachable;
 }

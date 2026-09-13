@@ -6,7 +6,7 @@ import { StoredProofState } from '../../charges/schemas/charge';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
-import { type NoticeContext, NoticeTemplate, notifyCharge } from '../../notifications/services/send';
+import { announceCharges, type NoticeContext, NoticeTemplate } from '../../notifications/services/send';
 import { PixRequiredError, PixSnapshotLockedError } from '../errors';
 import { assertPublicLinkSecretConfigured, PublicTokenPurpose, verifyPublicChargeToken } from '../services/capability';
 import { ensurePublicLink, linkToken } from '../services/links';
@@ -95,7 +95,7 @@ export namespace PublicLinkRepository {
     });
 
     if (announce && notice) {
-      await notifyCharge(db, notice, chargeId, NoticeTemplate.Initial, nowSeconds * 1000);
+      await announceCharges(db, notice, [chargeId], nowSeconds * 1000);
     }
 
     return link;

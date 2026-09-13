@@ -7,7 +7,7 @@ import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
 import { ensurePublicLink, linkAlive } from '../../public/services/links';
-import { EMAIL_FOLLOWUP_MS, instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR } from './planner';
+import { EMAIL_FOLLOWUP_MS, instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
 import { NoticeTemplate, renderNotice } from './render';
 import type { NotificationTransport } from './transport';
 
@@ -214,10 +214,28 @@ export async function followUpCharge(
 /** Fired at charge creation (after the transaction): the first notice, with its follow-up rule. */
 export async function announceCharges(db: DbClient, context: NoticeContext, chargeIds: string[], now = Date.now()): Promise<void> {
   for (const chargeId of chargeIds) {
-    const charge = await db.charges.findOne({ select: { payer: true }, where: { id: chargeId } });
+    const charge = await db.charges.findOne({ select: { payer: true, due_date: true, billing_id: true }, where: { id: chargeId } });
 
     // The owner of a conta a pagar just typed it: only the scheduled reminders reach them.
     if (!charge || ChargeRepository.payer(charge) === ChargePayer.Owner) {
+      continue;
+    }
+
+    const billing = await db.billings.findOne({ select: { timezone: true, reminders: true }, where: { id: charge.billing_id } });
+
+    if (!billing) {
+      continue;
+    }
+
+    // A charge created ahead of its due day meets the debtor through the reminders, not on the day it was created.
+    const due = shouldSendInitialNotice({
+      dueDate: charge.due_date,
+      now,
+      timezone: billing.timezone,
+      reminders: effectiveReminders(billing)
+    });
+
+    if (!due) {
       continue;
     }
 

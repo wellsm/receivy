@@ -26,7 +26,7 @@ export function Toast({ message, onDismiss, duration = 3000 }: ToastProps) {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[88px] z-50 flex justify-center px-4 md:bottom-6">
-      <p role="status" onClick={onDismiss} className="pointer-events-auto m-0 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white shadow-lg">
+      <p role="status" onClick={onDismiss} className="pointer-events-auto m-0 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-surface shadow-lg">
         {message}
       </p>
     </div>

@@ -5,8 +5,8 @@ import { responseMessage } from "@/lib/financial-response";
 import { CloudUpload, FileText, Receipt, Trash2 } from "lucide-react";
 
 const HINT = "m-0 text-sm leading-5 text-muted";
-const PRIMARY_BUTTON = "min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-white transition hover:bg-primary-strong disabled:opacity-50";
-const DANGER_BUTTON = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-200 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50";
+const PRIMARY_BUTTON = "min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50";
+const DANGER_BUTTON = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-danger/30 px-4 text-sm font-semibold text-danger transition hover:bg-danger-soft disabled:opacity-50";
 const FILE_INPUT_LABEL = "Comprovante JPG, PNG ou PDF";
 /** Only a flag: the API knows the slot by the payer, so a reload just asks it again. */
 const STARTED_KEY = "receivy-proof-upload";
@@ -219,7 +219,7 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
       )}
 
       {error && (
-        <p role="alert" className="m-0 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+        <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {error}
         </p>
       )}

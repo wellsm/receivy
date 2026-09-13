@@ -90,7 +90,7 @@ function PickedPreview({ file, url, busy, onPick, onSend }: { file: File; url: s
             type="button"
             disabled={busy}
             onClick={onSend}
-            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-white transition hover:bg-primary-strong disabled:opacity-50"
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
           >
             <CloudUpload size={16} aria-hidden="true" />
             Enviar comprovante
@@ -149,7 +149,7 @@ export function ProofCard({ charge, busy, picked, onView, onPick, onSend, onAcce
             aria-label="Marcar como pago"
             disabled={busy}
             onClick={onAccept}
-            className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-white transition hover:bg-primary-strong disabled:opacity-50"
+            className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
           >
             <Check size={16} aria-hidden="true" />
             Marcar como pago
@@ -207,7 +207,7 @@ export function ProofCard({ charge, busy, picked, onView, onPick, onSend, onAcce
             aria-label="Marcar como pago"
             disabled={busy}
             onClick={onAccept}
-            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-white transition hover:bg-primary-strong disabled:opacity-50"
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
           >
             <Check size={16} aria-hidden="true" />
             Marcar como pago
@@ -236,7 +236,7 @@ export function ProofCard({ charge, busy, picked, onView, onPick, onSend, onAcce
               type="button"
               disabled={busy}
               onClick={() => replace.current?.click()}
-              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-white transition hover:bg-primary-strong disabled:opacity-50"
+              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
             >
               <CloudUpload size={16} aria-hidden="true" />
               Substituir

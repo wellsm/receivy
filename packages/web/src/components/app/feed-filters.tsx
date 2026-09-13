@@ -147,7 +147,7 @@ function ChipGroup<T extends string>({ group, options, selected, everyLabel, onP
             aria-pressed={every}
             onClick={onClear}
             className={`min-h-10 rounded-full border px-4 text-sm font-semibold ${
-              every ? "border-primary bg-primary text-white" : "border-outline bg-surface text-ink"
+              every ? "border-primary bg-primary text-on-primary" : "border-outline bg-surface text-ink"
             }`}
           >
             {everyLabel}
@@ -165,7 +165,7 @@ function ChipGroup<T extends string>({ group, options, selected, everyLabel, onP
               aria-pressed={active}
               onClick={() => onPick(option.value)}
               className={`min-h-10 rounded-full border px-4 text-sm font-semibold ${
-                active ? "border-primary bg-primary text-white" : "border-outline bg-surface text-ink"
+                active ? "border-primary bg-primary text-on-primary" : "border-outline bg-surface text-ink"
               }`}
             >
               {option.label}
@@ -189,7 +189,7 @@ function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetProps) {
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-black/40"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-scrim"
       role="presentation"
       onClick={onClose}
       onKeyDown={event => {
@@ -245,7 +245,7 @@ function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetProps) {
         />
         <ChipGroup group="Período" options={FEED_PERIODS} selected={[draft.period]} onPick={period => setDraft({ ...draft, period })} />
 
-        <button type="button" onClick={() => onApply(draft)} className="min-h-14 rounded-2xl bg-primary font-bold text-white">
+        <button type="button" onClick={() => onApply(draft)} className="min-h-14 rounded-2xl bg-primary font-bold text-on-primary">
           Aplicar
         </button>
       </div>
@@ -279,7 +279,7 @@ export function FeedFiltersBar({ value, onChange, counts }: FeedFiltersBarProps)
         <SlidersHorizontal size={16} aria-hidden="true" />
         Filtros
         {changed > 0 && (
-          <span aria-hidden="true" className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">
+          <span aria-hidden="true" className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-on-primary">
             {changed}
           </span>
         )}

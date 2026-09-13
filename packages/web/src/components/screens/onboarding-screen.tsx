@@ -17,7 +17,7 @@ type OnboardingScreenProps = {
   initialName?: string | null;
 };
 
-const INPUT_CLASS = "h-14 w-full rounded-2xl border border-outline bg-white px-4 text-base text-ink outline-none placeholder:text-muted focus:border-primary";
+const INPUT_CLASS = "h-14 w-full rounded-2xl border border-outline bg-surface px-4 text-base text-ink outline-none placeholder:text-muted focus:border-primary";
 
 export function OnboardingScreen({ nextPath = "/", initialName = null }: OnboardingScreenProps = {}) {
   const router = useRouter();
@@ -110,14 +110,14 @@ export function OnboardingScreen({ nextPath = "/", initialName = null }: Onboard
             className={INPUT_CLASS}
           />
 
-          <button type="submit" disabled={!canContinue} className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-white transition active:opacity-80 disabled:opacity-50">
+          <button type="submit" disabled={!canContinue} className="mt-4 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-bold text-on-primary transition active:opacity-80 disabled:opacity-50">
             Continuar
             {busy && <Loader2 aria-hidden="true" size={18} className="animate-spin" />}
           </button>
         </form>
 
         {error && (
-          <p role="alert" className="m-0 mt-4 rounded-xl bg-red-50 p-3 text-sm leading-5 text-red-700">
+          <p role="alert" className="m-0 mt-4 rounded-xl bg-danger-soft p-3 text-sm leading-5 text-danger">
             {error}
           </p>
         )}

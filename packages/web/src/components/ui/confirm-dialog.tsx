@@ -20,12 +20,14 @@ type ConfirmDialogProps = {
 
 const TONE_STYLES = {
   danger: {
-    badge: "bg-red-100 text-red-700",
-    confirm: "bg-red-600",
+    badge: "bg-danger-soft text-danger",
+    confirm: "bg-danger-solid",
+    confirmText: "text-on-primary",
   },
   primary: {
     badge: "bg-primary-soft text-primary-strong",
     confirm: "bg-primary hover:bg-primary-strong",
+    confirmText: "text-on-primary",
   },
 } as const;
 
@@ -40,7 +42,7 @@ export function ConfirmDialog({ title, subtitle, icon: Icon, detail, explanation
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-scrim px-4"
       role="presentation"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -67,7 +69,7 @@ export function ConfirmDialog({ title, subtitle, icon: Icon, detail, explanation
           <button ref={cancel} type="button" onClick={onCancel} className="h-11 flex-1 rounded-xl border border-outline/50 bg-surface text-sm font-semibold text-ink">
             Cancelar
           </button>
-          <button type="button" disabled={busy} onClick={onConfirm} className={`h-11 flex-1 rounded-xl text-sm font-semibold text-white transition disabled:opacity-50 ${styles.confirm}`}>
+          <button type="button" disabled={busy} onClick={onConfirm} className={`h-11 flex-1 rounded-xl text-sm font-semibold transition disabled:opacity-50 ${styles.confirm} ${styles.confirmText}`}>
             {confirmLabel}
           </button>
         </div>

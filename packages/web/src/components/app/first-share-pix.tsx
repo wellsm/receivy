@@ -40,7 +40,7 @@ export function FirstSharePix({ busy, publish }: { busy: boolean; publish: (id: 
         type="button"
         disabled={busy || saving || !selected}
         onClick={() => void publish(selected)}
-        className="min-h-12 rounded-xl bg-primary text-sm font-bold text-white transition hover:bg-primary-strong disabled:opacity-50"
+        className="min-h-12 rounded-xl bg-primary text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
       >
         Publicar com este Pix
       </button>
@@ -74,7 +74,7 @@ export function FirstSharePix({ busy, publish }: { busy: boolean; publish: (id: 
       </details>
 
       {error && (
-        <p role="alert" className="m-0 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+        <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {error}
         </p>
       )}

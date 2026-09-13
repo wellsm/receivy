@@ -68,7 +68,7 @@ export function SplitEditor({ mode, rows, hint, disabled, onChange }: SplitEdito
           );
         })}
       </ul>
-      {hint && <p className="m-0 text-sm font-semibold text-amber-700">{hint}</p>}
+      {hint && <p className="m-0 text-sm font-semibold text-warning">{hint}</p>}
     </div>
   );
 }

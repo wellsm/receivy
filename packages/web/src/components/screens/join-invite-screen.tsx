@@ -19,7 +19,7 @@ const COLUMN = "mx-auto flex w-full max-w-md flex-col gap-6 md:max-w-2xl";
 const BRAND = "m-0 text-[22px] font-extrabold text-primary-strong";
 const CARD = "flex flex-col gap-4 rounded-2xl border border-outline/30 bg-surface p-6 md:p-10";
 const TITLE = "m-0 text-3xl font-extrabold leading-tight tracking-tight text-primary-strong md:text-4xl";
-const PRIMARY_BUTTON = "inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-white transition hover:bg-primary-strong disabled:opacity-50";
+const PRIMARY_BUTTON = "inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50";
 
 /** The public shell shown when the invite is missing, used by the page and by the screen. */
 export function InviteUnavailable() {
@@ -121,7 +121,7 @@ export function JoinInviteScreen({ token, view, authenticated }: JoinInviteScree
           )}
 
           {error && (
-            <p className="m-0 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-[13px] leading-5 text-red-700" role="alert">
+            <p className="m-0 rounded-xl border border-danger/30 bg-danger-soft px-3.5 py-3 text-[13px] leading-5 text-danger" role="alert">
               {error}
             </p>
           )}

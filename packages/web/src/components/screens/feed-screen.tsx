@@ -51,14 +51,14 @@ function TotalCard({ label, amount, count, tone }: { label: string; amount: stri
 
   return (
     <article className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-outline/40 bg-surface p-4">
-      <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-1 ${receivable ? "bg-primary" : "bg-red-600"}`} />
+      <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-1 ${receivable ? "bg-primary" : "bg-danger-solid"}`} />
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-bold tracking-widest text-muted">{label}</span>
-        <Arrow size={18} aria-hidden="true" className={receivable ? "text-primary" : "text-red-600"} />
+        <Arrow size={18} aria-hidden="true" className={receivable ? "text-primary" : "text-danger"} />
       </div>
-      <strong className={`mt-2 text-xl font-extrabold tracking-tight ${receivable ? "text-primary" : "text-red-700"}`}>{amount}</strong>
+      <strong className={`mt-2 text-xl font-extrabold tracking-tight ${receivable ? "text-primary" : "text-danger"}`}>{amount}</strong>
       <div className="mt-3 flex items-center gap-1.5 border-t border-outline/30 pt-2">
-        <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${receivable ? "bg-primary" : "bg-red-600"}`} />
+        <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${receivable ? "bg-primary" : "bg-danger-solid"}`} />
         <span className="text-[11px] font-semibold text-muted">{pluralize(count)}</span>
       </div>
     </article>
@@ -82,7 +82,7 @@ function ChargeCard({
   const badges = chargeBadges(charge, today);
   const action = chargeAction(charge, direction);
   const settled = charge.state !== "pending";
-  const amountClass = settled ? "text-muted" : direction === "receivable" ? "text-primary" : "text-red-700";
+  const amountClass = settled ? "text-muted" : direction === "receivable" ? "text-primary" : "text-danger";
   const href = `/charges/${charge.id}`;
 
   const content = (
@@ -121,7 +121,7 @@ function ChargeCard({
           <Link
             href={href}
             className={`relative flex min-h-10 items-center rounded-lg px-3 text-xs font-bold no-underline ${
-              action.label === "Pagar" ? "bg-primary text-white" : "bg-surface-muted text-primary-strong"
+              action.label === "Pagar" ? "bg-primary text-on-primary" : "bg-surface-muted text-primary-strong"
             }`}
           >
             {action.label}
@@ -296,11 +296,11 @@ export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummar
         )}
 
         {error && (
-          <div className="flex flex-col gap-2 rounded-xl bg-red-50 p-4">
-            <p role="alert" className="m-0 text-red-700">
+          <div className="flex flex-col gap-2 rounded-xl bg-danger-soft p-4">
+            <p role="alert" className="m-0 text-danger">
               {error}
             </p>
-            <button type="button" className="flex min-h-12 items-center self-start font-bold text-red-700" onClick={() => void load()}>
+            <button type="button" className="flex min-h-12 items-center self-start font-bold text-danger" onClick={() => void load()}>
               Tentar novamente
             </button>
           </div>

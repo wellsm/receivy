@@ -89,7 +89,7 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
   return (
     <section className="mx-auto flex w-full max-w-3xl flex-col gap-4 pb-4">
       {required && (
-        <p className="m-0 rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900" role="status">
+        <p className="m-0 rounded-xl bg-warning-soft p-4 text-sm font-semibold text-warning" role="status">
           Você precisa de uma chave Pix para criar cobranças.
         </p>
       )}
@@ -97,7 +97,7 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
       <h2 className="m-0 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted">CHAVES ATIVAS ({items.length})</h2>
 
       {error && (
-        <p role="alert" className="m-0 rounded-xl bg-red-50 p-4 text-sm text-red-700">
+        <p role="alert" className="m-0 rounded-xl bg-danger-soft p-4 text-sm text-danger">
           {error}
         </p>
       )}
@@ -112,7 +112,7 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
         <section className="flex flex-col items-center gap-2 rounded-2xl border border-outline/40 bg-surface p-8 text-center">
           <h3 className="m-0 text-lg font-extrabold text-primary-strong">Nenhuma chave ainda</h3>
           <p className="m-0 text-sm leading-5 text-muted">Cadastre uma chave para receber pelos links de cobrança.</p>
-          <Link className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-bold text-white" href={newKeyHref}>
+          <Link className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-bold text-on-primary" href={newKeyHref}>
             Cadastrar nova chave
           </Link>
         </section>
@@ -123,7 +123,7 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
           <article key={method.id} className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="flex flex-1 items-center gap-3">
-                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${method.isDefault ? "bg-primary text-white" : "bg-surface-muted text-primary-strong"}`}>
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${method.isDefault ? "bg-primary text-on-primary" : "bg-surface-muted text-primary-strong"}`}>
                   <PixTypeIcon type={method.pixKeyType} size={20} />
                 </span>
                 <div className="flex flex-col gap-0.5">
@@ -150,7 +150,7 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
                   trigger.current = event.currentTarget;
                   setRemoving(method);
                 }}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-red-700 transition hover:bg-red-50 active:scale-95 disabled:opacity-50"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-danger transition hover:bg-danger-soft active:scale-95 disabled:opacity-50"
               >
                 <Trash2 size={18} aria-hidden="true" />
               </button>
@@ -179,7 +179,7 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
       </div>
 
       <aside className="flex items-start gap-3 rounded-2xl border border-outline/30 bg-surface-muted/70 p-4">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft/60 text-[#006c49]">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft/60 text-success">
           <Lock size={18} aria-hidden="true" />
         </span>
         <div className="flex flex-col gap-0.5">
@@ -190,7 +190,7 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
 
       <ScreenFooter className="-mx-1 bg-canvas/95 px-1 pb-2 pt-3 backdrop-blur-md">
         <Link
-          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white transition active:scale-[0.98]"
+          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-on-primary transition active:scale-[0.98]"
           href={newKeyHref}
           aria-label="Cadastrar nova chave"
         >

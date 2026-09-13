@@ -135,7 +135,7 @@ export function CodeScreen() {
           <div className="mt-3 flex items-center gap-2">
             <Lock aria-hidden="true" size={16} className="shrink-0 text-muted" />
             {expired ? (
-              <p className="m-0 text-sm font-semibold text-red-700">Código expirado. Peça um novo código.</p>
+              <p className="m-0 text-sm font-semibold text-danger">Código expirado. Peça um novo código.</p>
             ) : (
               <p className="m-0 text-sm text-muted">
                 Expira em <strong className="font-extrabold text-ink">{formatRemaining(remaining)}</strong>
@@ -143,14 +143,14 @@ export function CodeScreen() {
             )}
           </div>
 
-          <button type="submit" disabled={!canConfirm} className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-extrabold text-white transition active:opacity-80 disabled:opacity-50">
+          <button type="submit" disabled={!canConfirm} className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-extrabold text-on-primary transition active:opacity-80 disabled:opacity-50">
             Confirmar e Entrar
             {busy ? <Loader2 aria-hidden="true" size={20} className="animate-spin" /> : <ArrowRight aria-hidden="true" size={20} />}
           </button>
         </form>
 
         {error && (
-          <p role="alert" className="m-0 mt-4 rounded-xl bg-red-50 p-3 text-sm leading-5 text-red-700">
+          <p role="alert" className="m-0 mt-4 rounded-xl bg-danger-soft p-3 text-sm leading-5 text-danger">
             {error}
           </p>
         )}

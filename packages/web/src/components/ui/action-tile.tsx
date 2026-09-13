@@ -12,8 +12,8 @@ type ActionTileProps = {
 
 const STYLES = {
   neutral: { circle: "bg-surface-muted text-primary-strong", label: "font-medium text-ink" },
-  primary: { circle: "bg-primary text-white", label: "font-bold text-primary" },
-  danger: { circle: "bg-red-100 text-red-700", label: "font-medium text-red-700" },
+  primary: { circle: "bg-primary text-on-primary", label: "font-bold text-primary" },
+  danger: { circle: "bg-danger-soft text-danger", label: "font-medium text-danger" },
 } as const;
 
 /** One square of the quick-actions row under a detail card: icon in a circle, label below. Lay them out in a `flex gap-2`. */

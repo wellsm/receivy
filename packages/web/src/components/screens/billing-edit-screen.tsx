@@ -37,7 +37,7 @@ export function BillingEditScreen({ id }: { id: string }) {
   if (error) {
     return (
       <div className="flex flex-col items-center gap-3 py-10">
-        <p role="alert" className="m-0 text-center text-red-700">
+        <p role="alert" className="m-0 text-center text-danger">
           {error}
         </p>
         <button type="button" className="min-h-12 font-bold text-primary" onClick={() => router.back()}>

@@ -134,7 +134,7 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
   return (
     <form className="mx-auto flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-2xl" onSubmit={submit}>
       {required && (
-        <p className="m-0 rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900" role="status">
+        <p className="m-0 rounded-xl bg-warning-soft p-4 text-sm font-semibold text-warning" role="status">
           Você precisa de uma chave Pix para criar cobranças.
         </p>
       )}
@@ -144,7 +144,7 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
       <section className="flex items-center justify-between gap-4 rounded-xl border border-outline/40 bg-surface p-4">
         <div className="flex flex-1 flex-col gap-1">
           <label htmlFor="pix-default" className="flex items-center gap-1.5 text-sm font-bold text-ink">
-            <Star size={16} aria-hidden="true" className="fill-current text-[#006c49]" />
+            <Star size={16} aria-hidden="true" className="fill-current text-success" />
             Definir como chave principal
           </label>
           <p className="m-0 text-xs leading-5 text-muted">Esta chave será usada como padrão ao criar novas cobranças e links Pix.</p>
@@ -162,13 +162,13 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
           />
           <span
             aria-hidden="true"
-            className="relative h-7 w-12 rounded-full bg-outline/60 transition after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:bg-white after:shadow-sm after:transition peer-checked:bg-primary peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30"
+            className="relative h-7 w-12 rounded-full bg-outline/60 transition after:absolute after:left-[2px] after:top-[2px] after:h-6 after:w-6 after:rounded-full after:bg-surface after:shadow-sm after:transition peer-checked:bg-primary peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30"
           />
         </span>
       </section>
 
       {error && (
-        <p className="m-0 rounded-xl bg-red-50 p-4 text-sm text-red-700" role="alert">
+        <p className="m-0 rounded-xl bg-danger-soft p-4 text-sm text-danger" role="alert">
           {error}
         </p>
       )}
@@ -178,7 +178,7 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
           type="submit"
           aria-label="Salvar chave Pix"
           disabled={busy}
-          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white transition active:scale-[0.985] disabled:opacity-60"
+          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary transition active:scale-[0.985] disabled:opacity-60"
         >
           {busy ? <Loader2 size={18} aria-hidden="true" className="animate-spin" /> : <Check size={18} aria-hidden="true" />}
           {busy ? "Salvando…" : "Salvar Chave Pix"}

@@ -52,7 +52,7 @@ export function CategorySelect({ value, onSelect, disabled }: CategorySelectProp
 
       {expanded && (
         <>
-          <div className="fixed inset-0 z-30 bg-black/40 sm:bg-transparent" role="presentation" onClick={close} />
+          <div className="fixed inset-0 z-30 bg-scrim sm:bg-transparent" role="presentation" onClick={close} />
 
           <div
             className="fixed inset-x-0 bottom-0 z-40 max-h-[70vh] overflow-y-auto rounded-t-3xl border-t border-outline/30 bg-canvas p-4 pb-8 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-2 sm:w-full sm:max-h-80 sm:rounded-2xl sm:border sm:p-2 sm:pb-2 sm:shadow-xl"

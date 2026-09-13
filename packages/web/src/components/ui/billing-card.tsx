@@ -5,9 +5,9 @@ import { ChevronRight, Share2 } from "lucide-react";
 import { CategoryIcon } from "@/components/ui/category-icon";
 
 const BADGE_CLASS: Record<BadgeTone, string> = {
-  danger: "bg-red-50 text-red-700",
-  info: "bg-blue-50 text-blue-800",
-  warning: "bg-amber-50 text-amber-900",
+  danger: "bg-danger-soft text-danger",
+  info: "bg-info-soft text-info",
+  warning: "bg-warning-soft text-warning",
   success: "bg-primary-soft/50 text-primary-strong",
   neutral: "bg-surface-muted text-muted",
 };
@@ -65,7 +65,7 @@ export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProp
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{billing.description}</span>
-            <span className={`shrink-0 text-xs font-semibold ${overdue ? "text-red-700" : "text-muted"}`}>{dueLabel}</span>
+            <span className={`shrink-0 text-xs font-semibold ${overdue ? "text-danger" : "text-muted"}`}>{dueLabel}</span>
           </span>
 
           {badges.length > 0 && (

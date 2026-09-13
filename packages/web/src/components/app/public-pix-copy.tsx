@@ -89,7 +89,7 @@ export function PublicPixCopy({ pixKey, timeoutMs = 2_000 }: PublicPixCopyProps)
         {label}
       </button>
       {error && (
-        <p role="alert" className="m-0 text-sm text-red-700">
+        <p role="alert" className="m-0 text-sm text-danger">
           {error}
         </p>
       )}

@@ -43,12 +43,12 @@ function Row({ icon: Icon, label, title, subtitle, danger = false, disabled = fa
 
   const content = (
     <>
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${danger ? "bg-red-50 text-red-700" : "bg-surface-muted text-primary-strong"}`}>
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${danger ? "bg-danger-soft text-danger" : "bg-surface-muted text-primary-strong"}`}>
         <Icon aria-hidden="true" size={20} strokeWidth={1.8} />
       </span>
 
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className={`text-base font-bold ${danger ? "text-red-700" : "text-ink"}`}>{title}</span>
+        <span className={`text-base font-bold ${danger ? "text-danger" : "text-ink"}`}>{title}</span>
         <span className="text-xs leading-4 text-muted">{subtitle}</span>
       </span>
 
@@ -81,7 +81,7 @@ type DialogShellProps = { titleId: string; onClose: () => void; children: ReactN
 function DialogShell({ titleId, onClose, children }: DialogShellProps) {
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-6"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-scrim px-6"
       role="presentation"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -303,7 +303,7 @@ export function ProfileScreen() {
                 />
                 <button
                   type="button"
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-white disabled:opacity-50"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-on-primary disabled:opacity-50"
                   aria-label="Salvar nome"
                   disabled={busy || !draft.trim()}
                   onClick={() => void saveName()}
@@ -433,7 +433,7 @@ export function ProfileScreen() {
             <button ref={cancel} type="button" className={`${DIALOG_ACTION} border border-outline text-primary`} onClick={closeDialog}>
               Cancelar
             </button>
-            <button type="button" className={`${DIALOG_ACTION} bg-primary text-white disabled:opacity-50`} disabled={busy} onClick={() => void logout()}>
+            <button type="button" className={`${DIALOG_ACTION} bg-primary text-on-primary disabled:opacity-50`} disabled={busy} onClick={() => void logout()}>
               Sair
             </button>
           </div>
@@ -442,7 +442,7 @@ export function ProfileScreen() {
 
       {dialog === "delete" && (
         <DialogShell titleId="profile-delete-title" onClose={closeDialog}>
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-700" aria-hidden="true">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-danger" aria-hidden="true">
             <TriangleAlert size={24} strokeWidth={1.8} />
           </span>
 
@@ -470,7 +470,7 @@ export function ProfileScreen() {
             <button ref={cancel} type="button" className={`${DIALOG_ACTION} border border-outline text-primary`} onClick={closeDialog}>
               Cancelar
             </button>
-            <button type="button" className={`${DIALOG_ACTION} bg-red-700 text-white disabled:opacity-50`} disabled={busy || confirmation !== "EXCLUIR"} onClick={() => void erase()}>
+            <button type="button" className={`${DIALOG_ACTION} bg-danger-solid text-on-primary disabled:opacity-50`} disabled={busy || confirmation !== "EXCLUIR"} onClick={() => void erase()}>
               Confirmar exclusão
             </button>
           </div>

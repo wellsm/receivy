@@ -348,7 +348,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
       <section className="flex min-h-[40vh] items-center justify-center">
         {error ? (
           <div className="flex flex-col gap-3 px-5">
-            <p role="alert" className="m-0 text-center text-red-700">
+            <p role="alert" className="m-0 text-center text-danger">
               {error}
             </p>
             <button type="button" className="min-h-12 font-bold text-primary" onClick={load}>
@@ -411,7 +411,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   return (
     <section className="flex flex-col gap-5 pb-10">
       {error && (
-        <p role="alert" className="m-0 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+        <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -427,8 +427,8 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                   <CategoryIcon category={billing.category} size={14} />
                   {billingCategoryLabel(billing.category)}
                 </span>
-                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">{typeTag(billing, current)}</span>
-                {payable && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900">A pagar</span>}
+                <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">{typeTag(billing, current)}</span>
+                {payable && <span className="rounded-full bg-warning-soft px-2.5 py-1 text-[11px] font-semibold text-warning">A pagar</span>}
               </div>
               <StatusTag label={STATE_LABELS[billing.state]} tone={stateTone} compact />
             </div>
@@ -509,7 +509,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
               {invite && billing.state === "active" && !payable && (
                 <div className="flex items-center justify-between px-1">
                   <span className="text-[11px] text-muted">Convite ativo até {dayMonth(invite.expiresAt.slice(0, 10))}</span>
-                  <button type="button" disabled={busy} onClick={() => void revokeInvite(billing)} className="min-h-8 text-[11px] font-semibold text-red-700">
+                  <button type="button" disabled={busy} onClick={() => void revokeInvite(billing)} className="min-h-8 text-[11px] font-semibold text-danger">
                     Revogar convite
                   </button>
                 </div>
@@ -550,7 +550,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                       type="button"
                       disabled={busy}
                       onClick={() => void resolveGuest(billing, guest, { action: "add" })}
-                      className="inline-flex min-h-8 items-center rounded-lg bg-primary px-3 text-[11px] font-semibold text-white disabled:opacity-50"
+                      className="inline-flex min-h-8 items-center rounded-lg bg-primary px-3 text-[11px] font-semibold text-on-primary disabled:opacity-50"
                     >
                       Novo participante
                     </button>
@@ -587,8 +587,8 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
               const name = payable ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
               const statusColor = {
                 success: "text-primary",
-                warning: "text-amber-700",
-                danger: "text-red-700",
+                warning: "text-warning",
+                danger: "text-danger",
                 neutral: "text-muted",
               }[status.tone];
 
@@ -637,7 +637,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                           type="button"
                           aria-label={`Revisar comprovante de ${name}`}
                           onClick={() => router.push(`/charges/${charge.id}`)}
-                          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[11px] font-semibold text-white"
+                          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[11px] font-semibold text-on-primary"
                         >
                           Revisar
                         </button>
@@ -647,7 +647,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
 
                   {isPending && !reviewing && !ended && (
                     <div className="flex items-center justify-between border-t border-outline/20 pt-2.5">
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-warning">
                         <Bell size={13} aria-hidden="true" />
                         Aguardando pagamento
                       </span>
@@ -667,7 +667,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                             aria-label={`Compartilhar link de ${name}`}
                             disabled={busy}
                             onClick={() => void shareCharge(charge)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white disabled:opacity-50"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-on-primary disabled:opacity-50"
                           >
                             <Share2 size={14} aria-hidden="true" />
                           </button>
@@ -739,7 +739,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <span
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                        state === "done" ? "bg-emerald-50 text-emerald-800" : state === "open" ? "bg-blue-50 text-blue-800" : "bg-surface-muted text-muted"
+                        state === "done" ? "bg-success-soft text-success" : state === "open" ? "bg-info-soft text-info" : "bg-surface-muted text-muted"
                       }`}
                     >
                       <Icon size={18} aria-hidden="true" />
@@ -773,7 +773,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
             aria-label="Compartilhar link de pagamento"
             disabled={busy}
             onClick={() => (pending.length === 1 ? void shareCharge(pending[0]!) : setChooser((open) => !open))}
-            className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white disabled:opacity-50"
+            className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary disabled:opacity-50"
           >
             <Share2 size={18} aria-hidden="true" />
             Compartilhar Link de Pagamento

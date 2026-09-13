@@ -185,7 +185,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
       <section className="flex flex-col gap-3">
         {error ? (
           <>
-            <p role="alert" className="m-0 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+            <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm text-danger">
               {error}
             </p>
             <button
@@ -224,7 +224,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
   return (
     <section className="mx-auto flex w-full max-w-md flex-col gap-5 md:max-w-none">
       {error && (
-        <p role="alert" className="m-0 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+        <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -262,8 +262,8 @@ export function ContactLedgerScreen({ id }: { id: string }) {
               {archived ? (
                 <StatusTag label="Contato removido" tone="neutral" />
               ) : active.length ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200/60 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
-                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-amber-500" />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">
+                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-warning" />
                   {active.length} cobrança{active.length === 1 ? "" : "s"} ativa
                   {active.length === 1 ? "" : "s"}
                 </span>
@@ -295,7 +295,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
               <div className="flex flex-1 flex-col gap-1 rounded-lg border border-outline/20 bg-surface-muted/80 p-3">
                 <span className="text-[11px] text-muted">A receber</span>
                 <strong className="text-2xl font-extrabold text-primary tabular-nums">{formatMoney(data.receivable)}</strong>
-                <span className="text-[11px] text-amber-800">
+                <span className="text-[11px] text-warning">
                   {pendingCount} pendência{pendingCount === 1 ? "" : "s"}
                 </span>
               </div>
@@ -321,7 +321,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
             <div className="flex items-center justify-between px-0.5">
               <h2 className="m-0 flex items-center gap-2 text-lg font-bold text-ink">
                 Cobranças Ativas
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold text-white">{active.length}</span>
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-bold text-on-primary">{active.length}</span>
               </h2>
               <span className="text-[11px] text-muted">Total: {formatMoney({ amountCents: activeCents, currency })}</span>
             </div>
@@ -357,7 +357,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
                   </Link>
 
                   <div className="flex items-center justify-between gap-2 border-t border-outline/20 pt-3">
-                    <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${due.late ? "bg-red-50 text-red-700" : "bg-amber-100/50 text-amber-900"}`}>{due.text}</span>
+                    <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${due.late ? "bg-danger-soft text-danger" : "bg-warning-soft text-warning"}`}>{due.text}</span>
                     {receivable && (
                       <div className="flex items-center gap-2">
                         {item.sharingState === "ready" && (
@@ -377,7 +377,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
                           aria-label={`Lembrar ${item.description}`}
                           disabled={busy}
                           onClick={() => void remind(item)}
-                          className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-semibold text-white disabled:opacity-50"
+                          className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-xs font-semibold text-on-primary disabled:opacity-50"
                         >
                           <Bell size={14} aria-hidden="true" />
                           Lembrar Pix
@@ -412,7 +412,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
                   className="flex items-center justify-between gap-3 rounded-xl border border-outline/20 bg-surface p-4 text-inherit no-underline"
                 >
                   <span className="flex min-w-0 flex-1 items-center gap-3">
-                    <span aria-hidden="true" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${paid ? "bg-emerald-50 text-primary" : "bg-surface-muted text-muted"}`}>
+                    <span aria-hidden="true" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${paid ? "bg-success-soft text-primary" : "bg-surface-muted text-muted"}`}>
                       {paid ? <Check size={18} /> : <Trash2 size={18} />}
                     </span>
                     <span className="flex min-w-0 flex-col">

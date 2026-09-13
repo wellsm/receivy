@@ -39,10 +39,10 @@ const LOAD_ERROR = "Não foi possível carregar a cobrança.";
 
 const STATUS_COLOR = {
   success: "text-primary",
-  warning: "text-amber-700",
-  danger: "text-red-700",
+  warning: "text-warning",
+  danger: "text-danger",
   neutral: "text-muted",
-  info: "text-blue-800",
+  info: "text-info",
 } as const;
 
 async function request<T>(path: string, init: RequestInit = {}, fallback = LOAD_ERROR): Promise<T> {
@@ -249,7 +249,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
       <section className="flex min-h-[40vh] items-center justify-center">
         {loaded ? (
           <div className="flex flex-col gap-3 px-5">
-            <p role="alert" className="m-0 text-center text-red-700">
+            <p role="alert" className="m-0 text-center text-danger">
               {error || LOAD_ERROR}
             </p>
             <button type="button" className="min-h-12 font-bold text-primary" onClick={load}>
@@ -287,7 +287,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   return (
     <section className="flex flex-col gap-4 pb-4">
       {error && (
-        <p role="alert" className="m-0 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+        <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -302,8 +302,8 @@ export function ChargeDetailScreen({ id }: { id: string }) {
                 <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${receivable ? "bg-primary-soft/50 text-primary-strong" : "bg-violet-100 text-violet-900"}`}>
                   {receivable ? "A receber" : "A pagar"}
                 </span>
-                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">{chargeTypeLabel(charge)}</span>
-                {ownBill && charge.ownedByViewer && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-900">Minha conta</span>}
+                <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">{chargeTypeLabel(charge)}</span>
+                {ownBill && charge.ownedByViewer && <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">Minha conta</span>}
               </div>
               <StatusTag label={state.label} tone={state.tone} compact />
             </div>
@@ -388,7 +388,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
             type="button"
             disabled={busy || (uploadAllowed && !picked)}
             onClick={() => (uploadAllowed ? sendPicked() : router.push(`/charges/${id}/proof`))}
-            className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white transition hover:bg-primary-strong disabled:opacity-50"
+            className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
           >
             {uploadAllowed ? <CloudUpload size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
             {footerLabel}

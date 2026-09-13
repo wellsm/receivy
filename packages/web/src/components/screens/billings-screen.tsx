@@ -150,11 +150,11 @@ export function BillingsScreen() {
             onChange={(event) => setTerm(event.target.value)}
           />
           <Link
-            className="hidden min-h-12 shrink-0 items-center gap-2 rounded-xl bg-primary-strong px-4 text-sm font-bold text-white md:inline-flex"
+            className="hidden min-h-12 shrink-0 items-center gap-2 rounded-xl bg-primary-strong px-4 text-sm font-bold text-on-primary md:inline-flex"
             href="/billings/new"
             aria-label="Nova conta"
           >
-            <Plus size={18} aria-hidden="true" className="text-white" />
+            <Plus size={18} aria-hidden="true" className="text-on-primary" />
             Nova conta
           </Link>
         </div>
@@ -213,11 +213,11 @@ export function BillingsScreen() {
       )}
 
       {error && (
-        <div className="flex flex-col gap-2 rounded-xl bg-red-50 p-4">
-          <p role="alert" className="m-0 text-sm text-red-700">
+        <div className="flex flex-col gap-2 rounded-xl bg-danger-soft p-4">
+          <p role="alert" className="m-0 text-sm text-danger">
             {error}
           </p>
-          <button type="button" className="self-start text-sm font-bold text-red-700" onClick={() => void load()}>
+          <button type="button" className="self-start text-sm font-bold text-danger" onClick={() => void load()}>
             Tentar novamente
           </button>
         </div>
@@ -227,7 +227,7 @@ export function BillingsScreen() {
         <section className="flex flex-col gap-3 rounded-2xl border border-outline/40 bg-surface p-5">
           <h2 className="m-0 text-2xl font-extrabold text-primary-strong">Nenhuma conta ainda</h2>
           <p className="m-0 text-sm leading-6 text-muted">Crie a primeira para acompanhar os vencimentos.</p>
-          <Link className="inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 font-bold text-white" href="/billings/new">
+          <Link className="inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 font-bold text-on-primary" href="/billings/new">
             Nova conta
           </Link>
         </section>
@@ -256,12 +256,12 @@ export function BillingsScreen() {
       {/* Narrow viewports keep the CTA pinned above the tab bar; wide ones show it beside the search. */}
       <div className="fixed inset-x-0 bottom-[72px] z-[5] border-t border-outline/20 bg-canvas/95 px-5 pb-2 pt-3 backdrop-blur-md md:hidden">
         <Link
-          className="flex h-13 items-center justify-center gap-2 rounded-xl bg-primary-strong text-base font-bold text-white"
+          className="flex h-13 items-center justify-center gap-2 rounded-xl bg-primary-strong text-base font-bold text-on-primary"
           href="/billings/new"
           aria-label="Nova conta"
         >
-          <Plus size={20} aria-hidden="true" className="text-white" />
-          <span className="text-base font-bold text-white">Cadastrar Nova Conta</span>
+          <Plus size={20} aria-hidden="true" className="text-on-primary" />
+          <span className="text-base font-bold text-on-primary">Cadastrar Nova Conta</span>
         </Link>
       </div>
     </section>

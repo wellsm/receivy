@@ -19,7 +19,7 @@ type ScopeDialogProps = {
 };
 
 const SECONDARY_STYLES = {
-  danger: "bg-red-600 text-white",
+  danger: "bg-danger-solid text-on-primary",
   neutral: "border border-outline/50 bg-surface text-ink",
 } as const;
 
@@ -34,7 +34,7 @@ export function ScopeDialog({ title, subtitle, icon: Icon, explanation, primaryL
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-scrim px-4"
       role="presentation"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -57,7 +57,7 @@ export function ScopeDialog({ title, subtitle, icon: Icon, explanation, primaryL
         </div>
         <p className="m-0 text-xs leading-5 text-muted">{explanation}</p>
         <div className="flex flex-col gap-2.5 pt-1">
-          <button type="button" disabled={busy} onClick={onPrimary} className="h-11 rounded-xl bg-primary text-sm font-semibold text-white transition hover:bg-primary-strong disabled:opacity-50">
+          <button type="button" disabled={busy} onClick={onPrimary} className="h-11 rounded-xl bg-primary text-sm font-semibold text-on-primary transition hover:bg-primary-strong disabled:opacity-50">
             {primaryLabel}
           </button>
           <button type="button" disabled={busy} onClick={onSecondary} className={`h-11 rounded-xl text-sm font-semibold transition disabled:opacity-50 ${SECONDARY_STYLES[secondaryTone]}`}>

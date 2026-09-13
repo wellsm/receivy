@@ -84,7 +84,7 @@ export function ContactPickerSheet({ selected, onToggle, onSeen, onClose, onNew,
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-scrim sm:items-center"
       role="presentation"
       onKeyDown={event => {
         if (event.key !== "Escape") {
@@ -123,7 +123,7 @@ export function ContactPickerSheet({ selected, onToggle, onSeen, onClose, onNew,
             + Novo contato
           </button>
         )}
-        {error && <p className="m-0 rounded-xl bg-red-50 p-4 text-red-700" role="alert">{error}</p>}
+        {error && <p className="m-0 rounded-xl bg-danger-soft p-4 text-danger" role="alert">{error}</p>}
         {loading && <p className="m-0 text-muted" role="status">Carregando contatos…</p>}
         {!loading && !error && !contacts.length && <p className="m-0 py-6 text-muted">Nenhum contato encontrado.</p>}
         <ul className="m-0 flex list-none flex-col gap-2 overflow-y-auto p-0">
@@ -156,7 +156,7 @@ export function ContactPickerSheet({ selected, onToggle, onSeen, onClose, onNew,
               Carregar mais
             </button>
           )}
-          <button type="button" className="min-h-14 rounded-2xl bg-primary font-bold text-white" onClick={close}>
+          <button type="button" className="min-h-14 rounded-2xl bg-primary font-bold text-on-primary" onClick={close}>
             Concluir
           </button>
         </div>

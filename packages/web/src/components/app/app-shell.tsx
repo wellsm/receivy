@@ -44,7 +44,7 @@ function HeaderBell({ badge = false }: { badge?: boolean }) {
   return (
     <Link className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted" href="/settings" aria-label="Notificações">
       <Bell aria-hidden="true" size={21} strokeWidth={1.8} />
-      {badge && <span className="absolute top-[9px] right-[9px] h-[9px] w-[9px] rounded-full border-2 border-surface bg-red-600" aria-hidden="true" data-testid="header-bell-dot" />}
+      {badge && <span className="absolute top-[9px] right-[9px] h-[9px] w-[9px] rounded-full border-2 border-surface bg-danger-solid" aria-hidden="true" data-testid="header-bell-dot" />}
     </Link>
   );
 }

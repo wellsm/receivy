@@ -154,7 +154,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
   return (
     <section className="flex flex-col gap-4 pb-4">
       {error && (
-        <p role="alert" className="m-0 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+        <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -221,7 +221,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
                 aria-label="Rejeitar comprovante"
                 disabled={busy}
                 onClick={() => void review("rejected")}
-                className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-xl border border-outline/50 bg-surface text-sm font-bold text-red-700 disabled:opacity-50"
+                className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-xl border border-outline/50 bg-surface text-sm font-bold text-danger disabled:opacity-50"
               >
                 <X size={18} aria-hidden="true" />
                 Rejeitar
@@ -230,7 +230,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
                 type="button"
                 disabled={busy}
                 onClick={() => setConfirmAccept(true)}
-                className="flex h-[52px] flex-[2] items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white transition hover:bg-primary-strong disabled:opacity-50"
+                className="flex h-[52px] flex-[2] items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
               >
                 <Check size={18} aria-hidden="true" />
                 Marcar como pago
@@ -260,7 +260,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
                 type="button"
                 disabled={busy}
                 onClick={() => picker.current?.click()}
-                className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white transition hover:bg-primary-strong disabled:opacity-50"
+                className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
               >
                 <CloudUpload size={18} aria-hidden="true" />
                 Enviar novo comprovante
@@ -273,7 +273,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
               type="button"
               disabled={busy}
               onClick={() => void withdraw()}
-              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-xl border border-red-200 bg-surface text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+              className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-xl border border-danger/30 bg-surface text-sm font-bold text-danger transition hover:bg-danger-soft disabled:opacity-50"
             >
               <Trash2 size={18} aria-hidden="true" />
               Apagar e enviar outro

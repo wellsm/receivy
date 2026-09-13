@@ -102,7 +102,7 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
           )}
 
           {providers.apple && (
-            <button type="button" disabled={busy} onClick={() => void socialLogin("apple")} className={`${SOCIAL_BUTTON} bg-black text-white`}>
+            <button type="button" disabled={busy} onClick={() => void socialLogin("apple")} className={`${SOCIAL_BUTTON} bg-ink text-surface`}>
               <Apple aria-hidden="true" size={20} />
               Continuar com Apple
             </button>
@@ -133,14 +133,14 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
                 className="h-full min-w-0 flex-1 border-0 bg-transparent text-[16px] text-ink outline-none placeholder:text-muted focus-visible:outline-none"
               />
             </div>
-            <button type="submit" disabled={busy} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-primary text-base font-extrabold text-white transition active:opacity-80 disabled:opacity-50">
+            <button type="submit" disabled={busy} className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-primary text-base font-extrabold text-on-primary transition active:opacity-80 disabled:opacity-50">
               Continuar com E-mail
               {busy ? <Loader2 aria-hidden="true" size={20} className="animate-spin" /> : <ArrowRight aria-hidden="true" size={20} />}
             </button>
           </form>
 
           {error && (
-            <p role="alert" className="m-0 rounded-xl bg-red-50 p-3 text-sm leading-5 text-red-700">
+            <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm leading-5 text-danger">
               {error}
             </p>
           )}

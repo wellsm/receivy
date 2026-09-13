@@ -144,7 +144,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       <p className="m-0 leading-6 text-muted">{INTRO}</p>
 
       {linked && (
-        <p className="m-0 rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900" role="status">
+        <p className="m-0 rounded-xl bg-warning-soft p-4 text-sm font-semibold text-warning" role="status">
           {LINKED_NOTE}
         </p>
       )}
@@ -190,7 +190,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       </fieldset>
 
       {error && (
-        <p role="alert" className="m-0 rounded-xl bg-red-50 p-4 text-sm text-red-700">
+        <p role="alert" className="m-0 rounded-xl bg-danger-soft p-4 text-sm text-danger">
           {error}
         </p>
       )}
@@ -199,7 +199,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
         <button
           type="submit"
           disabled={busy}
-          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white transition active:scale-[0.985] disabled:opacity-60"
+          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary transition active:scale-[0.985] disabled:opacity-60"
         >
           {busy ? <Loader2 size={18} aria-hidden="true" className="animate-spin" /> : <Check size={18} aria-hidden="true" />}
           {busy ? "Salvando…" : "Salvar contato"}

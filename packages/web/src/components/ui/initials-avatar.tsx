@@ -14,7 +14,7 @@ export function InitialsAvatar({ name, size = 28, inverted = false }: InitialsAv
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-extrabold ${inverted ? "bg-primary text-white" : "bg-primary-soft/60 text-primary-strong"}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-extrabold ${inverted ? "bg-primary text-on-primary" : "bg-primary-soft/60 text-primary-strong"}`}
       style={{ width: size, height: size, fontSize: size * 0.42 }}
     >
       {initialOf(name)}

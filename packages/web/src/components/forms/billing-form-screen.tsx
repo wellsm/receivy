@@ -585,7 +585,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           </span>
           <h2 className="m-0 text-xl font-bold text-primary-strong">{PIX_GATE_TITLE}</h2>
           <p className="m-0 max-w-sm text-sm leading-5 text-muted">{PIX_GATE_NOTE}</p>
-          <button type="button" className="mt-2 h-12 w-full max-w-sm rounded-xl bg-primary font-bold text-white" onClick={() => leaveTo(PIX_SETUP)}>
+          <button type="button" className="mt-2 h-12 w-full max-w-sm rounded-xl bg-primary font-bold text-on-primary" onClick={() => leaveTo(PIX_SETUP)}>
             Cadastrar chave Pix
           </button>
         </section>
@@ -805,7 +805,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
               <label
                 key={option.value}
                 className={`flex min-h-12 flex-1 cursor-pointer items-center justify-center rounded-xl border px-2 text-xs font-semibold ${
-                  active ? "border-primary bg-primary text-white" : "border-outline/40 bg-surface text-ink"
+                  active ? "border-primary bg-primary text-on-primary" : "border-outline/40 bg-surface text-ink"
                 }`}
               >
                 <input
@@ -984,7 +984,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       </div>
       </div>
 
-      {error && <p className="m-0 rounded-xl bg-red-50 p-4 text-red-700" role="alert">{error}</p>}
+      {error && <p className="m-0 rounded-xl bg-danger-soft p-4 text-danger" role="alert">{error}</p>}
 
       <ScreenFooter className="-mx-1 border-t border-outline/30 bg-surface/95 px-1 pb-2 pt-4 backdrop-blur">
         {busy && <p className="m-0 mb-2 text-sm text-muted" role="status">Salvando…</p>}
@@ -994,7 +994,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
             Tentar novamente
           </button>
         ) : (
-          <button type="submit" className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white disabled:opacity-50" disabled={busy || !totalCents}>
+          <button type="submit" className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary disabled:opacity-50" disabled={busy || !totalCents}>
             {busy && <Loader2 aria-hidden="true" size={18} className="animate-spin" />}
             {action}
           </button>

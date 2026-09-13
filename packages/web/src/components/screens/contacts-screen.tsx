@@ -161,7 +161,7 @@ export function ContactsScreen({ returnTo }: { returnTo?: string }) {
         {/* Floats over the list on phones; sits in the heading row once there is room. */}
         <Link
           href={newContactHref}
-          className="fixed right-5 bottom-24 z-20 flex h-14 items-center gap-2 rounded-full bg-primary px-5 font-bold text-white shadow-lg transition active:scale-[0.98] md:static md:h-12 md:shadow-none"
+          className="fixed right-5 bottom-24 z-20 flex h-14 items-center gap-2 rounded-full bg-primary px-5 font-bold text-on-primary shadow-lg transition active:scale-[0.98] md:static md:h-12 md:shadow-none"
         >
           <Plus size={18} aria-hidden="true" />
           Novo contato
@@ -169,8 +169,8 @@ export function ContactsScreen({ returnTo }: { returnTo?: string }) {
       </div>
 
       {error && (
-        <div className="flex flex-col gap-2 rounded-2xl bg-red-50 p-4">
-          <p role="alert" className="m-0 text-red-700">
+        <div className="flex flex-col gap-2 rounded-2xl bg-danger-soft p-4">
+          <p role="alert" className="m-0 text-danger">
             {error}
           </p>
 

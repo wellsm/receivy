@@ -89,7 +89,7 @@ it("renders one card per billing with badges, relative due date, amount and next
 
   const overdue = screen.getByRole("article", { name: "Cobrança Aluguel" });
   const overdueLabel = within(overdue).getByText("Atrasado 1 dia");
-  expect(overdueLabel).toHaveClass("text-red-700");
+  expect(overdueLabel).toHaveClass("text-danger");
 });
 
 it("sends the search term after the debounce without a state filter", async () => {

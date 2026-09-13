@@ -212,6 +212,18 @@ curl -s $API/auth/email/code -H 'content-type: application/json' -d '{"email":"x
 
 `pnpm dev:mobile` com dev client. Rodar 1, 2, 3, 4, 5, 6 (envio de comprovante pela tela `charges/[id]/proof`), 9 e 14. Diferenças esperadas: tabs nativas no iOS, header vindo do router, pull-to-refresh nas listas. Push continua `disabled` localmente.
 
+## 17. Mês materializado
+
+- [ ] Criar recorrente mensal com vencimento daqui a alguns dias neste mês. Esperado: a cobrança aparece no Feed e no detalhe na hora; nenhum e-mail/push agora; o lembrete chega às 06:00 do dia.
+- [ ] Criar recorrente com vencimento hoje. Esperado: aviso inicial imediato.
+- [ ] Criar parcelado 3× começando hoje. Esperado: 3 cobranças, 1 aviso (a de hoje).
+- [ ] Pausar com pendentes → modal "Pausar conta?". "Manter as deste mês": a cobrança do mês continua pendente. Repetir em outra conta com "Cancelar pendentes (N)": todas canceladas.
+- [ ] Encerrar parcelado com "Manter as deste mês". Esperado: parcela do mês pendente, meses seguintes canceladas.
+- [ ] Pausar/Encerrar sem pendentes. Esperado: Pausar direto; Encerrar com a confirmação simples.
+- [ ] Editar valor de recorrente com cobrança futura no mês → "Aplicar também às deste mês". Esperado: mesma cobrança (mesmo link público) com o novo valor. Repetir com "Só a partir do mês seguinte": valor do mês intacto.
+- [ ] Editar só a categoria. Esperado: salva sem modal.
+- [ ] Trocar o vencimento de 15 para 30 no dia 16 de um mês que já tem a cobrança de 15. Esperado: nenhuma segunda cobrança no mês; próxima em 30 do mês seguinte.
+
 ## Divergências
 
 Copie um bloco por item:

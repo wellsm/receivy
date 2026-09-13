@@ -224,6 +224,17 @@ curl -s $API/auth/email/code -H 'content-type: application/json' -d '{"email":"x
 - [ ] Editar só a categoria. Esperado: salva sem modal.
 - [ ] Trocar o vencimento de 15 para 30 no dia 16 de um mês que já tem a cobrança de 15. Esperado: nenhuma segunda cobrança no mês; próxima em 30 do mês seguinte.
 
+## 18. Dark mode
+
+- [ ] Web, Perfil › Aparência em Sistema com o sistema no escuro: Feed, Contas, detalhe da conta, cobrança e Perfil escuros, sem flash claro ao recarregar.
+- [ ] Web, trocar para Claro e depois Escuro: aplica na hora e sobrevive ao recarregar a página.
+- [ ] Web, modais (Pausar/Encerrar, edição com escopo, sair, excluir conta): fundo escurecido e textos legíveis nos dois temas.
+- [ ] Web, selos Atrasada, Em análise, Paga e Lembrete: cores de status legíveis no escuro.
+- [ ] Mobile (após rebuild), Sistema: acompanha o modo do aparelho ao trocar pela central de controle.
+- [ ] Mobile, Escuro fixado com o aparelho no claro: StatusBar clara, header e abas escuros, alertas nativos e date picker escuros.
+- [ ] Mobile, fechar e reabrir o app com Escuro fixado: abre direto escuro, sem flash.
+- [ ] Mobile iOS (NativeTabs) e Android (Tabs): ícones ativo e inativo legíveis nos dois temas.
+
 ## Divergências
 
 Copie um bloco por item:

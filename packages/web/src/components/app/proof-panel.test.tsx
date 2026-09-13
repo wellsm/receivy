@@ -54,6 +54,23 @@ it("completes the upload right after the PUT instead of polling the slot", async
   expect(sessionStorage.getItem("receivy-proof-upload")).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
 });
+it("keeps the send button busy from the click until the upload is completed", async () => {
+  let finishPut: () => void = () => {};
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (init?.method === "PUT") return new Promise<Response>(resolve => { finishPut = () => resolve(new Response(null, { status: 204 })); });
+    if (init?.method === "POST") return url === COMPLETE ? pending() : ticket();
+    return empty();
+  });
+  render(<ProofPanel base={BASE} state={ChargeState.Pending} />);
+  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [pdf()] } });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
+  const sending = await screen.findByRole("button", { name: "Enviando…" });
+  expect(sending).toBeDisabled();
+  expect(sending.getAttribute("aria-busy")).toBe("true");
+  finishPut();
+  await screen.findByText("Comprovante enviado para revisão.");
+  expect(screen.queryByRole("button", { name: "Enviando…" })).toBeNull();
+});
 it("keeps the flag when the API cannot attach the file so a reload asks again", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
     if (init?.method === "PUT") return new Response(null, { status: 204 });

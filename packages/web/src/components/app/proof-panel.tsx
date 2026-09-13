@@ -2,10 +2,10 @@
 import { useEffect, useState } from "react";
 import { fileSizeText, type ChargeState, type ProofUploadTicket, type PublicProofState } from "@receivy/common";
 import { responseMessage } from "@/lib/financial-response";
-import { CloudUpload, FileText, Receipt, Trash2 } from "lucide-react";
+import { CloudUpload, FileText, Loader2, Receipt, Trash2 } from "lucide-react";
 
 const HINT = "m-0 text-sm leading-5 text-muted";
-const PRIMARY_BUTTON = "min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50";
+const PRIMARY_BUTTON = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50";
 const DANGER_BUTTON = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-danger/30 px-4 text-sm font-semibold text-danger transition hover:bg-danger-soft disabled:opacity-50";
 const FILE_INPUT_LABEL = "Comprovante JPG, PNG ou PDF";
 /** Only a flag: the API knows the slot by the payer, so a reload just asks it again. */
@@ -212,8 +212,9 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
               />
             </label>
           )}
-          <button type="button" disabled={busy || !file} onClick={() => void upload()} className={PRIMARY_BUTTON}>
-            Enviar comprovante
+          <button type="button" disabled={busy || !file} aria-busy={busy} onClick={() => void upload()} className={PRIMARY_BUTTON}>
+            {busy && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}
+            {busy ? "Enviando…" : "Enviar comprovante"}
           </button>
         </>
       )}

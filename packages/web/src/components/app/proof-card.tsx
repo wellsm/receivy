@@ -1,7 +1,7 @@
 "use client";
 
 import { canMarkPaid, canUploadProof, fileSizeText, momentText, proofNote, proofStateLabel, type ChargeDetail } from "@receivy/common";
-import { Check, CloudUpload, Eye, FileText, Image as ImageIcon, Receipt } from "lucide-react";
+import { Check, CloudUpload, Eye, FileText, Image as ImageIcon, Loader2, Receipt } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PROOF_ACCEPT } from "@/lib/proof-upload";
 import { StatusTag } from "@/components/ui/status-tag";
@@ -12,6 +12,8 @@ const DROPZONE =
 type ProofCardProps = {
   charge: ChargeDetail;
   busy: boolean;
+  /** True from the send click until the upload is completed, so the send button reads as in flight. */
+  sending?: boolean;
   /** The staged file, previewed in the card until it is sent. */
   picked: File | null;
   onView: () => void;
@@ -57,7 +59,7 @@ function FilePicker({ label, disabled, onPick, className = DROPZONE }: { label: 
 }
 
 /** The picked file before it goes up: a thumbnail for an image, a document mark otherwise. */
-function PickedPreview({ file, url, busy, onPick, onSend }: { file: File; url: string | null; busy: boolean; onPick: (file: File) => void; onSend?: () => void }) {
+function PickedPreview({ file, url, busy, sending, onPick, onSend }: { file: File; url: string | null; busy: boolean; sending?: boolean; onPick: (file: File) => void; onSend?: () => void }) {
   const FileIcon = file.type === "application/pdf" ? FileText : ImageIcon;
 
   return (
@@ -89,11 +91,12 @@ function PickedPreview({ file, url, busy, onPick, onSend }: { file: File; url: s
           <button
             type="button"
             disabled={busy}
+            aria-busy={sending}
             onClick={onSend}
             className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
           >
-            <CloudUpload size={16} aria-hidden="true" />
-            Enviar comprovante
+            {sending ? <Loader2 size={16} aria-hidden="true" className="animate-spin" /> : <CloudUpload size={16} aria-hidden="true" />}
+            {sending ? "Enviando…" : "Enviar comprovante"}
           </button>
         )}
       </div>
@@ -102,7 +105,7 @@ function PickedPreview({ file, url, busy, onPick, onSend }: { file: File; url: s
 }
 
 /** The proof section of a charge: the file with "Ver", plus accept (creditor) or replace (debtor) when allowed. */
-export function ProofCard({ charge, busy, picked, onView, onPick, onSend, onAccept }: ProofCardProps) {
+export function ProofCard({ charge, busy, sending, picked, onView, onPick, onSend, onAccept }: ProofCardProps) {
   const proof = charge.proof;
   const upload = canUploadProof(charge);
   // Whoever collects settles from here: accepting the file under review, or by hand when there is none to accept.
@@ -136,7 +139,7 @@ export function ProofCard({ charge, busy, picked, onView, onPick, onSend, onAcce
 
         {upload ? (
           <>
-            {picked ? <PickedPreview file={picked} url={previewUrl} busy={busy} onPick={pick} onSend={onSend} /> : <FilePicker label="Selecionar comprovante" disabled={busy} onPick={pick} />}
+            {picked ? <PickedPreview file={picked} url={previewUrl} busy={busy} sending={sending} onPick={pick} onSend={onSend} /> : <FilePicker label="Selecionar comprovante" disabled={busy} onPick={pick} />}
             <p className="m-0 text-[11px] text-muted">JPG, PNG ou PDF de até 10 MB.</p>
           </>
         ) : (
@@ -187,7 +190,7 @@ export function ProofCard({ charge, busy, picked, onView, onPick, onSend, onAcce
 
       {note && <p className="m-0 text-xs leading-4 text-muted">{note}</p>}
 
-      {upload && picked && <PickedPreview file={picked} url={previewUrl} busy={busy} onPick={pick} onSend={onSend} />}
+      {upload && picked && <PickedPreview file={picked} url={previewUrl} busy={busy} sending={sending} onPick={pick} onSend={onSend} />}
 
       <div className="flex gap-2">
         <button

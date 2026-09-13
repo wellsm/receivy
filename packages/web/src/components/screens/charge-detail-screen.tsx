@@ -20,7 +20,7 @@ import {
   type PublicLink,
   REMINDER_QUOTA_MESSAGE,
 } from "@receivy/common";
-import { Bell, CalendarDays, Check, CircleStop, CloudUpload, Copy, Eye, RotateCcw, Share2 } from "lucide-react";
+import { Bell, CalendarDays, Check, CircleStop, CloudUpload, Copy, Eye, Loader2, RotateCcw, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
@@ -88,6 +88,8 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  // `busy` also covers reminders, cancel and share; only an upload reads as "Enviando…".
+  const [sending, setSending] = useState(false);
   // Picking only stages the file; the footer button is what sends it.
   const [picked, setPicked] = useState<File | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -224,7 +226,11 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   }
 
   async function upload(file: File) {
+    setSending(true);
+
     const sent = await run(() => uploadProofFile(base, file), "Não foi possível enviar o comprovante.");
+
+    setSending(false);
 
     if (!sent) {
       return;
@@ -365,6 +371,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
           <ProofCard
             charge={charge}
             busy={busy}
+            sending={sending}
             picked={picked}
             onView={() => router.push(`/charges/${id}/proof`)}
             onPick={setPicked}
@@ -387,11 +394,12 @@ export function ChargeDetailScreen({ id }: { id: string }) {
           <button
             type="button"
             disabled={busy || (uploadAllowed && !picked)}
+            aria-busy={sending}
             onClick={() => (uploadAllowed ? sendPicked() : router.push(`/charges/${id}/proof`))}
             className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
           >
-            {uploadAllowed ? <CloudUpload size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
-            {footerLabel}
+            {sending ? <Loader2 size={18} aria-hidden="true" className="animate-spin" /> : uploadAllowed ? <CloudUpload size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+            {sending ? "Enviando…" : footerLabel}
           </button>
         </ScreenFooter>
       )}

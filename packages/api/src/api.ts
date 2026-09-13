@@ -9,6 +9,7 @@ import type {
   GuestAlreadyResolvedError,
   IdempotencyMismatchError,
   PayableHasNoSplitError,
+  PendingChargesWithoutStateError,
   ReceivableHasNoPayeeError
 } from './billings/errors';
 import type { BillingRoutes } from './billings/routes';
@@ -93,7 +94,14 @@ export declare class Api extends Http.Service {
         PixRequiredError,
         PixSnapshotLockedError
       ];
-      422: [ProofInvalidFileError, ProofTooLargeError, ProofSizeMismatchError, ProofReviewInvalidError, TimelineOverflowError];
+      422: [
+        ProofInvalidFileError,
+        ProofTooLargeError,
+        ProofSizeMismatchError,
+        ProofReviewInvalidError,
+        TimelineOverflowError,
+        PendingChargesWithoutStateError
+      ];
       429: [TooManyRequestsError, ReminderQuotaError];
     };
   }>;

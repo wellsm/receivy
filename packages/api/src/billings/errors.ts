@@ -1,4 +1,4 @@
-import { ConflictError } from '../common/errors';
+import { ConflictError, UnprocessableEntityError } from '../common/errors';
 
 export class IdempotencyMismatchError extends ConflictError {
   constructor(message = 'Idempotency-Key já usada com outro conteúdo.') {
@@ -51,5 +51,11 @@ export class GuestAlreadyResolvedError extends ConflictError {
 export class BillingInactiveError extends ConflictError {
   constructor(message = 'Essa conta não está mais ativa.') {
     super(message, 'BILLING_INACTIVE');
+  }
+}
+
+export class PendingChargesWithoutStateError extends UnprocessableEntityError {
+  constructor(message = 'Escolha pausar ou encerrar para decidir sobre as cobranças pendentes.') {
+    super(message, 'PENDING_CHARGES_WITHOUT_STATE');
   }
 }

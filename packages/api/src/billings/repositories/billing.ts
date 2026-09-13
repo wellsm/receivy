@@ -28,6 +28,7 @@ import {
   materializationDate,
   materializationHorizon,
   normalizeBillingInput,
+  PendingChargesAction,
   type PixKeyType,
   type PixSnapshot,
   planBillingCharges,
@@ -56,6 +57,7 @@ import {
   BillingSnapshotLockedError,
   IdempotencyMismatchError,
   PayableHasNoSplitError,
+  PendingChargesWithoutStateError,
   ReceivableHasNoPayeeError
 } from '../errors';
 import { BillingGuestState } from '../schemas/billing-guest';
@@ -412,10 +414,10 @@ async function searchBillingIds(
   return rows.map((row) => String(row['id']));
 }
 
-async function cancelPendingCharges(db: DbClient, ownerId: string, billingId: string, now: string) {
+async function cancelPendingCharges(db: DbClient, ownerId: string, billingId: string, now: string, reason: string, after?: string) {
   const pending = await db.charges.findMany({
     select: ChargeRepository.SELECT,
-    where: { billing_id: billingId, state: ChargeState.Pending },
+    where: { billing_id: billingId, state: ChargeState.Pending, ...(after ? { due_date: { gt: after } } : {}) },
     lock: true
   });
 
@@ -426,15 +428,35 @@ async function cancelPendingCharges(db: DbClient, ownerId: string, billingId: st
       eventableType: EventableType.Charge,
       eventableId: row.id,
       actorId: ownerId,
-      payload: { reason: 'billing_ended' },
+      payload: { reason },
       at: now
     });
   }
 }
 
+/** Pausar keeps and Encerrar cancels by default; Keep only drops what falls after this month, Cancel drops every pending charge. */
+async function settlePendingCharges(db: DbClient, ownerId: string, billingId: string, patch: BillingPatch, today: string, now: string) {
+  const ended = patch.state === BillingState.Ended;
+  const reason = ended ? 'billing_ended' : 'billing_paused';
+  const action = patch.pendingCharges ?? (ended ? PendingChargesAction.Cancel : PendingChargesAction.Keep);
+
+  if (action === PendingChargesAction.Cancel) {
+    await cancelPendingCharges(db, ownerId, billingId, now, reason);
+    return;
+  }
+
+  await cancelPendingCharges(db, ownerId, billingId, now, reason, endOfMonth(today));
+}
+
 function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
   if (row.state === BillingState.Ended) {
     throw new BillingEndedError();
+  }
+
+  const settles = patch.state === BillingState.Paused || patch.state === BillingState.Ended;
+
+  if (patch.pendingCharges !== undefined && !settles) {
+    throw new PendingChargesWithoutStateError();
   }
 
   if (patch.state === BillingState.Paused && row.type !== BillingType.Indefinite) {
@@ -968,8 +990,8 @@ export namespace BillingRepository {
         throw new HttpNotFoundError();
       }
 
-      if (patch.state === BillingState.Ended) {
-        await cancelPendingCharges(tx, ownerId, id, instant);
+      if (patch.state === BillingState.Paused || patch.state === BillingState.Ended) {
+        await settlePendingCharges(tx, ownerId, id, patch, today, instant);
       }
 
       await audit(tx, ownerId, id, patch.state ? `billing.${patch.state}` : 'billing.edited', instant);

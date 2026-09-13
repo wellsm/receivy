@@ -438,11 +438,25 @@ async function cancelPendingCharges(db: DbClient, ownerId: string, billingId: st
   }
 }
 
-/** Pausar keeps and Encerrar cancels by default; Keep only drops what falls after this month, Cancel drops every pending charge. */
+/**
+ * Pausar never cancels unless the caller says `Cancel`: pausing keeps every pending charge no matter
+ * what an old app sends (absent or `Keep`), so a −N reminder that already materialized next month's
+ * charge is never left stranded past the resume cursor. Encerrar keeps its old default: absent cancels
+ * everything, `Keep` only drops what falls after this month, `Cancel` drops every pending charge.
+ */
 async function settlePendingCharges(db: DbClient, ownerId: string, billingId: string, patch: BillingPatch, today: string, now: string) {
   const ended = patch.state === BillingState.Ended;
   const reason = ended ? 'billing_ended' : 'billing_paused';
-  const action = patch.pendingCharges ?? (ended ? PendingChargesAction.Cancel : PendingChargesAction.Keep);
+
+  if (!ended) {
+    if (patch.pendingCharges === PendingChargesAction.Cancel) {
+      await cancelPendingCharges(db, ownerId, billingId, now, reason);
+    }
+
+    return;
+  }
+
+  const action = patch.pendingCharges ?? PendingChargesAction.Cancel;
 
   if (action === PendingChargesAction.Cancel) {
     await cancelPendingCharges(db, ownerId, billingId, now, reason);
@@ -470,7 +484,13 @@ function touchesCharges(patch: BillingPatch): boolean {
 }
 
 /** EditScope.CurrentMonth: this month's charges that are not due yet follow the edit; returns the created charge ids to announce. */
-async function rewriteMonthCharges(db: DbClient, row: BillingRepository.Row, today: string, now: string): Promise<string[]> {
+async function rewriteMonthCharges(
+  db: DbClient,
+  row: BillingRepository.Row,
+  patch: BillingPatch,
+  today: string,
+  now: string
+): Promise<string[]> {
   const monthEnd = endOfMonth(today);
   const { records } = await db.charges.findMany({
     select: ChargeRepository.SELECT,
@@ -483,19 +503,24 @@ async function rewriteMonthCharges(db: DbClient, row: BillingRepository.Row, tod
     return [];
   }
 
-  // Monthly and yearly rules have one occurrence per month: the new day inside the month, or the current one.
-  const dueDate = billingDates(calendarRule(row), addCalendarDays(today, 1), monthEnd, 1)[0] ?? editable[0]!.due_date;
+  const rescheduled = patch.startDate !== undefined || patch.dueRule !== undefined;
+  const pixTouched = patch.paymentMethodId !== undefined || patch.clearPaymentMethod || patch.pix !== undefined || patch.clearPix;
+
+  // Monthly and yearly rules have one occurrence per month: only a reschedule looks for a new day inside
+  // the month; otherwise the stale start_date/due_rule from an earlier NextMonth edit must not leak in.
+  const dueDate = rescheduled
+    ? (billingDates(calendarRule(row), addCalendarDays(today, 1), monthEnd, 1)[0] ?? editable[0]!.due_date)
+    : editable[0]!.due_date;
   const { split } = await BillingRepository.splitFor(db, row.id);
   const payable = payableOf(row);
-  const counterparts = payable ? (row.payee_user_id ? [row.payee_user_id] : []) : userIds(split);
-  const context = await prepareChargeMaterialization(db, row.owner_id, counterparts, row.payment_method_id, payable);
+  const payer = payable ? payable.payer : ChargePayer.Person;
   const plan = planBillingCharges({
     description: row.description,
     totalCents: row.total_cents,
     split,
     dueDates: [dueDate],
     numbered: false,
-    payer: context.payer,
+    payer,
     payeeUserId: row.payee_user_id ?? null
   });
   const existing: MonthCharge[] = editable.map((charge) => ({
@@ -505,8 +530,17 @@ async function rewriteMonthCharges(db: DbClient, row: BillingRepository.Row, tod
   }));
   const changes = monthChanges(existing, plan.charges);
 
+  // Only the people entering this month need revalidation; an archived contact or key elsewhere on the
+  // billing must not fail an update to someone already on it. A conta a pagar without a payee still
+  // needs a context to create its owner-only charge, even though nobody "enters" by user id.
+  const entering = changes.create.map((planned) => planned.userId).filter((userId): userId is string => userId != null);
+  const context =
+    pixTouched || changes.create.length
+      ? await prepareChargeMaterialization(db, row.owner_id, entering, row.payment_method_id, payable)
+      : undefined;
+
   for (const { charge, planned } of changes.update) {
-    const moving = planned.dueDate !== charge.dueDate;
+    const moving = rescheduled && planned.dueDate !== charge.dueDate;
     const blocked =
       moving &&
       (await db.charges.count({
@@ -522,10 +556,14 @@ async function rewriteMonthCharges(db: DbClient, row: BillingRepository.Row, tod
       data: {
         description: planned.description,
         amount_cents: planned.amountCents,
-        due_date: planned.dueDate,
-        pix_key_type_snapshot: context.pix?.keyType ?? sqlNull,
-        pix_key_snapshot: context.pix?.key ?? sqlNull,
-        pix_label_snapshot: context.pix?.label ?? sqlNull,
+        ...(moving ? { due_date: planned.dueDate } : {}),
+        ...(pixTouched
+          ? {
+              pix_key_type_snapshot: context!.pix?.keyType ?? sqlNull,
+              pix_key_snapshot: context!.pix?.key ?? sqlNull,
+              pix_label_snapshot: context!.pix?.label ?? sqlNull
+            }
+          : {}),
         updated_at: now
       }
     });
@@ -572,7 +610,7 @@ async function rewriteMonthCharges(db: DbClient, row: BillingRepository.Row, tod
     row.owner_id,
     { ...plan, charges: creatable },
     { id: row.id, type: BillingType.Indefinite },
-    context,
+    context!,
     now
   );
 
@@ -1130,8 +1168,9 @@ export namespace BillingRepository {
         await settlePendingCharges(tx, ownerId, id, patch, today, instant);
       }
 
-      if (patch.applyTo === EditScope.CurrentMonth && touchesCharges(patch)) {
-        noticeChargeIds.push(...(await rewriteMonthCharges(tx, await billingRow(tx, ownerId, id), today, instant)));
+      // A paused/ended billing never materializes new occurrences; applyTo must not create one either.
+      if (patch.applyTo === EditScope.CurrentMonth && touchesCharges(patch) && (patch.state ?? row.state) === BillingState.Active) {
+        noticeChargeIds.push(...(await rewriteMonthCharges(tx, await billingRow(tx, ownerId, id), patch, today, instant)));
       }
 
       await audit(tx, ownerId, id, patch.state ? `billing.${patch.state}` : 'billing.edited', instant);

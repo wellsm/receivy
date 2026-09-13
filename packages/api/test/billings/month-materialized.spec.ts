@@ -30,6 +30,7 @@ const { context, sent } = fakeNotice();
 let pixId: string;
 let anaId: string;
 let brunoId: string;
+let brunoContactId: string;
 let carlaId: string;
 
 function recurring(key: string, startDate: string, userIds: string[], overrides: Partial<BillingInput> = {}): BillingInput {
@@ -48,7 +49,16 @@ function recurring(key: string, startDate: string, userIds: string[], overrides:
 
 async function chargeRows(billingId: string) {
   const { records } = await db.charges.findMany({
-    select: { id: true, due_date: true, state: true, amount_cents: true, debtor_user_id: true },
+    select: {
+      id: true,
+      due_date: true,
+      state: true,
+      amount_cents: true,
+      debtor_user_id: true,
+      pix_key_snapshot: true,
+      pix_key_type_snapshot: true,
+      pix_label_snapshot: true
+    },
     where: { billing_id: billingId },
     order: { due_date: Order.Asc }
   });
@@ -65,7 +75,11 @@ describe('month materialized: pending charges and current month edits', () => {
     await createUser(db, { id: OWNER, email: 'month-owner@example.com', name: 'Dona' });
 
     anaId = (await ContactRepository.save(db, OWNER, { name: 'Ana', email: 'month-ana@example.com' })).userId;
-    brunoId = (await ContactRepository.save(db, OWNER, { name: 'Bruno', email: 'month-bruno@example.com' })).userId;
+
+    const bruno = await ContactRepository.save(db, OWNER, { name: 'Bruno', email: 'month-bruno@example.com' });
+
+    brunoId = bruno.userId;
+    brunoContactId = bruno.id;
     carlaId = (await ContactRepository.save(db, OWNER, { name: 'Carla', email: 'month-carla@example.com' })).userId;
     pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
   });
@@ -319,5 +333,130 @@ describe('month materialized: pending charges and current month edits', () => {
       () => BillingRepository.patch(db, OWNER, course.id, { applyTo: EditScope.CurrentMonth }, date('2026-03-06')),
       EditScopeNotRecurringError
     );
+  });
+
+  it('never cancels a paused recorrente on Pausar, even a charge an early reminder already put in next month', async () => {
+    const earlyReminder = { reminders: [{ offsetDays: -5, enabled: true }] };
+
+    // materializationHorizon('2026-03-29', [-5]) = max(endOfMonth = '2026-03-31', '2026-03-29' + 5 = '2026-04-03')
+    // = '2026-04-03': the April 3 occurrence already exists at creation, one day before the reminder
+    // itself (due date - 5 = '2026-03-29') would have forced the daily cron to create it anyway.
+    const absent = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-pause-early-absent',
+      recurring('Assinatura', '2026-04-03', [anaId], earlyReminder),
+      date('2026-03-29')
+    );
+
+    deepEqual(
+      absent.charges.map((charge) => charge.dueDate),
+      ['2026-04-03']
+    );
+
+    await BillingRepository.patch(db, OWNER, absent.id, { state: BillingState.Paused }, date('2026-03-29'));
+    deepEqual(
+      (await chargeRows(absent.id)).map((row) => row.state),
+      ['pending']
+    );
+
+    const keptExplicitly = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-pause-early-keep',
+      recurring('Assinatura', '2026-04-03', [anaId], earlyReminder),
+      date('2026-03-29')
+    );
+
+    await BillingRepository.patch(
+      db,
+      OWNER,
+      keptExplicitly.id,
+      { state: BillingState.Paused, pendingCharges: PendingChargesAction.Keep },
+      date('2026-03-29')
+    );
+    deepEqual(
+      (await chargeRows(keptExplicitly.id)).map((row) => row.state),
+      ['pending']
+    );
+  });
+
+  it('CurrentMonth leaves due_date and the Pix snapshot alone when the patch does not reschedule or touch Pix', async () => {
+    const billing = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-current-untouched',
+      recurring('Fatura', '2026-03-20', [anaId], { paymentMethodId: undefined }),
+      date('2026-03-05')
+    );
+    const [before] = await chargeRows(billing.id);
+
+    ok(before);
+    equal(before.pix_key_snapshot, '52998224725', 'picked up the only default payment method at creation');
+
+    const alternate = await PaymentMethodRepository.save(db, OWNER, {
+      pixKeyType: PixKeyType.Email,
+      pixKey: 'alt@example.com',
+      label: 'Alternativo'
+    });
+
+    await PaymentMethodRepository.makeDefault(db, OWNER, alternate.id);
+
+    await BillingRepository.patch(db, OWNER, billing.id, { totalCents: 12_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+
+    const [after] = await chargeRows(billing.id);
+
+    equal(after?.id, before.id, 'same charge, not cancelled and recreated');
+    equal(after?.due_date, '2026-03-20', 'amount-only edit does not reschedule');
+    equal(after?.amount_cents, 12_000);
+    equal(
+      after?.pix_key_snapshot,
+      before.pix_key_snapshot,
+      'an unrelated default-payment-method change must not rotate an already shared key'
+    );
+
+    await PaymentMethodRepository.makeDefault(db, OWNER, pixId);
+  });
+
+  it('applyTo on a paused billing creates no charge for a newly added person', async () => {
+    const paused = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-paused-split',
+      recurring('Pausada', '2026-03-20', [anaId]),
+      date('2026-03-05')
+    );
+
+    await BillingRepository.patch(db, OWNER, paused.id, { state: BillingState.Paused }, date('2026-03-06'));
+
+    const withCarla = {
+      mode: SplitMode.Equal,
+      parts: [anaId, carlaId].map((userId): SplitParty => ({ kind: SplitPartKind.User, userId }))
+    } satisfies BillingInput['split'];
+
+    await BillingRepository.patch(db, OWNER, paused.id, { split: withCarla, applyTo: EditScope.CurrentMonth }, date('2026-03-07'));
+
+    const rows = await chargeRows(paused.id);
+
+    ok(!rows.some((row) => row.debtor_user_id === carlaId), 'a paused billing never materializes a new occurrence');
+  });
+
+  it('CurrentMonth updating an existing charge does not fail because another participant was archived later', async () => {
+    const billing = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-current-archived',
+      recurring('Duo', '2026-03-20', [anaId, brunoId]),
+      date('2026-03-05')
+    );
+
+    await ContactRepository.archive(db, OWNER, brunoContactId);
+
+    // totalCents-only: neither Ana nor Bruno enters this month, so neither needs revalidation.
+    await BillingRepository.patch(db, OWNER, billing.id, { totalCents: 12_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+
+    const ana = (await chargeRows(billing.id)).find((row) => row.debtor_user_id === anaId);
+
+    equal(ana?.amount_cents, 6_000);
   });
 });

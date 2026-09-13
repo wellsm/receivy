@@ -60,11 +60,15 @@ cobranças canceladas: por isso a edição atualiza a cobrança existente em vez
 - `PatchBody.pendingCharges?: PendingChargesAction`. Enviado sem `state` `paused`/`ended` →
   `PendingChargesWithoutStateError` (422, `billings/errors.ts`, listado em `httpErrors` do `api.ts`).
 - Ausente: comportamento atual (Pausar mantém; Encerrar cancela todas).
-- `Keep`: aplica o estado e cancela só as pendentes com `due_date > endOfMonth(today)`. Na recorrente não
-  há nenhuma; no Parcelado encerrado, cancela as parcelas dos meses seguintes. As mantidas seguem
-  pagáveis e recebendo lembretes.
-- `Cancel`: aplica o estado e cancela todas as pendentes (atrasadas e com comprovante em análise
-  inclusive), como o Encerrar atual.
+- Pausar nunca cancela pendentes por conta própria: ausente e `Keep` têm o mesmo efeito (mantém tudo).
+  Só `Cancel` cancela. Isso vale mesmo quando uma pendente já foi materializada no mês seguinte por um
+  lembrete de offset negativo (ex.: −5 no dia 3 já existe em 28) — pausar nunca a derruba, e retomar
+  não a recriaria (o cursor já passou dela).
+- Encerrar mantém o padrão atual: ausente cancela todas. `Keep` aplica o estado e cancela só as
+  pendentes com `due_date > endOfMonth(today)`; no Parcelado encerrado, cancela as parcelas dos meses
+  seguintes. As mantidas seguem pagáveis e recebendo lembretes.
+- `Cancel` (Pausar ou Encerrar): aplica o estado e cancela todas as pendentes (atrasadas e com
+  comprovante em análise inclusive), como o Encerrar atual.
 - `charge.cancelled` com `payload.reason` `billing_paused` ou `billing_ended`.
 - `cancelPendingCharges` ganha o filtro opcional de data e o motivo.
 
@@ -100,6 +104,26 @@ cobranças canceladas: por isso a edição atualiza a cobrança existente em vez
   gate via `announceCharges`; cobrança futura segue esperando o lembrete.
 - **Pessoa nova na edição com cobrança cancelada da mesma pessoa e data** (índice único): a criação é
   pulada, como na colisão do reagendamento.
+- **Pausar nunca cancela** (achado da revisão final): ausente e `Keep` têm o mesmo efeito no Pausar —
+  mantêm toda pendente, inclusive a que um lembrete de offset negativo já materializou no mês seguinte.
+  Só `Cancel` cancela no Pausar. Encerrar continua como descrito acima (ausente cancela, `Keep` só
+  depois do fim do mês, `Cancel` cancela tudo).
+- **`CurrentMonth` só muda o que o patch pediu** (achado da revisão final): `due_date` só é recalculado
+  quando o patch reagenda (`startDate` e/ou `dueRule`); sem isso, o dia atual da cobrança elegível é
+  preservado, mesmo que o billing carregue um `start_date`/`due_rule` deixado por um `NextMonth`
+  anterior. Os snapshots de Pix (`pix_key_snapshot` e companhia) só são regravados quando o patch mexe
+  em Pix (`paymentMethodId`, `clearPaymentMethod`, `pix` ou `clearPix`); um edit de valor/descrição não
+  troca a chave de um link já compartilhado. Valor e descrição continuam seguindo o plano novo.
+- **`CurrentMonth` valida só quem entra** (achado da revisão final): a revalidação de contato/chave
+  Pix dentro do `applyTo` alcança apenas as pessoas de `changes.create` (quem vai ganhar uma cobrança
+  nova neste mês) e, quando necessário um snapshot de Pix, a fonte do Pix. Atualizar uma cobrança de
+  quem já estava no billing nunca falha por causa de outro participante ou da chave armazenada terem
+  sido arquivados depois. O `payer` de `planBillingCharges` continua vindo de `payableOf(row)`, sem
+  disparar a validação completa quando ninguém entra.
+- **`applyTo` num billing não ativo não faz nada** (achado da revisão final): quando o estado efetivo
+  do patch (`patch.state ?? row.state`) não é `active` — por exemplo, pausar e editar a divisão no
+  mesmo patch, ou editar um billing já pausado — o `applyTo` é ignorado sem erro; nenhuma cobrança nova
+  é criada para quem entrou na divisão.
 
 ## UI (web e mobile)
 

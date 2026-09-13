@@ -59,12 +59,8 @@ describe('adoptProviderPicture', () => {
   it('ignores missing, insecure, non-image, oversized and failing pictures', async () => {
     const { db, bucket } = fakes();
 
-    expect(
-      await adoptProviderPicture({ db, bucket, userId: 'u1', picture: undefined, fetcher: image() })
-    ).toBe(false);
-    expect(
-      await adoptProviderPicture({ db, bucket, userId: 'u1', picture: 'http://lh3.test/p.jpg', fetcher: image() })
-    ).toBe(false);
+    expect(await adoptProviderPicture({ db, bucket, userId: 'u1', picture: undefined, fetcher: image() })).toBe(false);
+    expect(await adoptProviderPicture({ db, bucket, userId: 'u1', picture: 'http://lh3.test/p.jpg', fetcher: image() })).toBe(false);
     expect(
       await adoptProviderPicture({
         db,

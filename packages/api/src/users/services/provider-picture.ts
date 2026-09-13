@@ -18,9 +18,14 @@ type AdoptInput = {
  * Copies the OAuth provider's picture into `avatars/<id>` for a user who has no photo yet. Best effort: the login
  * that calls it must never fail because of the picture, so every problem ends in `false`.
  */
-export async function adoptProviderPicture(
-  { db, bucket, userId, picture, fetcher = fetch, now = new Date() }: AdoptInput
-): Promise<boolean> {
+export async function adoptProviderPicture({
+  db,
+  bucket,
+  userId,
+  picture,
+  fetcher = fetch,
+  now = new Date()
+}: AdoptInput): Promise<boolean> {
   if (!picture?.startsWith('https://')) {
     return false;
   }

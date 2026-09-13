@@ -1,14 +1,12 @@
 import type { Service } from '@ez4/common';
-import { describe, expect, it, vi } from 'vitest';
 import type { Client } from '@ez4/storage';
+import { describe, expect, it, vi } from 'vitest';
 import type { DbClient } from '../../database';
 import type { UserProvider } from '../provider';
 import { googleCallbackHandler } from './google-callback';
 
 vi.mock('../services/oauth-flow', async () => {
-  const actual = await vi.importActual<typeof import('../services/oauth-flow')>(
-    '../services/oauth-flow'
-  );
+  const actual = await vi.importActual<typeof import('../services/oauth-flow')>('../services/oauth-flow');
   return {
     ...actual,
     completeOauth: vi.fn(async (input, dependencies) => {

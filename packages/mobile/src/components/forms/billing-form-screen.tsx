@@ -8,6 +8,9 @@ import {
   buildBillingInput,
   calendarDate,
   draftTotalCents,
+  editableMonthCharges,
+  editScopeExplanation,
+  EditScope,
   EMPTY_BILLING_DRAFT,
   EMPTY_SPLIT_VALUES,
   endOfMonth,
@@ -16,12 +19,14 @@ import {
   parseBRLCents,
   pixKeyField,
   previewBillingSplit,
+  shouldAskEditScope,
   splitParties,
   splitPartyKey,
   UserStatus,
   type BillingDetail,
   type BillingDraft,
   type BillingInput,
+  type BillingPatch,
   BillingType,
   type Contact,
   Direction,
@@ -40,6 +45,7 @@ import { Image } from "expo-image";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { MonthSelect } from "@/components/app/month-select";
+import { ScopeModal } from "@/components/app/scope-modal";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { financialClient, FinancialRequestError, type FinancialClient } from "@/financial/client";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
@@ -66,7 +72,7 @@ const PIX_ICONS: Record<PaymentMethod["pixKeyType"], number> = {
 };
 
 type Client = Pick<FinancialClient, "paymentMethods" | "profile" | "createBilling" | "patchBilling">;
-type Attempt = { input: BillingInput; key: string; uncertain: boolean };
+type Attempt = { input: BillingInput; key: string; uncertain: boolean; applyTo?: EditScope };
 
 type BillingFormScreenProps = {
   client?: Client;
@@ -326,6 +332,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   const [pixOpen, setPixOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [scopeAttempt, setScopeAttempt] = useState<Attempt | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -481,7 +488,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     update({ values: { ...draft.values, [draft.mode]: { ...draft.values[draft.mode], [key]: value } } });
   }
 
-  function patchBody(input: BillingInput) {
+  function patchBody(input: BillingInput): BillingPatch {
     const editable = {
       reminders: input.reminders,
       category: input.category,
@@ -509,7 +516,9 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     setError("");
 
     try {
-      const saved = billing ? await client.patchBilling(billing.id, patchBody(sent.input)) : await client.createBilling(sent.input, sent.key);
+      const saved = billing
+        ? await client.patchBilling(billing.id, sent.applyTo ? { ...patchBody(sent.input), applyTo: sent.applyTo } : patchBody(sent.input))
+        : await client.createBilling(sent.input, sent.key);
 
       setAttempt(null);
       clearDraft();
@@ -522,6 +531,17 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
       setError(reason instanceof Error ? reason.message : "Não foi possível salvar a conta.");
       setBusy(false);
     }
+  }
+
+  function applyScope(applyTo?: EditScope) {
+    if (!scopeAttempt) {
+      return;
+    }
+
+    const sent = applyTo ? { ...scopeAttempt, applyTo } : scopeAttempt;
+
+    setScopeAttempt(null);
+    void save(sent);
   }
 
   function submit() {
@@ -538,7 +558,15 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     }
 
     try {
-      void save({ input: buildBillingInput(draftToBuild(draft)), key: Crypto.randomUUID(), uncertain: false });
+      const next: Attempt = { input: buildBillingInput(draftToBuild(draft)), key: Crypto.randomUUID(), uncertain: false };
+
+      // Only a recorrente edit that changes what its charges carry, with charges of this month still ahead, needs the answer.
+      if (billing && shouldAskEditScope(billing, patchBody(next.input), todayIn(billing.timezone))) {
+        setScopeAttempt(next);
+        return;
+      }
+
+      void save(next);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Confira os dados informados.");
     }
@@ -1184,6 +1212,19 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                   leaveTo(onCreateContact);
                 }
           }
+        />
+      )}
+
+      {scopeAttempt && billing && (
+        <ScopeModal
+          title="Aplicar às cobranças deste mês?"
+          explanation={editScopeExplanation(editableMonthCharges(billing, todayIn(billing.timezone)).length, todayIn(billing.timezone))}
+          primaryLabel="Aplicar também às deste mês"
+          secondaryLabel="Só a partir do mês seguinte"
+          busy={busy}
+          onPrimary={() => applyScope(EditScope.CurrentMonth)}
+          onSecondary={() => applyScope()}
+          onCancel={() => setScopeAttempt(null)}
         />
       )}
     </SafeAreaView>

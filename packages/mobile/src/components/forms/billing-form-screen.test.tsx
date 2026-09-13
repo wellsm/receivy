@@ -1,4 +1,4 @@
-import { addCalendarDays, BillingCategory, BillingState, BillingType, calendarDate, Direction, EMPTY_BILLING_DRAFT, endOfMonthOptions, PixKeyType, SplitMode, SplitPartKind, UserStatus, type BillingDetail, type Contact } from "@receivy/common";
+import { addCalendarDays, BillingCategory, BillingFrequency, BillingState, BillingType, calendarDate, ChargeState, Direction, EMPTY_BILLING_DRAFT, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, UserStatus, type BillingDetail, type ChargeDetail, type Contact } from "@receivy/common";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { FinancialRequestError } from "@/financial/client";
 import { clearDraft, patchDraft, saveDraft, takeDraft } from "@/financial/draft-store";
@@ -731,6 +731,92 @@ describe("BillingFormScreen", () => {
       category: "transport",
     });
     expect(client.createBilling).not.toHaveBeenCalled();
+  });
+
+  const monthCharge: ChargeDetail = {
+    id: "c9",
+    description: "Jantar",
+    amount: { amountCents: 9_000, currency: "BRL" },
+    dueDate: "2026-09-20",
+    state: ChargeState.Pending,
+    billingId: "b2",
+    billingType: BillingType.Indefinite,
+    installment: null,
+    installmentCount: null,
+    counterpartName: "Ana",
+    proofState: null,
+    direction: Direction.Receivable,
+    recipient: { userId: "u1", name: "Ana", email: null },
+    debtorUserId: "u1",
+    pix: null,
+    sharingState: SharingState.Ready,
+    proof: null,
+    cancelledAt: null,
+    paidAt: null,
+    createdAt: "2026-09-01T00:00:00Z",
+  };
+
+  const recurringWithCharge: BillingDetail = { ...onceBilling, id: "b2", type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: "2026-09-20", nextDueDate: "2026-09-20", charges: [monthCharge] };
+
+  // Only Date is faked: RNTL keeps its real timers for waitFor.
+  function onSeptemberTenth() {
+    jest.useFakeTimers({
+      now: new Date("2026-09-10T15:00:00Z"),
+      doNotFake: ["nextTick", "setImmediate", "clearImmediate", "setInterval", "clearInterval", "setTimeout", "clearTimeout", "queueMicrotask", "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback", "cancelIdleCallback", "hrtime", "performance"],
+    });
+  }
+
+  afterEach(() => jest.useRealTimers());
+
+  it("asks whether an amount change also reaches this month's charges", async () => {
+    onSeptemberTenth();
+    const patchBilling = jest.fn().mockResolvedValue(recurringWithCharge);
+    const client = financialApi({ patchBilling });
+
+    await render(<BillingFormScreen client={client as never} contacts={contactsApi()} billing={recurringWithCharge} onSaved={jest.fn()} onBack={jest.fn()} />);
+    await screen.findByText("Editar conta");
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "12000");
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+
+    expect(await screen.findByRole("header", { name: "Aplicar às cobranças deste mês?" })).toBeOnTheScreen();
+    expect(screen.getByText("1 cobrança de setembro ainda não venceu.")).toBeOnTheScreen();
+    expect(patchBilling).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Aplicar também às deste mês" }));
+
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+    expect(patchBilling.mock.calls[0][1]).toMatchObject({ totalCents: 12_000, applyTo: "current_month" });
+  });
+
+  it("sends no scope when the owner keeps this month as it is", async () => {
+    onSeptemberTenth();
+    const patchBilling = jest.fn().mockResolvedValue(recurringWithCharge);
+    const client = financialApi({ patchBilling });
+
+    await render(<BillingFormScreen client={client as never} contacts={contactsApi()} billing={recurringWithCharge} onSaved={jest.fn()} onBack={jest.fn()} />);
+    await screen.findByText("Editar conta");
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "12000");
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Só a partir do mês seguinte" }));
+
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+    expect(patchBilling.mock.calls[0][1].applyTo).toBeUndefined();
+  });
+
+  it("saves an untouched recurring billing without asking", async () => {
+    onSeptemberTenth();
+    const patchBilling = jest.fn().mockResolvedValue(recurringWithCharge);
+    const client = financialApi({ patchBilling });
+
+    await render(<BillingFormScreen client={client as never} contacts={contactsApi()} billing={recurringWithCharge} onSaved={jest.fn()} onBack={jest.fn()} />);
+    await screen.findByText("Editar conta");
+
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+    expect(screen.queryByRole("header", { name: "Aplicar às cobranças deste mês?" })).toBeNull();
   });
 
   it("creates a conta a pagar without contacts, with the payee and the typed key", async () => {

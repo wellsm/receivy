@@ -10,10 +10,10 @@ type ProducerContext = {
 };
 
 /** Notice context for HTTP handlers: rendering settings, the transport and the reminder scheduler. */
-export function noticeContext(context: ProducerContext): NoticeContext {
+export function noticeContext({ variables, email, chargeNotifyScheduler }: ProducerContext): NoticeContext {
   return {
-    config: notificationConfigFrom(context.variables),
-    transport: notificationTransport(context.variables, globalThis.fetch, context.email),
-    notify: context.chargeNotifyScheduler
+    config: notificationConfigFrom(variables),
+    transport: notificationTransport(variables, globalThis.fetch, email),
+    notify: chargeNotifyScheduler
   };
 }

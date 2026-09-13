@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Alert, Share } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import type { ChargeDetail, ChargeProof } from "@receivy/common";
+import { BillingType, ChargePayer, ChargeState, Direction, PixKeyType, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { ChargeDetailScreen } from "@/components/screens/charge-detail-screen";
 
 jest.mock("expo-router", () => {
@@ -19,21 +19,21 @@ jest.mock("expo/fetch", () => ({ fetch: jest.fn() }));
 function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
   return {
     id: "charge",
-    direction: "payable",
+    direction: Direction.Payable,
     description: "Aluguel",
     amount: { amountCents: 2500, currency: "BRL" },
     dueDate: "2026-09-10",
-    state: "pending",
+    state: ChargeState.Pending,
     billingId: "b1",
-    billingType: "until",
+    billingType: BillingType.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: "Ana",
     proofState: null,
     recipient: { userId: "u1", name: "Ana", email: "ana@example.com" },
     debtorUserId: "u1",
-    pix: { keyType: "email", key: "pix@example.com", label: "Principal" },
-    sharingState: "ready",
+    pix: { keyType: PixKeyType.Email, key: "pix@example.com", label: "Principal" },
+    sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
     paidAt: null,
@@ -44,8 +44,8 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
 
 function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
   return {
-    state: "pending",
-    file: { name: "comprovante.pdf", mime: "application/pdf", size: 184 * 1024 },
+    state: ProofState.Pending,
+    file: { name: "comprovante.pdf", mime: ProofMime.Pdf, size: 184 * 1024 },
     sentAt: "2026-09-05T14:32:00Z",
     reviewedAt: null,
     reason: null,
@@ -62,7 +62,7 @@ describe("ChargeDetailScreen", () => {
   it("creates and explicitly selects an owned Pix before sharing", async () => {
     jest.spyOn(Share, "share").mockResolvedValue({ action: Share.sharedAction });
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ direction: "receivable", pix: null, sharingState: "pix_required" })),
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, pix: null, sharingState: SharingState.PixRequired })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn().mockResolvedValue({ token: "fixture" }),
@@ -92,14 +92,14 @@ describe("ChargeDetailScreen", () => {
     expect(screen.queryByRole("button", { name: "Marcar pago" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Marcar como pago" })).toBeNull();
 
-    await fireEvent.press(screen.getByRole("button", { name: "Copiar chave Pix" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Copiar Chave Pix" }));
 
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith("pix@example.com");
   });
 
   it.each([
-    ["paid" as const, "Esta cobrança já foi paga. Nenhuma nova transferência é necessária."],
-    ["cancelled" as const, "Esta cobrança foi cancelada e não deve ser paga."],
+    [ChargeState.Paid, "Esta cobrança já foi paga. Nenhuma nova transferência é necessária."],
+    [ChargeState.Cancelled, "Esta cobrança foi cancelada e não deve ser paga."],
   ])("does not instruct payment for a %s payable charge", async (state, guidance) => {
     const client = {
       charge: jest.fn().mockResolvedValue(charge({ state, cancelledAt: state === "cancelled" ? "2026-09-01" : null, paidAt: state === "paid" ? "2026-09-01" : null })),
@@ -119,13 +119,14 @@ describe("ChargeDetailScreen", () => {
   it("lets the debtor send a proof and opens the preview afterwards", async () => {
     const onOpenProof = jest.fn();
     const client = {
-      // The upload has no finalize call: the screen polls the charge until the bucket event attached the file.
-      charge: jest.fn().mockResolvedValueOnce(charge()).mockResolvedValue(charge({ proofState: "pending", proof: proof() })),
+      charge: jest.fn().mockResolvedValueOnce(charge()).mockResolvedValue(charge({ proofState: ProofState.Pending, proof: proof() })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn(),
       publicChargeUrl: jest.fn(),
       startProofUpload: jest.fn().mockResolvedValue(TICKET),
+      // After the PUT the screen completes the upload and shows the charge the API answers with.
+      completeProofUpload: jest.fn().mockResolvedValue(charge({ proofState: ProofState.Pending, proof: proof() })),
       reviewProof: jest.fn(),
       downloadProof: jest.fn(),
     };
@@ -150,7 +151,7 @@ describe("ChargeDetailScreen", () => {
 
   it("offers a replacement only after the last proof was rejected", async () => {
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ proofState: "rejected", proof: proof({ state: "rejected", reason: "Ilegível" }) })),
+      charge: jest.fn().mockResolvedValue(charge({ proofState: ProofState.Rejected, proof: proof({ state: ProofState.Rejected, reason: "Ilegível" }) })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn(),
@@ -169,7 +170,7 @@ describe("ChargeDetailScreen", () => {
 
   it("lets the debtor delete a pending proof and send another one", async () => {
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ proofState: "pending", proof: proof() })),
+      charge: jest.fn().mockResolvedValue(charge({ proofState: ProofState.Pending, proof: proof() })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn(),
@@ -195,13 +196,13 @@ describe("ChargeDetailScreen", () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
     const pending = proof({ sentByViewer: false });
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ direction: "receivable", proofState: "pending", proof: pending })),
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, proofState: ProofState.Pending, proof: pending })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn(),
       publicChargeUrl: jest.fn(),
       startProofUpload: jest.fn(),
-      reviewProof: jest.fn().mockResolvedValue(charge({ direction: "receivable", state: "paid", paidAt: "2026-09-08T12:00:00Z", proofState: "accepted", proof: { ...pending, state: "accepted", reviewedAt: "2026-09-08T12:00:00Z" } })),
+      reviewProof: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z", proofState: ProofState.Accepted, proof: { ...pending, state: ProofState.Accepted, reviewedAt: "2026-09-08T12:00:00Z" } })),
       downloadProof: jest.fn(),
     };
 
@@ -220,9 +221,9 @@ describe("ChargeDetailScreen", () => {
       .spyOn(Alert, "alert")
       .mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga" || button.text === "Enviar lembrete")?.onPress?.());
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ direction: "receivable" })),
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable })),
       cancel: jest.fn(),
-      pay: jest.fn().mockResolvedValue(charge({ direction: "receivable", state: "paid", paidAt: "2026-09-08T12:00:00Z" })),
+      pay: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z" })),
       publicLink: jest.fn(),
       publicChargeUrl: jest.fn(),
       startProofUpload: jest.fn(),
@@ -248,11 +249,11 @@ describe("ChargeDetailScreen", () => {
   it("reopens a paid charge after confirmation", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Reabrir")?.onPress?.());
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ direction: "receivable", state: "paid", paidAt: "2026-09-08T12:00:00Z" })),
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z" })),
       startProofUpload: jest.fn(),
       cancel: jest.fn(),
       pay: jest.fn(),
-      reopen: jest.fn().mockResolvedValue(charge({ direction: "receivable" })),
+      reopen: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable })),
       publicLink: jest.fn(),
       publicChargeUrl: jest.fn(),
     };
@@ -268,7 +269,7 @@ describe("ChargeDetailScreen", () => {
 
   it("hides the reminder when the debtor cannot be reached", async () => {
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ direction: "receivable", counterpartReachable: false })),
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, counterpartReachable: false })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn(),
@@ -283,7 +284,7 @@ describe("ChargeDetailScreen", () => {
 
   it("lets the owner of a conta a pagar copy the key, send the proof and mark it paid", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
-    const own = charge({ direction: "payable", payer: "owner", ownedByViewer: true, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorUserId: null });
+    const own = charge({ direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorUserId: null });
     const client = {
       charge: jest.fn().mockResolvedValue(own),
       cancel: jest.fn(),
@@ -300,7 +301,7 @@ describe("ChargeDetailScreen", () => {
     expect(await screen.findByText("Minha conta")).toBeOnTheScreen();
     expect(screen.getByText("A pagar")).toBeOnTheScreen();
     expect(screen.getByText("Conta só sua")).toBeOnTheScreen();
-    expect(screen.getByRole("button", { name: "Copiar Pix" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Copiar Chave Pix" })).toBeOnTheScreen();
     // The tile and the proof card both offer the upload.
     expect(screen.getAllByRole("button", { name: "Enviar comprovante" }).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Marcar como pago" })).toBeOnTheScreen();
@@ -319,7 +320,7 @@ describe("ChargeDetailScreen", () => {
 
   it("gives the payee of a conta a pagar only the proof and the paid mark", async () => {
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ direction: "receivable", payer: "owner", ownedByViewer: false, counterpartName: "Bruno", proofState: "pending", proof: proof({ sentByViewer: false }) })),
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, payer: ChargePayer.Owner, ownedByViewer: false, counterpartName: "Bruno", proofState: ProofState.Pending, proof: proof({ sentByViewer: false }) })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn(),
@@ -337,7 +338,7 @@ describe("ChargeDetailScreen", () => {
     expect(screen.getByRole("button", { name: "Marcar como pago" })).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Comprovante" })).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Marcar como pago" })).toBeOnTheScreen();
-    expect(screen.queryByRole("button", { name: "Copiar Pix" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copiar Chave Pix" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Enviar comprovante" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Compartilhar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Lembrar" })).toBeNull();

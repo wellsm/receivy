@@ -1,6 +1,6 @@
 "use client";
 
-import { billingShareAction, calendarDate, type BillingState, type BillingSummary, type BillingsPage, type Direction } from "@receivy/common";
+import { BillingState, billingShareAction, calendarDate, Direction, type BillingSummary, type BillingsPage } from "@receivy/common";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,16 +13,16 @@ const LIST_ERROR = "Não foi possível carregar suas cobranças.";
 
 /** Client-side state filter over the loaded pages; ended billings stay out of the way by default. */
 const STATE_FILTERS: { value: BillingState; label: string; empty: string }[] = [
-  { value: "active", label: "Ativas", empty: "Nenhuma conta ativa." },
-  { value: "paused", label: "Pausadas", empty: "Nenhuma conta pausada." },
-  { value: "ended", label: "Encerradas", empty: "Nenhuma conta encerrada." },
+  { value: BillingState.Active, label: "Ativas", empty: "Nenhuma conta ativa." },
+  { value: BillingState.Paused, label: "Pausadas", empty: "Nenhuma conta pausada." },
+  { value: BillingState.Ended, label: "Encerradas", empty: "Nenhuma conta encerrada." },
 ];
 
 /** Server-side direction filter: the API only returns the side asked for. */
 const DIRECTION_FILTERS: { value: Direction | ""; label: string }[] = [
   { value: "", label: "Todas" },
-  { value: "receivable", label: "A receber" },
-  { value: "payable", label: "A pagar" },
+  { value: Direction.Receivable, label: "A receber" },
+  { value: Direction.Payable, label: "A pagar" },
 ];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -61,7 +61,7 @@ export function BillingsScreen() {
   const [page, setPage] = useState<BillingsPage | null>(null);
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
-  const [stateFilter, setStateFilter] = useState<BillingState>("active");
+  const [stateFilter, setStateFilter] = useState<BillingState>(BillingState.Active);
   const [direction, setDirection] = useState<Direction | "">("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");

@@ -1,7 +1,12 @@
 import type { PixKeyType } from './contracts';
-import type { BadgeTone } from './feed';
+import { BadgeTone } from './feed';
 
-export type PixKeyboard = 'numeric' | 'tel' | 'email' | 'text';
+export const enum PixKeyboard {
+  Numeric = 'numeric',
+  Tel = 'tel',
+  Email = 'email',
+  Text = 'text'
+}
 
 export type PixKeyField = {
   label: string;
@@ -113,35 +118,35 @@ const PIX_KEY_FIELDS: Record<PixKeyType, PixKeyField> = {
   cpf: {
     label: 'CPF do titular',
     placeholder: '000.000.000-00',
-    keyboard: 'numeric',
+    keyboard: PixKeyboard.Numeric,
     format: formatCpf,
     unformat: onlyDigits
   },
   cnpj: {
     label: 'CNPJ',
     placeholder: '00.000.000/0000-00',
-    keyboard: 'numeric',
+    keyboard: PixKeyboard.Numeric,
     format: formatCnpj,
     unformat: onlyDigits
   },
   phone: {
     label: 'Telefone celular',
     placeholder: '(00) 00000-0000',
-    keyboard: 'tel',
+    keyboard: PixKeyboard.Tel,
     format: formatPhoneBR,
     unformat: unformatPhoneKey
   },
   email: {
     label: 'E-mail Pix',
     placeholder: 'seu.email@exemplo.com.br',
-    keyboard: 'email',
+    keyboard: PixKeyboard.Email,
     format: keep,
     unformat: trimmed
   },
   random: {
     label: 'Chave aleatória',
     placeholder: '89a456bc-1234-…',
-    keyboard: 'text',
+    keyboard: PixKeyboard.Text,
     format: keep,
     unformat: trimmed
   }
@@ -166,8 +171,8 @@ export function initialsOf(name: string): string {
 
 export function contactBadge(activeCharges: number): ContactBadge {
   if (activeCharges <= 0) {
-    return { label: 'Sem pendências', tone: 'success' };
+    return { label: 'Sem pendências', tone: BadgeTone.Success };
   }
 
-  return { label: `${activeCharges} ${activeCharges === 1 ? 'ativa' : 'ativas'}`, tone: 'warning' };
+  return { label: `${activeCharges} ${activeCharges === 1 ? 'ativa' : 'ativas'}`, tone: BadgeTone.Warning };
 }

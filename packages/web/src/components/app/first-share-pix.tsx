@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { PaymentMethod, PixKeyType } from "@receivy/common";
+import { PixKeyType, type PaymentMethod } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
 
@@ -9,7 +9,7 @@ const LABEL = "text-xs font-semibold text-muted";
 
 export function FirstSharePix({ busy, publish }: { busy: boolean; publish: (id: string) => Promise<void> }) {
   const [items, setItems] = useState<PaymentMethod[]>([]), [selected, setSelected] = useState("");
-  const [key, setKey] = useState(""), [type, setType] = useState<PixKeyType>("email"), [error, setError] = useState(""), [saving, setSaving] = useState(false);
+  const [key, setKey] = useState(""), [type, setType] = useState<PixKeyType>(PixKeyType.Email), [error, setError] = useState(""), [saving, setSaving] = useState(false);
   useEffect(() => { void browserFetch("/api/financial/payment-methods").then(async response => { if (!response.ok) throw new Error("Não foi possível carregar as chaves."); setItems((await response.json()).paymentMethods); }).catch(() => setError("Não foi possível carregar as chaves. Reabra a cobrança para tentar novamente.")); }, []);
   async function save() {
     setSaving(true); setError("");

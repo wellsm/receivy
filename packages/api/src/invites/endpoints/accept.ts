@@ -8,7 +8,7 @@ import { noticeContext } from '../../notifications/services/context';
 import { pushToUser } from '../../notifications/services/direct';
 import { notificationTransport } from '../../notifications/services/transport';
 import type { InviteProvider } from '../provider';
-import { acceptInvite } from '../repositories/invite';
+import { InviteRepository } from '../repositories/invite';
 import { resolveInvite } from '../services/links';
 
 declare class AcceptRequest implements Http.Request {
@@ -21,25 +21,28 @@ declare class AcceptResponse implements Http.Response {
   body: InviteAcceptResult;
 }
 
-export async function acceptInviteHandler(request: AcceptRequest, context: Service.Context<InviteProvider>): Promise<AcceptResponse> {
-  const invite = await resolveInvite(context.db, request.parameters.token, context.variables.PUBLIC_LINK_HMAC_SECRET);
-  await throttlePublicRead(context.db, invite.public_id, INVITE_ACCEPT);
+export async function acceptInviteHandler(
+  request: AcceptRequest,
+  { db, variables, email, chargeNotifyScheduler }: Service.Context<InviteProvider>
+): Promise<AcceptResponse> {
+  const invite = await resolveInvite(db, request.parameters.token, variables.PUBLIC_LINK_HMAC_SECRET);
+  await throttlePublicRead(db, invite.public_id, INVITE_ACCEPT);
 
-  const { waiting, ...body } = await acceptInvite(
-    context.db,
+  const { waiting, ...body } = await InviteRepository.accept(
+    db,
     request.identity.userId,
     request.parameters.token,
-    context.variables.PUBLIC_LINK_HMAC_SECRET,
+    variables.PUBLIC_LINK_HMAC_SECRET,
     new Date(),
-    noticeContext(context)
+    noticeContext({ chargeNotifyScheduler, email, variables })
   );
 
   // The owner learns right away that someone is waiting; the card on the billing detail is the fallback.
   if (waiting) {
-    await pushToUser(context.db, notificationTransport(context.variables, globalThis.fetch, context.email), waiting.ownerId, {
+    await pushToUser(db, notificationTransport(variables, globalThis.fetch, email), waiting.ownerId, {
       title: `Alguém entrou em «${waiting.description}»`,
       body: `${waiting.guestName} entrou pelo link. Diga quem é para liberar a cobrança.`,
-      url: `${context.variables.PUBLIC_WEB_ORIGIN}/billings/${body.billingId}`
+      url: `${variables.PUBLIC_WEB_ORIGIN}/billings/${body.billingId}`
     });
   }
 

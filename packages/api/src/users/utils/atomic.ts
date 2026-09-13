@@ -1,6 +1,6 @@
 import type { ConfirmEmailCodeBody } from '@receivy/common';
 import type { DbClient } from '../../database';
-import { createAuthRepository } from '../repositories/auth';
+import { AuthRepository } from '../repositories/auth';
 import { AuthFlowError, confirmEmailCode } from '../services/email-login';
 import { lockAccountReferences } from '../services/locking';
 import { exchangeOauthGrant } from '../services/oauth-flow';
@@ -11,7 +11,7 @@ export async function confirmEmailAtomically(db: DbClient, input: ConfirmEmailCo
   const outcome = await db.transaction(async (tx) => {
     await lockAccountReferences(tx, 'write');
     try {
-      return await confirmEmailCode(input, { ...config, repo: createAuthRepository(tx) });
+      return await confirmEmailCode(input, { ...config, repo: AuthRepository.create(tx) });
     } catch (error) {
       // Expected authentication failures must commit the bounded attempt counter.
       // Infrastructure failures still roll back code, identity/link and session.
@@ -30,6 +30,6 @@ export function exchangeOauthAtomically(
 ) {
   return db.transaction(async (tx) => {
     await lockAccountReferences(tx, 'write');
-    return exchangeOauthGrant(input, { ...config, repo: createAuthRepository(tx) });
+    return exchangeOauthGrant(input, { ...config, repo: AuthRepository.create(tx) });
   });
 }

@@ -45,6 +45,8 @@ describe("CodeScreen", () => {
 
     await waitFor(() => expect(confirmEmailCode).toHaveBeenCalledWith({ email: "lucas@email.com", code: "123456" }));
     expect(onAuthenticated).toHaveBeenCalled();
+    // Clearing it here would flash the button back to idle while this screen is still on top.
+    expect(confirm).toBeDisabled();
   });
 
   it("counts down to expiry and then refuses the code until a new one is sent", async () => {

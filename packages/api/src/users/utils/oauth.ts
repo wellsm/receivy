@@ -3,10 +3,14 @@ import type { UserProvider } from '../provider';
 import type { OauthProvider } from '../services/oauth';
 import { createOauthProviderClient, oauthProviderConfigFrom } from '../services/oauth-provider';
 
-export function oauthDependencies(provider: OauthProvider, context: Service.Context<UserProvider>, native = false) {
-  const config = oauthProviderConfigFrom(context.variables);
+export function oauthDependencies(
+  provider: OauthProvider,
+  { variables }: Pick<Service.Context<UserProvider>, 'variables'>,
+  native = false
+) {
+  const config = oauthProviderConfigFrom(variables);
   return {
-    allowList: context.variables.OAUTH_REDIRECT_ALLOW_LIST.split(',')
+    allowList: variables.OAUTH_REDIRECT_ALLOW_LIST.split(',')
       .map((value) => value.trim())
       .filter(Boolean),
     client: createOauthProviderClient(provider, config, fetch, native),

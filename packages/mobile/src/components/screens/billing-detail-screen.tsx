@@ -4,6 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Share, Text, View } from "react-native";
 import {
   billingCategoryLabel,
+  BillingState,
   calendarDate,
   chargeShareText,
   formatMoney,
@@ -158,14 +159,16 @@ function cycleState(cycle: Cycle): "open" | "done" | "cancelled" {
 }
 
 function typeTag(billing: BillingDetail, current: Cycle | null): string {
+  const monthEnd = billing.dueRule === "end_of_month" ? " · final do mês" : "";
+
   if (billing.type === "until") {
     const installment = current?.charges[0]?.installment ?? current?.index ?? 1;
 
-    return `Parcelado (${installment}/${billing.installmentCount ?? "?"})`;
+    return `Parcelado (${installment}/${billing.installmentCount ?? "?"})${monthEnd}`;
   }
 
   if (billing.type === "indefinite") {
-    return billing.frequency === "yearly" ? "Recorrente anual" : "Recorrente mensal";
+    return billing.frequency === "yearly" ? "Recorrente anual" : `Recorrente mensal${monthEnd}`;
   }
 
   return "À vista";
@@ -274,7 +277,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
     }
   }
 
-  async function transition(detail: BillingDetail, state: "active" | "paused" | "ended") {
+  async function transition(detail: BillingDetail, state: BillingState) {
     await run(async () => {
       const updated = await client.patchBilling(detail.id, { state });
 
@@ -455,11 +458,12 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
           <View className="flex-row items-center justify-between border-t border-outline/20 pt-3">
             <View className="flex-1 flex-row items-center gap-1.5">
               <Image source={ICONS.key} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
+              {/* Only the owner reaches this screen, so the key itself is safe to show here. */}
               <Text className="flex-1 text-[11px] text-muted" numberOfLines={1}>
                 {pix ? (
                   <>
-                    Chave Pix: <Text className="font-medium text-ink">{pix.key}</Text>
-                    {` • ${PIX_TYPE_LABELS[pix.keyType]}`}
+                    {`Pix - ${PIX_TYPE_LABELS[pix.keyType]}: `}
+                    <Text className="font-medium text-ink">{pix.key}</Text>
                   </>
                 ) : (
                   "Sem chave Pix vinculada"
@@ -489,7 +493,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                   icon={billing.state === "active" ? ICONS.pause : ICONS.play}
                   hint={billing.state === "active" ? "Suspende as próximas ocorrências" : "Volta a gerar ocorrências"}
                   disabled={busy}
-                  onPress={() => void transition(billing, billing.state === "active" ? "paused" : "active")}
+                  onPress={() => void transition(billing, billing.state === "active" ? BillingState.Paused : BillingState.Active)}
                 />
               )}
               <ActionTile label="Encerrar" icon={ICONS.stop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onPress={() => setConfirmEnd(true)} />
@@ -818,7 +822,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                   accessibilityRole="button"
                   accessibilityLabel="Confirmar encerramento"
                   disabled={busy}
-                  onPress={() => void transition(billing, "ended")}
+                  onPress={() => void transition(billing, BillingState.Ended)}
                   className="h-11 flex-1 items-center justify-center rounded-lg bg-red-600"
                 >
                   <Text className="text-xs font-semibold text-white">Encerrar</Text>

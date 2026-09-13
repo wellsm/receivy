@@ -29,10 +29,13 @@ export declare class MailpitEmailService extends Factory.Service<EmailProvider> 
   };
 }
 
-export function createService(context: Service.Context<MailpitEmailService>, request: typeof fetch = globalThis.fetch): EmailProvider {
-  const { APP_STAGE, MAILPIT_API_URL } = context.variables;
+export function createService(
+  { variables }: Service.Context<MailpitEmailService>,
+  request: typeof fetch = globalThis.fetch
+): EmailProvider {
+  const { APP_STAGE, MAILPIT_API_URL } = variables;
 
-  if (APP_STAGE !== 'local' && APP_STAGE !== 'test') {
+  if (APP_STAGE !== 'dev') {
     throw new Error(`Email transport 'mailpit' is only allowed when APP_STAGE is local or test.`);
   }
 

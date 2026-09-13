@@ -3,7 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { PaymentMethod } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { PaymentMethodProvider } from '../provider';
-import { savePaymentMethod } from '../repositories/payment-method';
+import { PaymentMethodRepository } from '../repositories/payment-method';
 import { type PaymentMethodBody, paymentMethodInput, safe } from '../utils/input';
 
 declare class CreateRequest implements Http.Request {
@@ -18,7 +18,10 @@ declare class CreateResponse implements Http.Response {
 
 export async function createPaymentMethodHandler(
   request: CreateRequest,
-  context: Service.Context<PaymentMethodProvider>
+  { db }: Service.Context<PaymentMethodProvider>
 ): Promise<CreateResponse> {
-  return { status: 201, body: await safe(() => savePaymentMethod(context.db, request.identity.userId, paymentMethodInput(request.body))) };
+  return {
+    status: 201,
+    body: await safe(() => PaymentMethodRepository.save(db, request.identity.userId, paymentMethodInput(request.body)))
+  };
 }

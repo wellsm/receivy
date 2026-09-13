@@ -3,18 +3,22 @@ import { after, before, describe, it } from 'node:test';
 import type { Service } from '@ez4/common';
 import { HttpForbiddenError, HttpUnauthorizedError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
-import { getCharge, payCharge } from '../../src/charges/repositories/charge';
+import { DevicePlatform, PixKeyType, ProofMime } from '@receivy/common';
+import { ChargeRepository } from '../../src/charges/repositories/charge';
+import { StoredProofState } from '../../src/charges/schemas/charge';
 import type { SessionAuthorizerProvider } from '../../src/common/authorizers/session';
 import { sessionAuthorizer } from '../../src/common/authorizers/session';
-import { saveContact } from '../../src/contacts/repositories/contact';
-import { registerDevice } from '../../src/notifications/repositories/notification';
-import { savePaymentMethod } from '../../src/payment-methods/repositories/payment-method';
-import { actorHash } from '../../src/proofs/repositories/proof';
-import { createOrRotatePublicLink, getPublicCharge } from '../../src/public/repositories/public-link';
+import { ContactRepository } from '../../src/contacts/repositories/contact';
+import { NotificationRepository } from '../../src/notifications/repositories/notification';
+import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
+import { ProofRepository } from '../../src/proofs/repositories/proof';
+import { PublicLinkRepository } from '../../src/public/repositories/public-link';
 import { deleteHandler } from '../../src/users/endpoints/delete-account';
 import type { UserProvider } from '../../src/users/provider';
-import { eraseAccount, revokeSession, updateProfile } from '../../src/users/repositories/account';
-import { createAuthRepository } from '../../src/users/repositories/auth';
+import { AccountRepository } from '../../src/users/repositories/account';
+import { AuthRepository } from '../../src/users/repositories/auth';
+import { SessionRepository } from '../../src/users/repositories/sessions';
+import { eraseAccount } from '../../src/users/services/deletion';
 import { issueAccessToken } from '../../src/users/services/session';
 import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 
@@ -22,7 +26,7 @@ const owner = '61000000-0000-4000-8000-000000000001';
 const debtor = '61000000-0000-4000-8000-000000000002';
 const secret = 'account-tests-only-secret';
 const context = { db, variables: { AUTH_JWT_SECRET: secret } } as Service.Context<SessionAuthorizerProvider>;
-const repository = createAuthRepository(db);
+const repository = AuthRepository.create(db);
 const ids = [owner, debtor];
 const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
 const deleteContext = { ...context, proofFiles: bucket } as unknown as Service.Context<UserProvider>;
@@ -34,15 +38,22 @@ async function authorize(access: string) {
   return sessionAuthorizer({ headers: { authorization: `Bearer ${access}` } }, context);
 }
 /** A file already attached to the charge, sent by `sender` or by the public link when null. */
-async function attachProof(chargeId: string, key: string, sender: string | null, state: 'pending' | 'accepted' = 'accepted') {
+async function attachProof(
+  chargeId: string,
+  key: string,
+  sender: string | null,
+  state: StoredProofState.Pending | StoredProofState.Accepted = StoredProofState.Accepted
+) {
   const now = new Date().toISOString();
   await db.charges.updateOne({
     where: { id: chargeId },
     data: {
       proof_state: state,
-      proof_file: { key, name: 'fixture.pdf', mime: 'application/pdf', size: 16, sha256: '0'.repeat(64) },
+      proof_file: { key, name: 'fixture.pdf', mime: ProofMime.Pdf, size: 16, sha256: '0'.repeat(64) },
       ...(sender ? { proof_sender: { id: sender } } : {}),
-      proof_actor_hash: sender ? actorHash({ userId: sender }) : actorHash({ token: 'public-fixture', secret }),
+      proof_actor_hash: sender
+        ? ProofRepository.actorHash({ userId: sender })
+        : ProofRepository.actorHash({ token: 'public-fixture', secret }),
       proof_sent_at: now,
       updated_at: now
     }
@@ -61,7 +72,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     const [database] = await db.rawQuery('SELECT current_database() AS name');
     equal(database?.['name'], 'receivy_tests');
     await createUser(db, { id: owner, email: 'account-owner@example.com', name: 'Account Owner' });
-    await savePaymentMethod(db, owner, { pixKeyType: 'email', pixKey: 'account-owner@example.com' });
+    await PaymentMethodRepository.save(db, owner, { pixKeyType: PixKeyType.Email, pixKey: 'account-owner@example.com' });
     await createUser(db, { id: debtor, email: 'account-debtor@example.com', name: 'Account Debtor' });
   });
   after(async () => {
@@ -74,8 +85,8 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
   it('rejects issued access after remote revocation and forbids foreign or missing families', async () => {
     const current = await session(owner);
     equal((await authorize(current.access)).identity.userId, owner);
-    await rejects(() => revokeSession(db, debtor, current.familyId), HttpForbiddenError);
-    await revokeSession(db, owner, current.familyId);
+    await rejects(() => SessionRepository.revoke(db, debtor, current.familyId), HttpForbiddenError);
+    await SessionRepository.revoke(db, owner, current.familyId);
     await rejects(() => authorize(current.access), HttpUnauthorizedError);
     await rejects(() => authorize(issueAccessToken({ familyId: current.familyId, userId: debtor, secret })), HttpUnauthorizedError);
     await rejects(() => authorize(issueAccessToken({ familyId: crypto.randomUUID(), userId: owner, secret })), HttpUnauthorizedError);
@@ -83,22 +94,22 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
   it('logout and refresh replay remove only corresponding push registrations plus unlinked legacy tokens', async () => {
     const first = await session(owner);
     const second = await session(owner);
-    const a = await registerDevice(
+    const a = await NotificationRepository.registerDevice(
       db,
       owner,
-      { token: 'ExpoPushToken[account_a]', installationId: 'account-a', platform: 'ios' },
+      { token: 'ExpoPushToken[account_a]', installationId: 'account-a', platform: DevicePlatform.Ios },
       first.familyId
     );
-    const b = await registerDevice(
+    const b = await NotificationRepository.registerDevice(
       db,
       owner,
-      { token: 'ExpoPushToken[account_b]', installationId: 'account-b', platform: 'android' },
+      { token: 'ExpoPushToken[account_b]', installationId: 'account-b', platform: DevicePlatform.Android },
       second.familyId
     );
-    const legacy = await registerDevice(db, owner, {
+    const legacy = await NotificationRepository.registerDevice(db, owner, {
       token: 'ExpoPushToken[account_legacy]',
       installationId: 'account-legacy',
-      platform: 'ios'
+      platform: DevicePlatform.Ios
     });
     await repository.revokeFamilyByRefreshToken(first.refreshToken);
     await rejects(() => authorize(first.access), HttpUnauthorizedError);
@@ -108,7 +119,12 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     equal((await repository.rotateRefreshToken(second.refreshToken)).kind, 'rotated');
     const raced = await Promise.allSettled([
       repository.rotateRefreshToken(second.refreshToken),
-      registerDevice(db, owner, { token: 'ExpoPushToken[account_race]', installationId: 'account-race', platform: 'ios' }, second.familyId)
+      NotificationRepository.registerDevice(
+        db,
+        owner,
+        { token: 'ExpoPushToken[account_race]', installationId: 'account-race', platform: DevicePlatform.Ios },
+        second.familyId
+      )
     ]);
     ok(raced[0].status === 'fulfilled');
     equal(raced[0].value.kind, 'replayed');
@@ -120,28 +136,28 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     const id = crypto.randomUUID();
     ids.push(id);
     await createUser(db, { id, email: 'rollback-account@example.com', name: 'Rollback fixture' });
-    const person = await saveContact(db, owner, { name: 'Rollback fixture', email: 'rollback-account@example.com' });
+    const person = await ContactRepository.save(db, owner, { name: 'Rollback fixture', email: 'rollback-account@example.com' });
     const { chargeId: rollbackChargeId } = await createOnceCharge(db, owner, 'account-rollback', {
       userId: person.userId,
       amountCents: 50,
       dueDate: '2026-10-01'
     });
     const auth = await session(id);
-    await attachProof(rollbackChargeId, 'invalid-legacy-key', id, 'pending');
+    await attachProof(rollbackChargeId, 'invalid-legacy-key', id, StoredProofState.Pending);
     // An unroutable key can no longer make an account undeletable: the caller drops it best-effort.
     const { objectKeys } = await eraseAccount(db, id, 'EXCLUIR');
     deepEqual(objectKeys, ['invalid-legacy-key']);
     await rejects(() => authorize(auth.access), HttpUnauthorizedError);
-    equal((await getCharge(db, owner, rollbackChargeId)).recipient.email, null);
+    equal((await ChargeRepository.get(db, owner, rollbackChargeId)).recipient.email, null);
     deepEqual(await proofColumns(rollbackChargeId), { state: null, key: null, sender: null });
   });
   it('validates profile', async () => {
-    await updateProfile(db, owner, { name: '  Ana  ', locale: 'pt-BR', timezone: 'America/Manaus', country: 'BR' });
+    await AccountRepository.updateProfile(db, owner, { name: '  Ana  ', locale: 'pt-BR', timezone: 'America/Manaus', country: 'BR' });
     equal((await db.users.findOne({ select: { name: true }, where: { id: owner } }))?.name, 'Ana');
-    await rejects(() => updateProfile(db, owner, { name: ' ', locale: 'pt-BR', timezone: 'bad/zone', country: 'BR' }));
+    await rejects(() => AccountRepository.updateProfile(db, owner, { name: ' ', locale: 'pt-BR', timezone: 'bad/zone', country: 'BR' }));
   });
   it("atomically erases identity, preserves other account's payment fact and closes re-registration history access", async () => {
-    const person = await saveContact(db, owner, { name: 'Account Debtor', email: 'account-debtor@example.com' });
+    const person = await ContactRepository.save(db, owner, { name: 'Account Debtor', email: 'account-debtor@example.com' });
     const { chargeId } = await createOnceCharge(db, owner, 'account-history', {
       userId: person.userId,
       amountCents: 1234,
@@ -152,16 +168,16 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
       amountCents: 70,
       dueDate: '2026-10-02'
     });
-    const publicLink = await createOrRotatePublicLink(db, owner, chargeId, secret);
-    await payCharge(db, owner, chargeId);
+    const publicLink = await PublicLinkRepository.createOrRotate(db, owner, chargeId, secret);
+    await ChargeRepository.pay(db, owner, chargeId);
     const ownKey = `proofs/${chargeId}/${crypto.randomUUID()}`;
     const anonymousKey = `proofs/${anonymousChargeId}/${crypto.randomUUID()}`;
     await bucket.write(ownKey, Buffer.from('%PDF-1.7\nfixture'));
     await bucket.write(anonymousKey, Buffer.from('%PDF-1.7\nfixture'));
     await attachProof(chargeId, ownKey, debtor);
-    await attachProof(anonymousChargeId, anonymousKey, null, 'pending');
+    await attachProof(anonymousChargeId, anonymousKey, null, StoredProofState.Pending);
     const current = await session(debtor);
-    equal((await getCharge(db, debtor, chargeId)).direction, 'payable');
+    equal((await ChargeRepository.get(db, debtor, chargeId)).direction, 'payable');
     const concurrent = await Promise.all([eraseAccount(db, debtor, 'EXCLUIR'), eraseAccount(db, debtor, 'EXCLUIR')]);
     deepEqual(
       concurrent.map((result) => result.deleted),
@@ -182,7 +198,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     );
     await rejects(() => repository.issueSession(debtor), /Account unavailable/);
     equal((await repository.rotateRefreshToken(current.refreshToken)).kind, 'invalid');
-    const row = await getCharge(db, owner, chargeId);
+    const row = await ChargeRepository.get(db, owner, chargeId);
     equal(row.state, 'paid');
     ok(row.paidAt, 'the settlement survives the payer');
     equal(row.amount.amountCents, 1234);
@@ -190,7 +206,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     equal(row.recipient.name, 'Conta excluída');
     equal(row.proof, null, 'the file the erased person sent goes with them');
     // The link belongs to the creditor's charge, not to the payer: it keeps answering, with nothing of theirs on it.
-    equal((await getPublicCharge(db, publicLink.token, secret)).state, 'paid');
+    equal((await PublicLinkRepository.getCharge(db, publicLink.token, secret)).state, 'paid');
     deepEqual(await proofColumns(chargeId), { state: null, key: null, sender: null });
     deepEqual(await proofColumns(anonymousChargeId), { state: 'pending', key: anonymousKey, sender: null });
     // Only the erasure that did the work reports files, and only the ones it owned.
@@ -202,19 +218,22 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     const replacement = await repository.findOrCreateUserByEmail('account-debtor@example.com');
     ids.push(replacement.id);
     notEqual(replacement.id, debtor);
-    await rejects(() => getCharge(db, replacement.id, chargeId), HttpForbiddenError);
+    await rejects(() => ChargeRepository.get(db, replacement.id, chargeId), HttpForbiddenError);
     await rejects(
-      () => saveContact(db, debtor, { name: 'Stale request', email: 'stale-contact@example.com' }),
+      () => ContactRepository.save(db, debtor, { name: 'Stale request', email: 'stale-contact@example.com' }),
       HttpUnauthorizedError,
       'a pre-authorized request cannot recreate contacts after erasure'
     );
-    await rejects(() => savePaymentMethod(db, debtor, { pixKeyType: 'email', pixKey: 'stale@example.com' }), HttpUnauthorizedError);
+    await rejects(
+      () => PaymentMethodRepository.save(db, debtor, { pixKeyType: PixKeyType.Email, pixKey: 'stale@example.com' }),
+      HttpUnauthorizedError
+    );
   });
   it('drops every erased file from the bucket after the transaction commits', async () => {
     const id = crypto.randomUUID();
     ids.push(id);
     await createUser(db, { id, email: 'queued-account@example.com', name: 'Queued fixture' });
-    const person = await saveContact(db, owner, { name: 'Queued fixture', email: 'queued-account@example.com' });
+    const person = await ContactRepository.save(db, owner, { name: 'Queued fixture', email: 'queued-account@example.com' });
     const { chargeId } = await createOnceCharge(db, owner, 'account-queued', {
       userId: person.userId,
       amountCents: 70,

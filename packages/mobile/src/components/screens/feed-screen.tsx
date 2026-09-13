@@ -158,9 +158,9 @@ function ChargeCard({
             accessibilityRole="button"
             accessibilityLabel={action.label}
             onPress={onOpen}
-            className={`min-h-10 justify-center rounded-lg px-3 ${action.label === "Pagar via Pix" ? "bg-primary" : "bg-surface-muted"}`}
+            className={`min-h-10 justify-center rounded-lg px-3 ${action.label === "Pagar" ? "bg-primary" : "bg-surface-muted"}`}
           >
-            <Text className={`text-xs font-bold ${action.label === "Pagar via Pix" ? "text-white" : "text-primary-strong"}`}>{action.label}</Text>
+            <Text className={`text-xs font-bold ${action.label === "Pagar" ? "text-white" : "text-primary-strong"}`}>{action.label}</Text>
           </Pressable>
         )}
       </View>

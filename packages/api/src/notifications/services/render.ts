@@ -1,6 +1,13 @@
 import { chargeDateText } from '@receivy/common';
 import { buttonRow, chargeRow, emailDocument, noticeRow } from '../../common/services/email/layout';
-import { issuePublicChargeToken } from '../../public/services/capability';
+import { issuePublicChargeToken, PublicTokenPurpose } from '../../public/services/capability';
+
+/** Declared here, not in `send.ts`, so rendering never imports the sender back (a runtime cycle). */
+export const enum NoticeTemplate {
+  Initial = 'initial',
+  Reminder = 'reminder',
+  Manual = 'manual'
+}
 
 const CLOSING = 'Se já pagou, envie o comprovante para revisão. O Receivy não movimenta dinheiro.';
 
@@ -24,7 +31,7 @@ export interface RenderInputs {
  * client can read, and the HTML is what a mail client renders. A conta a pagar reminding its own
  * owner never leaves as e-mail, so it renders no HTML.
  */
-export function renderNotice(input: RenderInputs, template: 'initial' | 'reminder' | 'manual', secret: string) {
+export function renderNotice(input: RenderInputs, template: NoticeTemplate, secret: string) {
   const amount = `${Math.floor(input.cents / 100)},${String(input.cents % 100).padStart(2, '0')}`;
   const due = chargeDateText(input.dueDate);
 
@@ -40,11 +47,11 @@ export function renderNotice(input: RenderInputs, template: 'initial' | 'reminde
     version: input.version,
     expiresAtSeconds: input.expires,
     secret,
-    purpose: 'charge'
+    purpose: PublicTokenPurpose.Charge
   });
 
   const url = `${input.origin}/pay/${token}`;
-  const initial = template === 'initial';
+  const initial = template === NoticeTemplate.Initial;
   const subject = initial ? 'Uma nova cobrança no Receivy' : 'Lembrete de cobrança no Receivy';
   const opening = `${input.name}, ${initial ? 'você recebeu uma cobrança' : 'há uma cobrança pendente'} de R$ ${amount}, com vencimento em ${due}.`;
   const text = `${opening}\n${input.description}\nConfira os detalhes: ${url}\n${CLOSING}`;

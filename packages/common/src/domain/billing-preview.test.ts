@@ -1,26 +1,30 @@
 import { describe, expect, it } from 'vitest';
+import { BillingDueRule, BillingFrequency, BillingType, SplitPartKind } from './billing';
+import { BillingCategory } from './billing-category';
 import { type BillingDraft, EMPTY_SPLIT_VALUES } from './billing-draft';
 import { draftTotalCents, previewBillingSplit, splitParties, splitPartyKey } from './billing-preview';
+import { Direction, PixKeyType, SplitMode } from './contracts';
 import { formatMoney } from './money';
 
 const base: BillingDraft = {
-  direction: 'receivable',
+  direction: Direction.Receivable,
   payee: '',
-  pixInline: { type: 'email', key: '', label: '' },
-  type: 'once',
+  pixInline: { type: PixKeyType.Email, key: '', label: '' },
+  type: BillingType.Once,
   selected: ['p1', 'p2'],
   owner: true,
   amount: '90,00',
   description: 'Internet',
-  frequency: 'monthly',
+  frequency: BillingFrequency.Monthly,
   start: '2026-01-31',
+  dueRule: BillingDueRule.Fixed,
   end: '',
   occurrences: '',
   timezone: 'America/Sao_Paulo',
   pix: '',
-  mode: 'equal',
+  mode: SplitMode.Equal,
   values: EMPTY_SPLIT_VALUES(),
-  category: 'other',
+  category: BillingCategory.Other,
   reminders: [{ offsetDays: '0', enabled: true }]
 };
 
@@ -45,7 +49,7 @@ describe('previewBillingSplit', () => {
   });
 
   it('defaults a missing share to one', () => {
-    expect(previewBillingSplit({ ...base, mode: 'shares', values: { ...EMPTY_SPLIT_VALUES(), shares: { p1: '2' } } })).toEqual({
+    expect(previewBillingSplit({ ...base, mode: SplitMode.Shares, values: { ...EMPTY_SPLIT_VALUES(), shares: { p1: '2' } } })).toEqual({
       amounts: { p1: 4500, p2: 2250, owner: 2250 },
       error: null
     });
@@ -55,7 +59,7 @@ describe('previewBillingSplit', () => {
     const preview = previewBillingSplit({
       ...base,
       owner: false,
-      mode: 'fixed',
+      mode: SplitMode.Fixed,
       values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00', p2: '45,00' } }
     });
 
@@ -66,7 +70,7 @@ describe('previewBillingSplit', () => {
     const preview = previewBillingSplit({
       ...base,
       owner: true,
-      mode: 'fixed',
+      mode: SplitMode.Fixed,
       values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00', p2: '45,00' } }
     });
 
@@ -77,7 +81,7 @@ describe('previewBillingSplit', () => {
     const preview = previewBillingSplit({
       ...base,
       owner: true,
-      mode: 'fixed',
+      mode: SplitMode.Fixed,
       values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '60,00', p2: '45,00' } }
     });
 
@@ -88,7 +92,7 @@ describe('previewBillingSplit', () => {
     const preview = previewBillingSplit({
       ...base,
       owner: false,
-      mode: 'percentage',
+      mode: SplitMode.Percentage,
       values: { ...EMPTY_SPLIT_VALUES(), percentage: { p1: '60', p2: '50' } }
     });
 
@@ -100,7 +104,7 @@ describe('previewBillingSplit', () => {
       previewBillingSplit({
         ...base,
         owner: false,
-        mode: 'percentage',
+        mode: SplitMode.Percentage,
         values: { ...EMPTY_SPLIT_VALUES(), percentage: { p1: '60', p2: '40' } }
       })
     ).toEqual({
@@ -110,9 +114,9 @@ describe('previewBillingSplit', () => {
   });
 
   it('keeps a fixed value in place when switching to percentage and back', () => {
-    const withFixed = { ...base, mode: 'fixed' as const, values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00' } } };
+    const withFixed = { ...base, mode: SplitMode.Fixed, values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00' } } };
     const switchedToPercentage = { ...withFixed, mode: 'percentage' as const };
-    const switchedBack = { ...switchedToPercentage, mode: 'fixed' as const };
+    const switchedBack = { ...switchedToPercentage, mode: SplitMode.Fixed };
 
     expect(previewBillingSplit(switchedBack)).toEqual(previewBillingSplit(withFixed));
   });
@@ -122,7 +126,7 @@ describe('previewBillingSplit', () => {
       previewBillingSplit({
         ...base,
         amount: '',
-        mode: 'percentage',
+        mode: SplitMode.Percentage,
         values: { ...EMPTY_SPLIT_VALUES(), percentage: { p1: '60', p2: '50' } }
       })
     ).toEqual({
@@ -145,7 +149,7 @@ describe('splitParties', () => {
   });
 
   it('keys a party by person id or owner', () => {
-    expect(splitPartyKey({ kind: 'user', userId: 'p1' })).toBe('p1');
-    expect(splitPartyKey({ kind: 'owner' })).toBe('owner');
+    expect(splitPartyKey({ kind: SplitPartKind.User, userId: 'p1' })).toBe('p1');
+    expect(splitPartyKey({ kind: SplitPartKind.Owner })).toBe('owner');
   });
 });

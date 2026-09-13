@@ -3,7 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import { allowEmailCode } from '../../common/utils/throttle';
 import type { UserProvider } from '../provider';
-import { createAuthRepository } from '../repositories/auth';
+import { AuthRepository } from '../repositories/auth';
 import { requestEmailCode } from '../services/email-login';
 import { createLoginCodeMailer } from '../services/login-code-email';
 
@@ -15,9 +15,10 @@ declare class EmailCodeResponse implements Http.Response {
   status: 204;
 }
 
-export async function emailCodeHandler(request: EmailCodeRequest, context: Service.Context<UserProvider>): Promise<EmailCodeResponse> {
-  const { db, email, variables } = context;
-
+export async function emailCodeHandler(
+  request: EmailCodeRequest,
+  { db, email, variables }: Service.Context<UserProvider>
+): Promise<EmailCodeResponse> {
   const allowed = await allowEmailCode(db, request.body.email, variables.LOGIN_CODE_HASH_KEY);
 
   if (!allowed) {
@@ -26,7 +27,7 @@ export async function emailCodeHandler(request: EmailCodeRequest, context: Servi
 
   await requestEmailCode(request.body, {
     codeHashKey: variables.LOGIN_CODE_HASH_KEY,
-    repo: createAuthRepository(db),
+    repo: AuthRepository.create(db),
     transport: createLoginCodeMailer(email, variables.EMAIL_TRANSPORT, variables.RESEND_FROM_EMAIL)
   });
 

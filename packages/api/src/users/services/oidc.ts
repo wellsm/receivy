@@ -1,7 +1,10 @@
 import { createPublicKey, type JsonWebKey as NodeJsonWebKey, verify } from 'node:crypto';
 import { normalizeEmail } from '@receivy/common';
 
-type SupportedAlgorithm = 'ES256' | 'RS256';
+export const enum SupportedAlgorithm {
+  Es256 = 'ES256',
+  Rs256 = 'RS256'
+}
 
 type Jwk = NodeJsonWebKey & {
   alg?: string;
@@ -77,7 +80,11 @@ export function verifyOidcIdToken({
   const algorithm = header.alg;
   const kid = header.kid;
 
-  if ((algorithm !== 'RS256' && algorithm !== 'ES256') || !algorithms.includes(algorithm) || typeof kid !== 'string') {
+  if (
+    (algorithm !== SupportedAlgorithm.Rs256 && algorithm !== SupportedAlgorithm.Es256) ||
+    !algorithms.includes(algorithm) ||
+    typeof kid !== 'string'
+  ) {
     return invalidToken();
   }
 
@@ -96,7 +103,7 @@ export function verifyOidcIdToken({
     const validSignature = verify(
       'sha256',
       Buffer.from(`${encodedHeader}.${encodedPayload}`),
-      algorithm === 'ES256' ? { key: publicKey, dsaEncoding: 'ieee-p1363' } : publicKey,
+      algorithm === SupportedAlgorithm.Es256 ? { key: publicKey, dsaEncoding: 'ieee-p1363' } : publicKey,
       Buffer.from(encodedSignature, 'base64url')
     );
     if (!validSignature) {

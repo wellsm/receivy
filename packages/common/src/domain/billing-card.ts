@@ -1,14 +1,19 @@
-import type { BillingSummary } from './billing';
+import { BillingFrequency, BillingState, type BillingSummary, BillingType } from './billing';
 import { dayDiff } from './calendar-labels';
-import type { SplitMode } from './contracts';
-import type { BadgeTone } from './feed';
+import { Direction, SplitMode } from './contracts';
+import { BadgeTone } from './feed';
 import { formatMoney } from './money';
+
+export const enum BillingShareAction {
+  Share = 'share',
+  Open = 'open'
+}
 
 export type BillingBadge = { label: string; tone: BadgeTone };
 
 /** Human due date for a billing card: relative for the days around today, plural-aware when overdue. */
 export function billingDueLabel(billing: BillingSummary, today: string): string {
-  if (billing.state === 'ended') {
+  if (billing.state === BillingState.Ended) {
     return billing.paidCount === billing.chargeCount && billing.chargeCount > 0 ? 'Liquidada' : 'Encerrada';
   }
 
@@ -39,49 +44,49 @@ export function billingDueLabel(billing: BillingSummary, today: string): string 
 export function billingBadges(billing: BillingSummary): BillingBadge[] {
   const badges: BillingBadge[] = [];
 
-  if (billing.type === 'once') {
-    badges.push({ label: 'Única', tone: 'neutral' });
-  } else if (billing.type === 'until') {
+  if (billing.type === BillingType.Once) {
+    badges.push({ label: 'Única', tone: BadgeTone.Neutral });
+  } else if (billing.type === BillingType.Until) {
     if (billing.paidCount < (billing.installmentCount ?? 0)) {
-      badges.push({ label: `Parcela ${billing.paidCount + 1} de ${billing.installmentCount}`, tone: 'info' });
+      badges.push({ label: `Parcela ${billing.paidCount + 1} de ${billing.installmentCount}`, tone: BadgeTone.Info });
     } else {
-      badges.push({ label: `${billing.installmentCount} parcelas`, tone: 'neutral' });
+      badges.push({ label: `${billing.installmentCount} parcelas`, tone: BadgeTone.Neutral });
     }
   } else {
-    badges.push({ label: `Recorrente ${billing.frequency === 'yearly' ? 'anual' : 'mensal'}`, tone: 'info' });
+    badges.push({ label: `Recorrente ${billing.frequency === BillingFrequency.Yearly ? 'anual' : 'mensal'}`, tone: BadgeTone.Info });
   }
 
-  if (billing.state === 'paused') {
-    badges.push({ label: 'Pausada', tone: 'warning' });
+  if (billing.state === BillingState.Paused) {
+    badges.push({ label: 'Pausada', tone: BadgeTone.Warning });
   }
 
   if (billing.proofsPending > 0) {
-    badges.push({ label: 'Aguardando comprovante', tone: 'info' });
+    badges.push({ label: 'Aguardando comprovante', tone: BadgeTone.Info });
   }
 
-  if (billing.state === 'ended' && billing.paidCount === billing.chargeCount && billing.chargeCount > 0) {
-    badges.push({ label: 'Liquidado', tone: 'success' });
+  if (billing.state === BillingState.Ended && billing.paidCount === billing.chargeCount && billing.chargeCount > 0) {
+    badges.push({ label: 'Liquidado', tone: BadgeTone.Success });
   }
 
-  if (billing.direction === 'payable') {
-    badges.push({ label: 'A pagar', tone: 'warning' });
-    badges.push({ label: billing.payeeName ?? 'Só comigo', tone: 'neutral' });
+  if (billing.direction === Direction.Payable) {
+    badges.push({ label: 'A pagar', tone: BadgeTone.Warning });
+    badges.push({ label: billing.payeeName ?? 'Só comigo', tone: BadgeTone.Neutral });
 
     return badges;
   }
 
-  badges.push({ label: `${billing.participantCount} pessoa${billing.participantCount === 1 ? '' : 's'}`, tone: 'neutral' });
+  badges.push({ label: `${billing.participantCount} pessoa${billing.participantCount === 1 ? '' : 's'}`, tone: BadgeTone.Neutral });
 
   return badges;
 }
 
 /** The single call to action a billing card offers; null once the billing ended. */
-export function billingShareAction(billing: BillingSummary): 'share' | 'open' | null {
-  if (billing.state === 'ended') {
+export function billingShareAction(billing: BillingSummary): BillingShareAction | null {
+  if (billing.state === BillingState.Ended) {
     return null;
   }
 
-  return billing.shareChargeId ? 'share' : 'open';
+  return billing.shareChargeId ? BillingShareAction.Share : BillingShareAction.Open;
 }
 
 /**
@@ -92,7 +97,7 @@ export function billingShareAction(billing: BillingSummary): 'share' | 'open' | 
 export function billingSummaryLine(input: { people: number; amountCents: number; mode: SplitMode; dueLabel: string }): string {
   const people = `${input.people} pessoa${input.people === 1 ? '' : 's'}`;
   const money = formatMoney({ amountCents: input.amountCents, currency: 'BRL' });
-  const amount = input.mode === 'equal' ? `${money} cada` : `${money} total`;
+  const amount = input.mode === SplitMode.Equal ? `${money} cada` : `${money} total`;
 
   return `${people} · ${amount} · vence ${input.dueLabel.toLowerCase()}`;
 }

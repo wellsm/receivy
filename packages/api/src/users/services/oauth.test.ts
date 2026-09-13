@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildAuthorizationUrl, createOauthAttempt, isAllowedOauthRedirect } from './oauth';
+import { buildAuthorizationUrl, createOauthAttempt, isAllowedOauthRedirect, OauthProvider } from './oauth';
 
 describe('OAuth authorization requests', () => {
   it('creates independent state, nonce and RFC 7636 PKCE values', () => {
@@ -37,9 +37,9 @@ describe('OAuth authorization requests', () => {
       redirectUri: 'https://api.receivy.example/auth/google/callback',
       state: 'state'
     };
-    const google = new URL(buildAuthorizationUrl('google', common));
+    const google = new URL(buildAuthorizationUrl(OauthProvider.Google, common));
     const apple = new URL(
-      buildAuthorizationUrl('apple', {
+      buildAuthorizationUrl(OauthProvider.Apple, {
         ...common,
         redirectUri: 'https://api.receivy.example/auth/apple/callback'
       })

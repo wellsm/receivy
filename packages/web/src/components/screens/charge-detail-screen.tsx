@@ -20,20 +20,18 @@ import {
   type PublicLink,
   REMINDER_QUOTA_MESSAGE,
 } from "@receivy/common";
-import { Bell, CalendarDays, Check, CircleStop, CloudUpload, Copy, Eye, KeyRound, RotateCcw, Share2 } from "lucide-react";
+import { Bell, CalendarDays, Check, CircleStop, CloudUpload, Copy, Eye, RotateCcw, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
-import { PROOF_ACCEPT, uploadProofFile } from "@/lib/proof-upload";
+import { uploadProofFile } from "@/lib/proof-upload";
 import { FirstSharePix } from "@/components/app/first-share-pix";
 import { ProofCard } from "@/components/app/proof-card";
 import { Toast } from "@/components/app/toast";
 import { ActionTile } from "@/components/ui/action-tile";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { CopyButton } from "@/components/ui/copy-button";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
-import { PIX_TYPE_LABELS } from "@/components/ui/pix-type-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 import { StatusTag } from "@/components/ui/status-tag";
 
@@ -90,12 +88,13 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  // Picking only stages the file; the footer button is what sends it.
+  const [picked, setPicked] = useState<File | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
   const [confirmRemind, setConfirmRemind] = useState(false);
   // How the payment lands: accepting the file under review or by hand; `null` keeps the dialog closed.
   const [confirmPaid, setConfirmPaid] = useState<"review" | "pay" | null>(null);
-  const footerPicker = useRef<HTMLInputElement>(null);
 
   const base = `/api/financial/charges/${id}`;
 
@@ -231,8 +230,18 @@ export function ChargeDetailScreen({ id }: { id: string }) {
       return;
     }
 
+    // Stays on the charge: the card swaps the preview for the sent file under review.
+    setPicked(null);
     setCharge(sent);
-    router.push(`/charges/${id}/proof`);
+    setNotice("Comprovante enviado para revisão.");
+  }
+
+  function sendPicked() {
+    if (!picked) {
+      return;
+    }
+
+    void upload(picked);
   }
 
   if (!charge) {
@@ -272,6 +281,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   const cancellable = canCancelCharge(charge);
   const acceptProof = canAcceptProof(charge);
   const uploadAllowed = canUploadProof(charge);
+  // The card picks the file; this button only sends it, so it stays disabled until there is one.
   const footerLabel = uploadAllowed ? (proof ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado";
 
   return (
@@ -284,7 +294,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
       {notice && <Toast message={notice} onDismiss={() => setNotice("")} />}
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] md:items-start">
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
           {/* Hero: the same card the billing detail opens with, scoped to one person */}
           <article className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -316,22 +326,6 @@ export function ChargeDetailScreen({ id }: { id: string }) {
               </span>
             </p>
 
-            <div className="flex items-center justify-between border-t border-outline/20 pt-3">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                <KeyRound size={14} aria-hidden="true" className="shrink-0 text-primary-strong" />
-                <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
-                  {charge.pix ? (
-                    <>
-                      Chave Pix: <span className="font-medium text-ink">{charge.pix.key}</span>
-                      {` • ${PIX_TYPE_LABELS[charge.pix.keyType]}`}
-                    </>
-                  ) : (
-                    "Sem chave Pix vinculada"
-                  )}
-                </span>
-              </div>
-              {charge.pix && <CopyButton value={charge.pix.key} ariaLabel="Copiar chave Pix" onRefused={() => setError("Não foi possível copiar a chave.")} />}
-            </div>
           </article>
 
           {/* Amount */}
@@ -345,10 +339,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
           {(pending || reopenable) && (
             <div className="flex flex-col gap-2.5">
               <div className="flex gap-2">
-                {!receivable && charge.pix && <ActionTile label="Copiar Pix" icon={Copy} hint="Copia a chave Pix do credor" disabled={busy} onClick={() => void copyPix(charge.pix!.key)} />}
-                {!receivable && !proof && (
-                  <ActionTile label="Enviar comprovante" icon={CloudUpload} tone="primary" hint="Envia o comprovante de pagamento" disabled={busy} onClick={() => footerPicker.current?.click()} />
-                )}
+                {!receivable && charge.pix && <ActionTile label="Copiar Chave Pix" icon={Copy} hint="Copia a chave Pix do credor" disabled={busy} onClick={() => void copyPix(charge.pix!.key)} />}
                 {(!receivable || ownBill) && proof && (
                   <ActionTile label="Comprovante" icon={Eye} tone="primary" hint="Abre o comprovante enviado" disabled={busy} onClick={() => router.push(`/charges/${id}/proof`)} />
                 )}
@@ -370,8 +361,16 @@ export function ChargeDetailScreen({ id }: { id: string }) {
           {guidance && <p className="m-0 rounded-2xl bg-surface-muted p-4 text-sm leading-5 text-muted">{guidance}</p>}
         </div>
 
-        <div className="flex flex-col gap-4">
-          <ProofCard charge={charge} busy={busy} onView={() => router.push(`/charges/${id}/proof`)} onUpload={(file) => void upload(file)} onAccept={() => setConfirmPaid(acceptProof ? "review" : "pay")} />
+        <div className="flex min-w-0 flex-col gap-4">
+          <ProofCard
+            charge={charge}
+            busy={busy}
+            picked={picked}
+            onView={() => router.push(`/charges/${id}/proof`)}
+            onPick={setPicked}
+            onSend={markable ? sendPicked : undefined}
+            onAccept={() => setConfirmPaid(acceptProof ? "review" : "pay")}
+          />
 
           {creditor && pending && charge.sharingState === "pix_required" && <FirstSharePix busy={busy} publish={(methodId) => shareLink(false, methodId)} />}
 
@@ -383,32 +382,12 @@ export function ChargeDetailScreen({ id }: { id: string }) {
         </div>
       </div>
 
-      {/* The picker lives outside the footer: the owner of a conta a pagar uploads from the tile while the footer marks it paid */}
-      {pending && !receivable && (
-        <input
-          ref={footerPicker}
-          type="file"
-          accept={PROOF_ACCEPT}
-          aria-label={footerLabel}
-          className="sr-only"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-
-            event.target.value = "";
-
-            if (file) {
-              void upload(file);
-            }
-          }}
-        />
-      )}
-
       {pending && !markable && (uploadAllowed || proof) && (
         <ScreenFooter className="-mx-1 mt-2 border-t border-outline/20 bg-canvas/95 px-1 py-3 backdrop-blur-md">
           <button
             type="button"
-            disabled={busy}
-            onClick={() => (uploadAllowed ? footerPicker.current?.click() : router.push(`/charges/${id}/proof`))}
+            disabled={busy || (uploadAllowed && !picked)}
+            onClick={() => (uploadAllowed ? sendPicked() : router.push(`/charges/${id}/proof`))}
             className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white transition hover:bg-primary-strong disabled:opacity-50"
           >
             {uploadAllowed ? <CloudUpload size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}

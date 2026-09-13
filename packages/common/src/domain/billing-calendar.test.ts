@@ -1,20 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_BILLING_REMINDERS } from './billing';
+import { BillingDueRule, BillingFrequency, BillingType, DEFAULT_BILLING_REMINDERS, SplitPartKind } from './billing';
 import {
   addCalendarDays,
   billingDates,
   billingDueDates,
   civilHour,
+  endOfMonth,
   materializationDate,
   normalizeBillingInput,
   zonedInstant
 } from './billing-calendar';
+import { SplitMode } from './contracts';
+import type { BillingSplit } from './split';
 
-const split = { mode: 'equal' as const, parts: [{ kind: 'user' as const, userId: 'ana' }] };
+const split = { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: 'ana' }] } satisfies BillingSplit;
 
 describe('billing calendar', () => {
   it('clamps monthly dates to the last day without drifting', () => {
-    expect(billingDates({ frequency: 'monthly', startDate: '2026-01-31' }, '2026-01-01', '2026-04-30')).toEqual([
+    expect(billingDates({ frequency: BillingFrequency.Monthly, startDate: '2026-01-31' }, '2026-01-01', '2026-04-30')).toEqual([
       '2026-01-31',
       '2026-02-28',
       '2026-03-31',
@@ -22,8 +25,60 @@ describe('billing calendar', () => {
     ]);
   });
 
+  it('lands every month on its last day with an end_of_month rule', () => {
+    expect(
+      billingDates(
+        { frequency: BillingFrequency.Monthly, startDate: '2026-09-30', dueRule: BillingDueRule.EndOfMonth },
+        '2026-09-01',
+        '2027-02-28'
+      )
+    ).toEqual(['2026-09-30', '2026-10-31', '2026-11-30', '2026-12-31', '2027-01-31', '2027-02-28']);
+    expect(
+      billingDates(
+        { frequency: BillingFrequency.Monthly, startDate: '2028-01-31', dueRule: BillingDueRule.EndOfMonth },
+        '2028-02-01',
+        '2028-02-29'
+      )
+    ).toEqual(['2028-02-29']);
+    // A fixed rule keeps the start day: the bug end_of_month fixes.
+    expect(billingDates({ frequency: BillingFrequency.Monthly, startDate: '2026-09-30' }, '2026-10-01', '2026-10-31')).toEqual([
+      '2026-10-30'
+    ]);
+  });
+
+  it('finds the last day of a month', () => {
+    expect(endOfMonth('2026-09-12')).toBe('2026-09-30');
+    expect(endOfMonth('2028-02-01')).toBe('2028-02-29');
+    expect(() => endOfMonth('31/01/2026')).toThrow(RangeError);
+  });
+
+  it('accepts end_of_month only on the last day of monthly or once billings', () => {
+    const base = {
+      type: BillingType.Until,
+      frequency: BillingFrequency.Monthly,
+      totalCents: 1_000,
+      startDate: '2026-09-30',
+      endDate: '2026-11-30',
+      timezone: 'America/Sao_Paulo',
+      split,
+      dueRule: BillingDueRule.EndOfMonth
+    };
+
+    expect(normalizeBillingInput(base).dueRule).toBe('end_of_month');
+    expect(billingDueDates(base)).toEqual(['2026-09-30', '2026-10-31', '2026-11-30']);
+    expect(() => normalizeBillingInput({ ...base, startDate: '2026-09-29' })).toThrow(
+      'Com final do mês, o vencimento deve ser o último dia do mês.'
+    );
+    expect(() =>
+      normalizeBillingInput({ ...base, type: BillingType.Indefinite, frequency: BillingFrequency.Yearly, endDate: undefined })
+    ).toThrow('Final do mês só vale para cobranças mensais.');
+    expect(normalizeBillingInput({ ...base, type: BillingType.Once, frequency: undefined, endDate: undefined }).dueRule).toBe(
+      BillingDueRule.EndOfMonth
+    );
+  });
+
   it('reads day and month from the start date for yearly rules and restores leap day', () => {
-    expect(billingDates({ frequency: 'yearly', startDate: '2024-02-29' }, '2024-01-01', '2028-12-31')).toEqual([
+    expect(billingDates({ frequency: BillingFrequency.Yearly, startDate: '2024-02-29' }, '2024-01-01', '2028-12-31')).toEqual([
       '2024-02-29',
       '2025-02-28',
       '2026-02-28',
@@ -33,22 +88,23 @@ describe('billing calendar', () => {
   });
 
   it('honors inclusive bounds and the limit', () => {
-    expect(billingDates({ frequency: 'monthly', startDate: '2026-01-15', endDate: '2026-03-15' }, '2026-02-01', '2026-12-31')).toEqual([
-      '2026-02-15',
-      '2026-03-15'
-    ]);
-    expect(billingDates({ frequency: 'monthly', startDate: '2000-01-01' }, '2000-01-01', '2010-01-01', 3)).toHaveLength(3);
+    expect(
+      billingDates({ frequency: BillingFrequency.Monthly, startDate: '2026-01-15', endDate: '2026-03-15' }, '2026-02-01', '2026-12-31')
+    ).toEqual(['2026-02-15', '2026-03-15']);
+    expect(billingDates({ frequency: BillingFrequency.Monthly, startDate: '2000-01-01' }, '2000-01-01', '2010-01-01', 3)).toHaveLength(3);
   });
 
   it('expands finite billings into due dates and caps them at 120', () => {
-    expect(billingDueDates({ type: 'once', startDate: '2026-05-10' })).toEqual(['2026-05-10']);
-    expect(billingDueDates({ type: 'until', frequency: 'monthly', startDate: '2026-01-31', endDate: '2026-03-31' })).toEqual([
-      '2026-01-31',
-      '2026-02-28',
-      '2026-03-31'
-    ]);
-    expect(() => billingDueDates({ type: 'until', frequency: 'monthly', startDate: '2026-01-01', endDate: '2040-01-01' })).toThrow(/120/);
-    expect(() => billingDueDates({ type: 'indefinite', frequency: 'monthly', startDate: '2026-01-01' })).toThrow(/sem fim/i);
+    expect(billingDueDates({ type: BillingType.Once, startDate: '2026-05-10' })).toEqual(['2026-05-10']);
+    expect(
+      billingDueDates({ type: BillingType.Until, frequency: BillingFrequency.Monthly, startDate: '2026-01-31', endDate: '2026-03-31' })
+    ).toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
+    expect(() =>
+      billingDueDates({ type: BillingType.Until, frequency: BillingFrequency.Monthly, startDate: '2026-01-01', endDate: '2040-01-01' })
+    ).toThrow(/120/);
+    expect(() => billingDueDates({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-01-01' })).toThrow(
+      /sem fim/i
+    );
   });
 
   it('uses the earliest enabled reminder for materialization', () => {
@@ -63,13 +119,19 @@ describe('billing calendar', () => {
   });
 
   it('normalizes input per type and rejects incompatible fields', () => {
-    const once = normalizeBillingInput({ type: 'once', totalCents: 100, startDate: '2026-01-31', timezone: 'America/Sao_Paulo', split });
+    const once = normalizeBillingInput({
+      type: BillingType.Once,
+      totalCents: 100,
+      startDate: '2026-01-31',
+      timezone: 'America/Sao_Paulo',
+      split
+    });
     expect(once.description).toBe('Conta');
     expect(once.frequency).toBeUndefined();
     expect(once.reminders).toBeUndefined();
     const until = normalizeBillingInput({
-      type: 'until',
-      frequency: 'monthly',
+      type: BillingType.Until,
+      frequency: BillingFrequency.Monthly,
       totalCents: 100,
       startDate: '2026-01-31',
       endDate: '2026-03-31',
@@ -84,16 +146,23 @@ describe('billing calendar', () => {
       { offsetDays: -3, enabled: false },
       { offsetDays: 2, enabled: true }
     ]);
-    expect(() => normalizeBillingInput({ type: 'until', totalCents: 100, startDate: '2026-01-31', timezone: 'UTC', split })).toThrow(
-      /frequência/i
-    );
     expect(() =>
-      normalizeBillingInput({ type: 'until', frequency: 'monthly', totalCents: 100, startDate: '2026-01-31', timezone: 'UTC', split })
+      normalizeBillingInput({ type: BillingType.Until, totalCents: 100, startDate: '2026-01-31', timezone: 'UTC', split })
+    ).toThrow(/frequência/i);
+    expect(() =>
+      normalizeBillingInput({
+        type: BillingType.Until,
+        frequency: BillingFrequency.Monthly,
+        totalCents: 100,
+        startDate: '2026-01-31',
+        timezone: 'UTC',
+        split
+      })
     ).toThrow(/data final/i);
     expect(() =>
       normalizeBillingInput({
-        type: 'indefinite',
-        frequency: 'monthly',
+        type: BillingType.Indefinite,
+        frequency: BillingFrequency.Monthly,
         totalCents: 100,
         startDate: '2026-01-31',
         endDate: '2026-02-01',
@@ -103,8 +172,8 @@ describe('billing calendar', () => {
     ).toThrow(/sem fim/i);
     expect(() =>
       normalizeBillingInput({
-        type: 'until',
-        frequency: 'monthly',
+        type: BillingType.Until,
+        frequency: BillingFrequency.Monthly,
         totalCents: 100,
         startDate: '2026-03-31',
         endDate: '2026-01-31',
@@ -113,11 +182,11 @@ describe('billing calendar', () => {
       })
     ).toThrow(/anterior/i);
     expect(() =>
-      normalizeBillingInput({ type: 'once', totalCents: 100, startDate: '2026-01-31', timezone: 'Mars/Olympus', split })
+      normalizeBillingInput({ type: BillingType.Once, totalCents: 100, startDate: '2026-01-31', timezone: 'Mars/Olympus', split })
     ).toThrow();
     expect(() =>
       normalizeBillingInput({
-        type: 'once',
+        type: BillingType.Once,
         totalCents: 100,
         startDate: '2026-01-31',
         timezone: 'UTC',

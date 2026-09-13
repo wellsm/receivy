@@ -1,6 +1,13 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
 
+export const enum BillingGuestState {
+  Pending = 'pending',
+  Linked = 'linked',
+  Added = 'added',
+  Dismissed = 'dismissed'
+}
+
 /**
  * Someone who accepted an invite while the split still named contacts without e-mail. They wait
  * here until the owner links them to one of those contacts, adds them as a new participant or
@@ -11,7 +18,7 @@ export interface BillingGuestSchema extends Database.Schema {
   billing_id: String.UUID;
   owner_id: String.UUID;
   user_id: String.UUID;
-  state: 'pending' | 'linked' | 'added' | 'dismissed';
+  state: BillingGuestState;
   created_at: String.DateTime;
   resolved_at?: String.DateTime;
 }

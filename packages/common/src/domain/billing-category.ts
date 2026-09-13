@@ -1,14 +1,23 @@
-export type BillingCategory = 'food' | 'transport' | 'groceries' | 'subscription' | 'loan' | 'housing' | 'travel' | 'other';
+export const enum BillingCategory {
+  Food = 'food',
+  Transport = 'transport',
+  Groceries = 'groceries',
+  Subscription = 'subscription',
+  Loan = 'loan',
+  Housing = 'housing',
+  Travel = 'travel',
+  Other = 'other'
+}
 
 export const BILLING_CATEGORIES: { value: BillingCategory; label: string }[] = [
-  { value: 'food', label: 'Alimentação' },
-  { value: 'transport', label: 'Transporte' },
-  { value: 'groceries', label: 'Mercado' },
-  { value: 'subscription', label: 'Assinatura' },
-  { value: 'loan', label: 'Empréstimo' },
-  { value: 'housing', label: 'Moradia' },
-  { value: 'travel', label: 'Viagem' },
-  { value: 'other', label: 'Outro' }
+  { value: BillingCategory.Food, label: 'Alimentação' },
+  { value: BillingCategory.Transport, label: 'Transporte' },
+  { value: BillingCategory.Groceries, label: 'Mercado' },
+  { value: BillingCategory.Subscription, label: 'Assinatura' },
+  { value: BillingCategory.Loan, label: 'Empréstimo' },
+  { value: BillingCategory.Housing, label: 'Moradia' },
+  { value: BillingCategory.Travel, label: 'Viagem' },
+  { value: BillingCategory.Other, label: 'Outro' }
 ];
 
 export function billingCategoryLabel(category: BillingCategory): string {

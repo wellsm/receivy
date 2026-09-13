@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ChargeSummary } from './contracts';
+import { BillingType } from './billing';
+import { ChargePayer, ChargeState, type ChargeSummary, Direction, ProofState } from './contracts';
 import { chargeAction, chargeBadges, chargeStateLabel, feedDayLabel } from './feed';
 
 const base: ChargeSummary = {
@@ -7,9 +8,9 @@ const base: ChargeSummary = {
   description: 'Mercado',
   amount: { amountCents: 8742, currency: 'BRL' },
   dueDate: '2026-09-08',
-  state: 'pending',
+  state: ChargeState.Pending,
   billingId: 'b1',
-  billingType: 'once',
+  billingType: BillingType.Once,
   installment: 1,
   installmentCount: 1,
   counterpartName: 'Maria',
@@ -35,55 +36,64 @@ describe('chargeBadges', () => {
 
   it('describes recurrence, installments and proofs', () => {
     expect(
-      chargeBadges({ ...base, billingType: 'indefinite', installment: null, installmentCount: null, dueDate: '2026-10-01' }, '2026-09-08')
+      chargeBadges(
+        { ...base, billingType: BillingType.Indefinite, installment: null, installmentCount: null, dueDate: '2026-10-01' },
+        '2026-09-08'
+      )
     ).toEqual([{ label: 'Recorrente', tone: 'neutral' }]);
     expect(
-      chargeBadges({ ...base, billingType: 'until', installment: 2, installmentCount: 3, dueDate: '2026-10-01' }, '2026-09-08')
+      chargeBadges({ ...base, billingType: BillingType.Until, installment: 2, installmentCount: 3, dueDate: '2026-10-01' }, '2026-09-08')
     ).toEqual([{ label: 'Parcela 2 de 3', tone: 'neutral' }]);
-    expect(chargeBadges({ ...base, dueDate: '2026-10-01', proofState: 'pending' }, '2026-09-08')).toEqual([
+    expect(chargeBadges({ ...base, dueDate: '2026-10-01', proofState: ProofState.Pending }, '2026-09-08')).toEqual([
       { label: 'Comprovante enviado', tone: 'info' }
     ]);
-    expect(chargeBadges({ ...base, state: 'paid', proofState: 'accepted' }, '2026-09-08')).toEqual([
+    expect(chargeBadges({ ...base, state: ChargeState.Paid, proofState: ProofState.Accepted }, '2026-09-08')).toEqual([
       { label: 'Validado', tone: 'success' }
     ]);
-    expect(chargeBadges({ ...base, state: 'paid' }, '2026-09-08')).toEqual([{ label: 'Pago', tone: 'success' }]);
-    expect(chargeBadges({ ...base, state: 'cancelled' }, '2026-09-08')).toEqual([{ label: 'Cancelado', tone: 'neutral' }]);
+    expect(chargeBadges({ ...base, state: ChargeState.Paid }, '2026-09-08')).toEqual([{ label: 'Pago', tone: 'success' }]);
+    expect(chargeBadges({ ...base, state: ChargeState.Cancelled }, '2026-09-08')).toEqual([{ label: 'Cancelado', tone: 'neutral' }]);
   });
 });
 
 describe('chargeStateLabel and chargeAction', () => {
   it('labels the amount by direction and settlement', () => {
-    expect(chargeStateLabel(base, 'receivable')).toBe('A receber');
-    expect(chargeStateLabel(base, 'payable')).toBe('A pagar');
-    expect(chargeStateLabel({ ...base, state: 'paid' }, 'payable')).toBe('Liquidado');
-    expect(chargeStateLabel({ ...base, state: 'cancelled' }, 'payable')).toBe('Cancelado');
+    expect(chargeStateLabel(base, Direction.Receivable)).toBe('A receber');
+    expect(chargeStateLabel(base, Direction.Payable)).toBe('A pagar');
+    expect(chargeStateLabel({ ...base, state: ChargeState.Paid }, Direction.Payable)).toBe('Liquidado');
+    expect(chargeStateLabel({ ...base, state: ChargeState.Cancelled }, Direction.Payable)).toBe('Cancelado');
   });
 
   it('picks one action per situation and none for settled charges', () => {
-    expect(chargeAction(base, 'receivable')).toEqual({ kind: 'remind', label: 'Lembrar' });
-    expect(chargeAction({ ...base, counterpartReachable: false }, 'receivable')).toEqual({ kind: 'open', label: 'Ver cobrança' });
-    expect(chargeAction({ ...base, proofState: 'pending' }, 'receivable')).toEqual({ kind: 'open', label: 'Ver comprovante' });
-    expect(chargeAction(base, 'payable')).toEqual({ kind: 'open', label: 'Pagar via Pix' });
-    expect(chargeAction({ ...base, proofState: 'pending' }, 'payable')).toEqual({ kind: 'open', label: 'Ver cobrança' });
-    expect(chargeAction({ ...base, state: 'paid' }, 'payable')).toBeNull();
+    expect(chargeAction(base, Direction.Receivable)).toEqual({ kind: 'remind', label: 'Lembrar' });
+    expect(chargeAction({ ...base, counterpartReachable: false }, Direction.Receivable)).toEqual({ kind: 'open', label: 'Ver cobrança' });
+    expect(chargeAction({ ...base, proofState: ProofState.Pending }, Direction.Receivable)).toEqual({
+      kind: 'open',
+      label: 'Ver comprovante'
+    });
+    expect(chargeAction(base, Direction.Payable)).toEqual({ kind: 'open', label: 'Pagar' });
+    expect(chargeAction({ ...base, proofState: ProofState.Pending }, Direction.Payable)).toEqual({ kind: 'open', label: 'Ver cobrança' });
+    expect(chargeAction({ ...base, state: ChargeState.Paid }, Direction.Payable)).toBeNull();
   });
 });
 
 describe('conta a pagar in the feed', () => {
-  const own: ChargeSummary = { ...base, payer: 'owner', ownedByViewer: true, hasPix: true };
+  const own: ChargeSummary = { ...base, payer: ChargePayer.Owner, ownedByViewer: true, hasPix: true };
 
   it("badges the owner's own bill and offers Pix or a plain settle", () => {
     expect(chargeBadges(own, '2026-01-01').map((badge) => badge.label)).toContain('Minha conta');
-    expect(chargeAction(own, 'payable')).toEqual({ kind: 'open', label: 'Pagar via Pix' });
-    expect(chargeAction({ ...own, hasPix: false }, 'payable')).toEqual({ kind: 'open', label: 'Marcar pago' });
-    expect(chargeAction({ ...own, proofState: 'pending' }, 'payable')).toEqual({ kind: 'open', label: 'Ver cobrança' });
+    expect(chargeAction(own, Direction.Payable)).toEqual({ kind: 'open', label: 'Pagar' });
+    expect(chargeAction({ ...own, hasPix: false }, Direction.Payable)).toEqual({ kind: 'open', label: 'Marcar pago' });
+    expect(chargeAction({ ...own, proofState: ProofState.Pending }, Direction.Payable)).toEqual({ kind: 'open', label: 'Ver cobrança' });
   });
 
   it('never lets the payee remind: they only open or review', () => {
-    const payee: ChargeSummary = { ...base, payer: 'owner', ownedByViewer: false, hasPix: true };
+    const payee: ChargeSummary = { ...base, payer: ChargePayer.Owner, ownedByViewer: false, hasPix: true };
 
     expect(chargeBadges(payee, '2026-01-01').map((badge) => badge.label)).not.toContain('Minha conta');
-    expect(chargeAction(payee, 'receivable')).toEqual({ kind: 'open', label: 'Ver cobrança' });
-    expect(chargeAction({ ...payee, proofState: 'pending' }, 'receivable')).toEqual({ kind: 'open', label: 'Ver comprovante' });
+    expect(chargeAction(payee, Direction.Receivable)).toEqual({ kind: 'open', label: 'Ver cobrança' });
+    expect(chargeAction({ ...payee, proofState: ProofState.Pending }, Direction.Receivable)).toEqual({
+      kind: 'open',
+      label: 'Ver comprovante'
+    });
   });
 });

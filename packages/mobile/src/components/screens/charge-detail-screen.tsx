@@ -20,13 +20,11 @@ import {
   counterpartRoleLabel,
   formatMoney,
   type ChargeDetail,
-  type PixKeyType,
 } from "@receivy/common";
 import { FirstSharePix } from "@/components/app/first-share-pix";
 import { ProofCard } from "@/components/app/proof-card";
 import { Toast } from "@/components/app/toast";
 import { ActionTile } from "@/components/ui/action-tile";
-import { CopyButton } from "@/components/ui/copy-button";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { StatusTag } from "@/components/ui/status-tag";
@@ -35,7 +33,7 @@ import { pickAndUploadProof } from "@/financial/proof-upload";
 import { notificationClient } from "@/notifications/client";
 import { ACTIVE_TINT } from "@/theme/colors";
 
-export type ProofClient = Pick<FinancialClient, "startProofUpload" | "reviewProof" | "downloadProof" | "withdrawProof">;
+export type ProofClient = Pick<FinancialClient, "startProofUpload" | "completeProofUpload" | "reviewProof" | "downloadProof" | "withdrawProof">;
 
 type Client = Pick<FinancialClient, "charge" | "cancel" | "pay" | "publicLink" | "publicChargeUrl"> &
   Partial<ProofClient & Pick<FinancialClient, "reopen" | "paymentMethods" | "savePaymentMethod">>;
@@ -49,14 +47,6 @@ type ChargeDetailScreenProps = {
 };
 
 const LOAD_ERROR = "Não foi possível carregar a cobrança.";
-
-const PIX_TYPE_LABELS: Record<PixKeyType, string> = {
-  cpf: "CPF",
-  cnpj: "CNPJ",
-  email: "E-mail",
-  phone: "Celular",
-  random: "Aleatória",
-};
 
 const ICONS = {
   check: require("../../../assets/images/auth/check.svg"),
@@ -370,22 +360,6 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
             </Text>
           </View>
 
-          <View className="flex-row items-center justify-between border-t border-outline/20 pt-3">
-            <View className="flex-1 flex-row items-center gap-1.5">
-              <Image source={ICONS.key} tintColor={ACTIVE_TINT} style={{ width: 14, height: 14 }} />
-              <Text className="flex-1 text-[11px] text-muted" numberOfLines={1}>
-                {charge.pix ? (
-                  <>
-                    Chave Pix: <Text className="font-medium text-ink">{charge.pix.key}</Text>
-                    {` • ${PIX_TYPE_LABELS[charge.pix.keyType]}`}
-                  </>
-                ) : (
-                  "Sem chave Pix vinculada"
-                )}
-              </Text>
-            </View>
-            {charge.pix && <CopyButton value={charge.pix.key} accessibilityLabel="Copiar chave Pix" onRefused={() => setError("Não foi possível copiar a chave.")} />}
-          </View>
         </View>
 
         {/* Amount */}
@@ -402,7 +376,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
               {reopenable && <ActionTile label="Reabrir" icon={ICONS.edit} hint="Desfaz o pagamento e volta a cobrança para pendente" disabled={busy} onPress={confirmReopen} />}
               {!receivable && charge.pix && (
                 <ActionTile
-                  label="Copiar Pix"
+                  label="Copiar Chave Pix"
                   icon={ICONS.copy}
                   hint={ownBill ? "Copia a chave Pix da conta" : "Copia a chave Pix do credor"}
                   disabled={busy}

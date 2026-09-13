@@ -1,4 +1,4 @@
-import type { PaymentMethod } from "@receivy/common";
+import { type PaymentMethod, PixKeyType } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import { PixSettingsScreen } from "@/components/screens/pix-settings-screen";
@@ -41,7 +41,7 @@ describe("PixSettingsScreen", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("lists the active keys with the type label, the badge and the formatted key", async () => {
-    const api = client([method({ pixKeyType: "cpf", pixKey: "12345678901", label: "Nubank" })]);
+    const api = client([method({ pixKeyType: PixKeyType.Cpf, pixKey: "12345678901", label: "Nubank" })]);
 
     await render(<PixSettingsScreen client={api} />);
 

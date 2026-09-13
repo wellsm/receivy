@@ -1,4 +1,10 @@
-export type AuthProvider = 'email' | 'google' | 'apple';
+import type { UserStatus } from '../domain/contacts';
+
+export const enum AuthProvider {
+  Email = 'email',
+  Google = 'google',
+  Apple = 'apple'
+}
 
 export type AuthUser = {
   id: string;
@@ -8,7 +14,7 @@ export type AuthUser = {
   phone: string | null;
   avatarUrl: string | null;
   /** 'pending' until onboarding completes; 'active' afterwards; 'removed' after account deletion. */
-  status: 'pending' | 'active' | 'removed';
+  status: UserStatus;
   locale: 'pt-BR';
   timezone: string;
   country: 'BR';

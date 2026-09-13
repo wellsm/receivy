@@ -1,14 +1,18 @@
+import { BillingType, Direction, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
 import { describe, expect, it } from 'vitest';
 import { billingRequestFingerprint } from './request';
 
 const input = {
-  type: 'once' as const,
-  direction: 'receivable' as const,
+  type: BillingType.Once as const,
+  direction: Direction.Receivable as const,
   description: 'Jantar',
   totalCents: 1000,
   startDate: '2026-10-01',
   timezone: 'America/Sao_Paulo',
-  split: { mode: 'equal' as const, parts: [{ kind: 'user' as const, userId: 'p1' }, { kind: 'owner' as const }] }
+  split: {
+    mode: SplitMode.Equal as const,
+    parts: [{ kind: SplitPartKind.User as const, userId: 'p1' }, { kind: SplitPartKind.Owner as const }]
+  }
 };
 
 describe('billing request fingerprint', () => {
@@ -19,8 +23,8 @@ describe('billing request fingerprint', () => {
       startDate: input.startDate,
       totalCents: 1000,
       description: 'Jantar',
-      direction: 'receivable' as const,
-      type: 'once' as const
+      direction: Direction.Receivable as const,
+      type: BillingType.Once as const
     };
     expect(billingRequestFingerprint(reordered)).toBe(billingRequestFingerprint({ ...input, paymentMethodId: undefined }));
   });
@@ -35,10 +39,14 @@ describe('billing request fingerprint', () => {
 
 describe('conta a pagar fingerprint', () => {
   it('tells a conta a pagar apart by direction, payee and typed key', () => {
-    const payable = { ...input, direction: 'payable' as const, split: { mode: 'equal' as const, parts: [{ kind: 'owner' as const }] } };
+    const payable = {
+      ...input,
+      direction: Direction.Payable as const,
+      split: { mode: SplitMode.Equal as const, parts: [{ kind: SplitPartKind.Owner as const }] }
+    };
     expect(billingRequestFingerprint(payable)).not.toBe(billingRequestFingerprint(input));
     expect(billingRequestFingerprint({ ...payable, payeeUserId: 'p9' })).not.toBe(billingRequestFingerprint(payable));
-    expect(billingRequestFingerprint({ ...payable, pix: { keyType: 'email', key: 'pay@example.com' } })).not.toBe(
+    expect(billingRequestFingerprint({ ...payable, pix: { keyType: PixKeyType.Email, key: 'pay@example.com' } })).not.toBe(
       billingRequestFingerprint(payable)
     );
   });

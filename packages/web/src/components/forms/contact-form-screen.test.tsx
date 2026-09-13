@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT, type Contact } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, UserStatus, type Contact } from "@receivy/common";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
@@ -25,7 +25,7 @@ const ana: Contact = {
   displayName: "Aninha",
   email: "ana@example.com",
   phone: "+5511987654321",
-  status: "pending",
+  status: UserStatus.Pending,
   archivedAt: null,
   createdAt: "2026-01-01",
   lastBilledAt: null,
@@ -110,7 +110,7 @@ it("loads a contact for editing and returns to its ledger", async () => {
 });
 
 it("locks every field but the nickname on a contact with an active account", async () => {
-  api({ ...ana, status: "active" });
+  api({ ...ana, status: UserStatus.Active });
   render(<ContactFormScreen contactId="c1" />);
 
   await vi.waitFor(() => expect(screen.getByLabelText("Nome completo")).toBeDisabled());

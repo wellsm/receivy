@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { Environment, Service } from '@ez4/common';
+import { type Environment, Runtime, type Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
 import type { EmailInputs, EmailProvider } from '../client';
 
@@ -26,11 +26,11 @@ export declare class FileEmailService extends Factory.Service<EmailProvider> {
   };
 }
 
-export function createService(context: Service.Context<FileEmailService>): EmailProvider {
-  const { APP_STAGE, EMAIL_FILE_DIRECTORY } = context.variables;
+export function createService({ variables }: Service.Context<FileEmailService>): EmailProvider {
+  const { APP_STAGE, EMAIL_FILE_DIRECTORY } = variables;
 
-  if (APP_STAGE !== 'local') {
-    throw new Error(`Email transport 'file' is only allowed when APP_STAGE=local.`);
+  if (APP_STAGE !== 'dev' && Runtime.isLocal()) {
+    throw new Error(`Email transport 'file' is only allowed when APP_STAGE=dev and local.`);
   }
 
   const directory = resolve(process.cwd(), EMAIL_FILE_DIRECTORY ?? DEFAULT_EMAIL_FILE_DIRECTORY);

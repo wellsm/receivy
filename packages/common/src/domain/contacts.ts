@@ -1,7 +1,11 @@
 import { normalizeEmail } from '../auth/auth';
 
 /** A person as one agenda knows them: the account is the identity, the nickname is the owner's. */
-export type UserStatus = 'pending' | 'active' | 'removed';
+export const enum UserStatus {
+  Pending = 'pending',
+  Active = 'active',
+  Removed = 'removed'
+}
 
 /**
  * What an owner types to add someone. The e-mail is the identity when present; without one the person only

@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT } from "@receivy/common";
+import { Direction, EMPTY_BILLING_DRAFT } from "@receivy/common";
 import { beforeEach, expect, it } from "vitest";
 import { patchDraft, saveDraft, takeDraft } from "./billing-draft";
 
@@ -44,7 +44,7 @@ it("unions the selected contacts without dropping the stored draft", () => {
 });
 
 it("hands a new contact to the payee when the parked draft is a conta a pagar", () => {
-  saveDraft({ ...draft(), direction: "payable", selected: [] }, "/billings/new");
+  saveDraft({ ...draft(), direction: Direction.Payable, selected: [] }, "/billings/new");
 
   patchDraft({ selected: ["u2"] });
 

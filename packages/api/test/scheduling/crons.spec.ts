@@ -1,13 +1,14 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { Order } from '@ez4/database';
-import { createBilling, materializeDue, materializeDueBillings, patchBilling } from '../../src/billings/repositories/billing';
-import { payCharge } from '../../src/charges/repositories/charge';
-import { listEvents } from '../../src/common/repositories/events';
-import { archiveContact, saveContact } from '../../src/contacts/repositories/contact';
+import { BillingFrequency, type BillingSplit, BillingState, BillingType, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
+import { BillingRepository } from '../../src/billings/repositories/billing';
+import { ChargeRepository } from '../../src/charges/repositories/charge';
+import { EventRepository } from '../../src/common/repositories/events';
+import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { instantAt, REMINDER_HOUR } from '../../src/notifications/services/planner';
 import { type ChargeNotifyEvent, notifyIdentifier, planReminders } from '../../src/notifications/services/send';
-import { savePaymentMethod } from '../../src/payment-methods/repositories/payment-method';
+import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
 import { fakeNotice, fakeScheduler } from '../fixtures/scheduling';
 
@@ -46,7 +47,7 @@ async function cursorOf(billingId: string): Promise<string | undefined> {
 }
 
 async function auditTypes(billingId: string): Promise<string[]> {
-  return (await listEvents(db, billingId)).map((event) => event.type);
+  return (await EventRepository.list(db, billingId)).map((event) => event.type);
 }
 
 /** The sweep announces every assinatura in the database, so only the mails of this spec's debtor count. */
@@ -69,14 +70,14 @@ let earlyId: string;
 
 function monthly(key: string, startDate: string, overrides: Record<string, unknown> = {}) {
   return {
-    type: 'indefinite' as const,
-    frequency: 'monthly' as const,
+    type: BillingType.Indefinite as const,
+    frequency: BillingFrequency.Monthly as const,
     description: key,
     totalCents: 4_000,
     startDate,
     timezone: TZ,
     paymentMethodId: pixId,
-    split: { mode: 'fixed' as const, parts: [{ kind: 'user' as const, userId: debtorId, amountCents: 4_000 }] },
+    split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: debtorId, amountCents: 4_000 }] } satisfies BillingSplit,
     ...overrides
   };
 }
@@ -89,13 +90,21 @@ describe('daily cron: materialization and reminder plan', () => {
 
     await createUser(db, { id: OWNER, email: 'daily-cron-owner@example.com', name: 'Dona' });
 
-    debtorId = (await saveContact(db, OWNER, { name: 'Bruno', email: DEBTOR_EMAIL })).userId;
-    pixId = (await savePaymentMethod(db, OWNER, { pixKeyType: 'cpf', pixKey: '52998224725', label: 'Principal' })).id;
+    debtorId = (await ContactRepository.save(db, OWNER, { name: 'Bruno', email: DEBTOR_EMAIL })).userId;
+    pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
     monthlyId = (
-      await createBilling(db, OWNER, 'cron-monthly', monthly('Mensalidade', '2026-01-31'), date('2026-01-01'), undefined, context)
+      await BillingRepository.create(
+        db,
+        OWNER,
+        'cron-monthly',
+        monthly('Mensalidade', '2026-01-31'),
+        date('2026-01-01'),
+        undefined,
+        context
+      )
     ).id;
     earlyId = (
-      await createBilling(
+      await BillingRepository.create(
         db,
         OWNER,
         'cron-early',
@@ -120,7 +129,7 @@ describe('daily cron: materialization and reminder plan', () => {
   it('materializes every due occurrence of every active assinatura and announces the charges once', async () => {
     sent.reset();
 
-    ok((await materializeDueBillings(db, context, cronAt('2026-03-05'))) >= 1);
+    ok((await BillingRepository.materializeDueBillings(db, context, cronAt('2026-03-05'))) >= 1);
     deepEqual(await dueDates(monthlyId), ['2026-01-31', '2026-02-28']);
     equal(await cursorOf(monthlyId), '2026-02-28');
     equal((await auditTypes(monthlyId)).filter((type) => type === 'billing.materialized').length, 2);
@@ -129,14 +138,14 @@ describe('daily cron: materialization and reminder plan', () => {
     equal(debtorEmails().length, 2, 'each new charge says hello once');
 
     for (const { id } of await charges(monthlyId)) {
-      deepEqual((await listEvents(db, id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
+      deepEqual((await EventRepository.list(db, id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
       equal(notify.events.has(notifyIdentifier(id)), false, 'an e-mail sent right away needs no follow-up');
     }
 
     // Both steps are idempotent: the same day again finds nothing to do.
     sent.reset();
-    deepEqual(await materializeDue(db, monthlyId, context, cronAt('2026-03-05')), { materialized: false });
-    await materializeDueBillings(db, context, cronAt('2026-03-05'));
+    deepEqual(await BillingRepository.materializeDue(db, monthlyId, context, cronAt('2026-03-05')), { materialized: false });
+    await BillingRepository.materializeDueBillings(db, context, cronAt('2026-03-05'));
     deepEqual(await dueDates(monthlyId), ['2026-01-31', '2026-02-28']);
     equal(debtorEmails().length, 0);
   });
@@ -144,13 +153,29 @@ describe('daily cron: materialization and reminder plan', () => {
   it('skips paused, ended and finite billings, and materializes inline when one resumes', async () => {
     sent.reset();
 
-    const paused = await createBilling(db, OWNER, 'cron-paused', monthly('Pausada', '2026-02-15'), date('2026-01-01'), undefined, context);
-    const ended = await createBilling(db, OWNER, 'cron-ended', monthly('Encerrada', '2026-02-15'), date('2026-01-01'), undefined, context);
-    const once = await createBilling(
+    const paused = await BillingRepository.create(
+      db,
+      OWNER,
+      'cron-paused',
+      monthly('Pausada', '2026-02-15'),
+      date('2026-01-01'),
+      undefined,
+      context
+    );
+    const ended = await BillingRepository.create(
+      db,
+      OWNER,
+      'cron-ended',
+      monthly('Encerrada', '2026-02-15'),
+      date('2026-01-01'),
+      undefined,
+      context
+    );
+    const once = await BillingRepository.create(
       db,
       OWNER,
       'cron-once',
-      { ...monthly('Única', '2026-02-15'), type: 'once', frequency: undefined },
+      { ...monthly('Única', '2026-02-15'), type: BillingType.Once, frequency: undefined },
       date('2026-01-01'),
       undefined,
       context
@@ -158,31 +183,31 @@ describe('daily cron: materialization and reminder plan', () => {
 
     equal(once.charges.length, 1, 'a finite billing has every charge from day one');
 
-    await patchBilling(db, OWNER, paused.id, { state: 'paused' }, date('2026-01-02'), undefined, context);
-    await patchBilling(db, OWNER, ended.id, { state: 'ended' }, date('2026-01-02'), undefined, context);
+    await BillingRepository.patch(db, OWNER, paused.id, { state: BillingState.Paused }, date('2026-01-02'), undefined, context);
+    await BillingRepository.patch(db, OWNER, ended.id, { state: BillingState.Ended }, date('2026-01-02'), undefined, context);
     sent.reset();
 
-    await materializeDueBillings(db, context, cronAt('2026-03-05'));
+    await BillingRepository.materializeDueBillings(db, context, cronAt('2026-03-05'));
     deepEqual(await dueDates(paused.id), [], 'a paused billing generates nothing');
     deepEqual(await dueDates(ended.id), []);
     deepEqual(await dueDates(once.id), ['2026-02-15']);
     equal(debtorEmails().length, 0);
 
     // Resuming owes the occurrence of the day right away, without waiting for the next sweep.
-    await patchBilling(db, OWNER, paused.id, { state: 'active' }, date('2026-04-15'), undefined, context);
+    await BillingRepository.patch(db, OWNER, paused.id, { state: BillingState.Active }, date('2026-04-15'), undefined, context);
     deepEqual(await dueDates(paused.id), ['2026-04-15'], 'skipped months stay skipped');
     equal(await cursorOf(paused.id), '2026-04-15');
     equal(debtorEmails().length, 1);
     ok((await auditTypes(paused.id)).includes('billing.active'));
 
-    await patchBilling(db, OWNER, paused.id, { state: 'ended' }, date('2026-04-16'), undefined, context);
+    await BillingRepository.patch(db, OWNER, paused.id, { state: BillingState.Ended }, date('2026-04-16'), undefined, context);
     ok((await auditTypes(paused.id)).includes('billing.ended'));
   });
 
   it('materializes inline when the due day moves to a date already reached', async () => {
     sent.reset();
 
-    const created = await createBilling(
+    const created = await BillingRepository.create(
       db,
       OWNER,
       'cron-reschedule',
@@ -195,26 +220,37 @@ describe('daily cron: materialization and reminder plan', () => {
     deepEqual(await dueDates(created.id), []);
 
     await rejects(
-      () => patchBilling(db, OWNER, created.id, { startDate: '2027-07-14' }, date('2027-07-15'), undefined, context),
+      () => BillingRepository.patch(db, OWNER, created.id, { startDate: '2027-07-14' }, date('2027-07-15'), undefined, context),
       RangeError,
       'the next due date never lands behind today'
     );
 
-    const patched = await patchBilling(db, OWNER, created.id, { startDate: '2027-07-15' }, date('2027-07-15'), undefined, context);
+    const patched = await BillingRepository.patch(
+      db,
+      OWNER,
+      created.id,
+      { startDate: '2027-07-15' },
+      date('2027-07-15'),
+      undefined,
+      context
+    );
 
     equal(patched.startDate, '2027-07-15');
     deepEqual(await dueDates(created.id), ['2027-07-15'], 'today is due today');
     equal(debtorEmails().length, 1);
-    deepEqual((await listEvents(db, patched.charges[0]!.id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
+    deepEqual((await EventRepository.list(db, patched.charges[0]!.id, 'notice.sent'))[0]?.payload, {
+      template: 'initial',
+      channels: ['email']
+    });
 
-    await patchBilling(db, OWNER, created.id, { state: 'ended' }, date('2027-07-16'), undefined, context);
+    await BillingRepository.patch(db, OWNER, created.id, { state: BillingState.Ended }, date('2027-07-16'), undefined, context);
   });
 
   it('audits an archived recipient on one billing without stopping the others', async () => {
     sent.reset();
 
-    const archived = await saveContact(db, OWNER, { name: 'Arquivado', email: 'daily-cron-archived@example.com' });
-    const billing = await createBilling(
+    const archived = await ContactRepository.save(db, OWNER, { name: 'Arquivado', email: 'daily-cron-archived@example.com' });
+    const billing = await BillingRepository.create(
       db,
       OWNER,
       'cron-archived',
@@ -226,9 +262,12 @@ describe('daily cron: materialization and reminder plan', () => {
       context
     );
 
-    await archiveContact(db, OWNER, archived.id);
+    await ContactRepository.archive(db, OWNER, archived.id);
 
-    ok((await materializeDueBillings(db, context, cronAt('2026-03-31'))) >= 1, 'the healthy billing still gets its charge');
+    ok(
+      (await BillingRepository.materializeDueBillings(db, context, cronAt('2026-03-31'))) >= 1,
+      'the healthy billing still gets its charge'
+    );
     deepEqual(await dueDates(monthlyId), ['2026-01-31', '2026-02-28', '2026-03-31']);
     equal(debtorEmails().length, 1);
 
@@ -236,12 +275,12 @@ describe('daily cron: materialization and reminder plan', () => {
     equal(await cursorOf(billing.id), '2025-12-31', 'the cursor stays where creation left it');
     ok((await auditTypes(billing.id)).includes('billing.materialization_skipped'));
     equal(sent.emails.filter((email) => email.to === 'daily-cron-archived@example.com').length, 0);
-    deepEqual(await materializeDue(db, billing.id, context, cronAt('2026-03-31')), {
+    deepEqual(await BillingRepository.materializeDue(db, billing.id, context, cronAt('2026-03-31')), {
       materialized: false,
       skipped: 'Contato indisponível.'
     });
 
-    await patchBilling(db, OWNER, billing.id, { state: 'ended' }, date('2026-04-01'), undefined, context);
+    await BillingRepository.patch(db, OWNER, billing.id, { state: BillingState.Ended }, date('2026-04-01'), undefined, context);
   });
 
   it('arms 06:00 of the billing timezone for the reminders of the next twenty-four hours only', async () => {
@@ -265,12 +304,12 @@ describe('daily cron: materialization and reminder plan', () => {
     equal((await plan(cronAt('2026-04-01'))).has(notifyIdentifier(march.id)), false);
 
     // A settled charge has no reminder left.
-    await payCharge(db, OWNER, march.id, date('2026-03-30'));
+    await ChargeRepository.pay(db, OWNER, march.id, date('2026-03-30'));
     equal((await plan(cronAt('2026-03-31'))).has(notifyIdentifier(march.id)), false);
 
     // Neither has a cancelled one: ending the billing closes its pending charges.
     ok((await plan(cronAt('2026-02-28'))).has(notifyIdentifier(february.id)));
-    await patchBilling(db, OWNER, monthlyId, { state: 'ended' }, date('2026-04-02'), undefined, context);
+    await BillingRepository.patch(db, OWNER, monthlyId, { state: BillingState.Ended }, date('2026-04-02'), undefined, context);
     equal((await plan(cronAt('2026-02-28'))).has(notifyIdentifier(february.id)), false);
   });
 
@@ -278,7 +317,7 @@ describe('daily cron: materialization and reminder plan', () => {
     sent.reset();
 
     // An enabled early reminder pulls the materialization forward: the charge exists five days before it is due.
-    ok((await materializeDueBillings(db, context, cronAt('2026-06-25'))) >= 1);
+    ok((await BillingRepository.materializeDueBillings(db, context, cronAt('2026-06-25'))) >= 1);
 
     const [june] = await charges(earlyId);
 
@@ -291,6 +330,6 @@ describe('daily cron: materialization and reminder plan', () => {
     });
     equal((await plan(cronAt('2026-06-30'))).has(notifyIdentifier(june.id)), false, 'the disabled due-date offset never counts');
 
-    await patchBilling(db, OWNER, earlyId, { state: 'ended' }, date('2026-07-01'), undefined, context);
+    await BillingRepository.patch(db, OWNER, earlyId, { state: BillingState.Ended }, date('2026-07-01'), undefined, context);
   });
 });

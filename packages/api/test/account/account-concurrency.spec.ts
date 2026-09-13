@@ -1,6 +1,6 @@
 import { deepEqual, equal, ok } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { saveContact } from '../../src/contacts/repositories/contact';
+import { ContactRepository } from '../../src/contacts/repositories/contact';
 import type { DbClient } from '../../src/database';
 import { eraseAccount } from '../../src/users/services/deletion';
 import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
@@ -56,7 +56,7 @@ describe('account erasure versus cross-account materialization', () => {
       users.push(creditor, recipient);
       await createUser(db, { id: creditor, email: `${creditor}@example.com`, name: 'Creditor fixture' });
       await createUser(db, { id: recipient, email: `${recipient}@example.com`, name: 'Recipient fixture' });
-      const contact = await saveContact(db, creditor, { name: 'Recipient fixture', email: `${recipient}@example.com` });
+      const contact = await ContactRepository.save(db, creditor, { name: 'Recipient fixture', email: `${recipient}@example.com` });
       equal(contact.userId, recipient);
       const entered = deferred<{ backend: number; tx: DbClient }>();
       const release = deferred<void>();

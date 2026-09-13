@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type RenderInputs, renderNotice } from './render';
+import { NoticeTemplate, type RenderInputs, renderNotice } from './render';
 
 const input: RenderInputs = {
   email: 'fixture@example.com',
@@ -16,13 +16,13 @@ const input: RenderInputs = {
 
 describe('renderNotice', () => {
   it('writes the due date the Brazilian way, not the stored ISO day', () => {
-    const notice = renderNotice(input, 'initial', 'fixture-secret');
+    const notice = renderNotice(input, NoticeTemplate.Initial, 'fixture-secret');
     expect(notice.text).toContain('com vencimento em 20/09/2026');
     expect(notice.text).not.toContain('2026-09-20');
   });
 
   it('ships an HTML alternative that repeats the text and the same payment link', () => {
-    const notice = renderNotice(input, 'initial', 'fixture-secret');
+    const notice = renderNotice(input, NoticeTemplate.Initial, 'fixture-secret');
 
     expect(notice.html?.startsWith('<!doctype html>')).toBe(true);
     expect(notice.html).toContain('Serviço prestado');
@@ -33,7 +33,7 @@ describe('renderNotice', () => {
   });
 
   it('escapes the description instead of letting it close a tag', () => {
-    const notice = renderNotice({ ...input, description: 'Pizza <b>&</b> refri' }, 'initial', 'fixture-secret');
+    const notice = renderNotice({ ...input, description: 'Pizza <b>&</b> refri' }, NoticeTemplate.Initial, 'fixture-secret');
 
     expect(notice.html).toContain('Pizza &lt;b&gt;&amp;&lt;/b&gt; refri');
     expect(notice.html).not.toContain('<b>');
@@ -42,8 +42,8 @@ describe('renderNotice', () => {
 
   it('renders manual exactly like reminder', () => {
     const secret = 'fixture-secret';
-    const reminder = renderNotice(input, 'reminder', secret);
-    const manual = renderNotice(input, 'manual', secret);
+    const reminder = renderNotice(input, NoticeTemplate.Reminder, secret);
+    const manual = renderNotice(input, NoticeTemplate.Manual, secret);
     expect(manual.subject).toBe(reminder.subject);
     expect(manual.text).toBe(reminder.text);
     expect(manual.html).toBe(reminder.html);
@@ -53,7 +53,7 @@ describe('renderNotice', () => {
 
 describe('renderNotice for the owner of a conta a pagar', () => {
   it('speaks to the owner about their own bill and issues no public link', () => {
-    const notice = renderNotice({ ...input, email: undefined, self: true }, 'reminder', 'fixture-secret');
+    const notice = renderNotice({ ...input, email: undefined, self: true }, NoticeTemplate.Reminder, 'fixture-secret');
     expect(notice.subject).toBe('Lembrete da sua conta no Receivy');
     expect(notice.text).toContain('Sua conta «Serviço prestado» de R$ 123,45 vence em 20/09/2026');
     expect(notice.text).not.toContain('/pay/');

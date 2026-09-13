@@ -2,7 +2,7 @@ import { Bell, ReceiptText, Rows3, UserRound } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { backLabelFor } from "@/lib/navigation";
+import { BackButton } from "@/components/app/back-button";
 
 const navigation = [
   { href: "/", label: "Feed", icon: Rows3 },
@@ -87,9 +87,7 @@ function ScreenHeader({ title, back }: { title?: string; back?: string }) {
 
   return (
     <header className={`${HEADER_BAR} grid-cols-[minmax(64px,1fr)_auto_minmax(64px,1fr)] md:static md:min-h-0 md:grid-cols-[auto_minmax(0,1fr)] md:gap-[18px] md:border-b-0 md:bg-transparent md:px-8 md:pt-7 md:backdrop-blur-none`}>
-      <Link className="inline-flex min-h-11 items-center gap-1.5 justify-self-start px-2 text-[17px] font-bold text-primary-strong md:text-sm" href={back}>
-        ← <span className="sr-only md:not-sr-only">{backLabelFor(back)}</span>
-      </Link>
+      <BackButton fallback={back} className="inline-flex min-h-11 items-center gap-1.5 justify-self-start px-2 text-[17px] font-bold text-primary-strong md:text-sm" />
       <h1 className="m-0 text-center text-[17px] font-bold tracking-[-0.01em] text-primary-strong md:text-left md:text-2xl">{title}</h1>
       <span className="md:hidden" aria-hidden="true" />
     </header>

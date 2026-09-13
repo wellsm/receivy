@@ -3,11 +3,14 @@ import {
   amountDigitsToInput,
   amountInputToDigits,
   billingCategoryLabel,
+  BillingDueRule,
+  BillingFrequency,
   buildBillingInput,
   calendarDate,
   draftTotalCents,
   EMPTY_BILLING_DRAFT,
   EMPTY_SPLIT_VALUES,
+  endOfMonth,
   formatAmountDigits,
   formatMoney,
   parseBRLCents,
@@ -15,16 +18,18 @@ import {
   previewBillingSplit,
   splitParties,
   splitPartyKey,
+  UserStatus,
   type BillingDetail,
   type BillingDraft,
   type BillingInput,
-  type BillingType,
+  BillingType,
   type Contact,
-  type Direction,
+  Direction,
   type PaymentMethod,
   type PixDraft,
-  type PixKeyType,
-  type SplitMode,
+  PixKeyType,
+  SplitMode,
+  SplitPartKind,
   type SplitParty,
   type SplitValues,
 } from "@receivy/common";
@@ -34,6 +39,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Image } from "expo-image";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { MonthSelect } from "@/components/app/month-select";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { financialClient, FinancialRequestError, type FinancialClient } from "@/financial/client";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
@@ -85,9 +91,9 @@ const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com a sua c
 const NO_VALUES: Record<string, string> = {};
 
 const TYPES: { value: BillingType; label: string }[] = [
-  { value: "once", label: "À vista" },
-  { value: "until", label: "Parcelado" },
-  { value: "indefinite", label: "Recorrente" },
+  { value: BillingType.Once, label: "À vista" },
+  { value: BillingType.Until, label: "Parcelado" },
+  { value: BillingType.Indefinite, label: "Recorrente" },
 ];
 
 const AMOUNT_LABELS: Record<BillingType, string> = {
@@ -100,16 +106,16 @@ const AMOUNT_LABELS: Record<BillingType, string> = {
 const PAYABLE_AMOUNT_LABELS: Record<BillingType, string> = { ...AMOUNT_LABELS, once: "Valor" };
 
 const DIRECTIONS: { value: Direction; label: string }[] = [
-  { value: "receivable", label: "Vou receber" },
-  { value: "payable", label: "Vou pagar" },
+  { value: Direction.Receivable, label: "Vou receber" },
+  { value: Direction.Payable, label: "Vou pagar" },
 ];
 
 /** The segmented control shows the short label; the accessible name keeps the full one. */
 const SPLIT_MODES: { value: SplitMode; label: string; name: string }[] = [
-  { value: "equal", label: "Igual", name: "Igual" },
-  { value: "shares", label: "Cotas", name: "Cotas" },
-  { value: "percentage", label: "%", name: "Porcentagem" },
-  { value: "fixed", label: "Fixo", name: "Valor fixo" },
+  { value: SplitMode.Equal, label: "Igual", name: "Igual" },
+  { value: SplitMode.Shares, label: "Cotas", name: "Cotas" },
+  { value: SplitMode.Percentage, label: "%", name: "Porcentagem" },
+  { value: SplitMode.Fixed, label: "Fixo", name: "Valor fixo" },
 ];
 
 const QUICK_DUE: { label: string; days: number }[] = [{ label: "Hoje", days: 0 }];
@@ -190,7 +196,7 @@ function valuesFromBilling(billing: BillingDetail): SplitValues {
 
 function pixDraftFromBilling(billing: BillingDetail): PixDraft {
   if (!billing.pix) {
-    return { type: "email", key: "", label: "" };
+    return { type: PixKeyType.Email, key: "", label: "" };
   }
 
   return { type: billing.pix.keyType, key: pixKeyField(billing.pix.keyType).format(billing.pix.key), label: billing.pix.label };
@@ -208,8 +214,9 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     owner: parts.some((part) => part.kind === "owner") || billing.split.mode === "fixed",
     amount: moneyText(billing.total.amountCents),
     description: billing.description,
-    frequency: billing.frequency ?? "monthly",
+    frequency: billing.frequency ?? BillingFrequency.Monthly,
     start: billing.startDate,
+    dueRule: billing.dueRule ?? BillingDueRule.Fixed,
     end: billing.endDate ?? "",
     occurrences: "",
     timezone: billing.timezone,
@@ -240,7 +247,7 @@ function unknownContact(userId: string): Contact {
     displayName: "Contato",
     email: "",
     phone: null,
-    status: "pending",
+    status: UserStatus.Pending,
     archivedAt: null,
     createdAt: "",
     lastBilledAt: null,
@@ -487,7 +494,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
       return editable;
     }
 
-    const body = { description: input.description, totalCents: input.totalCents, startDate: input.startDate, ...editable };
+    const body = { description: input.description, totalCents: input.totalCents, startDate: input.startDate, dueRule: input.dueRule ?? BillingDueRule.Fixed, ...editable };
 
     if (input.direction === "payable") {
       return { ...body, payeeUserId: input.payeeUserId, clearPayee: !input.payeeUserId };
@@ -506,13 +513,13 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
 
       setAttempt(null);
       clearDraft();
+      // Left busy on purpose: the caller leaves this screen.
       onSaved(saved);
     } catch (reason) {
       const uncertain = sent.uncertain || !(reason instanceof FinancialRequestError) || reason.status >= 500;
 
       setAttempt(uncertain ? { ...sent, uncertain: true } : null);
       setError(reason instanceof Error ? reason.message : "Não foi possível salvar a conta.");
-    } finally {
       setBusy(false);
     }
   }
@@ -538,6 +545,22 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   }
 
   const today = todayIn(draft.timezone);
+  // Month ends exist for a single due date and for monthly rules; a yearly billing keeps a fixed day.
+  const monthEnds = draft.type === "once" || draft.frequency === "monthly";
+  const monthEnd = monthEnds && draft.dueRule === "end_of_month";
+
+  function toggleMonthEnd() {
+    if (monthEnd) {
+      update({ dueRule: BillingDueRule.Fixed });
+      return;
+    }
+
+    // Typed text may not be a date yet; the month end then starts from today.
+    const base = /^\d{4}-\d{2}-\d{2}$/.test(draft.start) && draft.start >= today ? draft.start : today;
+
+    setCalendarOpen(false);
+    update({ dueRule: BillingDueRule.EndOfMonth, start: endOfMonth(base) });
+  }
   const totalCents = draftTotalCents(draft);
   const { amounts, error: hint } = previewBillingSplit(draft);
   /** The draft seats user ids; the agenda entries loaded so far give them a name. */
@@ -584,7 +607,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   }
 
   const modeValues = draft.mode === "equal" ? NO_VALUES : draft.values[draft.mode];
-  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map((userId) => ({ kind: "user", userId })) : splitParties(draft);
+  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map((userId) => ({ kind: SplitPartKind.User, userId })) : splitParties(draft);
   const rows: SplitRow[] = rowParties.map((party) => {
     const key = splitPartyKey(party);
     const cents = amounts[key];
@@ -879,7 +902,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 label={option.label}
                 active={draft.type === option.value}
                 disabled={locked || scheduled}
-                onPress={() => update({ type: option.value, frequency: option.value === "until" ? "monthly" : draft.frequency, end: "" })}
+                onPress={() => update({ type: option.value, frequency: option.value === "until" ? BillingFrequency.Monthly : draft.frequency, end: "" })}
               />
             ))}
           </View>
@@ -900,8 +923,8 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
           )}
           {draft.type === "indefinite" && (
             <View className="flex-row gap-2">
-              <Chip label="Mensal" active={draft.frequency === "monthly"} disabled={locked || scheduled} onPress={() => update({ frequency: "monthly" })} />
-              <Chip label="Anual" active={draft.frequency === "yearly"} disabled={locked || scheduled} onPress={() => update({ frequency: "yearly" })} />
+              <Chip label="Mensal" active={draft.frequency === "monthly"} disabled={locked || scheduled} onPress={() => update({ frequency: BillingFrequency.Monthly })} />
+              <Chip label="Anual" active={draft.frequency === "yearly"} disabled={locked || scheduled} onPress={() => update({ frequency: BillingFrequency.Yearly })} />
             </View>
           )}
         </View>
@@ -910,40 +933,62 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
         <View className="gap-2">
           <SectionLabel>{scheduled ? "Próximo vencimento" : "Data de Vencimento"}</SectionLabel>
           <View className="flex-row items-center gap-2">
-            <TextInput
-              accessibilityLabel="Vencimento"
-              editable={!locked && !dueLocked}
-              placeholder="AAAA-MM-DD"
-              placeholderTextColor={MUTED_TINT}
-              value={draft.start}
-              onChangeText={(value) => update({ start: value })}
-              className="h-11 flex-1 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] font-semibold text-ink"
-            />
+            {monthEnd ? (
+              <View className="flex-1">
+                <MonthSelect value={draft.start} today={today} disabled={locked || dueLocked} onSelect={(value) => update({ start: value })} />
+              </View>
+            ) : (
+              <TextInput
+                accessibilityLabel="Vencimento"
+                editable={!locked && !dueLocked}
+                placeholder="AAAA-MM-DD"
+                placeholderTextColor={MUTED_TINT}
+                value={draft.start}
+                onChangeText={(value) => update({ start: value })}
+                className="h-11 flex-1 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] font-semibold text-ink"
+              />
+            )}
             {QUICK_DUE.map((option) => (
               <Pressable
                 key={option.label}
                 accessibilityRole="button"
                 accessibilityLabel={option.label}
-                accessibilityState={{ selected: draft.start === addCalendarDays(today, option.days), disabled: locked || dueLocked }}
+                accessibilityState={{ selected: !monthEnd && draft.start === addCalendarDays(today, option.days), disabled: locked || dueLocked }}
                 disabled={locked || dueLocked}
-                onPress={() => update({ start: addCalendarDays(today, option.days) })}
+                onPress={() => update({ start: addCalendarDays(today, option.days), dueRule: BillingDueRule.Fixed })}
                 className={`h-11 items-center justify-center rounded-xl border px-3.5 ${
-                  draft.start === addCalendarDays(today, option.days) ? "border-primary/30 bg-primary-soft/60" : "border-outline/40 bg-surface-muted"
+                  !monthEnd && draft.start === addCalendarDays(today, option.days) ? "border-primary/30 bg-primary-soft/60" : "border-outline/40 bg-surface-muted"
                 } ${locked || dueLocked ? "opacity-50" : ""}`}
               >
                 <Text className="text-xs font-semibold text-primary-strong">{option.label}</Text>
               </Pressable>
             ))}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Abrir calendário"
-              accessibilityState={{ expanded: calendarOpen, disabled: locked || dueLocked }}
-              disabled={locked || dueLocked}
-              onPress={() => setCalendarOpen((open) => !open)}
-              className={`h-11 w-11 items-center justify-center rounded-xl border border-outline/50 bg-surface ${locked || dueLocked ? "opacity-50" : ""}`}
-            >
-              <Image source={calendarMark} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
-            </Pressable>
+            {monthEnds && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Final do mês"
+                accessibilityState={{ selected: monthEnd, disabled: locked || dueLocked }}
+                disabled={locked || dueLocked}
+                onPress={toggleMonthEnd}
+                className={`h-11 items-center justify-center rounded-xl border px-3.5 ${monthEnd ? "border-primary/30 bg-primary-soft/60" : "border-outline/40 bg-surface-muted"} ${
+                  locked || dueLocked ? "opacity-50" : ""
+                }`}
+              >
+                <Text className="text-xs font-semibold text-primary-strong">Final do mês</Text>
+              </Pressable>
+            )}
+            {!monthEnd && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Abrir calendário"
+                accessibilityState={{ expanded: calendarOpen, disabled: locked || dueLocked }}
+                disabled={locked || dueLocked}
+                onPress={() => setCalendarOpen((open) => !open)}
+                className={`h-11 w-11 items-center justify-center rounded-xl border border-outline/50 bg-surface ${locked || dueLocked ? "opacity-50" : ""}`}
+              >
+                <Image source={calendarMark} tintColor={ACTIVE_TINT} style={{ width: 20, height: 20 }} />
+              </Pressable>
+            )}
           </View>
           {calendarOpen && Platform.OS !== "ios" && (
             <DateTimePicker

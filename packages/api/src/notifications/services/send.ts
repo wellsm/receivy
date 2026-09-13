@@ -1,16 +1,22 @@
 import type { Client } from '@ez4/scheduler';
-import { addCalendarDays } from '@receivy/common';
+import { addCalendarDays, ChargePayer, ChargeState } from '@receivy/common';
 import { effectiveReminders } from '../../billings/services/reminders';
-import { CHARGE_SELECT, chargePayer } from '../../charges/repositories/charge';
-import { listEvents, recordEvent } from '../../common/repositories/events';
+import { ChargeRepository } from '../../charges/repositories/charge';
+import { StoredProofState } from '../../charges/schemas/charge';
+import { EventRepository } from '../../common/repositories/events';
+import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
 import { ensurePublicLink, linkAlive } from '../../public/services/links';
 import { EMAIL_FOLLOWUP_MS, instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR } from './planner';
-import { renderNotice } from './render';
+import { NoticeTemplate, renderNotice } from './render';
 import type { NotificationTransport } from './transport';
 
-export type NoticeTemplate = 'initial' | 'reminder' | 'manual';
-export type NoticeChannel = 'push' | 'email';
+export { NoticeTemplate };
+
+export const enum NoticeChannel {
+  Push = 'push',
+  Email = 'email'
+}
 
 /**
  * What `charge:<id>:notify` carries. `first` is the notice itself (push, or e-mail when there is no
@@ -51,13 +57,13 @@ export async function sendChargeNotice(
   now = Date.now(),
   options: SendOptions = {}
 ): Promise<SendResult> {
-  const charge = await db.charges.findOne({ select: CHARGE_SELECT, where: { id: chargeId } });
+  const charge = await db.charges.findOne({ select: ChargeRepository.SELECT, where: { id: chargeId } });
 
-  if (!charge || charge.state !== 'pending') {
+  if (!charge || charge.state !== ChargeState.Pending) {
     return { channels: [] };
   }
 
-  const ownerPays = chargePayer(charge) === 'owner';
+  const ownerPays = ChargeRepository.payer(charge) === ChargePayer.Owner;
   const targetId = ownerPays ? charge.creditor_id : charge.debtor_user_id;
   const target = targetId
     ? await db.users.findOne({ select: { id: true, name: true, email: true }, where: { id: targetId, deleted_at: { isNull: true } } })
@@ -65,9 +71,9 @@ export async function sendChargeNotice(
   const payload = { template, ...(options.offsetDays === undefined ? {} : { offsetDays: options.offsetDays }) };
 
   if (!target) {
-    await recordEvent(db, {
+    await EventRepository.record(db, {
       type: 'notice.skipped',
-      eventableType: 'charge',
+      eventableType: EventableType.Charge,
       eventableId: chargeId,
       payload: { ...payload, reason: 'no_recipient' }
     });
@@ -78,9 +84,9 @@ export async function sendChargeNotice(
 
   // The notice carries the payment link, so a conta a receber without a key has nothing to send yet.
   if (!ownerPays && !hasPix) {
-    await recordEvent(db, {
+    await EventRepository.record(db, {
       type: 'notice.skipped',
-      eventableType: 'charge',
+      eventableType: EventableType.Charge,
       eventableId: chargeId,
       payload: { ...payload, reason: 'pix_required' }
     });
@@ -118,7 +124,7 @@ export async function sendChargeNotice(
     const result = await context.transport.push({ token: device.token, title: rendered.subject, body: PUSH_BODY, url: rendered.url });
 
     if (result.status === 'accepted') {
-      channels.push('push');
+      channels.push(NoticeChannel.Push);
     } else if (result.status === 'device_unregistered') {
       await db.device_tokens.updateOne({ where: { id: device.id }, data: { active: false, updated_at: new Date(now).toISOString() } });
     }
@@ -137,13 +143,13 @@ export async function sendChargeNotice(
     });
 
     if (result.status === 'accepted') {
-      channels.push('email');
+      channels.push(NoticeChannel.Email);
     }
   }
 
-  await recordEvent(db, {
+  await EventRepository.record(db, {
     type: channels.length ? 'notice.sent' : 'notice.skipped',
-    eventableType: 'charge',
+    eventableType: EventableType.Charge,
     eventableId: chargeId,
     payload: { ...payload, channels, ...(channels.length ? {} : { reason: 'no_channel' }) },
     at: new Date(now).toISOString()
@@ -166,7 +172,7 @@ export async function notifyCharge(
 ): Promise<SendResult> {
   const result = await sendChargeNotice(db, context, chargeId, template, now, { offsetDays, channel: 'auto' });
 
-  if (result.channels.includes('push')) {
+  if (result.channels.includes(NoticeChannel.Push)) {
     await context.notify
       .setEvent(notifyIdentifier(chargeId), {
         date: new Date(now + EMAIL_FOLLOWUP_MS),
@@ -187,15 +193,15 @@ export async function followUpCharge(
 ): Promise<SendResult> {
   const charge = await db.charges.findOne({ select: { state: true, proof_state: true }, where: { id: event.chargeId } });
 
-  if (!charge || charge.state !== 'pending' || charge.proof_state === 'pending') {
+  if (!charge || charge.state !== ChargeState.Pending || charge.proof_state === StoredProofState.Pending) {
     return { channels: [] };
   }
 
-  const already = (await listEvents(db, event.chargeId, 'notice.sent')).some(
+  const already = (await EventRepository.list(db, event.chargeId, 'notice.sent')).some(
     (sent) =>
       sent.payload['template'] === event.template &&
       sent.payload['offsetDays'] === event.offsetDays &&
-      (sent.payload['channels'] as string[] | undefined)?.includes('email')
+      (sent.payload['channels'] as string[] | undefined)?.includes(NoticeChannel.Email)
   );
 
   if (already) {
@@ -211,11 +217,11 @@ export async function announceCharges(db: DbClient, context: NoticeContext, char
     const charge = await db.charges.findOne({ select: { payer: true }, where: { id: chargeId } });
 
     // The owner of a conta a pagar just typed it: only the scheduled reminders reach them.
-    if (!charge || chargePayer(charge) === 'owner') {
+    if (!charge || ChargeRepository.payer(charge) === ChargePayer.Owner) {
       continue;
     }
 
-    await notifyCharge(db, context, chargeId, 'initial', now);
+    await notifyCharge(db, context, chargeId, NoticeTemplate.Initial, now);
   }
 }
 
@@ -229,7 +235,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
   const to = new Date(now + 100 * 86400_000).toISOString().slice(0, 10);
   const { records } = await db.charges.findMany({
     select: { id: true, billing_id: true, due_date: true },
-    where: { state: 'pending', due_date: { gte: from, lte: to } }
+    where: { state: ChargeState.Pending, due_date: { gte: from, lte: to } }
   });
   const billings = new Map<string, { timezone: string; reminders?: string }>();
 
@@ -262,7 +268,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
 
       await notify.setEvent(notifyIdentifier(charge.id), {
         date: at,
-        event: { chargeId: charge.id, template: 'reminder', stage: 'first', offsetDays: reminder.offsetDays }
+        event: { chargeId: charge.id, template: NoticeTemplate.Reminder, stage: 'first', offsetDays: reminder.offsetDays }
       });
       planned++;
     }

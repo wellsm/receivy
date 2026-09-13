@@ -1,14 +1,14 @@
 # Cobrança como centro: eventos, schedulers e upload por evento do bucket
 
 Decisões de 2026-09-11. Objetivo: menos tabelas e menos estado operacional em volta de `charges`,
-seguindo o padrão do FreightHero (`sign-url` + evento do bucket; schedulers dinâmicos por entidade).
+seguindo o padrão do FreightHero (`sign-url` + confirmação do cliente; schedulers dinâmicos por entidade).
 
 ## O que sai
 
 | Antes | Depois |
 | --- | --- |
 | `payment_proofs` (histórico de arquivos) | colunas `proof_*` na cobrança; histórico em `events` |
-| `upload_intents` + `finalize` chamado pelo cliente | slot `proof_state = uploading` + evento do bucket em `proofs/*` |
+| `upload_intents` + `finalize` chamado pelo cliente | slot `proof_state = uploading` + `POST .../proof/complete` do cliente (evento do bucket em `proofs/*` como rede) |
 | `payments` | `charges.state = paid` + `paid_at`; quem quitou vai para `events` |
 | `public_links` | `charges.public_id/link_version/link_expires_at/link_revoked_at` |
 | `activity_events` (uma linha por sujeito) | `events` (`eventable_type/id`, `type`, `actor_user_id`, `payload` JSON) |
@@ -39,10 +39,17 @@ comprovante pendente: ele continua `pending` e a tela lê o estado da cobrança.
    slot (`uploading`, chave `proofs/<chargeId>/<uuid>`, mime e tamanho declarados, ator, 5 min),
    arma `charge:<id>:upload-expiry` e devolve `getWriteUrl`.
 2. Cliente faz o PUT direto no bucket.
-3. Evento do bucket (`Bucket.UseEvent` em `proofs/*`): acha a cobrança pela chave, confere que é
-   o slot atual, lê o objeto, valida magic bytes, tamanho e sha256, passa a `pending`, grava
-   `proof.uploaded`. Chave desconhecida ou bytes inválidos: apaga o objeto e limpa o slot.
-4. Cliente consulta a cobrança (ou `GET /public/charges/{token}/proof`) até `pending`.
+3. Cliente chama `POST /charges/{id}/proof/complete` (ou `POST /public/charges/{token}/proof/complete`):
+   confere que o ator é dono do slot e que o objeto existe, e roda `receiveProofObject`: lê o objeto,
+   valida magic bytes, tamanho e sha256, passa a `pending`, grava `proof.uploaded` e devolve a cobrança
+   (ou o estado público). Slot vazio ou alheio: 409 `UPLOAD_MISSING`. Bytes inválidos: apaga o objeto,
+   limpa o slot e responde 422.
+4. Evento do bucket (`Bucket.UseEvent` em `proofs/*`) faz o mesmo trabalho e fica como rede na AWS:
+   quem chega primeiro anexa, o outro não faz nada. Chave desconhecida: apaga o objeto.
+
+Revisão de 2026-09-12: o `serve --local` do EZ4 entrega a chave ao bucket com `/` inicial, então o
+evento nunca dispara localmente e o polling do cliente esgotava. A confirmação voltou para o cliente,
+sem polling.
 
 Limite continua 10 MB (o PUT não passa pela API).
 

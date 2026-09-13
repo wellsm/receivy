@@ -3,7 +3,8 @@ import type { Http } from '@ez4/gateway';
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { UserProvider } from '../provider';
-import { createAuthRepository } from '../repositories/auth';
+import { AuthRepository } from '../repositories/auth';
+import { OauthProvider } from '../services/oauth';
 import { commitOauthIdentity } from '../services/oauth-commit';
 import { completeOauth, OauthFlowError } from '../services/oauth-flow';
 import { appendOauthGrant, oauthDependencies } from '../utils/oauth';
@@ -19,9 +20,9 @@ declare class AppleCallbackResponse implements Http.Response {
 
 export async function appleCallbackHandler(
   request: AppleCallbackRequest,
-  context: Service.Context<UserProvider>
+  { db, variables }: Service.Context<UserProvider>
 ): Promise<AppleCallbackResponse> {
-  const dependencies = oauthDependencies('apple', context);
+  const dependencies = oauthDependencies(OauthProvider.Apple, { variables });
   if (!dependencies.client) {
     throw new HttpNotFoundError();
   }
@@ -37,13 +38,13 @@ export async function appleCallbackHandler(
         code: code ?? undefined,
         error: form.get('error') ?? undefined,
         profile: form.get('user') ?? undefined,
-        provider: 'apple',
+        provider: OauthProvider.Apple,
         state
       },
       {
         providerClient: dependencies.client,
-        repo: createAuthRepository(context.db),
-        commitGrant: (input) => commitOauthIdentity(context.db, input)
+        repo: AuthRepository.create(db),
+        commitGrant: (input) => commitOauthIdentity(db, input)
       }
     );
     return {

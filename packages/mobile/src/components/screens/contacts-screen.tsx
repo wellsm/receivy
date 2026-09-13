@@ -1,4 +1,4 @@
-import { contactBadge, formatPhoneBR, initialsOf, type BadgeTone, type Contact } from "@receivy/common";
+import { contactBadge, formatPhoneBR, initialsOf, BadgeTone, type Contact } from "@receivy/common";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -72,7 +72,7 @@ function ContactCard({ contact, onPress }: { contact: Contact; onPress: () => vo
           </Text>
 
           {/* The person has not signed in yet: the agenda says so instead of pretending they get reminders. */}
-          {contact.status === "pending" ? <Badge label={PENDING_LABEL} tone="neutral" /> : null}
+          {contact.status === "pending" ? <Badge label={PENDING_LABEL} tone={BadgeTone.Neutral} /> : null}
           <Badge label={badge.label} tone={badge.tone} />
         </View>
 

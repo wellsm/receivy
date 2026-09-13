@@ -51,7 +51,7 @@ through the Next BFF anyway. Buckets are keyed by what the API verified:
 | `POST /auth/email/confirm` | the code itself | 5 attempts per code |
 | public charge / invite reads | link `public_id`, after the token was verified | 60 |
 | `POST /invites/{token}/accept` | invite `public_id` | 120 |
-| public proof upload / withdraw | charge `public_id` | 12 |
+| public proof upload / complete / withdraw | charge `public_id` | 12 |
 | `POST /charges/{id}/reminders` | charge | 1 per 24 h |
 
 A guessed token costs one indexed read and a 404; it never creates a throttle row.

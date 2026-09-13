@@ -1,6 +1,6 @@
 "use client";
 
-import { pixKeyField, type PaymentMethod, type PaymentMethodsPage, type PixKeyType } from "@receivy/common";
+import { pixKeyField, PixKeyType, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
 import { Check, Loader2, Star } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -16,7 +16,7 @@ const SAVE_ERROR = "Não foi possível salvar a chave Pix.";
 
 export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScreenProps) {
   const router = useRouter();
-  const [type, setType] = useState<PixKeyType>("email");
+  const [type, setType] = useState<PixKeyType>(PixKeyType.Email);
   const [key, setKey] = useState("");
   const [touched, setTouched] = useState(false);
   const [makeDefault, setMakeDefault] = useState(true);
@@ -64,7 +64,7 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
         }
 
         if (payload.user.phone) {
-          setAccountPhone(pixKeyField("phone").format(payload.user.phone));
+          setAccountPhone(pixKeyField(PixKeyType.Phone).format(payload.user.phone));
         }
       })
       .catch(() => undefined);

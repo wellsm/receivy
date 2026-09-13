@@ -1,19 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import type { BillingSummary } from './billing';
+import { BillingFrequency, BillingState, type BillingSummary, BillingType } from './billing';
 import { billingBadges, billingDueLabel, billingShareAction, billingSummaryLine } from './billing-card';
+import { BillingCategory } from './billing-category';
+import { Direction, SplitMode } from './contracts';
 
 const base: BillingSummary = {
   id: 'b1',
-  direction: 'receivable',
+  direction: Direction.Receivable,
   payeeName: null,
-  type: 'once',
+  type: BillingType.Once,
   description: 'Aluguel',
   total: { amountCents: 100_000, currency: 'BRL' },
   startDate: '2026-09-10',
-  state: 'active',
+  state: BillingState.Active,
   nextDueDate: '2026-09-10',
   createdAt: '2026-09-01T00:00:00.000Z',
-  category: 'housing',
+  category: BillingCategory.Housing,
   participantCount: 3,
   chargeCount: 1,
   paidCount: 0,
@@ -44,11 +46,15 @@ describe('billingDueLabel', () => {
   });
 
   it('reports ended state as liquidated when every charge was paid', () => {
-    expect(billingDueLabel({ ...base, state: 'ended', nextDueDate: null, chargeCount: 4, paidCount: 4 }, '2026-09-10')).toBe('Liquidada');
+    expect(billingDueLabel({ ...base, state: BillingState.Ended, nextDueDate: null, chargeCount: 4, paidCount: 4 }, '2026-09-10')).toBe(
+      'Liquidada'
+    );
   });
 
   it('reports ended state as closed otherwise', () => {
-    expect(billingDueLabel({ ...base, state: 'ended', nextDueDate: null, chargeCount: 4, paidCount: 2 }, '2026-09-10')).toBe('Encerrada');
+    expect(billingDueLabel({ ...base, state: BillingState.Ended, nextDueDate: null, chargeCount: 4, paidCount: 2 }, '2026-09-10')).toBe(
+      'Encerrada'
+    );
   });
 });
 
@@ -63,7 +69,7 @@ describe('billingBadges', () => {
   it('badges an until billing paid 1 of 4 installments', () => {
     const summary: BillingSummary = {
       ...base,
-      type: 'until',
+      type: BillingType.Until,
       installmentCount: 4,
       paidCount: 1,
       chargeCount: 4,
@@ -79,7 +85,7 @@ describe('billingBadges', () => {
   it('badges a fully paid until billing with the installment count', () => {
     const summary: BillingSummary = {
       ...base,
-      type: 'until',
+      type: BillingType.Until,
       installmentCount: 4,
       paidCount: 4,
       chargeCount: 4,
@@ -95,9 +101,9 @@ describe('billingBadges', () => {
   it('badges a paused indefinite billing', () => {
     const summary: BillingSummary = {
       ...base,
-      type: 'indefinite',
-      frequency: 'monthly',
-      state: 'paused'
+      type: BillingType.Indefinite,
+      frequency: BillingFrequency.Monthly,
+      state: BillingState.Paused
     };
 
     expect(billingBadges(summary)).toEqual([
@@ -110,8 +116,8 @@ describe('billingBadges', () => {
   it('badges an indefinite yearly billing awaiting a proof', () => {
     const summary: BillingSummary = {
       ...base,
-      type: 'indefinite',
-      frequency: 'yearly',
+      type: BillingType.Indefinite,
+      frequency: BillingFrequency.Yearly,
       proofsPending: 1
     };
 
@@ -125,7 +131,7 @@ describe('billingBadges', () => {
   it('badges an ended billing as liquidated once every charge is paid', () => {
     const summary: BillingSummary = {
       ...base,
-      state: 'ended',
+      state: BillingState.Ended,
       chargeCount: 4,
       paidCount: 4
     };
@@ -140,7 +146,7 @@ describe('billingBadges', () => {
   it('never liquidates an ended billing that never produced a charge', () => {
     const summary: BillingSummary = {
       ...base,
-      state: 'ended',
+      state: BillingState.Ended,
       nextDueDate: null,
       chargeCount: 0,
       paidCount: 0
@@ -156,7 +162,7 @@ describe('billingBadges', () => {
 
 describe('billingShareAction', () => {
   it('offers nothing once the billing ended', () => {
-    expect(billingShareAction({ ...base, state: 'ended' })).toBeNull();
+    expect(billingShareAction({ ...base, state: BillingState.Ended })).toBeNull();
   });
 
   it('offers to share the single pending charge when there is one', () => {
@@ -170,13 +176,13 @@ describe('billingShareAction', () => {
 
 describe('billingSummaryLine', () => {
   it('shows the per-person amount for an equal split', () => {
-    expect(billingSummaryLine({ people: 1, amountCents: 5_000, mode: 'equal', dueLabel: 'Hoje' })).toBe(
+    expect(billingSummaryLine({ people: 1, amountCents: 5_000, mode: SplitMode.Equal, dueLabel: 'Hoje' })).toBe(
       '1 pessoa · R$ 50,00 cada · vence hoje'
     );
   });
 
   it('shows the total amount for other split modes and pluralizes people', () => {
-    expect(billingSummaryLine({ people: 2, amountCents: 10_000, mode: 'fixed', dueLabel: 'Amanhã' })).toBe(
+    expect(billingSummaryLine({ people: 2, amountCents: 10_000, mode: SplitMode.Fixed, dueLabel: 'Amanhã' })).toBe(
       '2 pessoas · R$ 100,00 total · vence amanhã'
     );
   });
@@ -184,9 +190,9 @@ describe('billingSummaryLine', () => {
 
 describe('billingBadges on a conta a pagar', () => {
   it('shows the direction and the payee instead of the participant count', () => {
-    const labels = billingBadges({ ...base, direction: 'payable', payeeName: 'Imobiliária' }).map((badge) => badge.label);
+    const labels = billingBadges({ ...base, direction: Direction.Payable, payeeName: 'Imobiliária' }).map((badge) => badge.label);
 
     expect(labels).toEqual(['Única', 'A pagar', 'Imobiliária']);
-    expect(billingBadges({ ...base, direction: 'payable', payeeName: null }).map((badge) => badge.label)).toContain('Só comigo');
+    expect(billingBadges({ ...base, direction: Direction.Payable, payeeName: null }).map((badge) => badge.label)).toContain('Só comigo');
   });
 });

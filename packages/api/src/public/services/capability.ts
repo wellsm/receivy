@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /** Bound into the signature so a charge link can never be replayed as an invite link. */
-export type PublicTokenPurpose = 'charge' | 'invite';
+export const enum PublicTokenPurpose {
+  Charge = 'charge',
+  Invite = 'invite'
+}
 
 type IssueInput = { publicId: string; version: number; expiresAtSeconds: number; secret: string; purpose: PublicTokenPurpose };
 type VerifyInput = { version: number; nowSeconds?: number; secret: string; purpose: PublicTokenPurpose };

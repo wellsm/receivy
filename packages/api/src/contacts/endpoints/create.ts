@@ -4,7 +4,7 @@ import type { String } from '@ez4/schema';
 import type { Contact } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { ContactProvider } from '../provider';
-import { saveContact } from '../repositories/contact';
+import { ContactRepository } from '../repositories/contact';
 import { parseContactInput } from '../utils/parse';
 
 declare class CreateRequest implements Http.Request {
@@ -17,6 +17,6 @@ declare class CreateResponse implements Http.Response {
   body: Contact;
 }
 
-export async function createContactHandler(request: CreateRequest, context: Service.Context<ContactProvider>): Promise<CreateResponse> {
-  return { status: 201, body: await saveContact(context.db, request.identity.userId, parseContactInput(request.body)) };
+export async function createContactHandler(request: CreateRequest, { db }: Service.Context<ContactProvider>): Promise<CreateResponse> {
+  return { status: 201, body: await ContactRepository.save(db, request.identity.userId, parseContactInput(request.body)) };
 }

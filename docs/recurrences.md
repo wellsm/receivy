@@ -1,7 +1,10 @@
 # Recorrências
 
 Uma recorrência é uma regra do proprietário. Mensais limitam dias 29–31 ao último
-dia do mês; anuais em 29/2 usam 28/2 quando necessário. O calendário usa o fuso
+dia do mês; anuais em 29/2 usam 28/2 quando necessário. Com `due_rule = end_of_month`
+(Única e Mensal, parcelada ou sem fim), toda ocorrência cai no último dia do mês
+(30/09, 31/10, 28/02…); o início precisa ser o último dia do seu mês. Só a conta sem
+fim troca a regra depois de criada, e a troca vale para as ocorrências ainda não geradas. O calendário usa o fuso
 IANA salvo na regra, inicialmente carregado do perfil nos clientes.
 
 ## Início, pausa, edição e falhas do agendador

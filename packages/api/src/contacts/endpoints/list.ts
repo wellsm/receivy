@@ -4,7 +4,7 @@ import type { String } from '@ez4/schema';
 import type { ContactsPage } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { ContactProvider } from '../provider';
-import { listContacts } from '../repositories/contact';
+import { ContactRepository } from '../repositories/contact';
 
 declare class ListRequest implements Http.Request {
   identity: SessionIdentity;
@@ -17,11 +17,11 @@ declare class ListResponse implements Http.Response {
   body: ContactsPage;
 }
 
-export async function listContactsHandler(request: ListRequest, context: Service.Context<ContactProvider>): Promise<ListResponse> {
+export async function listContactsHandler(request: ListRequest, { db }: Service.Context<ContactProvider>): Promise<ListResponse> {
   return {
     status: 200,
-    body: await listContacts(
-      context.db,
+    body: await ContactRepository.list(
+      db,
       request.identity.userId,
       request.query.cursor,
       request.query.archived,

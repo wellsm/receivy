@@ -1,3 +1,4 @@
+import { UserStatus } from "@receivy/common";
 import { createProfileStore } from "./profile";
 
 const user = {
@@ -6,7 +7,7 @@ const user = {
   name: "Ana",
   phone: null,
   avatarUrl: null,
-  status: "active" as const,
+  status: UserStatus.Active,
   locale: "pt-BR" as const,
   timezone: "America/Sao_Paulo",
   country: "BR" as const,

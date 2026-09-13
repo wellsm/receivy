@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Service } from '@ez4/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { EmailTransport } from './client';
 import { createEmailClient } from './compose';
 import type { EmailService } from './service';
 import { createService } from './service';
@@ -40,7 +41,7 @@ describe('email factory service', () => {
       resend: { send }
     } as unknown as Service.Context<EmailService>);
 
-    expect(await client.send('resend', message)).toEqual({ status: 'accepted', id: 'vendor-1' });
+    expect(await client.send(EmailTransport.Resend, message)).toEqual({ status: 'accepted', id: 'vendor-1' });
     expect(send).toHaveBeenCalledWith(message);
   });
 
@@ -53,14 +54,14 @@ describe('email factory service', () => {
   it('drops mail silently on the disabled vendor', async () => {
     const client = createEmailClient({ APP_STAGE: 'local' });
 
-    expect(await client.send('disabled', message)).toEqual({ status: 'disabled' });
+    expect(await client.send(EmailTransport.Disabled, message)).toEqual({ status: 'disabled' });
   });
 
   it('writes an .eml file on the file vendor, only for the local stage', async () => {
     const directory = createTempDirectory();
     const client = createEmailClient({ APP_STAGE: 'local', EMAIL_FILE_DIRECTORY: directory });
 
-    const result = await client.send('file', { ...message, key: 'delivery-1' });
+    const result = await client.send(EmailTransport.File, { ...message, key: 'delivery-1' });
 
     expect(result.status).toBe('accepted');
 
@@ -76,7 +77,7 @@ describe('email factory service', () => {
     for (const stage of ['dev', 'prd', 'test', undefined]) {
       const remote = createEmailClient({ APP_STAGE: stage, EMAIL_FILE_DIRECTORY: directory });
 
-      expect(() => remote.send('file', message)).toThrow(/APP_STAGE=local/);
+      expect(() => remote.send(EmailTransport.File, message)).toThrow(/APP_STAGE=local/);
     }
   });
 
@@ -84,7 +85,7 @@ describe('email factory service', () => {
     const directory = createTempDirectory();
     const client = createEmailClient({ APP_STAGE: 'local', EMAIL_FILE_DIRECTORY: directory });
 
-    const result = await client.send('file', { ...message, html: '<!doctype html><html><body><p>Olá</p></body></html>' });
+    const result = await client.send(EmailTransport.File, { ...message, html: '<!doctype html><html><body><p>Olá</p></body></html>' });
 
     expect(result.status).toBe('accepted');
 
@@ -115,16 +116,16 @@ describe('email factory service', () => {
     for (const [response, status] of outcomes) {
       const client = createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, vi.fn().mockResolvedValue(response));
 
-      expect((await client.send('resend', message)).status).toBe(status);
+      expect((await client.send(EmailTransport.Resend, message)).status).toBe(status);
     }
 
     const offline = createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, vi.fn().mockRejectedValue(new Error('offline')));
 
-    expect(await offline.send('resend', message)).toEqual({ status: 'uncertain' });
+    expect(await offline.send(EmailTransport.Resend, message)).toEqual({ status: 'uncertain' });
 
     const unconfigured = createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'disabled' }, vi.fn());
 
-    expect(await unconfigured.send('resend', message)).toEqual({ status: 'permanent' });
+    expect(await unconfigured.send(EmailTransport.Resend, message)).toEqual({ status: 'permanent' });
   });
 
   it('sends the idempotency key and the authorization header to Resend without logging', async () => {
@@ -132,7 +133,7 @@ describe('email factory service', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const client = createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'resend-key' }, request);
 
-    await client.send('resend', { ...message, key: 'stable-key' });
+    await client.send(EmailTransport.Resend, { ...message, key: 'stable-key' });
 
     const [url, init] = request.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
@@ -150,7 +151,7 @@ describe('email factory service', () => {
     const request = vi.fn().mockResolvedValue(Response.json({ ID: 'mailpit-1' }));
     const client = createEmailClient({ APP_STAGE: 'local', MAILPIT_API_URL: 'http://127.0.0.1:8025/' }, request);
 
-    const result = await client.send('mailpit', { ...message, key: 'delivery-1' });
+    const result = await client.send(EmailTransport.Mailpit, { ...message, key: 'delivery-1' });
 
     expect(result).toEqual({ status: 'accepted', id: 'mailpit-1' });
 
@@ -170,13 +171,13 @@ describe('email factory service', () => {
     const html = '<!doctype html><html><body><p>Olá</p></body></html>';
 
     const mailpit = vi.fn().mockResolvedValue(Response.json({ ID: 'mailpit-3' }));
-    await createEmailClient({ APP_STAGE: 'local' }, mailpit).send('mailpit', { ...message, html });
+    await createEmailClient({ APP_STAGE: 'local' }, mailpit).send(EmailTransport.Mailpit, { ...message, html });
 
     const [, mailpitInit] = mailpit.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(mailpitInit.body))).toMatchObject({ text: message.text, html });
 
     const resend = vi.fn().mockResolvedValue(Response.json({ id: 'resend-3' }));
-    await createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, resend).send('resend', { ...message, html });
+    await createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, resend).send(EmailTransport.Resend, { ...message, html });
 
     const [, resendInit] = resend.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(resendInit.body))).toMatchObject({ text: message.text, html });
@@ -185,7 +186,7 @@ describe('email factory service', () => {
   it('omits the HTML field entirely on a text-only message', async () => {
     const resend = vi.fn().mockResolvedValue(Response.json({ id: 'resend-4' }));
 
-    await createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, resend).send('resend', message);
+    await createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, resend).send(EmailTransport.Resend, message);
 
     const [, init] = resend.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).not.toHaveProperty('html');
@@ -194,12 +195,12 @@ describe('email factory service', () => {
   it('keeps the Mailpit vendor out of every deployed stage', async () => {
     const request = vi.fn().mockResolvedValue(Response.json({ ID: 'mailpit-2' }));
 
-    expect((await createEmailClient({ APP_STAGE: 'test' }, request).send('mailpit', message)).status).toBe('accepted');
+    expect((await createEmailClient({ APP_STAGE: 'test' }, request).send(EmailTransport.Mailpit, message)).status).toBe('accepted');
 
     for (const stage of ['dev', 'prd', undefined]) {
       const remote = createEmailClient({ APP_STAGE: stage }, request);
 
-      expect(() => remote.send('mailpit', message)).toThrow(/local or test/);
+      expect(() => remote.send(EmailTransport.Mailpit, message)).toThrow(/local or test/);
     }
   });
 
@@ -213,11 +214,11 @@ describe('email factory service', () => {
     for (const [response, status] of outcomes) {
       const client = createEmailClient({ APP_STAGE: 'local' }, vi.fn().mockResolvedValue(response));
 
-      expect((await client.send('mailpit', message)).status).toBe(status);
+      expect((await client.send(EmailTransport.Mailpit, message)).status).toBe(status);
     }
 
     const offline = createEmailClient({ APP_STAGE: 'local' }, vi.fn().mockRejectedValue(new Error('offline')));
 
-    expect(await offline.send('mailpit', message)).toEqual({ status: 'uncertain' });
+    expect(await offline.send(EmailTransport.Mailpit, message)).toEqual({ status: 'uncertain' });
   });
 });

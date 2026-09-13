@@ -1,20 +1,23 @@
 import {
-  type BillingFrequency,
+  BillingDueRule,
+  BillingFrequency,
   type BillingInput,
   type BillingPixInput,
   type BillingReminder,
-  type BillingType,
+  BillingType,
   MAX_FINITE_OCCURRENCES,
-  type NormalizedBillingInput
+  type NormalizedBillingInput,
+  SplitPartKind
 } from './billing';
+import { Direction, SplitMode } from './contracts';
 import { normalizePixKey } from './pix-key';
 import { type BillingSplit, resolveBillingSplit } from './split';
 
-export type BillingCalendarRule = { frequency: BillingFrequency; startDate: string; endDate?: string };
+export type BillingCalendarRule = { frequency: BillingFrequency; startDate: string; endDate?: string; dueRule?: BillingDueRule };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const TYPES: BillingType[] = ['once', 'until', 'indefinite'];
-const FREQUENCIES: BillingFrequency[] = ['monthly', 'yearly'];
+const TYPES: BillingType[] = [BillingType.Once, BillingType.Until, BillingType.Indefinite];
+const FREQUENCIES: BillingFrequency[] = [BillingFrequency.Monthly, BillingFrequency.Yearly];
 
 export function addCalendarDays(value: string, days: number): string {
   const date = new Date(`${value}T12:00:00Z`);
@@ -34,21 +37,35 @@ export function addCalendarDays(value: string, days: number): string {
   return result;
 }
 
+/** Last day of the month `value` falls in; only its year and month are read. */
+export function endOfMonth(value: string): string {
+  const month = Number(value.slice(5, 7));
+
+  if (!ISO_DATE.test(value) || month < 1 || month > 12) {
+    throw new RangeError('Data inválida.');
+  }
+
+  const day = new Date(Date.UTC(Number(value.slice(0, 4)), month, 0)).getUTCDate();
+
+  return `${value.slice(0, 7)}-${String(day).padStart(2, '0')}`;
+}
+
 export function materializationDate(dueDate: string, reminders: BillingReminder[]): string {
   const offsets = reminders.filter((reminder) => reminder.enabled).map((reminder) => reminder.offsetDays);
 
   return addCalendarDays(dueDate, offsets.length ? Math.min(...offsets) : 0);
 }
 
-/** Civil due dates of a rule between `from` and `to` (inclusive). Day and month come from `startDate`. */
+/** Civil due dates of a rule between `from` and `to` (inclusive). Day and month come from `startDate`, or the month end. */
 export function billingDates(rule: BillingCalendarRule, from: string, to: string, limit = 100): string[] {
   const start = from > rule.startDate ? from : rule.startDate;
   const end = rule.endDate && rule.endDate < to ? rule.endDate : to;
-  const day = Number(rule.startDate.slice(8, 10));
+  // Day 31 clamps to every month's last day, so a month-end rule never inherits a shorter start day.
+  const day = rule.dueRule === BillingDueRule.EndOfMonth ? 31 : Number(rule.startDate.slice(8, 10));
   const dates: string[] = [];
 
   let year = Number(start.slice(0, 4));
-  let month = rule.frequency === 'yearly' ? Number(rule.startDate.slice(5, 7)) : Number(start.slice(5, 7));
+  let month = rule.frequency === BillingFrequency.Yearly ? Number(rule.startDate.slice(5, 7)) : Number(start.slice(5, 7));
 
   while (year <= Number(end.slice(0, 4)) && dates.length < limit) {
     const maxDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -62,7 +79,7 @@ export function billingDates(rule: BillingCalendarRule, from: string, to: string
       dates.push(due);
     }
 
-    if (rule.frequency === 'yearly') {
+    if (rule.frequency === BillingFrequency.Yearly) {
       year++;
       continue;
     }
@@ -79,12 +96,12 @@ export function billingDates(rule: BillingCalendarRule, from: string, to: string
 }
 
 /** Every due date of a finite billing. Throws for `indefinite`, which is materialized by the job. */
-export function billingDueDates(input: Pick<BillingInput, 'type' | 'frequency' | 'startDate' | 'endDate'>): string[] {
-  if (input.type === 'once') {
+export function billingDueDates(input: Pick<BillingInput, 'type' | 'frequency' | 'startDate' | 'endDate' | 'dueRule'>): string[] {
+  if (input.type === BillingType.Once) {
     return [input.startDate];
   }
 
-  if (input.type === 'indefinite') {
+  if (input.type === BillingType.Indefinite) {
     throw new RangeError('Cobranças sem fim são geradas pelo job, não na criação.');
   }
 
@@ -93,7 +110,7 @@ export function billingDueDates(input: Pick<BillingInput, 'type' | 'frequency' |
   }
 
   const dates = billingDates(
-    { frequency: input.frequency, startDate: input.startDate, endDate: input.endDate },
+    { frequency: input.frequency, startDate: input.startDate, endDate: input.endDate, dueRule: input.dueRule },
     input.startDate,
     input.endDate,
     MAX_FINITE_OCCURRENCES + 1
@@ -139,17 +156,27 @@ export function normalizeBillingInput(input: BillingInput): NormalizedBillingInp
     addCalendarDays(input.endDate, 0);
   }
 
-  const recurring = input.type !== 'once';
+  const recurring = input.type !== BillingType.Once;
 
   if (recurring && (!input.frequency || !FREQUENCIES.includes(input.frequency))) {
     throw new RangeError('Informe a frequência: mensal ou anual.');
   }
 
-  if (input.type === 'until' && !input.endDate) {
+  const monthEnd = input.dueRule === BillingDueRule.EndOfMonth;
+
+  if (monthEnd && recurring && input.frequency !== BillingFrequency.Monthly) {
+    throw new RangeError('Final do mês só vale para cobranças mensais.');
+  }
+
+  if (monthEnd && input.startDate !== endOfMonth(input.startDate)) {
+    throw new RangeError('Com final do mês, o vencimento deve ser o último dia do mês.');
+  }
+
+  if (input.type === BillingType.Until && !input.endDate) {
     throw new RangeError('Informe a data final.');
   }
 
-  if (input.type === 'indefinite' && input.endDate) {
+  if (input.type === BillingType.Indefinite && input.endDate) {
     throw new RangeError('Cobranças sem fim não aceitam data final.');
   }
 
@@ -163,17 +190,17 @@ export function normalizeBillingInput(input: BillingInput): NormalizedBillingInp
     throw new RangeError('Informe uma descrição de até 500 caracteres.');
   }
 
-  const direction = input.direction ?? 'receivable';
+  const direction = input.direction ?? Direction.Receivable;
 
-  if (direction !== 'receivable' && direction !== 'payable') {
+  if (direction !== Direction.Receivable && direction !== Direction.Payable) {
     throw new RangeError('Direção inválida.');
   }
 
-  const split = direction === 'payable' ? payableSplit(input) : receivableSplit(input);
+  const split = direction === Direction.Payable ? payableSplit(input) : receivableSplit(input);
 
   resolveBillingSplit(input.totalCents, split);
 
-  if (input.type === 'until') {
+  if (input.type === BillingType.Until) {
     billingDueDates(input);
   }
 
@@ -183,15 +210,17 @@ export function normalizeBillingInput(input: BillingInput): NormalizedBillingInp
     description,
     totalCents: input.totalCents,
     startDate: input.startDate,
-    endDate: input.type === 'until' ? input.endDate : undefined,
+    endDate: input.type === BillingType.Until ? input.endDate : undefined,
+    // Only the month end is carried: 'fixed' stays implicit, like before the rule existed.
+    dueRule: monthEnd ? BillingDueRule.EndOfMonth : undefined,
     timezone: input.timezone,
-    paymentMethodId: direction === 'receivable' ? input.paymentMethodId || undefined : undefined,
+    paymentMethodId: direction === Direction.Receivable ? input.paymentMethodId || undefined : undefined,
     reminders: input.reminders ? validateReminders(input.reminders) : undefined,
     split,
     category: input.category,
     direction,
-    payeeUserId: direction === 'payable' ? input.payeeUserId?.trim() || undefined : undefined,
-    pix: direction === 'payable' && input.pix ? normalizeBillingPix(input.pix) : undefined
+    payeeUserId: direction === Direction.Payable ? input.payeeUserId?.trim() || undefined : undefined,
+    pix: direction === Direction.Payable && input.pix ? normalizeBillingPix(input.pix) : undefined
   };
 }
 
@@ -206,7 +235,7 @@ function receivableSplit(input: BillingInput): BillingSplit {
 
 /** A conta a pagar has a single payer, the owner: the allocation is the owner alone and no wallet key applies. */
 function payableSplit(input: BillingInput): BillingSplit {
-  if (input.split && input.split.parts.some((part) => part.kind === 'user')) {
+  if (input.split && input.split.parts.some((part) => part.kind === SplitPartKind.User)) {
     throw new RangeError('Uma conta a pagar não divide o valor com contatos.');
   }
 
@@ -214,7 +243,7 @@ function payableSplit(input: BillingInput): BillingSplit {
     throw new RangeError('Uma conta a pagar usa a chave Pix de quem recebe, não a sua.');
   }
 
-  return { mode: 'equal', parts: [{ kind: 'owner' }] };
+  return { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] };
 }
 
 function normalizeBillingPix(pix: BillingPixInput): BillingPixInput {

@@ -68,14 +68,16 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
 
       if (!response.ok) {
         setError(await responseMessage(response, "Não foi possível enviar o código agora."));
+        setBusy(false);
         return;
       }
 
       writePendingLogin({ email, sentAt: Date.now(), nextPath });
+      // Left busy on purpose: the route change unmounts this screen, and clearing it here
+      // would flash the button back to idle while the old screen is still on top.
       router.push("/login/code");
     } catch {
       setError("Não foi possível enviar o código agora.");
-    } finally {
       setBusy(false);
     }
   }

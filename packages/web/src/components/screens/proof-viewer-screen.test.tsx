@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ChargeDetail, ChargeProof } from "@receivy/common";
+import { BillingType, ChargeState, Direction, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ProofViewerScreen } from "@/components/screens/proof-viewer-screen";
 
@@ -12,8 +12,8 @@ afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
   return {
-    state: "pending",
-    file: { name: "comprovante.png", mime: "image/png", size: 2048 },
+    state: ProofState.Pending,
+    file: { name: "comprovante.png", mime: ProofMime.Png, size: 2048 },
     sentAt: "2026-09-05T14:32:00Z",
     reviewedAt: null,
     reason: null,
@@ -25,21 +25,21 @@ function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
 function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
   return {
     id: "charge",
-    direction: "receivable",
+    direction: Direction.Receivable,
     description: "Aluguel",
     amount: { amountCents: 2500, currency: "BRL" },
     dueDate: "2026-09-10",
-    state: "pending",
+    state: ChargeState.Pending,
     billingId: "b1",
-    billingType: "once",
+    billingType: BillingType.Once,
     installment: 1,
     installmentCount: 1,
     counterpartName: "Ana",
-    proofState: "pending",
+    proofState: ProofState.Pending,
     recipient: { userId: "u1", name: "Ana", email: null },
     debtorUserId: "u1",
     pix: null,
-    sharingState: "ready",
+    sharingState: SharingState.Ready,
     proof: proof(),
     cancelledAt: null,
     paidAt: null,
@@ -74,7 +74,7 @@ function serve(detail: ChargeDetail, extra: Record<string, (init?: RequestInit) 
 
 describe("ProofViewerScreen", () => {
   it("shows the proof and lets the creditor accept it", async () => {
-    const review = vi.fn(() => Response.json(charge({ state: "paid", proofState: "accepted", proof: proof({ state: "accepted" }) })));
+    const review = vi.fn(() => Response.json(charge({ state: ChargeState.Paid, proofState: ProofState.Accepted, proof: proof({ state: ProofState.Accepted }) })));
 
     serve(charge(), { "POST /api/financial/charges/charge/proof/review": review });
 
@@ -91,7 +91,7 @@ describe("ProofViewerScreen", () => {
   });
 
   it("sends the optional reason along with a rejection", async () => {
-    const review = vi.fn((init?: RequestInit) => Response.json(charge({ proofState: "rejected", proof: proof({ state: "rejected", reason: String(init?.body) }) })));
+    const review = vi.fn((init?: RequestInit) => Response.json(charge({ proofState: ProofState.Rejected, proof: proof({ state: ProofState.Rejected, reason: String(init?.body) }) })));
 
     serve(charge(), { "POST /api/financial/charges/charge/proof/review": review });
 
@@ -106,8 +106,8 @@ describe("ProofViewerScreen", () => {
 
   it("lets the debtor replace a rejected proof and previews the new file", async () => {
     const put = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
-    const rejected = charge({ direction: "payable", proofState: "rejected", proof: proof({ state: "rejected", reason: "Ilegível", file: { name: "antigo.pdf", mime: "application/pdf", size: 2048 } }) });
-    const replaced = charge({ direction: "payable", proof: proof({ file: { name: "novo.png", mime: "image/png", size: 3 }, sentByViewer: true }) });
+    const rejected = charge({ direction: Direction.Payable, proofState: ProofState.Rejected, proof: proof({ state: ProofState.Rejected, reason: "Ilegível", file: { name: "antigo.pdf", mime: ProofMime.Pdf, size: 2048 } }) });
+    const replaced = charge({ direction: Direction.Payable, proof: proof({ file: { name: "novo.png", mime: ProofMime.Png, size: 3 }, sentByViewer: true }) });
     const swap = serve(rejected, {
       "POST /api/financial/charges/charge/proof": () => {
         // The bucket event lands right after the PUT: the next read of the charge already carries the new file.
@@ -136,7 +136,7 @@ describe("ProofViewerScreen", () => {
   it("lets the sender take back a pending proof and returns to the charge", async () => {
     const withdraw = vi.fn(() => new Response(null, { status: 204 }));
 
-    serve(charge({ direction: "payable", proof: proof({ sentByViewer: true }) }), { "DELETE /api/financial/charges/charge/proof": withdraw });
+    serve(charge({ direction: Direction.Payable, proof: proof({ sentByViewer: true }) }), { "DELETE /api/financial/charges/charge/proof": withdraw });
 
     render(<ProofViewerScreen chargeId="charge" />);
 

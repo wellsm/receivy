@@ -1,15 +1,15 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import type { TimelinePage } from '@receivy/common';
+import { BillingType, ChargeState, Direction, FeedStatus, type TimelinePage } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { InvalidTimelineFilterError } from '../errors';
 import type { TimelineProvider } from '../provider';
-import { getTimeline } from '../repositories/timeline';
+import { TimelineRepository } from '../repositories/timeline';
 
-const DIRECTIONS = ['receivable', 'payable'] as const;
-const STATUSES = ['pending', 'overdue', 'paid', 'cancelled'] as const;
-const TYPES = ['once', 'until', 'indefinite'] as const;
+const DIRECTIONS: readonly Direction[] = [Direction.Receivable, Direction.Payable];
+const STATUSES: readonly TimelineRepository.Status[] = [ChargeState.Pending, FeedStatus.Overdue, ChargeState.Paid, ChargeState.Cancelled];
+const TYPES: readonly BillingType[] = [BillingType.Once, BillingType.Until, BillingType.Indefinite];
 
 declare class TimelineRequest implements Http.Request {
   identity: SessionIdentity;
@@ -44,6 +44,7 @@ function parseList<T extends string>(field: string, raw: string | undefined, all
         .map((value) => value.trim())
     )
   ].filter(Boolean);
+
   const invalid = values.find((value) => !allowed.includes(value as T));
 
   if (invalid) {
@@ -53,8 +54,11 @@ function parseList<T extends string>(field: string, raw: string | undefined, all
   return values as T[];
 }
 
-export async function timelineHandler(request: TimelineRequest, context: Service.Context<TimelineProvider>): Promise<TimelineResponse> {
-  const { cursor, direction, status, type, from, to } = request.query;
+export async function timelineHandler(
+  { identity, query }: TimelineRequest,
+  { db }: Service.Context<TimelineProvider>
+): Promise<TimelineResponse> {
+  const { cursor, direction, status, type, from, to } = query;
 
   const filters = {
     cursor,
@@ -65,5 +69,5 @@ export async function timelineHandler(request: TimelineRequest, context: Service
     type: parseList('type', type, TYPES)
   };
 
-  return { status: 200, body: await getTimeline(context.db, request.identity.userId, filters) };
+  return { status: 200, body: await TimelineRepository.get(db, identity.userId, filters) };
 }

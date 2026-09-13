@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Alert } from "react-native";
-import { calendarDate, type ChargeSummary, type TimelinePage } from "@receivy/common";
+import { BillingType, calendarDate, ChargeState, Direction, ProofState, type ChargeSummary, type TimelinePage } from "@receivy/common";
 import { FeedScreen } from "@/components/screens/feed-screen";
 
 jest.mock("@/navigation/tab-header", () => ({ useTabHeader: () => {} }));
@@ -30,9 +30,9 @@ function charge(overrides: Partial<ChargeSummary> & { id: string }): ChargeSumma
     description: "Mercado semanal",
     amount: { amountCents: 8742, currency: "BRL" },
     dueDate: today,
-    state: "pending",
+    state: ChargeState.Pending,
     billingId: "b1",
-    billingType: "once",
+    billingType: BillingType.Once,
     installment: 1,
     installmentCount: 1,
     counterpartName: "Maria",
@@ -41,7 +41,7 @@ function charge(overrides: Partial<ChargeSummary> & { id: string }): ChargeSumma
   };
 }
 
-function item(charge: ChargeSummary, direction: "receivable" | "payable" = "receivable"): TimelinePage["items"][number] {
+function item(charge: ChargeSummary, direction: Direction = Direction.Receivable): TimelinePage["items"][number] {
   return { kind: "charge", direction, charge };
 }
 
@@ -62,9 +62,9 @@ describe("FeedScreen", () => {
   it("shows totals with counts, groups charges by day and offers one action per card", async () => {
     const timeline = jest.fn().mockResolvedValue(
       page([
-        item(charge({ id: "c1", proofState: "pending" })),
-        item(charge({ id: "c2", description: "Netflix", counterpartName: "Netflix", amount: { amountCents: 2790, currency: "BRL" } }), "payable"),
-        item(charge({ id: "c3", description: "Claude Team", counterpartName: "João", dueDate: "2020-01-01", billingType: "indefinite", installment: null, installmentCount: null })),
+        item(charge({ id: "c1", proofState: ProofState.Pending })),
+        item(charge({ id: "c2", description: "Netflix", counterpartName: "Netflix", amount: { amountCents: 2790, currency: "BRL" } }), Direction.Payable),
+        item(charge({ id: "c3", description: "Claude Team", counterpartName: "João", dueDate: "2020-01-01", billingType: BillingType.Indefinite, installment: null, installmentCount: null })),
         item(charge({ id: "c4", description: "Internet", counterpartName: "Pedro", dueDate: "2099-01-01", counterpartReachable: false })),
       ]),
     );
@@ -85,7 +85,7 @@ describe("FeedScreen", () => {
     expect(screen.queryByText(/WhatsApp/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Nova cobrança" })).toBeNull();
 
-    await fireEvent.press(screen.getByRole("button", { name: "Pagar via Pix" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Pagar" }));
     expect(openCharge).toHaveBeenCalledWith("c2");
 
     await fireEvent.press(screen.getByRole("button", { name: "Ver cobrança" }));
@@ -121,7 +121,7 @@ async function pickDirection(label: string) {
     await pickDirection("A receber");
     await pickDirection("A pagar");
     await act(async () => {
-      payable.resolve(page([item(charge({ id: "new", description: "Resposta nova" }), "payable")]));
+      payable.resolve(page([item(charge({ id: "new", description: "Resposta nova" }), Direction.Payable)]));
       await Promise.resolve();
     });
     expect(await screen.findByText(/Resposta nova/)).toBeOnTheScreen();
@@ -137,7 +137,7 @@ async function pickDirection(label: string) {
     const timeline = jest
       .fn()
       .mockResolvedValueOnce(page([item(charge({ id: "a", description: "Primeira" }))], "page-2"))
-      .mockResolvedValueOnce(page([item(charge({ id: "b", description: "Segunda", state: "paid", proofState: "accepted" }))]));
+      .mockResolvedValueOnce(page([item(charge({ id: "b", description: "Segunda", state: ChargeState.Paid, proofState: ProofState.Accepted }))]));
     await render(<FeedScreen client={{ timeline }} />);
 
     await screen.findByText(/Primeira/);

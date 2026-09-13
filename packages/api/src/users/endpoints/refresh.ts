@@ -4,7 +4,7 @@ import { HttpUnauthorizedError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { SessionTokens } from '@receivy/common';
 import type { UserProvider } from '../provider';
-import { createAuthRepository } from '../repositories/auth';
+import { AuthRepository } from '../repositories/auth';
 import { refreshSession, SessionFlowError } from '../services/refresh-session';
 
 declare class RefreshRequest implements Http.Request {
@@ -16,11 +16,11 @@ declare class RefreshResponse implements Http.Response {
   body: SessionTokens;
 }
 
-export async function refreshHandler(request: RefreshRequest, context: Service.Context<UserProvider>): Promise<RefreshResponse> {
+export async function refreshHandler(request: RefreshRequest, { db, variables }: Service.Context<UserProvider>): Promise<RefreshResponse> {
   try {
     const body = await refreshSession(request.body, {
-      accessTokenSecret: context.variables.AUTH_JWT_SECRET,
-      repo: createAuthRepository(context.db)
+      accessTokenSecret: variables.AUTH_JWT_SECRET,
+      repo: AuthRepository.create(db)
     });
     return { status: 200, body };
   } catch (error) {

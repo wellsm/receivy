@@ -1,24 +1,28 @@
 import { describe, expect, it } from 'vitest';
+import { BillingDueRule, BillingFrequency, BillingType } from './billing';
+import { BillingCategory } from './billing-category';
 import { type BillingDraft, buildBillingInput, EMPTY_BILLING_DRAFT, EMPTY_SPLIT_VALUES } from './billing-draft';
+import { Direction, PixKeyType, SplitMode } from './contracts';
 
 const base: BillingDraft = {
-  direction: 'receivable',
+  direction: Direction.Receivable,
   payee: '',
-  pixInline: { type: 'email', key: '', label: '' },
-  type: 'once',
+  pixInline: { type: PixKeyType.Email, key: '', label: '' },
+  type: BillingType.Once,
   selected: ['p1'],
   owner: true,
   amount: '100,01',
   description: 'Internet',
-  frequency: 'monthly',
+  frequency: BillingFrequency.Monthly,
   start: '2026-01-31',
+  dueRule: BillingDueRule.Fixed,
   end: '',
   occurrences: '',
   timezone: 'America/Sao_Paulo',
   pix: '',
-  mode: 'equal',
+  mode: SplitMode.Equal,
   values: EMPTY_SPLIT_VALUES(),
-  category: 'other',
+  category: BillingCategory.Other,
   reminders: [{ offsetDays: '-3', enabled: true }]
 };
 
@@ -43,21 +47,42 @@ describe('billing draft review', () => {
   });
 
   it('turns "N vezes" into the end date of the last occurrence', () => {
-    const input = buildBillingInput({ ...base, type: 'until', occurrences: '3' });
+    const input = buildBillingInput({ ...base, type: BillingType.Until, occurrences: '3' });
     expect(input.endDate).toBe('2026-03-31');
-    expect(buildBillingInput({ ...base, type: 'until', end: '2026-02-15' }).endDate).toBe('2026-02-15');
-    expect(() => buildBillingInput({ ...base, type: 'until' })).toThrow(/data final/i);
+    expect(buildBillingInput({ ...base, type: BillingType.Until, end: '2026-02-15' }).endDate).toBe('2026-02-15');
+    expect(() => buildBillingInput({ ...base, type: BillingType.Until })).toThrow(/data final/i);
+  });
+
+  it('counts "N vezes" on month ends with an end_of_month rule', () => {
+    expect(
+      buildBillingInput({ ...base, type: BillingType.Until, start: '2026-09-30', occurrences: '3', dueRule: BillingDueRule.EndOfMonth })
+    ).toMatchObject({
+      endDate: '2026-11-30',
+      dueRule: 'end_of_month'
+    });
+    // A yearly draft never carries a month end, whatever it remembers.
+    expect(
+      buildBillingInput({
+        ...base,
+        type: BillingType.Indefinite,
+        frequency: BillingFrequency.Yearly,
+        start: '2026-09-30',
+        dueRule: BillingDueRule.EndOfMonth
+      }).dueRule
+    ).toBeUndefined();
   });
 
   it('parses fixed money and percentages once at the review boundary', () => {
-    expect(buildBillingInput({ ...base, mode: 'fixed', values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,01' } } }).split).toEqual({
+    expect(
+      buildBillingInput({ ...base, mode: SplitMode.Fixed, values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,01' } } }).split
+    ).toEqual({
       mode: 'fixed',
       parts: [{ kind: 'user', userId: 'p1', amountCents: 4001 }]
     });
     expect(
       buildBillingInput({
         ...base,
-        mode: 'percentage',
+        mode: SplitMode.Percentage,
         values: { ...EMPTY_SPLIT_VALUES(), percentage: { p1: '33,33', owner: '66,67' } }
       }).split
     ).toEqual({
@@ -72,7 +97,9 @@ describe('billing draft review', () => {
   it("keeps each mode's values isolated: filling fixed does not leak into percentage", () => {
     const values = { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,00' } };
 
-    expect(buildBillingInput({ ...base, mode: 'percentage', values: { ...values, percentage: { p1: '50', owner: '50' } } }).split).toEqual({
+    expect(
+      buildBillingInput({ ...base, mode: SplitMode.Percentage, values: { ...values, percentage: { p1: '50', owner: '50' } } }).split
+    ).toEqual({
       mode: 'percentage',
       parts: [
         { kind: 'user', userId: 'p1', basisPoints: 5000 },
@@ -84,12 +111,12 @@ describe('billing draft review', () => {
   it('ignores values.fixed when the mode is shares', () => {
     const draft = {
       ...base,
-      mode: 'shares' as const,
+      mode: SplitMode.Shares,
       values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '999,99' }, shares: { p1: '2' } }
     };
 
     expect(buildBillingInput(draft).split).toEqual({
-      mode: 'shares',
+      mode: SplitMode.Shares,
       parts: [
         { kind: 'user', userId: 'p1', shares: 2 },
         { kind: 'owner', shares: 1 }
@@ -100,7 +127,7 @@ describe('billing draft review', () => {
   it('rejects empty selection, bad reminder text and non-integer occurrences', () => {
     expect(() => buildBillingInput({ ...base, selected: [] })).toThrow(/contato/i);
     expect(() => buildBillingInput({ ...base, reminders: [{ offsetDays: '-', enabled: true }] })).toThrow(/dias inteiros/i);
-    expect(() => buildBillingInput({ ...base, type: 'until', occurrences: '2,5' })).toThrow(/vezes/i);
+    expect(() => buildBillingInput({ ...base, type: BillingType.Until, occurrences: '2,5' })).toThrow(/vezes/i);
   });
 
   it('builds a shares split and keeps the category', () => {
@@ -110,16 +137,16 @@ describe('billing draft review', () => {
       owner: true,
       amount: '100,00',
       description: 'Churrasco',
-      mode: 'shares' as const,
+      mode: SplitMode.Shares as const,
       values: { ...EMPTY_SPLIT_VALUES(), shares: { p1: '2', owner: '1' } },
-      category: 'food' as const
+      category: BillingCategory.Food
     };
 
     const input = buildBillingInput(draft);
 
-    expect(input.category).toBe('food');
+    expect(input.category).toBe(BillingCategory.Food);
     expect(input.split).toEqual({
-      mode: 'shares',
+      mode: SplitMode.Shares,
       parts: [
         { kind: 'user', userId: 'p1', shares: 2 },
         { kind: 'user', userId: 'p2', shares: 1 },
@@ -144,6 +171,7 @@ describe('EMPTY_BILLING_DRAFT', () => {
       description: '',
       frequency: 'monthly',
       start: '2026-09-10',
+      dueRule: 'fixed',
       end: '',
       occurrences: '',
       timezone: 'America/Sao_Paulo',
@@ -181,10 +209,10 @@ describe('EMPTY_SPLIT_VALUES', () => {
 describe('conta a pagar draft', () => {
   const payable: BillingDraft = {
     ...base,
-    direction: 'payable',
+    direction: Direction.Payable,
     selected: [],
     payee: 'p9',
-    pixInline: { type: 'cpf', key: '529.982.247-25', label: ' Aluguel ' }
+    pixInline: { type: PixKeyType.Cpf, key: '529.982.247-25', label: ' Aluguel ' }
   };
 
   it('needs no contact, drops the wallet key and normalizes the typed Pix', () => {
@@ -198,14 +226,16 @@ describe('conta a pagar draft', () => {
   });
 
   it('accepts a bill that is the owner alone, without payee or Pix', () => {
-    const input = buildBillingInput({ ...payable, payee: '', pixInline: { type: 'email', key: '', label: '' } });
+    const input = buildBillingInput({ ...payable, payee: '', pixInline: { type: PixKeyType.Email, key: '', label: '' } });
 
     expect(input.payeeUserId).toBeUndefined();
     expect(input.pix).toBeUndefined();
   });
 
   it('rejects an invalid typed key', () => {
-    expect(() => buildBillingInput({ ...payable, pixInline: { type: 'cpf', key: '123', label: '' } })).toThrow(/Chave Pix inválida/);
+    expect(() => buildBillingInput({ ...payable, pixInline: { type: PixKeyType.Cpf, key: '123', label: '' } })).toThrow(
+      /Chave Pix inválida/
+    );
   });
 });
 
@@ -213,9 +243,9 @@ describe('typed phone key', () => {
   it('accepts the masked national number and sends it as E.164', () => {
     const input = buildBillingInput({
       ...base,
-      direction: 'payable',
+      direction: Direction.Payable,
       selected: [],
-      pixInline: { type: 'phone', key: '(11) 98765-4321', label: '' }
+      pixInline: { type: PixKeyType.Phone, key: '(11) 98765-4321', label: '' }
     });
 
     expect(input.pix).toEqual({ keyType: 'phone', key: '+5511987654321', label: undefined });

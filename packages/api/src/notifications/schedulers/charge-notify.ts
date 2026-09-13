@@ -1,16 +1,17 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Cron } from '@ez4/scheduler';
 import type { String } from '@ez4/schema';
-import { listEvents } from '../../common/repositories/events';
+import { EventRepository } from '../../common/repositories/events';
 import type { EmailService } from '../../common/services/email/service';
 import type { Db } from '../../database';
 import { notificationConfigFrom } from '../services/planner';
+import type { NoticeTemplate } from '../services/render';
 import { followUpCharge, notifyCharge } from '../services/send';
 import { notificationTransport } from '../services/transport';
 
 export type ChargeNotifySchedule = {
   chargeId: String.UUID;
-  template: 'initial' | 'reminder' | 'manual';
+  template: NoticeTemplate;
   stage: 'first' | 'followup';
   offsetDays?: number;
 };
@@ -53,15 +54,14 @@ export declare class ChargeNotifyScheduler extends Cron.Service<ChargeNotifySche
 
 export async function handler(
   request: Cron.Incoming<ChargeNotifySchedule>,
-  context: Service.Context<ChargeNotifyScheduler>
+  { db, variables, email, chargeNotifyScheduler }: Service.Context<ChargeNotifyScheduler>
 ): Promise<void> {
   const event = request.event;
-  const { db } = context;
   const now = Date.now();
   const notice = {
-    config: notificationConfigFrom(context.variables),
-    transport: notificationTransport(context.variables, globalThis.fetch, context.email),
-    notify: context.chargeNotifyScheduler
+    config: notificationConfigFrom(variables),
+    transport: notificationTransport(variables, globalThis.fetch, email),
+    notify: chargeNotifyScheduler
   };
 
   if (event.stage === 'followup') {
@@ -72,8 +72,8 @@ export async function handler(
   }
 
   // A redelivery must not send the same reminder twice.
-  const already = (await listEvents(db, event.chargeId, 'notice.sent')).some(
-    (sent) => sent.payload['template'] === event.template && sent.payload['offsetDays'] === event.offsetDays
+  const already = (await EventRepository.list(db, event.chargeId, 'notice.sent')).some(
+    (sent) => sent.payload.template === event.template && sent.payload.offsetDays === event.offsetDays
   );
 
   if (already) {

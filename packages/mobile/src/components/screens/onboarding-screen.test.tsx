@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import type { AuthUser } from "@receivy/common";
+import { type AuthUser, UserStatus } from "@receivy/common";
 import { OnboardingScreen } from "@/components/screens/onboarding-screen";
 
 const user: AuthUser = {
@@ -8,7 +8,7 @@ const user: AuthUser = {
   name: null,
   phone: null,
   avatarUrl: null,
-  status: "pending",
+  status: UserStatus.Pending,
   locale: "pt-BR",
   timezone: "America/Sao_Paulo",
   country: "BR",

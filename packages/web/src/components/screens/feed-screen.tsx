@@ -128,7 +128,7 @@ function ChargeCard({
             type="button"
             disabled={reminded !== null}
             onClick={() => setConfirmRemind(true)}
-            className="flex min-h-10 items-center rounded-lg bg-primary-soft/40 px-3 text-xs font-bold text-primary-strong"
+            className="relative flex min-h-10 items-center rounded-lg bg-primary-soft/40 px-3 text-xs font-bold text-primary-strong"
           >
             {reminded ?? action.label}
           </button>
@@ -136,8 +136,8 @@ function ChargeCard({
         {action?.kind === "open" && (
           <Link
             href={href}
-            className={`flex min-h-10 items-center rounded-lg px-3 text-xs font-bold no-underline ${
-              action.label === "Pagar via Pix" ? "bg-primary text-white" : "bg-surface-muted text-primary-strong"
+            className={`relative flex min-h-10 items-center rounded-lg px-3 text-xs font-bold no-underline ${
+              action.label === "Pagar" ? "bg-primary text-white" : "bg-surface-muted text-primary-strong"
             }`}
           >
             {action.label}
@@ -163,15 +163,17 @@ function ChargeCard({
 
   const cardClass = "flex flex-col gap-3 rounded-2xl border border-outline/40 bg-surface p-4";
 
-  // A card with its own action keeps the action as the only control: nested links are not accessible.
-  if (action) {
-    return <article className={cardClass}>{content}</article>;
-  }
-
+  // The whole card opens the charge through one stretched link. Nesting the action inside it would
+  // not be accessible, so the link is a sibling overlay and the action is raised above it.
   return (
-    <Link href={href} aria-label={`Abrir cobrança ${charge.description}`} className={`${cardClass} text-inherit no-underline`}>
+    <article className={`${cardClass} relative`}>
+      <Link
+        href={href}
+        aria-label={`Abrir cobrança ${charge.description}`}
+        className="absolute inset-0 rounded-2xl focus-visible:outline-[3px] focus-visible:outline-primary focus-visible:outline-offset-2"
+      />
       {content}
-    </Link>
+    </article>
   );
 }
 

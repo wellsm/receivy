@@ -3,7 +3,8 @@ import type { Http } from '@ez4/gateway';
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { UserProvider } from '../provider';
-import { createAuthRepository } from '../repositories/auth';
+import { AuthRepository } from '../repositories/auth';
+import { OauthProvider } from '../services/oauth';
 import { commitOauthIdentity } from '../services/oauth-commit';
 import { completeOauth, OauthFlowError } from '../services/oauth-flow';
 import { appendOauthGrant, oauthDependencies } from '../utils/oauth';
@@ -23,9 +24,9 @@ declare class GoogleCallbackResponse implements Http.Response {
 
 export async function googleCallbackHandler(
   request: GoogleCallbackRequest,
-  context: Service.Context<UserProvider>
+  { db, variables }: Service.Context<UserProvider>
 ): Promise<GoogleCallbackResponse> {
-  const dependencies = oauthDependencies('google', context);
+  const dependencies = oauthDependencies(OauthProvider.Google, { variables });
   if (!dependencies.client) {
     throw new HttpNotFoundError();
   }
@@ -34,13 +35,13 @@ export async function googleCallbackHandler(
       {
         code: request.query.code,
         error: request.query.error,
-        provider: 'google',
+        provider: OauthProvider.Google,
         state: request.query.state
       },
       {
         providerClient: dependencies.client,
-        repo: createAuthRepository(context.db),
-        commitGrant: (input) => commitOauthIdentity(context.db, input)
+        repo: AuthRepository.create(db),
+        commitGrant: (input) => commitOauthIdentity(db, input)
       }
     );
     return {

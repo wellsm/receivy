@@ -5,6 +5,7 @@ import type { String } from '@ez4/schema';
 import type { AuthSessionResponse } from '@receivy/common';
 import type { UserProvider } from '../provider';
 import { beginNativeApple, exchangeNativeApple } from '../services/apple-native';
+import { OauthProvider } from '../services/oauth';
 import { oauthDependencies } from '../utils/oauth';
 
 declare class StartRequest implements Http.Request {
@@ -27,15 +28,18 @@ declare class ExchangeResponse implements Http.Response {
   status: 200;
   body: AuthSessionResponse;
 }
-export async function nativeAppleStartHandler(request: StartRequest, context: Service.Context<UserProvider>): Promise<StartResponse> {
-  if (!oauthDependencies('apple', context, true).client) throw new HttpNotFoundError();
-  return { status: 200, body: await beginNativeApple(context.db, request.body.clientChallenge) };
+export async function nativeAppleStartHandler(
+  request: StartRequest,
+  { db, variables }: Service.Context<UserProvider>
+): Promise<StartResponse> {
+  if (!oauthDependencies(OauthProvider.Apple, { variables }, true).client) throw new HttpNotFoundError();
+  return { status: 200, body: await beginNativeApple(db, request.body.clientChallenge) };
 }
 export async function nativeAppleExchangeHandler(
   request: ExchangeRequest,
-  context: Service.Context<UserProvider>
+  { db, variables }: Service.Context<UserProvider>
 ): Promise<ExchangeResponse> {
-  const client = oauthDependencies('apple', context, true).client;
+  const client = oauthDependencies(OauthProvider.Apple, { variables }, true).client;
   if (!client) throw new HttpNotFoundError();
-  return { status: 200, body: await exchangeNativeApple(context.db, request.body, client, context.variables.AUTH_JWT_SECRET) };
+  return { status: 200, body: await exchangeNativeApple(db, request.body, client, variables.AUTH_JWT_SECRET) };
 }

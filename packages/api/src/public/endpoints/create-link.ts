@@ -5,7 +5,7 @@ import type { PublicLink } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { noticeContext } from '../../notifications/services/context';
 import type { PublicProvider } from '../provider';
-import { createOrRotatePublicLink } from '../repositories/public-link';
+import { PublicLinkRepository } from '../repositories/public-link';
 
 declare class PublishRequest implements Http.Request {
   identity: SessionIdentity;
@@ -18,18 +18,21 @@ declare class LinkResponse implements Http.Response {
   body: PublicLink;
 }
 
-export async function createPublicLinkHandler(request: PublishRequest, context: Service.Context<PublicProvider>): Promise<LinkResponse> {
+export async function createPublicLinkHandler(
+  request: PublishRequest,
+  { db, email, chargeNotifyScheduler, variables }: Service.Context<PublicProvider>
+): Promise<LinkResponse> {
   return {
     status: 200,
-    body: await createOrRotatePublicLink(
-      context.db,
+    body: await PublicLinkRepository.createOrRotate(
+      db,
       request.identity.userId,
       request.parameters.id,
-      context.variables.PUBLIC_LINK_HMAC_SECRET,
+      variables.PUBLIC_LINK_HMAC_SECRET,
       false,
       undefined,
       request.body?.paymentMethodId,
-      noticeContext(context)
+      noticeContext({ chargeNotifyScheduler, email, variables })
     )
   };
 }

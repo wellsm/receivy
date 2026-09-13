@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
-import { BILLING_CATEGORIES, type BillingCategory, type BillingState, type BillingType, type Direction } from "@receivy/common";
+import { BILLING_CATEGORIES, type BillingCategory, BillingState, BillingType, Direction } from "@receivy/common";
 
 export type BillingFiltersValue = {
   state: BillingState;
@@ -10,27 +10,27 @@ export type BillingFiltersValue = {
   direction: Direction | "";
 };
 
-export const DEFAULT_BILLING_FILTERS: BillingFiltersValue = { state: "active", type: "", category: "", direction: "" };
+export const DEFAULT_BILLING_FILTERS: BillingFiltersValue = { state: BillingState.Active, type: "", category: "", direction: "" };
 
 const STATES: { value: BillingState; label: string }[] = [
-  { value: "active", label: "Ativas" },
-  { value: "paused", label: "Pausadas" },
-  { value: "ended", label: "Encerradas" },
+  { value: BillingState.Active, label: "Ativas" },
+  { value: BillingState.Paused, label: "Pausadas" },
+  { value: BillingState.Ended, label: "Encerradas" },
 ];
 
 const TYPES: { value: BillingType | ""; label: string }[] = [
   { value: "", label: "Todas" },
-  { value: "once", label: "Única" },
-  { value: "until", label: "Parcelada" },
-  { value: "indefinite", label: "Sem fim" },
+  { value: BillingType.Once, label: "Única" },
+  { value: BillingType.Until, label: "Parcelada" },
+  { value: BillingType.Indefinite, label: "Sem fim" },
 ];
 
 const CATEGORIES: { value: BillingCategory | ""; label: string }[] = [{ value: "", label: "Todas" }, ...BILLING_CATEGORIES];
 
 const DIRECTIONS: { value: Direction | ""; label: string }[] = [
   { value: "", label: "Todas" },
-  { value: "receivable", label: "A receber" },
-  { value: "payable", label: "A pagar" },
+  { value: Direction.Receivable, label: "A receber" },
+  { value: Direction.Payable, label: "A pagar" },
 ];
 
 /** The filters that differ from the default, as removable chips under the search field. */

@@ -5,7 +5,7 @@ import type { BillingDetail, BillingInput } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { noticeContext } from '../../notifications/services/context';
 import type { BillingProvider } from '../provider';
-import { createBilling } from '../repositories/billing';
+import { BillingRepository } from '../repositories/billing';
 import type { BillingBody } from '../utils/body';
 import { inviteLink, validation } from '../utils/context';
 
@@ -20,16 +20,19 @@ declare class CreateResponse implements Http.Response {
   body: BillingDetail;
 }
 
-export async function createBillingHandler(request: CreateRequest, context: Service.Context<BillingProvider>): Promise<CreateResponse> {
+export async function createBillingHandler(
+  request: CreateRequest,
+  { db, variables, email, chargeNotifyScheduler }: Service.Context<BillingProvider>
+): Promise<CreateResponse> {
   const body = await validation(() =>
-    createBilling(
-      context.db,
+    BillingRepository.create(
+      db,
       request.identity.userId,
       request.headers['idempotency-key'],
       request.body as BillingInput,
       new Date(),
-      inviteLink(context),
-      noticeContext(context)
+      inviteLink({ variables }),
+      noticeContext({ chargeNotifyScheduler, email, variables })
     )
   );
 

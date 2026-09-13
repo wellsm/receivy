@@ -11,7 +11,7 @@ import { financialClient, type FinancialClient } from "@/financial/client";
 import { pickAndUploadProof } from "@/financial/proof-upload";
 import { ACTIVE_TINT } from "@/theme/colors";
 
-type Client = Pick<FinancialClient, "charge" | "startProofUpload" | "reviewProof" | "downloadProof">;
+type Client = Pick<FinancialClient, "charge" | "startProofUpload" | "completeProofUpload" | "reviewProof" | "downloadProof">;
 
 type ProofViewerScreenProps = {
   chargeId: string;

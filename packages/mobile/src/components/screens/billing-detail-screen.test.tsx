@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import { Alert, Share } from "react-native";
-import { chargeShareText, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PixKeyType, ProofMime, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
 
 jest.mock("expo-router", () => {
@@ -13,7 +13,7 @@ jest.mock("expo-router", () => {
 
 jest.mock("expo-clipboard", () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
 
-const PIX = { keyType: "phone" as const, key: "11987654321", label: "Inter" };
+const PIX = { keyType: PixKeyType.Phone, key: "11987654321", label: "Inter" };
 
 function charge(overrides: Partial<ChargeDetail> & { id: string; name: string }): ChargeDetail {
   const { name, ...rest } = overrides;
@@ -22,18 +22,18 @@ function charge(overrides: Partial<ChargeDetail> & { id: string; name: string })
     description: "Jantar de despedida",
     amount: { amountCents: 6_000, currency: "BRL" },
     dueDate: "2026-11-15",
-    state: "pending",
+    state: ChargeState.Pending,
     billingId: "b1",
-    billingType: "until",
+    billingType: BillingType.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: name,
     proofState: null,
-    direction: "receivable",
+    direction: Direction.Receivable,
     recipient: { userId: "u1", name, email: null },
     debtorUserId: "u1",
     pix: PIX,
-    sharingState: "ready",
+    sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
     paidAt: null,
@@ -43,29 +43,29 @@ function charge(overrides: Partial<ChargeDetail> & { id: string; name: string })
 }
 
 const firstCycle = [
-  charge({ id: "c1", name: "Lucas F.", dueDate: "2026-10-15", installment: 1, state: "paid", paidAt: "2026-10-14T22:42:00Z" }),
-  charge({ id: "c2", name: "Mariana S.", dueDate: "2026-10-15", installment: 1, state: "paid", paidAt: "2026-10-15T11:15:00Z" }),
-  charge({ id: "c3", name: "Carlos", dueDate: "2026-10-15", installment: 1, state: "paid", paidAt: "2026-10-15T12:00:00Z" }),
+  charge({ id: "c1", name: "Lucas F.", dueDate: "2026-10-15", installment: 1, state: ChargeState.Paid, paidAt: "2026-10-14T22:42:00Z" }),
+  charge({ id: "c2", name: "Mariana S.", dueDate: "2026-10-15", installment: 1, state: ChargeState.Paid, paidAt: "2026-10-15T11:15:00Z" }),
+  charge({ id: "c3", name: "Carlos", dueDate: "2026-10-15", installment: 1, state: ChargeState.Paid, paidAt: "2026-10-15T12:00:00Z" }),
 ];
 
 const secondCycle = [
-  charge({ id: "c4", name: "Lucas F.", state: "paid", paidAt: "2026-11-14T22:42:00Z" }),
-  charge({ id: "c5", name: "Mariana S.", state: "paid", paidAt: "2026-11-15T11:15:00Z" }),
+  charge({ id: "c4", name: "Lucas F.", state: ChargeState.Paid, paidAt: "2026-11-14T22:42:00Z" }),
+  charge({ id: "c5", name: "Mariana S.", state: ChargeState.Paid, paidAt: "2026-11-15T11:15:00Z" }),
   charge({ id: "c6", name: "Carlos" }),
 ];
 
 function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
   return {
     id: "b1",
-    type: "until",
-    direction: "receivable",
+    type: BillingType.Until,
+    direction: Direction.Receivable,
     payee: null,
     pix: null,
     description: "Jantar de despedida",
     total: { amountCents: 18_000, currency: "BRL" },
     startDate: "2026-10-15",
     endDate: "2026-12-15",
-    state: "active",
+    state: BillingState.Active,
     installmentCount: 3,
     nextDueDate: "2026-11-15",
     createdAt: "2026-10-01T00:00:00Z",
@@ -73,12 +73,12 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
     timezone: "America/Sao_Paulo",
     paymentMethodId: "pix-1",
     reminders: [],
-    split: { mode: "equal", parts: [{ kind: "user", userId: "u1" }] },
+    split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
     allocations: [],
     charges: [...firstCycle, ...secondCycle],
     previews: [],
     nextMaterialization: null,
-    category: "food",
+    category: BillingCategory.Food,
     invite: null,
     guests: [],
     linkableContacts: [],
@@ -96,9 +96,9 @@ function makeClient(detail = billing(), overrides: Record<string, unknown> = {})
     publicLink: jest.fn().mockResolvedValue({ token: "tk" }),
     publicChargeUrl: (token: string) => `http://localhost:3000/pay/${token}`,
     paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }),
-    pay: jest.fn().mockResolvedValue(charge({ id: "c6", name: "Carlos", state: "paid" })),
+    pay: jest.fn().mockResolvedValue(charge({ id: "c6", name: "Carlos", state: ChargeState.Paid })),
     reopen: jest.fn().mockResolvedValue(charge({ id: "c4", name: "Lucas F." })),
-    reviewProof: jest.fn().mockResolvedValue(charge({ id: "c6", name: "Carlos", state: "paid" })),
+    reviewProof: jest.fn().mockResolvedValue(charge({ id: "c6", name: "Carlos", state: ChargeState.Paid })),
     ...overrides,
   };
 }
@@ -141,7 +141,7 @@ describe("BillingDetailScreen", () => {
   });
 
   it("asks the owner to review a sent proof instead of sharing the link", async () => {
-    const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: "paid" }), charge({ id: "c6", name: "Carlos", proofState: "pending" })] });
+    const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: ChargeState.Paid }), charge({ id: "c6", name: "Carlos", proofState: ProofState.Pending })] });
     const onOpenCharge = jest.fn();
 
     await open(makeClient(detail), { onOpenCharge });
@@ -158,8 +158,8 @@ describe("BillingDetailScreen", () => {
 
   it("accepts the proof under review when the owner marks the participant as paid", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
-    const pending = { state: "pending" as const, file: { name: "pix.png", mime: "image/png" as const, size: 10 }, sentAt: "2026-11-12T10:00:00Z", reviewedAt: null, reason: null, sentByViewer: false };
-    const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: "paid" }), charge({ id: "c6", name: "Carlos", proofState: "pending", proof: pending })] });
+    const pending = { state: ProofState.Pending, file: { name: "pix.png", mime: ProofMime.Png, size: 10 }, sentAt: "2026-11-12T10:00:00Z", reviewedAt: null, reason: null, sentByViewer: false };
+    const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: ChargeState.Paid }), charge({ id: "c6", name: "Carlos", proofState: ProofState.Pending, proof: pending })] });
     const { client } = await open(makeClient(detail));
 
     await fireEvent.press(screen.getByRole("button", { name: "Marcar Carlos como pago" }));
@@ -296,7 +296,7 @@ describe("BillingDetailScreen", () => {
   });
 
   it("pauses and resumes only a subscription", async () => {
-    const detail = billing({ type: "indefinite", frequency: "monthly", installmentCount: undefined, endDate: undefined });
+    const detail = billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined });
     const client = makeClient(detail, { patchBilling: jest.fn().mockResolvedValue({ ...detail, state: "paused" }) });
 
     await open(client);
@@ -311,7 +311,7 @@ describe("BillingDetailScreen", () => {
   });
 
   it("names the Pix key from the wallet while no charge has been generated", async () => {
-    const detail = billing({ type: "indefinite", frequency: "monthly", installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
+    const detail = billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
     const wallet = [{ id: "pix-2", type: "pix", pixKeyType: "email", pixKey: "ana@example.com", label: "Nubank", isDefault: true, archivedAt: null, createdAt: "" }];
 
     await open(makeClient(detail, { paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: wallet }) }));
@@ -356,11 +356,11 @@ describe("BillingDetailScreen", () => {
   });
 
   it("shows a conta a pagar with its own key and without invites or links", async () => {
-    const own = charge({ id: "c7", name: "Ana", direction: "payable", payer: "owner", ownedByViewer: true, counterpartName: "Ana", pix: null });
+    const own = charge({ id: "c7", name: "Ana", direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, counterpartName: "Ana", pix: null });
     const detail = billing({
-      direction: "payable",
+      direction: Direction.Payable,
       payee: { userId: "u1", name: "Ana" },
-      pix: { keyType: "email", key: "ana@example.com", label: "Nubank" },
+      pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
       paymentMethodId: undefined,
       charges: [own],
     });
@@ -382,8 +382,8 @@ describe("BillingDetailScreen", () => {
   });
 
   it("names the owner's own bill and falls back to no key on a conta a pagar", async () => {
-    const own = charge({ id: "c7", name: "Você", direction: "payable", payer: "owner", ownedByViewer: true, counterpartName: "Você", pix: null });
-    const detail = billing({ direction: "payable", payee: null, pix: null, paymentMethodId: undefined, charges: [own] });
+    const own = charge({ id: "c7", name: "Você", direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, counterpartName: "Você", pix: null });
+    const detail = billing({ direction: Direction.Payable, payee: null, pix: null, paymentMethodId: undefined, charges: [own] });
 
     await open(makeClient(detail));
 

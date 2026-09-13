@@ -1,13 +1,13 @@
 import { randomBytes } from 'node:crypto';
-import { CHARGE_SELECT, type ChargeRow } from '../../charges/repositories/charge';
+import { ChargeRepository } from '../../charges/repositories/charge';
 import type { DbClient } from '../../database';
-import { issuePublicChargeToken } from './capability';
+import { issuePublicChargeToken, PublicTokenPurpose } from './capability';
 
 export const LINK_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 const sqlNull = null as unknown as undefined;
 
-export type LinkColumns = Pick<ChargeRow, 'public_id' | 'link_version' | 'link_expires_at' | 'link_revoked_at'>;
+export type LinkColumns = Pick<ChargeRepository.Row, 'public_id' | 'link_version' | 'link_expires_at' | 'link_revoked_at'>;
 
 /** A link the payer can still open: issued, not revoked, not expired. */
 export function linkAlive(row: LinkColumns, nowSeconds: number): boolean {
@@ -15,7 +15,7 @@ export function linkAlive(row: LinkColumns, nowSeconds: number): boolean {
 }
 
 export function linkToken(
-  row: Required<Pick<ChargeRow, 'public_id' | 'link_expires_at'>> & Pick<ChargeRow, 'link_version'>,
+  row: Required<Pick<ChargeRepository.Row, 'public_id' | 'link_expires_at'>> & Pick<ChargeRepository.Row, 'link_version'>,
   secret: string
 ): string {
   return issuePublicChargeToken({
@@ -23,7 +23,7 @@ export function linkToken(
     version: row.link_version ?? 1,
     expiresAtSeconds: Math.floor(Date.parse(row.link_expires_at) / 1000),
     secret,
-    purpose: 'charge'
+    purpose: PublicTokenPurpose.Charge
   });
 }
 
@@ -31,7 +31,12 @@ export function linkToken(
  * Makes sure the charge has a live public link, minting or rotating the columns in place. `rotate`
  * bumps the version so the previous token stops verifying. Returns the row as it stands afterwards.
  */
-export async function ensurePublicLink(db: DbClient, row: ChargeRow, nowSeconds: number, rotate = false): Promise<ChargeRow> {
+export async function ensurePublicLink(
+  db: DbClient,
+  row: ChargeRepository.Row,
+  nowSeconds: number,
+  rotate = false
+): Promise<ChargeRepository.Row> {
   if (!rotate && linkAlive(row, nowSeconds)) {
     return row;
   }
@@ -50,7 +55,7 @@ export async function ensurePublicLink(db: DbClient, row: ChargeRow, nowSeconds:
     }
   });
 
-  const updated = await db.charges.findOne({ select: CHARGE_SELECT, where: { id: row.id } });
+  const updated = await db.charges.findOne({ select: ChargeRepository.SELECT, where: { id: row.id } });
 
   if (!updated) {
     throw new Error('Charge vanished while publishing its link.');

@@ -12,6 +12,12 @@ export class UploadInProgressError extends ConflictError {
   }
 }
 
+export class UploadMissingError extends ConflictError {
+  constructor(message = 'Nenhum envio em andamento. Selecione o arquivo e envie novamente.') {
+    super(message, 'UPLOAD_MISSING');
+  }
+}
+
 export class ProofReviewedError extends ConflictError {
   constructor(message = 'O comprovante já foi revisado.') {
     super(message, 'PROOF_REVIEWED');

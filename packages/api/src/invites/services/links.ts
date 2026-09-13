@@ -1,10 +1,23 @@
 import { randomBytes } from 'node:crypto';
 import { Order } from '@ez4/database';
 import { HttpNotFoundError } from '@ez4/gateway';
-import type { BillingCategory, BillingInvite, BillingState, BillingType, PublicInviteView } from '@receivy/common';
+import {
+  type BillingCategory,
+  type BillingInvite,
+  BillingState,
+  type BillingType,
+  Direction,
+  type PublicInviteView,
+  SplitPartKind
+} from '@receivy/common';
 import { lockOwner } from '../../charges/services/materialize';
 import type { DbClient } from '../../database';
-import { assertPublicLinkSecretConfigured, issuePublicChargeToken, verifyPublicChargeToken } from '../../public/services/capability';
+import {
+  assertPublicLinkSecretConfigured,
+  issuePublicChargeToken,
+  PublicTokenPurpose,
+  verifyPublicChargeToken
+} from '../../public/services/capability';
 import { InviteBillingInactiveError, PayableHasNoInviteError } from '../errors';
 
 /** Secret and web origin the detail needs to re-issue the active invite URL. */
@@ -35,7 +48,7 @@ export type InviteRow = {
 /** The narrowest billing shape createInvite/revokeInvite need, so this module never depends on billings/repository. */
 const OWNED_BILLING_SELECT = { id: true, state: true, direction: true } as const;
 
-type OwnedBillingRow = { id: string; state: BillingState; direction?: 'receivable' | 'payable' };
+type OwnedBillingRow = { id: string; state: BillingState; direction?: Direction };
 
 /** The narrowest billing shape a public invite preview needs. */
 const PUBLIC_BILLING_SELECT = {
@@ -75,7 +88,7 @@ function inviteToken(row: Pick<InviteRow, 'public_id' | 'expires_at'>, secret: s
     version: TOKEN_VERSION,
     expiresAtSeconds: seconds(row.expires_at),
     secret,
-    purpose: 'invite'
+    purpose: PublicTokenPurpose.Invite
   });
 }
 
@@ -112,12 +125,12 @@ export async function createInvite(
 
     const billing = await ownedBilling(tx, ownerId, billingId, true);
 
-    if (billing.state !== 'active') {
+    if (billing.state !== BillingState.Active) {
       throw new InviteBillingInactiveError();
     }
 
     // A conta a pagar has no participants to invite.
-    if (billing.direction === 'payable') {
+    if (billing.direction === Direction.Payable) {
       throw new PayableHasNoInviteError();
     }
 
@@ -195,7 +208,12 @@ export async function resolveInvite(db: DbClient, token: string, secret: string)
   let capability: { publicId: string; expiresAtSeconds: number };
 
   try {
-    capability = verifyPublicChargeToken(token, { version: TOKEN_VERSION, nowSeconds: IGNORE_EXPIRY, secret, purpose: 'invite' });
+    capability = verifyPublicChargeToken(token, {
+      version: TOKEN_VERSION,
+      nowSeconds: IGNORE_EXPIRY,
+      secret,
+      purpose: PublicTokenPurpose.Invite
+    });
   } catch {
     throw new HttpNotFoundError();
   }
@@ -221,7 +239,7 @@ export async function publicInviteView(db: DbClient, invite: InviteRow, now = ne
     throw new HttpNotFoundError();
   }
 
-  const expired = !!invite.revoked_at || new Date(invite.expires_at) <= now || billing.state !== 'active';
+  const expired = !!invite.revoked_at || new Date(invite.expires_at) <= now || billing.state !== BillingState.Active;
 
   if (expired) {
     return { expired: true };
@@ -235,7 +253,7 @@ export async function publicInviteView(db: DbClient, invite: InviteRow, now = ne
     description: billing.description,
     amount: { amountCents: billing.total_cents, currency: billing.currency },
     type: billing.type,
-    participantCount: await db.allocations.count({ where: { billing_id: billing.id, kind: 'user' } }),
+    participantCount: await db.allocations.count({ where: { billing_id: billing.id, kind: SplitPartKind.User } }),
     category: billing.category
   };
 }

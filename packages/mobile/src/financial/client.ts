@@ -38,6 +38,7 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     archivePaymentMethod(id: string) { return request<void>(`payment-methods/${id}/archive`, { method: "POST" }); },
     charge(id: string) { return request<ChargeDetail>(`charges/${id}`); },
     startProofUpload(id: string, input: ProofUploadInput) { return request<ProofUploadTicket>(`charges/${id}/proof`, { method: "POST", body: JSON.stringify(input) }); },
+    completeProofUpload(id: string) { return request<ChargeDetail>(`charges/${id}/proof/complete`, { method: "POST" }, "Não foi possível confirmar o envio."); },
     reviewProof(id: string, decision: "accepted" | "rejected", reason?: string) { return request<ChargeDetail>(`charges/${id}/proof/review`, { method: "POST", body: JSON.stringify({ decision, reason }) }); },
     withdrawProof(id: string) { return request<void>(`charges/${id}/proof`, { method: "DELETE" }, "Não foi possível apagar o comprovante."); },
     downloadProof(id: string) { return request<{ url: string; expiresIn: number }>(`charges/${id}/proof/download`); },

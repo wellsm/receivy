@@ -10,6 +10,7 @@ import {
   draftTotalCents,
   EMPTY_BILLING_DRAFT,
   EMPTY_SPLIT_VALUES,
+  endOfMonth,
   formatAmountDigits,
   formatMoney,
   parseBRLCents,
@@ -17,22 +18,25 @@ import {
   previewBillingSplit,
   splitPartyKey,
   splitParties,
+  BillingDueRule,
+  BillingFrequency,
+  BillingType,
+  Direction,
+  PixKeyType,
+  SplitMode,
+  SplitPartKind,
+  UserStatus,
   type BillingDetail,
   type BillingDraft,
-  type BillingFrequency,
   type BillingInput,
-  type BillingType,
-  type Direction,
   type PaymentMethod,
   type Contact,
   type ContactsPage,
   type PixDraft,
-  type PixKeyType,
-  type SplitMode,
   type SplitParty,
   type SplitValues,
 } from "@receivy/common";
-import { Check, ChevronDown, KeyRound, Plus, X } from "lucide-react";
+import { Check, ChevronDown, KeyRound, Loader2, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
@@ -40,6 +44,7 @@ import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 import { CategorySelect } from "@/components/app/category-select";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
+import { MonthSelect } from "@/components/app/month-select";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { SplitEditor, type SplitRow } from "@/components/app/split-editor";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
@@ -62,14 +67,14 @@ const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com a sua c
 const NO_VALUES: Record<string, string> = {};
 
 const DIRECTIONS: { value: Direction; label: string }[] = [
-  { value: "receivable", label: "Vou receber" },
-  { value: "payable", label: "Vou pagar" },
+  { value: Direction.Receivable, label: "Vou receber" },
+  { value: Direction.Payable, label: "Vou pagar" },
 ];
 
 const TYPES: { value: BillingType; label: string }[] = [
-  { value: "once", label: "À vista" },
-  { value: "until", label: "Parcelado" },
-  { value: "indefinite", label: "Recorrente" },
+  { value: BillingType.Once, label: "À vista" },
+  { value: BillingType.Until, label: "Parcelado" },
+  { value: BillingType.Indefinite, label: "Recorrente" },
 ];
 
 const AMOUNT_LABELS: Record<BillingType, string> = {
@@ -80,10 +85,10 @@ const AMOUNT_LABELS: Record<BillingType, string> = {
 
 /** The segmented control shows the short label; the accessible name keeps the full one. */
 const SPLIT_MODES: { value: SplitMode; label: string; name: string }[] = [
-  { value: "equal", label: "Igual", name: "Igual" },
-  { value: "shares", label: "Cotas", name: "Cotas" },
-  { value: "percentage", label: "%", name: "Porcentagem" },
-  { value: "fixed", label: "Fixo", name: "Valor fixo" },
+  { value: SplitMode.Equal, label: "Igual", name: "Igual" },
+  { value: SplitMode.Shares, label: "Cotas", name: "Cotas" },
+  { value: SplitMode.Percentage, label: "%", name: "Porcentagem" },
+  { value: SplitMode.Fixed, label: "Fixo", name: "Valor fixo" },
 ];
 
 const INPUT_CLASS = "h-12 w-full rounded-xl border border-outline/50 bg-surface px-3.5 text-[14px] text-ink disabled:opacity-60";
@@ -143,7 +148,7 @@ function valuesFromBilling(billing: BillingDetail): SplitValues {
 /** The draft keeps the canonical key (`+55…`, digits only); the field masks it for display. */
 function pixDraftFromBilling(billing: BillingDetail): PixDraft {
   if (!billing.pix) {
-    return { type: "email", key: "", label: "" };
+    return { type: PixKeyType.Email, key: "", label: "" };
   }
 
   return { type: billing.pix.keyType, key: billing.pix.key, label: billing.pix.label };
@@ -161,8 +166,9 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     owner: parts.some(part => part.kind === "owner") || billing.split.mode === "fixed",
     amount: moneyText(billing.total.amountCents),
     description: billing.description,
-    frequency: billing.frequency ?? "monthly",
+    frequency: billing.frequency ?? BillingFrequency.Monthly,
     start: billing.startDate,
+    dueRule: billing.dueRule ?? BillingDueRule.Fixed,
     end: billing.endDate ?? "",
     occurrences: "",
     timezone: billing.timezone,
@@ -176,7 +182,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
 
 /** A participant the agenda no longer lists (archived, or another owner's contact): the chip still needs a name. */
 function unknownContact(userId: string): Contact {
-  return { id: userId, userId, name: "Contato", nickname: null, displayName: "Contato", email: "", phone: null, status: "pending", archivedAt: null, createdAt: "", lastBilledAt: null, activeCharges: 0 };
+  return { id: userId, userId, name: "Contato", nickname: null, displayName: "Contato", email: "", phone: null, status: UserStatus.Pending, archivedAt: null, createdAt: "", lastBilledAt: null, activeCharges: 0 };
 }
 
 function abbreviate(pixKey: string): string {
@@ -347,6 +353,8 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           });
 
       setAttempt(null);
+      // Left busy on purpose: the caller navigates to the saved billing, and clearing it here
+      // would flash the button back to idle while this screen is still on top.
       onSaved(saved);
     } catch (reason) {
       const status = (reason as { status?: number }).status;
@@ -354,7 +362,6 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
       setAttempt(uncertain ? { ...sent, uncertain: true } : null);
       setError((reason as Error).message);
-    } finally {
       setBusy(false);
     }
   }
@@ -381,7 +388,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
     const split = input.direction === "payable" ? {} : { split: input.split };
 
-    return { description: input.description, totalCents: input.totalCents, startDate: input.startDate, ...split, ...editable };
+    return { description: input.description, totalCents: input.totalCents, startDate: input.startDate, dueRule: input.dueRule ?? "fixed", ...split, ...editable };
   }
 
   function submit(event: FormEvent) {
@@ -401,6 +408,18 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   }
 
   const today = todayIn(draft.timezone);
+  // Month ends exist for a single due date and for monthly rules; a yearly billing keeps a fixed day.
+  const monthEnds = draft.type === "once" || draft.frequency === "monthly";
+  const monthEnd = monthEnds && draft.dueRule === "end_of_month";
+
+  function toggleMonthEnd() {
+    if (monthEnd) {
+      update({ dueRule: BillingDueRule.Fixed });
+      return;
+    }
+
+    update({ dueRule: BillingDueRule.EndOfMonth, start: endOfMonth(draft.start && draft.start >= today ? draft.start : today) });
+  }
   const totalCents = draftTotalCents(draft);
   const { amounts, error: hint } = previewBillingSplit(draft);
   /** The draft seats people by account; the chips and split rows look their agenda entry up by that id. */
@@ -450,7 +469,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   }
 
   const modeValues = draft.mode === "equal" ? NO_VALUES : draft.values[draft.mode];
-  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map(userId => ({ kind: "user", userId })) : splitParties(draft);
+  const rowParties: SplitParty[] = draft.mode === "fixed" ? draft.selected.map(userId => ({ kind: SplitPartKind.User, userId })) : splitParties(draft);
   const rows: SplitRow[] = rowParties.map(party => {
     const key = splitPartyKey(party);
     const cents = amounts[key];
@@ -763,7 +782,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
                   name="billing-type"
                   value={option.value}
                   checked={active}
-                  onChange={() => update({ type: option.value, frequency: option.value === "until" ? "monthly" : draft.frequency, end: "" })}
+                  onChange={() => update({ type: option.value, frequency: option.value === "until" ? BillingFrequency.Monthly : draft.frequency, end: "" })}
                 />
                 {option.label}
               </label>
@@ -799,26 +818,44 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
       {/* Vencimento */}
       <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0" disabled={locked || dueLocked}>
-        <SectionLabel htmlFor="billing-start">{scheduled ? "Próximo vencimento" : "Data de Vencimento"}</SectionLabel>
+        <SectionLabel htmlFor={monthEnd ? undefined : "billing-start"}>{scheduled ? "Próximo vencimento" : "Data de Vencimento"}</SectionLabel>
         <div className="flex items-center gap-2">
-          <input
-            id="billing-start"
-            aria-label="Vencimento"
-            type="date"
-            value={draft.start}
-            onChange={event => update({ start: event.target.value })}
-            className="h-11 flex-1 rounded-xl border border-outline/50 bg-surface px-3.5 text-[14px] font-semibold text-ink disabled:opacity-60"
-          />
+          <div className="min-w-0 flex-1">
+            {monthEnd ? (
+              <MonthSelect value={draft.start} today={today} disabled={locked || dueLocked} onSelect={value => update({ start: value })} />
+            ) : (
+              <input
+                id="billing-start"
+                aria-label="Vencimento"
+                type="date"
+                value={draft.start}
+                onChange={event => update({ start: event.target.value })}
+                className="h-11 w-full rounded-xl border border-outline/50 bg-surface px-3.5 text-[14px] font-semibold text-ink disabled:opacity-60"
+              />
+            )}
+          </div>
           <button
             type="button"
-            aria-pressed={draft.start === today}
-            onClick={() => update({ start: addCalendarDays(today, 0) })}
-            className={`h-11 rounded-xl border px-3.5 text-xs font-semibold text-primary-strong disabled:opacity-50 ${
-              draft.start === today ? "border-primary/30 bg-primary-soft/60" : "border-outline/40 bg-surface-muted"
+            aria-pressed={!monthEnd && draft.start === today}
+            onClick={() => update({ start: addCalendarDays(today, 0), dueRule: BillingDueRule.Fixed })}
+            className={`h-11 shrink-0 rounded-xl border px-3.5 text-xs font-semibold text-primary-strong disabled:opacity-50 ${
+              !monthEnd && draft.start === today ? "border-primary/30 bg-primary-soft/60" : "border-outline/40 bg-surface-muted"
             }`}
           >
             Hoje
           </button>
+          {monthEnds && (
+            <button
+              type="button"
+              aria-pressed={monthEnd}
+              onClick={toggleMonthEnd}
+              className={`h-11 shrink-0 rounded-xl border px-3.5 text-xs font-semibold text-primary-strong disabled:opacity-50 ${
+                monthEnd ? "border-primary/30 bg-primary-soft/60" : "border-outline/40 bg-surface-muted"
+              }`}
+            >
+              Final do mês
+            </button>
+          )}
         </div>
       </fieldset>
 
@@ -863,7 +900,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           >
             <span className="flex min-w-0 flex-1 items-center gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">
-                <PixTypeIcon type={selectedPix?.pixKeyType ?? "random"} />
+                <PixTypeIcon type={selectedPix?.pixKeyType ?? PixKeyType.Random} />
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-xs font-semibold text-ink">
@@ -920,11 +957,13 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       <ScreenFooter className="-mx-1 border-t border-outline/30 bg-surface/95 px-1 pb-2 pt-4 backdrop-blur">
         {busy && <p className="m-0 mb-2 text-sm text-muted" role="status">Salvando…</p>}
         {attempt?.uncertain ? (
-          <button type="submit" className="h-[52px] w-full rounded-xl border border-outline bg-transparent text-sm font-bold text-primary" disabled={busy}>
+          <button type="submit" className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-outline bg-transparent text-sm font-bold text-primary" disabled={busy}>
+            {busy && <Loader2 aria-hidden="true" size={18} className="animate-spin" />}
             Tentar novamente
           </button>
         ) : (
-          <button type="submit" className="h-[52px] w-full rounded-xl bg-primary text-sm font-bold text-white disabled:opacity-50" disabled={busy || !totalCents}>
+          <button type="submit" className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-white disabled:opacity-50" disabled={busy || !totalCents}>
+            {busy && <Loader2 aria-hidden="true" size={18} className="animate-spin" />}
             {action}
           </button>
         )}

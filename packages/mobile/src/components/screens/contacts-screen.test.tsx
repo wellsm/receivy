@@ -1,4 +1,4 @@
-import type { Contact } from "@receivy/common";
+import { UserStatus, type Contact } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { ContactsScreen } from "@/components/screens/contacts-screen";
 
@@ -23,7 +23,7 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     displayName: "Ana Paula Souza",
     email: "ana@example.com",
     phone: null,
-    status: "active",
+    status: UserStatus.Active,
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
     lastBilledAt: null,
@@ -78,7 +78,7 @@ describe("ContactsScreen", () => {
   });
 
   it("marks a contact whose account is still pending", async () => {
-    const client = contactsApi({ contacts: [contact({ status: "pending", activeCharges: 1 })], nextCursor: null });
+    const client = contactsApi({ contacts: [contact({ status: UserStatus.Pending, activeCharges: 1 })], nextCursor: null });
 
     await render(<ContactsScreen client={client} />);
 

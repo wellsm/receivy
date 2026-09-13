@@ -1,3 +1,4 @@
+import { UserStatus } from '../domain/contacts';
 import type { AuthUser } from './auth';
 
 export type OnboardingProfile = Pick<AuthUser, 'status'>;
@@ -11,5 +12,5 @@ export function needsOnboarding(user: OnboardingProfile | null | undefined): boo
     return true;
   }
 
-  return user.status !== 'active';
+  return user.status !== UserStatus.Active;
 }

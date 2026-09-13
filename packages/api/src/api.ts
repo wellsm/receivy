@@ -39,7 +39,8 @@ import type {
   ProofReviewInvalidError,
   ProofSizeMismatchError,
   ProofTooLargeError,
-  UploadInProgressError
+  UploadInProgressError,
+  UploadMissingError
 } from './proofs/errors';
 import type { ProofRoutes } from './proofs/routes';
 import type { PixRequiredError, PixSnapshotLockedError } from './public/errors';
@@ -58,8 +59,6 @@ export declare class Api extends Http.Service {
     preferences: {
       namingStyle: NamingStyle.CamelCase;
     };
-    // Domain errors (`ApiError` subclasses) mapped to their status. The gateway serializes them as
-    // `{ type: 'error', message, context: { code } }`; see docs/api-errors.md.
     httpErrors: {
       409: [
         IdempotencyMismatchError,
@@ -88,6 +87,7 @@ export declare class Api extends Http.Service {
         PixKeyTakenError,
         ProofPendingError,
         UploadInProgressError,
+        UploadMissingError,
         ProofReviewedError,
         ProofMissingError,
         PixRequiredError,

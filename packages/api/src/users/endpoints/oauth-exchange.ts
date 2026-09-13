@@ -22,11 +22,11 @@ declare class OauthExchangeResponse implements Http.Response {
 
 export async function oauthExchangeHandler(
   request: OauthExchangeRequest,
-  context: Service.Context<UserProvider>
+  { db, variables }: Service.Context<UserProvider>
 ): Promise<OauthExchangeResponse> {
   try {
-    const body = await exchangeOauthAtomically(context.db, request.body, {
-      accessTokenSecret: context.variables.AUTH_JWT_SECRET
+    const body = await exchangeOauthAtomically(db, request.body, {
+      accessTokenSecret: variables.AUTH_JWT_SECRET
     });
     return { status: 200, body };
   } catch (error) {

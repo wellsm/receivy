@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from "react-native";
-import { type BillingState, type BillingSummary, type BillingsPage, type Direction, billingShareAction, calendarDate } from "@receivy/common";
+import { BillingState, type BillingSummary, type BillingsPage, Direction, billingShareAction, calendarDate } from "@receivy/common";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { financialClient, type FinancialClient } from "@/financial/client";
@@ -34,16 +34,16 @@ const LIST_ERROR = "Não foi possível carregar suas contas.";
 
 /** Client-side state filter over the loaded pages; ended billings stay out of the way by default. */
 const STATE_FILTERS: { value: BillingState; label: string; empty: string }[] = [
-  { value: "active", label: "Ativas", empty: "Nenhuma conta ativa." },
-  { value: "paused", label: "Pausadas", empty: "Nenhuma conta pausada." },
-  { value: "ended", label: "Encerradas", empty: "Nenhuma conta encerrada." },
+  { value: BillingState.Active, label: "Ativas", empty: "Nenhuma conta ativa." },
+  { value: BillingState.Paused, label: "Pausadas", empty: "Nenhuma conta pausada." },
+  { value: BillingState.Ended, label: "Encerradas", empty: "Nenhuma conta encerrada." },
 ];
 
 /** Server-side direction filter: the API lists both sides unless asked for one. */
 const DIRECTION_FILTERS: { value: Direction | ""; label: string }[] = [
   { value: "", label: "Todas" },
-  { value: "receivable", label: "A receber" },
-  { value: "payable", label: "A pagar" },
+  { value: Direction.Receivable, label: "A receber" },
+  { value: Direction.Payable, label: "A pagar" },
 ];
 
 const plusMark = require("../../../assets/images/auth/plus.svg");
@@ -85,7 +85,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
   const [page, setPage] = useState<BillingsPage | null>(null);
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
-  const [stateFilter, setStateFilter] = useState<BillingState>("active");
+  const [stateFilter, setStateFilter] = useState<BillingState>(BillingState.Active);
   const [direction, setDirection] = useState<Direction | "">("");
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);

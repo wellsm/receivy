@@ -27,8 +27,11 @@ export declare class ChargeNotificationCron extends Cron.Service {
   };
 }
 
-export async function handler(_request: Cron.Incoming<null>, context: Service.Context<ChargeNotificationCron>): Promise<void> {
-  const planned = await planReminders(context.db, context.chargeNotifyScheduler, Date.now());
+export async function handler(
+  _request: Cron.Incoming<null>,
+  { db, chargeNotifyScheduler }: Service.Context<ChargeNotificationCron>
+): Promise<void> {
+  const planned = await planReminders(db, chargeNotifyScheduler, Date.now());
 
   // Counts only; never owner or recipient data.
   console.info('Charge notification cron', { planned });

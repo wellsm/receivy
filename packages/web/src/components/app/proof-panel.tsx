@@ -10,8 +10,6 @@ const DANGER_BUTTON = "inline-flex min-h-11 items-center justify-center gap-2 ro
 const FILE_INPUT_LABEL = "Comprovante JPG, PNG ou PDF";
 /** Only a flag: the API knows the slot by the payer, so a reload just asks it again. */
 const STARTED_KEY = "receivy-proof-upload";
-const POLL_INTERVAL_MS = 1000;
-const POLL_ATTEMPTS = 30;
 const UNCONFIRMED = "Não foi possível confirmar o envio. Atualize a página.";
 const NOT_STORED = "O envio anterior não foi concluído. Selecione o arquivo e envie novamente.";
 
@@ -57,7 +55,6 @@ function PreviewCard({ preview, children }: { preview: ProofPreview; children?: 
 function uploadStarted(): boolean { try { return sessionStorage.getItem(STARTED_KEY) === "1"; } catch { return false; } }
 function rememberUpload() { try { sessionStorage.setItem(STARTED_KEY, "1"); } catch { /* A reload then reads the slot once instead of polling it. */ } }
 function forgetUpload() { try { sessionStorage.removeItem(STARTED_KEY); } catch { /* State still clears in memory. */ } }
-function sleep(ms: number) { return new Promise<void>(resolve => setTimeout(resolve, ms)); }
 /** `null` means the lookup itself failed; a `state: null` answer means there is no slot for this payer. */
 async function readStatus(base: string): Promise<PublicProofState | null> {
   try {
@@ -66,14 +63,13 @@ async function readStatus(base: string): Promise<PublicProofState | null> {
     return await response.json() as PublicProofState;
   } catch { return null; }
 }
-/** The API learns about the bytes from the bucket event; this waits for the slot to leave `uploading`. */
-async function settledStatus(base: string): Promise<PublicProofState | null> {
-  for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt++) {
-    if (attempt > 0) await sleep(POLL_INTERVAL_MS);
-    const status = await readStatus(base);
-    if (status && status.state !== "uploading") return status;
-  }
-  return null;
+/** Tells the API the bytes landed; `null` when it could not attach them, so the flag stays for a reload. */
+async function completeStatus(base: string): Promise<PublicProofState | null> {
+  try {
+    const response = await fetch(`${base}/proof/complete`, { method: "POST" });
+    if (!response.ok) return null;
+    return await response.json() as PublicProofState;
+  } catch { return null; }
 }
 
 export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
@@ -106,8 +102,8 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
   }
   useEffect(() => { let stopped = false;
     const check = async () => { const started = uploadStarted();
-      // A started upload keeps waiting for the bucket event; otherwise one read says where the payer's file stands.
-      const next = started ? await settledStatus(base) : await readStatus(base);
+      // A started upload is completed again (falling back to a read); otherwise one read says where the payer's file stands.
+      const next = started ? (await completeStatus(base)) ?? (await readStatus(base)) : await readStatus(base);
       if (stopped) return;
       if (!next) { if (started) setError(UNCONFIRMED); return; }
       if (started) forgetUpload();
@@ -125,9 +121,9 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
       const ticket = await response.json() as ProofUploadTicket;
       const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" });
       if (!put.ok) throw new Error("O arquivo não foi enviado. Tente novamente.");
-      // The bytes are up: from here only the confirmation can be lost, so a reload polls again instead of offering the dropzone.
+      // The bytes are up: from here only the confirmation can be lost, so a reload completes again instead of offering the dropzone.
       rememberUpload();
-      const next = await settledStatus(base);
+      const next = await completeStatus(base);
       if (!next) throw new Error(UNCONFIRMED);
       forgetUpload();
       if (next.state === null) throw new Error(NOT_STORED);

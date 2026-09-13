@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { SplitPartKind } from './billing';
 import { planBillingCharges } from './billing-plan';
+import { ChargePayer, SplitMode } from './contracts';
+import type { SplitParty } from './split';
 
-const ana = { kind: 'user' as const, userId: 'ana' };
-const bia = { kind: 'user' as const, userId: 'bia' };
-const owner = { kind: 'owner' as const };
+const ana = { kind: SplitPartKind.User, userId: 'ana' } satisfies SplitParty;
+const bia = { kind: SplitPartKind.User, userId: 'bia' } satisfies SplitParty;
+const owner = { kind: SplitPartKind.Owner } satisfies SplitParty;
 
 describe('billing plan', () => {
   it('repeats the exact per-occurrence split on every due date and numbers finite occurrences', () => {
     const plan = planBillingCharges({
       description: ' Aluguel ',
       totalCents: 100,
-      split: { mode: 'equal', parts: [ana, bia, owner] },
+      split: { mode: SplitMode.Equal, parts: [ana, bia, owner] },
       dueDates: ['2026-01-31', '2026-02-28'],
       numbered: true
     });
@@ -60,7 +63,7 @@ describe('billing plan', () => {
     const plan = planBillingCharges({
       description: 'Internet',
       totalCents: 1,
-      split: { mode: 'fixed', parts: [{ ...ana, amountCents: 0 }] },
+      split: { mode: SplitMode.Fixed, parts: [{ ...ana, amountCents: 0 }] },
       dueDates: ['2026-05-05'],
       numbered: false
     });
@@ -68,7 +71,7 @@ describe('billing plan', () => {
     const paid = planBillingCharges({
       description: 'Internet',
       totalCents: 1,
-      split: { mode: 'fixed', parts: [{ ...ana, amountCents: 1 }] },
+      split: { mode: SplitMode.Fixed, parts: [{ ...ana, amountCents: 1 }] },
       dueDates: ['2026-05-05'],
       numbered: false
     });
@@ -80,7 +83,7 @@ describe('billing plan', () => {
       planBillingCharges({
         description: '   ',
         totalCents: 1,
-        split: { mode: 'equal', parts: [ana] },
+        split: { mode: SplitMode.Equal, parts: [ana] },
         dueDates: ['2026-01-01'],
         numbered: true
       })
@@ -89,7 +92,7 @@ describe('billing plan', () => {
       planBillingCharges({
         description: 'x'.repeat(501),
         totalCents: 1,
-        split: { mode: 'equal', parts: [ana] },
+        split: { mode: SplitMode.Equal, parts: [ana] },
         dueDates: ['2026-01-01'],
         numbered: true
       })
@@ -102,10 +105,10 @@ describe('conta a pagar plan', () => {
     const plan = planBillingCharges({
       description: 'Aluguel',
       totalCents: 150_000,
-      split: { mode: 'equal', parts: [owner] },
+      split: { mode: SplitMode.Equal, parts: [owner] },
       dueDates: ['2026-01-05', '2026-02-05'],
       numbered: true,
-      payer: 'owner',
+      payer: ChargePayer.Owner,
       payeeUserId: 'landlord'
     });
 
@@ -120,10 +123,10 @@ describe('conta a pagar plan', () => {
     const plan = planBillingCharges({
       description: 'Netflix',
       totalCents: 3990,
-      split: { mode: 'equal', parts: [owner] },
+      split: { mode: SplitMode.Equal, parts: [owner] },
       dueDates: ['2026-01-05'],
       numbered: false,
-      payer: 'owner'
+      payer: ChargePayer.Owner
     });
 
     expect(plan.charges).toEqual([

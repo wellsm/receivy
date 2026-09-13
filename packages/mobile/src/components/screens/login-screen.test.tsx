@@ -28,6 +28,8 @@ describe("LoginScreen", () => {
 
     await waitFor(() => expect(requestEmailCode).toHaveBeenCalledWith({ email: "ana@example.com" }));
     expect(onCodeRequested).toHaveBeenCalledWith("ana@example.com");
+    // Clearing it here would flash the button back to idle while this screen is still on top.
+    expect(button).toBeDisabled();
   });
 
   it("hides provider buttons and the e-mail divider while the API reports them disabled", async () => {

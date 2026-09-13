@@ -1,9 +1,10 @@
 import { equal, ok, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, it } from 'node:test';
-import { createAuthRepository } from '../../src/users/repositories/auth';
+import { AuthProvider } from '@receivy/common';
+import { AuthRepository } from '../../src/users/repositories/auth';
 import { beginNativeApple, exchangeNativeApple } from '../../src/users/services/apple-native';
-import { hashOauthValue } from '../../src/users/services/oauth';
+import { hashOauthValue, OauthProvider } from '../../src/users/services/oauth';
 import type { OauthProviderClient } from '../../src/users/services/oauth-flow';
 import { cleanupUsers, db } from '../fixtures/financial';
 
@@ -50,7 +51,10 @@ it('binds native challenge/verifier/state, exchanges once concurrently, and comm
   ok(winner?.status === 'fulfilled');
   users.push(winner.value.user.id);
   equal(await db.session_families.count({ where: { user_id: winner.value.user.id } }), 1);
-  equal(await db.auth_identities.count({ where: { user_id: winner.value.user.id, provider: 'apple', provider_user_id: subject } }), 1);
+  equal(
+    await db.auth_identities.count({ where: { user_id: winner.value.user.id, provider: AuthProvider.Apple, provider_user_id: subject } }),
+    1
+  );
   await rejects(() =>
     exchangeNativeApple(db, { state: challenge.state, codeVerifier: verifier, authorizationCode: 'native-code' }, client, secret)
   );
@@ -59,8 +63,8 @@ it('binds native challenge/verifier/state, exchanges once concurrently, and comm
 it('rejects browser/native challenge substitution before provider I/O', async () => {
   const state = randomUUID();
   states.push(hashOauthValue(state));
-  await createAuthRepository(db).createAttempt({
-    provider: 'apple',
+  await AuthRepository.create(db).createAttempt({
+    provider: OauthProvider.Apple,
     clientChallenge: hashOauthValue(verifier),
     stateHash: hashOauthValue(state),
     destination: 'receivy://auth/callback',
@@ -76,8 +80,12 @@ it('rejects browser/native challenge substitution before provider I/O', async ()
   };
   await rejects(() => exchangeNativeApple(db, { state, codeVerifier: verifier, authorizationCode: 'web-code' }, client, secret));
   equal(
-    (await db.oauth_attempts.findOne({ select: { consumed_at: true }, where: { provider: 'apple', state_hash: hashOauthValue(state) } }))
-      ?.consumed_at,
+    (
+      await db.oauth_attempts.findOne({
+        select: { consumed_at: true },
+        where: { provider: OauthProvider.Apple, state_hash: hashOauthValue(state) }
+      })
+    )?.consumed_at,
     null
   );
 });

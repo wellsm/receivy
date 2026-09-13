@@ -1,5 +1,6 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
+import { OauthProvider } from './oauth';
 
 import {
   createOauthProviderClient,
@@ -11,7 +12,7 @@ import {
 
 describe('OAuth provider configuration', () => {
   it.each(['google', 'apple', 'nativeApple'] as const)('exchanges and verifies a signed %s fixture', async (mode) => {
-    const provider = mode === 'google' ? 'google' : 'apple',
+    const provider = mode === 'google' ? OauthProvider.Google : OauthProvider.Apple,
       native = mode === 'nativeApple';
     const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const appleKey = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -80,10 +81,10 @@ describe('OAuth provider configuration', () => {
       privateKeyBase64: Buffer.from(key.privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64')
     };
     const request = vi.fn<typeof fetch>();
-    expect(createOauthProviderClient('apple', { apple }, request)).not.toBeNull();
-    expect(createOauthProviderClient('apple', { apple }, request, true)).toBeNull();
-    expect(createOauthProviderClient('apple', { apple: { ...apple, nativeClientId: 'native' } }, request, true)).not.toBeNull();
-    expect(createOauthProviderClient('apple', { apple: { ...apple, privateKeyBase64: 'not-a-key' } }, request)).toBeNull();
+    expect(createOauthProviderClient(OauthProvider.Apple, { apple }, request)).not.toBeNull();
+    expect(createOauthProviderClient(OauthProvider.Apple, { apple }, request, true)).toBeNull();
+    expect(createOauthProviderClient(OauthProvider.Apple, { apple: { ...apple, nativeClientId: 'native' } }, request, true)).not.toBeNull();
+    expect(createOauthProviderClient(OauthProvider.Apple, { apple: { ...apple, privateKeyBase64: 'not-a-key' } }, request)).toBeNull();
     expect(request).not.toHaveBeenCalled();
   });
   it('keeps all providers disabled when credentials are absent', () => {

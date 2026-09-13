@@ -31,9 +31,9 @@ declare class PublicInviteResponse implements Http.Response {
 
 export async function publicInviteHandler(
   request: PublicTokenRequest,
-  context: Service.Context<InviteProvider>
+  { db, variables }: Service.Context<InviteProvider>
 ): Promise<PublicInviteResponse> {
-  const invite = await resolveInvite(context.db, request.parameters.token, context.variables.PUBLIC_LINK_HMAC_SECRET);
-  await throttlePublicRead(context.db, invite.public_id);
-  return { status: 200, body: await publicInviteView(context.db, invite) };
+  const invite = await resolveInvite(db, request.parameters.token, variables.PUBLIC_LINK_HMAC_SECRET);
+  await throttlePublicRead(db, invite.public_id);
+  return { status: 200, body: await publicInviteView(db, invite) };
 }

@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { verifyOidcIdToken } from './oidc';
+import { SupportedAlgorithm, verifyOidcIdToken } from './oidc';
 
 const nowSeconds = 1_788_545_600;
 
@@ -40,7 +40,7 @@ describe('OIDC identity-token verification', () => {
 
     expect(
       verifyOidcIdToken({
-        algorithms: ['RS256'],
+        algorithms: [SupportedAlgorithm.Rs256],
         audience: 'google-client',
         issuers: ['accounts.google.com', 'https://accounts.google.com'],
         jwks: fixture.jwks,
@@ -72,7 +72,7 @@ describe('OIDC identity-token verification', () => {
 
     expect(() =>
       verifyOidcIdToken({
-        algorithms: ['RS256'],
+        algorithms: [SupportedAlgorithm.Rs256],
         audience: 'google-client',
         issuers: ['https://accounts.google.com'],
         jwks: fixture.jwks,
@@ -89,7 +89,7 @@ describe('OIDC identity-token verification', () => {
 
     expect(() =>
       verifyOidcIdToken({
-        algorithms: ['RS256'],
+        algorithms: [SupportedAlgorithm.Rs256],
         audience: 'google-client',
         issuers: ['https://accounts.google.com'],
         jwks: other.jwks,

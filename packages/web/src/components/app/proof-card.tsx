@@ -2,19 +2,27 @@
 
 import { canMarkPaid, canUploadProof, fileSizeText, momentText, proofNote, proofStateLabel, type ChargeDetail } from "@receivy/common";
 import { Check, CloudUpload, Eye, FileText, Image as ImageIcon, Receipt } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PROOF_ACCEPT } from "@/lib/proof-upload";
 import { StatusTag } from "@/components/ui/status-tag";
+
+const DROPZONE =
+  "flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-outline/60 bg-surface-muted/50 px-4 text-sm font-semibold text-ink transition hover:border-primary disabled:opacity-50";
 
 type ProofCardProps = {
   charge: ChargeDetail;
   busy: boolean;
+  /** The staged file, previewed in the card until it is sent. */
+  picked: File | null;
   onView: () => void;
-  onUpload: (file: File) => void;
+  /** Staging only: picking a file never sends it, the send button does. */
+  onPick: (file: File) => void;
+  /** Only when the screen has no footer to send from (the owner who also settles). */
+  onSend?: () => void;
   onAccept: () => void;
 };
 
-function FilePicker({ label, disabled, onPick }: { label: string; disabled: boolean; onPick: (file: File) => void }) {
+function FilePicker({ label, disabled, onPick, className = DROPZONE }: { label: string; disabled: boolean; onPick: (file: File) => void; className?: string }) {
   const input = useRef<HTMLInputElement>(null);
 
   return (
@@ -39,7 +47,7 @@ function FilePicker({ label, disabled, onPick }: { label: string; disabled: bool
         type="button"
         disabled={disabled}
         onClick={() => input.current?.click()}
-        className="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-outline/60 bg-surface-muted/50 px-4 text-sm font-semibold text-ink transition hover:border-primary disabled:opacity-50"
+        className={className}
       >
         <CloudUpload size={20} aria-hidden="true" className="text-primary" />
         {label}
@@ -48,13 +56,75 @@ function FilePicker({ label, disabled, onPick }: { label: string; disabled: bool
   );
 }
 
+/** The picked file before it goes up: a thumbnail for an image, a document mark otherwise. */
+function PickedPreview({ file, url, busy, onPick, onSend }: { file: File; url: string | null; busy: boolean; onPick: (file: File) => void; onSend?: () => void }) {
+  const FileIcon = file.type === "application/pdf" ? FileText : ImageIcon;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-outline/30 bg-surface-muted/50 p-3">
+      {url ? (
+        // A blob URL from the viewer's own device: nothing for next/image to optimise or serve.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={`Prévia de ${file.name}`} className="max-h-56 w-full rounded-lg object-contain" />
+      ) : (
+        <div className="flex h-24 items-center justify-center rounded-lg bg-surface">
+          <FileIcon size={32} aria-hidden="true" className="text-primary" />
+        </div>
+      )}
+
+      <p className="m-0 flex min-w-0 gap-1 text-sm">
+        <span className="min-w-0 truncate font-semibold text-ink">{file.name}</span>
+        <span className="shrink-0 text-muted">· {fileSizeText(file.size)}</span>
+      </p>
+
+      <div className="flex gap-2">
+        <FilePicker
+          label="Trocar arquivo"
+          disabled={busy}
+          onPick={onPick}
+          className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-outline/50 bg-surface text-xs font-semibold text-ink transition hover:bg-surface-muted disabled:opacity-50"
+        />
+
+        {onSend && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onSend}
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-white transition hover:bg-primary-strong disabled:opacity-50"
+          >
+            <CloudUpload size={16} aria-hidden="true" />
+            Enviar comprovante
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** The proof section of a charge: the file with "Ver", plus accept (creditor) or replace (debtor) when allowed. */
-export function ProofCard({ charge, busy, onView, onUpload, onAccept }: ProofCardProps) {
+export function ProofCard({ charge, busy, picked, onView, onPick, onSend, onAccept }: ProofCardProps) {
   const proof = charge.proof;
   const upload = canUploadProof(charge);
   // Whoever collects settles from here: accepting the file under review, or by hand when there is none to accept.
   const settle = canMarkPaid(charge);
   const replace = useRef<HTMLInputElement>(null);
+  // Created when the file is picked, released when the next one replaces it or the card goes away.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  function pick(file: File) {
+    const image = file.type.startsWith("image/") && typeof URL.createObjectURL === "function";
+
+    setPreviewUrl(image ? URL.createObjectURL(file) : null);
+    onPick(file);
+  }
 
   if (!proof) {
     return (
@@ -66,7 +136,7 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept }: ProofCar
 
         {upload ? (
           <>
-            <FilePicker label="Enviar comprovante" disabled={busy} onPick={onUpload} />
+            {picked ? <PickedPreview file={picked} url={previewUrl} busy={busy} onPick={pick} onSend={onSend} /> : <FilePicker label="Selecionar comprovante" disabled={busy} onPick={pick} />}
             <p className="m-0 text-[11px] text-muted">JPG, PNG ou PDF de até 10 MB.</p>
           </>
         ) : (
@@ -117,6 +187,8 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept }: ProofCar
 
       {note && <p className="m-0 text-xs leading-4 text-muted">{note}</p>}
 
+      {upload && picked && <PickedPreview file={picked} url={previewUrl} busy={busy} onPick={pick} onSend={onSend} />}
+
       <div className="flex gap-2">
         <button
           type="button"
@@ -142,7 +214,7 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept }: ProofCar
           </button>
         )}
 
-        {upload && (
+        {upload && !picked && (
           <>
             <input
               ref={replace}
@@ -156,7 +228,7 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept }: ProofCar
                 event.target.value = "";
 
                 if (file) {
-                  onUpload(file);
+                  pick(file);
                 }
               }}
             />

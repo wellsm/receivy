@@ -1,7 +1,7 @@
 import { createPrivateKey, sign } from 'node:crypto';
-import { buildAuthorizationUrl, type OauthProvider } from './oauth';
+import { buildAuthorizationUrl, OauthProvider } from './oauth';
 import type { OauthAttemptValues, OauthProviderClient } from './oauth-flow';
-import { type OidcIdentity, verifyOidcIdToken } from './oidc';
+import { type OidcIdentity, SupportedAlgorithm, verifyOidcIdToken } from './oidc';
 
 type GoogleConfig = {
   callbackUri: string;
@@ -128,13 +128,13 @@ export function createOauthProviderClient(
   native = false
 ): OauthProviderClient | null {
   const selected =
-    native && provider === 'apple' && config.apple?.nativeClientId
+    native && provider === OauthProvider.Apple && config.apple?.nativeClientId
       ? { ...config.apple, clientId: config.apple.nativeClientId }
       : config[provider];
   if (!selected) {
     return null;
   }
-  if (provider === 'apple' && (!appleConfigurationAvailable(config.apple) || (native && !config.apple?.nativeClientId))) {
+  if (provider === OauthProvider.Apple && (!appleConfigurationAvailable(config.apple) || (native && !config.apple?.nativeClientId))) {
     return null;
   }
 
@@ -149,7 +149,7 @@ export function createOauthProviderClient(
 
     async verifyAuthorizationCode(input): Promise<OidcIdentity> {
       const nowSeconds = Math.floor(Date.now() / 1000);
-      const tokenUrl = provider === 'google' ? 'https://oauth2.googleapis.com/token' : 'https://appleid.apple.com/auth/token';
+      const tokenUrl = provider === OauthProvider.Google ? 'https://oauth2.googleapis.com/token' : 'https://appleid.apple.com/auth/token';
       const secret = 'clientSecret' in selected ? selected.clientSecret : createAppleClientSecret(selected, nowSeconds);
       const tokenResponse = await readJson(
         await request(tokenUrl, {
@@ -161,7 +161,7 @@ export function createOauthProviderClient(
             client_id: selected.clientId,
             client_secret: secret,
             code: input.code,
-            ...(provider === 'google' ? { code_verifier: input.codeVerifier } : {}),
+            ...(provider === OauthProvider.Google ? { code_verifier: input.codeVerifier } : {}),
             grant_type: 'authorization_code',
             ...(!native ? { redirect_uri: selected.callbackUri } : {})
           })
@@ -172,7 +172,8 @@ export function createOauthProviderClient(
         throw new Error('OAuth identity token is missing');
       }
 
-      const jwksUrl = provider === 'google' ? 'https://www.googleapis.com/oauth2/v3/certs' : 'https://appleid.apple.com/auth/keys';
+      const jwksUrl =
+        provider === OauthProvider.Google ? 'https://www.googleapis.com/oauth2/v3/certs' : 'https://appleid.apple.com/auth/keys';
       const jwks = await readJson(
         await request(jwksUrl, {
           signal: AbortSignal.timeout(10000),
@@ -183,15 +184,15 @@ export function createOauthProviderClient(
         throw new Error('OAuth provider keys are invalid');
       }
       const identity = verifyOidcIdToken({
-        algorithms: provider === 'google' ? ['RS256'] : ['RS256', 'ES256'],
+        algorithms: provider === OauthProvider.Google ? [SupportedAlgorithm.Rs256] : [SupportedAlgorithm.Rs256, SupportedAlgorithm.Es256],
         audience: selected.clientId,
-        issuers: provider === 'google' ? ['accounts.google.com', 'https://accounts.google.com'] : ['https://appleid.apple.com'],
+        issuers: provider === OauthProvider.Google ? ['accounts.google.com', 'https://accounts.google.com'] : ['https://appleid.apple.com'],
         jwks: { keys: jwks.keys },
         nonce: input.nonce,
         nowSeconds,
         token: tokenResponse.id_token
       });
-      const profileName = provider === 'apple' ? appleName(input.profile) : undefined;
+      const profileName = provider === OauthProvider.Apple ? appleName(input.profile) : undefined;
       return {
         ...identity,
         ...(profileName && !identity.name ? { name: profileName } : {})

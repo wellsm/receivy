@@ -1,11 +1,16 @@
+export const enum DevicePlatform {
+  Ios = 'ios',
+  Android = 'android'
+}
+
 export type DeviceRegistration = {
   token: string;
   installationId: string;
-  platform: 'ios' | 'android';
+  platform: DevicePlatform;
 };
 export type NotificationDevice = {
   id: string;
-  platform: 'ios' | 'android';
+  platform: DevicePlatform;
   active: boolean;
   createdAt: string;
 };

@@ -1,3 +1,7 @@
+import { endOfMonth } from './billing-calendar';
+
+export type MonthEndOption = { value: string; label: string; dueLabel: string };
+
 /** Whole days between two calendar dates (`YYYY-MM-DD`), positive when `to` comes after `from`. */
 export function dayDiff(from: string, to: string): number {
   const [fromYear, fromMonth, fromDay] = from.split('-').map(Number);
@@ -38,4 +42,19 @@ export function lastBilledHint(lastBilledAt: string | null, today: string): stri
 /** `dd/mm` for an instant or calendar date, always read in UTC so the day never shifts. */
 export function shortDayMonth(iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' }).format(new Date(iso));
+}
+
+/** The last day of `count` months from the month of `today`, labelled for the month picker. */
+export function endOfMonthOptions(today: string, count = 13): MonthEndOption[] {
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7)) - 1;
+  const names = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  return Array.from({ length: count }, (_, index) => {
+    const first = new Date(Date.UTC(year, month + index, 1));
+    const value = endOfMonth(first.toISOString().slice(0, 10));
+    const name = names.format(first);
+
+    return { value, label: `${name.charAt(0).toUpperCase()}${name.slice(1)}`, dueLabel: `vence ${shortDayMonth(value)}` };
+  });
 }

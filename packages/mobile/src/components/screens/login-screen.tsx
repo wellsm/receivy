@@ -49,11 +49,16 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
 
     try {
       if (await loginWithProvider(provider)) {
+        // Left busy on purpose: the route change unmounts this screen, and clearing it here
+        // would flash the button back to idle while the old screen is still on top.
         router.replace("/");
+        return;
       }
+
+      // The person cancelled the provider sheet and stays here.
+      setBusy(false);
     } catch {
       setError("Não foi possível concluir o login. Tente novamente ou use seu e-mail.");
-    } finally {
       setBusy(false);
     }
   }
@@ -70,10 +75,10 @@ export function LoginScreen({ client = authClient, onCodeRequested }: LoginScree
 
     try {
       await client.requestEmailCode({ email: normalizedEmail });
+      // Left busy on purpose: the caller navigates to the code screen.
       onCodeRequested(normalizedEmail);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível enviar o código agora.");
-    } finally {
       setBusy(false);
     }
   }

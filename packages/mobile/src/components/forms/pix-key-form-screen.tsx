@@ -1,4 +1,4 @@
-import { pixKeyField, type PaymentMethod, type PaymentMethodInput, type PixKeyType } from "@receivy/common";
+import { pixKeyField, type PaymentMethod, type PaymentMethodInput, PixKeyType } from "@receivy/common";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Switch, Text, View } from "react-native";
@@ -29,7 +29,7 @@ const EMPTY_ERROR = "Informe a chave Pix.";
 
 /** The Pix key form on its own screen, reached from the key list or the billing gate. */
 export function PixKeyFormScreen({ client = financialClient, profile = profileStore, returnTo, required = false, onSaved }: PixKeyFormScreenProps) {
-  const [type, setType] = useState<PixKeyType>("email");
+  const [type, setType] = useState<PixKeyType>(PixKeyType.Email);
   const [key, setKey] = useState("");
   const [touched, setTouched] = useState(false);
   const [makeDefault, setMakeDefault] = useState(true);
@@ -78,7 +78,7 @@ export function PixKeyFormScreen({ client = financialClient, profile = profileSt
         }
 
         if (user.phone) {
-          setAccountPhone(pixKeyField("phone").format(user.phone));
+          setAccountPhone(pixKeyField(PixKeyType.Phone).format(user.phone));
         }
       })
       .catch(() => undefined);

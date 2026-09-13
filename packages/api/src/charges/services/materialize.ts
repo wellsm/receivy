@@ -1,9 +1,10 @@
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
-import type { BillingPlan, BillingType, PaymentMethod } from '@receivy/common';
-import { recordEvent } from '../../common/repositories/events';
+import { type BillingPlan, type BillingType, ChargePayer, ChargeState, type PaymentMethod, UserStatus } from '@receivy/common';
+import { EventRepository } from '../../common/repositories/events';
+import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
 import { lockAccountReferences } from '../../users/services/locking';
-import { CHARGE_SELECT, type ChargeRow } from '../repositories/charge';
+import { ChargeRepository } from '../repositories/charge';
 
 /** A participant validated against the owner's agenda: the person's account id, and whether they already use the app. */
 export type ChargeRecipientMaterialization = { userId: string; active: boolean };
@@ -12,12 +13,12 @@ export type ChargeMaterializationContext = {
   recipients: Map<string, ChargeRecipientMaterialization>;
   pix: { keyType: PaymentMethod['pixKeyType']; key: string; label: string } | null;
   /** 'owner' materializes a conta a pagar: the owner pays, the (optional) payee is the counterpart. */
-  payer: 'person' | 'owner';
+  payer: ChargePayer;
 };
 
 /** How a conta a pagar materializes: the key typed on the billing replaces any wallet lookup. */
 export type PayableMaterialization = {
-  payer: 'owner';
+  payer: ChargePayer.Owner;
   pix?: { keyType: PaymentMethod['pixKeyType']; key: string; label?: string } | null;
 };
 
@@ -47,11 +48,11 @@ async function recipientSnapshots(db: DbClient, ownerId: string, userIds: string
     const user =
       contact && !contact.archived_at ? await db.users.findOne({ select: { id: true, status: true }, where: { id: userId } }) : undefined;
 
-    if (!user || user.status === 'removed') {
+    if (!user || user.status === UserStatus.Removed) {
       throw new HttpNotFoundError('Contato indisponível.');
     }
 
-    result.set(userId, { userId, active: user.status === 'active' });
+    result.set(userId, { userId, active: user.status === UserStatus.Active });
   }
 
   return result;
@@ -96,16 +97,16 @@ export async function prepareChargeMaterialization(
   if (payable) {
     const pix = payable.pix ? { keyType: payable.pix.keyType, key: payable.pix.key, label: payable.pix.label ?? 'Pix' } : null;
 
-    return { recipients, pix, payer: 'owner' };
+    return { recipients, pix, payer: ChargePayer.Owner };
   }
 
-  return { recipients, pix: await pixSnapshot(db, ownerId, paymentMethodId), payer: 'person' };
+  return { recipients, pix: await pixSnapshot(db, ownerId, paymentMethodId), payer: ChargePayer.Person };
 }
 
-async function recordCreation(db: DbClient, ownerId: string, row: ChargeRow, now: string): Promise<void> {
-  await recordEvent(db, {
+async function recordCreation(db: DbClient, ownerId: string, row: ChargeRepository.Row, now: string): Promise<void> {
+  await EventRepository.record(db, {
     type: 'charge.created',
-    eventableType: 'charge',
+    eventableType: EventableType.Charge,
     eventableId: row.id,
     actorId: ownerId,
     payload: { billingId: row.billing_id, ...(row.debtor_user_id ? { debtorUserId: row.debtor_user_id } : {}) },
@@ -124,8 +125,8 @@ export async function persistChargePlan(
   billing: ChargeBillingRef,
   context: ChargeMaterializationContext,
   now: string
-): Promise<{ rows: ChargeRow[]; noticeChargeIds: string[] }> {
-  const rows: ChargeRow[] = [];
+): Promise<{ rows: ChargeRepository.Row[]; noticeChargeIds: string[] }> {
+  const rows: ChargeRepository.Row[] = [];
   const noticeChargeIds: string[] = [];
 
   for (const item of plan.charges) {
@@ -136,12 +137,12 @@ export async function persistChargePlan(
       throw new HttpNotFoundError('Contato indisponível.');
     }
 
-    if (!item.userId && context.payer !== 'owner') {
+    if (!item.userId && context.payer !== ChargePayer.Owner) {
       throw new HttpNotFoundError('Contato indisponível.');
     }
 
     const row = await db.charges.insertOne({
-      select: CHARGE_SELECT,
+      select: ChargeRepository.SELECT,
       data: {
         id: crypto.randomUUID(),
         creditor: { id: ownerId },
@@ -159,7 +160,7 @@ export async function persistChargePlan(
         ...(context.pix
           ? { pix_key_type_snapshot: context.pix.keyType, pix_key_snapshot: context.pix.key, pix_label_snapshot: context.pix.label }
           : {}),
-        state: 'pending',
+        state: ChargeState.Pending,
         created_at: now,
         updated_at: now
       }

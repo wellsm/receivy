@@ -1,10 +1,18 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
+import type { BillingType, ChargePayer, ChargeState, PixKeyType, ProofMime } from '@receivy/common';
+
+export const enum StoredProofState {
+  Uploading = 'uploading',
+  Pending = 'pending',
+  Accepted = 'accepted',
+  Rejected = 'rejected'
+}
 
 export interface ProofFileSchema {
   key: String.Max<300>;
   name: String.Max<200>;
-  mime: 'image/jpeg' | 'image/png' | 'application/pdf';
+  mime: ProofMime;
   size: number;
   sha256?: String.Max<64>;
 }
@@ -16,26 +24,26 @@ export interface ChargeSchema extends Database.Schema {
   /** The person on the other side (users.id); null only on a conta a pagar without a payee. Name and e-mail are read live. */
   debtor_user_id?: String.UUID;
   /** Who pays: null or 'person' (the contact) on a conta a receber, 'owner' on a conta a pagar. */
-  payer?: 'person' | 'owner';
+  payer?: ChargePayer;
   billing_id: String.UUID;
-  billing_type: 'once' | 'until' | 'indefinite';
+  billing_type: BillingType;
   description: String.Max<500>;
   amount_cents: number;
   currency: 'BRL';
   due_date: String.Date;
   installment?: number;
   installment_count?: number;
-  pix_key_type_snapshot?: 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+  pix_key_type_snapshot?: PixKeyType;
   pix_key_snapshot?: String.Max<254>;
   pix_label_snapshot?: String.Max<120>;
-  state: 'pending' | 'paid' | 'cancelled';
+  state: ChargeState;
   cancelled_at?: String.DateTime;
   paid_at?: String.DateTime;
   /**
    * The single file attached to the charge. `uploading` is a reserved slot waiting for the bucket
    * event; the earlier files' history lives in `events`.
    */
-  proof_state?: 'uploading' | 'pending' | 'accepted' | 'rejected';
+  proof_state?: StoredProofState;
   proof_file?: ProofFileSchema;
   /** Who sent it: a signed-in debtor, or nobody when it came through the public link. */
   proof_sender_user_id?: String.UUID;

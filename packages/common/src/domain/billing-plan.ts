@@ -1,3 +1,5 @@
+import { SplitPartKind } from './billing';
+import { ChargePayer } from './contracts';
 import { type BillingSplit, type ResolvedAllocation, resolveBillingSplit } from './split';
 
 export type BillingPlanInput = {
@@ -8,7 +10,7 @@ export type BillingPlanInput = {
   /** `true` numbers charges k/N (once, until); `false` leaves both null (indefinite). */
   numbered: boolean;
   /** `owner` plans a conta a pagar: one charge per due date for the whole total, the owner paying. Defaults to `person`. */
-  payer?: 'person' | 'owner';
+  payer?: ChargePayer;
   /** Conta a pagar only: the contact who receives, or null when the bill is the owner's alone. */
   payeeUserId?: string | null;
 };
@@ -47,7 +49,7 @@ export function planBillingCharges(input: BillingPlanInput): BillingPlan {
     installmentCount: input.numbered ? input.dueDates.length : null
   });
 
-  if (input.payer === 'owner') {
+  if (input.payer === ChargePayer.Owner) {
     input.dueDates.forEach((dueDate, index) => {
       charges.push({
         userId: input.payeeUserId ?? null,
@@ -62,11 +64,11 @@ export function planBillingCharges(input: BillingPlanInput): BillingPlan {
     return { description, currency: 'BRL', totalCents: input.totalCents, allocations, charges };
   }
 
-  const external = allocations.filter((allocation) => allocation.kind === 'user' && allocation.amountCents > 0);
+  const external = allocations.filter((allocation) => allocation.kind === SplitPartKind.User && allocation.amountCents > 0);
 
   input.dueDates.forEach((dueDate, index) => {
     for (const allocation of external) {
-      if (allocation.kind !== 'user') {
+      if (allocation.kind !== SplitPartKind.User) {
         continue;
       }
 

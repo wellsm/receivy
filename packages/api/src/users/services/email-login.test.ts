@@ -1,4 +1,4 @@
-import type { AuthUser } from '@receivy/common';
+import { type AuthUser, UserStatus } from '@receivy/common';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthFlowError, type AuthRepository, confirmEmailCode, type EmailTransport, requestEmailCode } from './email-login';
 
@@ -8,7 +8,7 @@ const user: AuthUser = {
   name: null,
   phone: null,
   avatarUrl: null,
-  status: 'active',
+  status: UserStatus.Active,
   locale: 'pt-BR',
   timezone: 'America/Sao_Paulo',
   country: 'BR',

@@ -1,10 +1,10 @@
 import type { Http } from '@ez4/gateway';
 import { HttpBadRequestError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import type { PaymentMethodInput } from '@receivy/common';
+import type { PaymentMethodInput, PixKeyType } from '@receivy/common';
 
 export declare class PaymentMethodBody implements Http.JsonBody {
-  pixKeyType: 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+  pixKeyType: PixKeyType;
   pixKey: String.Max<254>;
   label?: String.Max<120>;
 }

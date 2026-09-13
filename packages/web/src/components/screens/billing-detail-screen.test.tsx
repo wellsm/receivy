@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { chargeShareText, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PixKeyType, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
 
@@ -24,7 +24,7 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-const PIX = { keyType: "phone" as const, key: "11987654321", label: "" };
+const PIX = { keyType: PixKeyType.Phone, key: "11987654321", label: "" };
 
 function charge(overrides: Partial<ChargeDetail> & { id: string; name: string }): ChargeDetail {
   const { name, ...rest } = overrides;
@@ -33,18 +33,18 @@ function charge(overrides: Partial<ChargeDetail> & { id: string; name: string })
     description: "Jantar de despedida",
     amount: { amountCents: 6_000, currency: "BRL" },
     dueDate: "2026-11-15",
-    state: "pending",
+    state: ChargeState.Pending,
     billingId: "b1",
-    billingType: "until",
+    billingType: BillingType.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: name,
     proofState: null,
-    direction: "receivable",
+    direction: Direction.Receivable,
     recipient: { userId: "u1", name, email: null },
     debtorUserId: "u1",
     pix: PIX,
-    sharingState: "ready",
+    sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
     paidAt: null,
@@ -54,29 +54,29 @@ function charge(overrides: Partial<ChargeDetail> & { id: string; name: string })
 }
 
 const firstCycle = [
-  charge({ id: "c1", name: "Lucas F.", dueDate: "2026-10-15", installment: 1, state: "paid", paidAt: "2026-10-14T22:42:00Z" }),
-  charge({ id: "c2", name: "Mariana S.", dueDate: "2026-10-15", installment: 1, state: "paid", paidAt: "2026-10-15T11:15:00Z" }),
-  charge({ id: "c3", name: "Carlos", dueDate: "2026-10-15", installment: 1, state: "paid", paidAt: "2026-10-15T12:00:00Z" }),
+  charge({ id: "c1", name: "Lucas F.", dueDate: "2026-10-15", installment: 1, state: ChargeState.Paid, paidAt: "2026-10-14T22:42:00Z" }),
+  charge({ id: "c2", name: "Mariana S.", dueDate: "2026-10-15", installment: 1, state: ChargeState.Paid, paidAt: "2026-10-15T11:15:00Z" }),
+  charge({ id: "c3", name: "Carlos", dueDate: "2026-10-15", installment: 1, state: ChargeState.Paid, paidAt: "2026-10-15T12:00:00Z" }),
 ];
 
 const secondCycle = [
-  charge({ id: "c4", name: "Lucas F.", state: "paid", paidAt: "2026-11-14T22:42:00Z" }),
-  charge({ id: "c5", name: "Mariana S.", state: "paid", paidAt: "2026-11-15T11:15:00Z" }),
+  charge({ id: "c4", name: "Lucas F.", state: ChargeState.Paid, paidAt: "2026-11-14T22:42:00Z" }),
+  charge({ id: "c5", name: "Mariana S.", state: ChargeState.Paid, paidAt: "2026-11-15T11:15:00Z" }),
   charge({ id: "c6", name: "Carlos" }),
 ];
 
 function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
   return {
     id: "b1",
-    type: "until",
-    direction: "receivable",
+    type: BillingType.Until,
+    direction: Direction.Receivable,
     payee: null,
     pix: null,
     description: "Jantar de despedida",
     total: { amountCents: 18_000, currency: "BRL" },
     startDate: "2026-10-15",
     endDate: "2026-12-15",
-    state: "active",
+    state: BillingState.Active,
     installmentCount: 3,
     nextDueDate: "2026-11-15",
     createdAt: "2026-10-01T00:00:00Z",
@@ -84,12 +84,12 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
     timezone: "America/Sao_Paulo",
     paymentMethodId: "pix-1",
     reminders: [],
-    split: { mode: "equal", parts: [{ kind: "user", userId: "u1" }] },
+    split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
     allocations: [],
     charges: [...firstCycle, ...secondCycle],
     previews: [],
     nextMaterialization: null,
-    category: "food",
+    category: BillingCategory.Food,
     invite: null,
     guests: [],
     linkableContacts: [],
@@ -163,7 +163,7 @@ it("sums the current cycle in the hero and lists its participants with their sta
 });
 
 it("asks the owner to review a sent proof instead of reminding the debtor", async () => {
-  const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: "paid" }), charge({ id: "c6", name: "Carlos", proofState: "pending" })] });
+  const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: ChargeState.Paid }), charge({ id: "c6", name: "Carlos", proofState: ProofState.Pending })] });
   await open(detail);
 
   expect(screen.getByText("Em revisão")).toBeInTheDocument();
@@ -177,9 +177,9 @@ it("asks the owner to review a sent proof instead of reminding the debtor", asyn
 });
 
 it("accepts the proof under review when the owner marks that participant as paid from the row", async () => {
-  const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: "paid" }), charge({ id: "c6", name: "Carlos", proofState: "pending" })] });
+  const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: ChargeState.Paid }), charge({ id: "c6", name: "Carlos", proofState: ProofState.Pending })] });
   const calls = await open(detail, (path, init) => {
-    if (path === "/api/financial/charges/c6/proof/review" && init?.method === "POST") return Response.json(charge({ id: "c6", name: "Carlos", state: "paid", proofState: "accepted" }));
+    if (path === "/api/financial/charges/c6/proof/review" && init?.method === "POST") return Response.json(charge({ id: "c6", name: "Carlos", state: ChargeState.Paid, proofState: ProofState.Accepted }));
     return undefined;
   });
   const user = setup();
@@ -308,7 +308,7 @@ it("shares an invite that already exists instead of issuing a new one", async ()
 });
 
 it("pauses and resumes only a subscription", async () => {
-  const calls = await open(billing({ type: "indefinite", frequency: "monthly", installmentCount: undefined, endDate: undefined }));
+  const calls = await open(billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined }));
   const user = setup();
 
   expect(screen.getByText("Recorrente mensal")).toBeInTheDocument();
@@ -327,7 +327,7 @@ it("has no pause for a finite billing", async () => {
 });
 
 it("names the Pix key from the wallet while no charge has been generated", async () => {
-  const detail = billing({ type: "indefinite", frequency: "monthly", installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
+  const detail = billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
   const wallet = [{ id: "pix-2", type: "pix", pixKeyType: "email", pixKey: "ana@example.com", label: "", isDefault: true, archivedAt: null, createdAt: "" }];
 
   await open(detail, (path) => (path === "/api/financial/payment-methods" ? Response.json({ paymentMethods: wallet }) : undefined));
@@ -360,12 +360,12 @@ it("ends only after confirmation, revokes the invite and hides the actions", asy
 
 it("shows a conta a pagar with its inline key and payee, without invite, link or reminders", async () => {
   const detail = billing({
-    direction: "payable",
+    direction: Direction.Payable,
     payee: { userId: "u1", name: "Ana" },
-    pix: { keyType: "email", key: "ana@example.com", label: "Nubank" },
+    pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
     paymentMethodId: undefined,
     invite: { url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" },
-    charges: [charge({ id: "c6", name: "Ana", direction: "payable", payer: "owner", ownedByViewer: true })],
+    charges: [charge({ id: "c6", name: "Ana", direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true })],
   });
   const calls = await open(detail);
   const user = setup();
@@ -390,7 +390,7 @@ it("shows a conta a pagar with its inline key and payee, without invite, link or
 });
 
 it("names a conta a pagar without payee or key as the owner's alone", async () => {
-  await open(billing({ direction: "payable", pix: null, paymentMethodId: undefined, charges: [charge({ id: "c6", name: "Você", direction: "payable", payer: "owner", ownedByViewer: true })] }));
+  await open(billing({ direction: Direction.Payable, pix: null, paymentMethodId: undefined, charges: [charge({ id: "c6", name: "Você", direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true })] }));
 
   expect(screen.getByText("Sem chave Pix")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Abrir cobrança de Só comigo" })).toBeInTheDocument();
@@ -400,12 +400,12 @@ it("marks a pending participant as paid only after confirmation and reloads", as
   let paid = false;
   const calls = await open(billing(), (path, init) => {
     if (path === "/api/financial/billings/b1" && (init?.method ?? "GET") === "GET" && paid) {
-      return Response.json(billing({ charges: [...firstCycle, ...secondCycle.slice(0, 2), charge({ id: "c6", name: "Carlos", state: "paid", paidAt: "2026-11-16T10:00:00Z" })] }));
+      return Response.json(billing({ charges: [...firstCycle, ...secondCycle.slice(0, 2), charge({ id: "c6", name: "Carlos", state: ChargeState.Paid, paidAt: "2026-11-16T10:00:00Z" })] }));
     }
 
     if (path === "/api/financial/charges/c6/pay" && init?.method === "POST") {
       paid = true;
-      return Response.json(charge({ id: "c6", name: "Carlos", state: "paid" }));
+      return Response.json(charge({ id: "c6", name: "Carlos", state: ChargeState.Paid }));
     }
 
     return undefined;

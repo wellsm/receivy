@@ -4,7 +4,7 @@ import type { String } from '@ez4/schema';
 import type { BillingPreview } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { BillingProvider } from '../provider';
-import { previewBilling } from '../repositories/billing';
+import { BillingRepository } from '../repositories/billing';
 
 declare class ReadRequest implements Http.Request {
   identity: SessionIdentity;
@@ -16,6 +16,6 @@ declare class PreviewResponse implements Http.Response {
   body: { previews: BillingPreview[] };
 }
 
-export async function previewBillingHandler(request: ReadRequest, context: Service.Context<BillingProvider>): Promise<PreviewResponse> {
-  return { status: 200, body: await previewBilling(context.db, request.identity.userId, request.parameters.id) };
+export async function previewBillingHandler(request: ReadRequest, { db }: Service.Context<BillingProvider>): Promise<PreviewResponse> {
+  return { status: 200, body: await BillingRepository.preview(db, request.identity.userId, request.parameters.id) };
 }

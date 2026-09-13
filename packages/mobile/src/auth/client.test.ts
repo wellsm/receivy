@@ -1,4 +1,4 @@
-import type { AuthSessionResponse } from "@receivy/common";
+import { type AuthSessionResponse, UserStatus } from "@receivy/common";
 import { createAuthClient, REFRESH_TOKEN_KEY } from "./client";
 
 const session: AuthSessionResponse = {
@@ -11,7 +11,7 @@ const session: AuthSessionResponse = {
     name: null,
     phone: null,
     avatarUrl: null,
-    status: "pending",
+    status: UserStatus.Pending,
     locale: "pt-BR",
     timezone: "America/Sao_Paulo",
     country: "BR",

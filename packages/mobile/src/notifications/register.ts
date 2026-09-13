@@ -4,7 +4,7 @@ import * as SecureStore from "expo-secure-store";
 import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
-import type { DeviceRegistration, NotificationDevice } from "@receivy/common";
+import { DevicePlatform, type DeviceRegistration, type NotificationDevice } from "@receivy/common";
 
 /** Runs automatically after login, best-effort; requires push credentials/project and a physical/development build. */
 export async function registerPushDevice(
@@ -41,5 +41,5 @@ export async function registerPushDevice(
     installationId = Crypto.randomUUID();
     await SecureStore.setItemAsync("receivy.push.installation", installationId);
   }
-  return register({ token, installationId, platform: Platform.OS });
+  return register({ token, installationId, platform: Platform.OS === "ios" ? DevicePlatform.Ios : DevicePlatform.Android });
 }

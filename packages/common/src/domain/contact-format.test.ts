@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contactBadge, formatCnpj, formatCpf, formatPhoneBR, initialsOf, onlyDigits, pixKeyField } from './contact-format';
+import { PixKeyType } from './contracts';
 
 describe('contact format', () => {
   it('keeps only digits', () => {
@@ -43,7 +44,7 @@ describe('contact format', () => {
   });
 
   it('describes the CPF field', () => {
-    const field = pixKeyField('cpf');
+    const field = pixKeyField(PixKeyType.Cpf);
     expect(field.label).toBe('CPF do titular');
     expect(field.placeholder).toBe('000.000.000-00');
     expect(field.keyboard).toBe('numeric');
@@ -52,7 +53,7 @@ describe('contact format', () => {
   });
 
   it('describes the CNPJ field', () => {
-    const field = pixKeyField('cnpj');
+    const field = pixKeyField(PixKeyType.Cnpj);
     expect(field.label).toBe('CNPJ');
     expect(field.placeholder).toBe('00.000.000/0000-00');
     expect(field.keyboard).toBe('numeric');
@@ -61,7 +62,7 @@ describe('contact format', () => {
   });
 
   it('describes the phone field and sends the country code the API expects', () => {
-    const field = pixKeyField('phone');
+    const field = pixKeyField(PixKeyType.Phone);
     expect(field.label).toBe('Telefone celular');
     expect(field.placeholder).toBe('(00) 00000-0000');
     expect(field.keyboard).toBe('tel');
@@ -72,7 +73,7 @@ describe('contact format', () => {
   });
 
   it('describes the email field', () => {
-    const field = pixKeyField('email');
+    const field = pixKeyField(PixKeyType.Email);
     expect(field.label).toBe('E-mail Pix');
     expect(field.placeholder).toBe('seu.email@exemplo.com.br');
     expect(field.keyboard).toBe('email');
@@ -81,7 +82,7 @@ describe('contact format', () => {
   });
 
   it('describes the random key field', () => {
-    const field = pixKeyField('random');
+    const field = pixKeyField(PixKeyType.Random);
     expect(field.label).toBe('Chave aleatória');
     expect(field.placeholder).toBe('89a456bc-1234-…');
     expect(field.keyboard).toBe('text');

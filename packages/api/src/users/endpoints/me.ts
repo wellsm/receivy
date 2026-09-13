@@ -4,7 +4,7 @@ import { HttpUnauthorizedError } from '@ez4/gateway';
 import type { AuthUser } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { UserProvider } from '../provider';
-import { findAuthUserById } from '../repositories/auth';
+import { AuthRepository } from '../repositories/auth';
 
 declare class MeRequest implements Http.Request {
   identity: SessionIdentity;
@@ -15,8 +15,8 @@ declare class MeResponse implements Http.Response {
   body: { user: AuthUser };
 }
 
-export async function meHandler(request: MeRequest, context: Service.Context<UserProvider>): Promise<MeResponse> {
-  const user = await findAuthUserById(context.db, request.identity.userId);
+export async function meHandler(request: MeRequest, { db }: Service.Context<UserProvider>): Promise<MeResponse> {
+  const user = await AuthRepository.findUserById(db, request.identity.userId);
   if (!user) {
     throw new HttpUnauthorizedError();
   }

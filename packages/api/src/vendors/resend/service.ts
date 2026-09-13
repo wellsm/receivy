@@ -21,8 +21,8 @@ export declare class ResendEmailService extends Factory.Service<EmailProvider> {
   };
 }
 
-export function createService(context: Service.Context<ResendEmailService>, request: typeof fetch = globalThis.fetch): EmailProvider {
-  const { RESEND_API_KEY } = context.variables;
+export function createService({ variables }: Service.Context<ResendEmailService>, request: typeof fetch = globalThis.fetch): EmailProvider {
+  const { RESEND_API_KEY } = variables;
 
   return {
     send: async (message: EmailInputs.Message) => {

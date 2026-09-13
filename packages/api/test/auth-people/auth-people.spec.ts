@@ -3,19 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import type { BillingSplit } from '@receivy/common';
-import { normalizeContact } from '@receivy/common';
-import { createBilling } from '../../src/billings/repositories/billing';
+import { BillingType, ChargeState, normalizeContact, SplitMode, SplitPartKind, UserStatus } from '@receivy/common';
+import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ApiError } from '../../src/common/errors';
-import {
-  archiveContact,
-  DUPLICATE_CONTACT_MESSAGE,
-  EMAIL_TAKEN_MESSAGE,
-  LINKED_CONTACT_MESSAGE,
-  listContacts,
-  saveContact
-} from '../../src/contacts/repositories/contact';
-import { updateProfile } from '../../src/users/repositories/account';
-import { createAuthRepository } from '../../src/users/repositories/auth';
+import { DUPLICATE_CONTACT_MESSAGE, EMAIL_TAKEN_MESSAGE, LINKED_CONTACT_MESSAGE } from '../../src/contacts/errors';
+import { ContactRepository } from '../../src/contacts/repositories/contact';
+import { AccountRepository } from '../../src/users/repositories/account';
+import { AuthRepository } from '../../src/users/repositories/auth';
 import { confirmEmailCode } from '../../src/users/services/email-login';
 import { hashOauthValue } from '../../src/users/services/oauth';
 import { exchangeOauthGrant, OauthFlowError } from '../../src/users/services/oauth-flow';
@@ -28,7 +22,7 @@ const owner = randomUUID(),
   contacts = randomUUID();
 const ids = [owner, stranger, joining, paged, contacts];
 const emails = ids.map((id) => `auth-people-${id}@example.com`);
-const repo = createAuthRepository(db);
+const repo = AuthRepository.create(db);
 const codeHashKey = 'auth-people-test-code-secret-only';
 const accessTokenSecret = 'auth-people-test-session-secret-only';
 const email = (label: string) => `auth-people-${label}-${randomUUID()}@example.com`;
@@ -46,7 +40,7 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
       data: {
         id: joining,
         email: emails[2]!,
-        status: 'pending',
+        status: UserStatus.Pending,
         locale: 'pt-BR',
         timezone: 'America/Sao_Paulo',
         country: 'BR',
@@ -69,62 +63,62 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
 
   it('normalizes owned contacts, locks name and e-mail once the account is active, and archives cleanly', async () => {
     const input = normalizeContact({ name: '  Ana  Silva ', email: emails[2]!.toUpperCase() });
-    const contact = await saveContact(db, owner, input);
+    const contact = await ContactRepository.save(db, owner, input);
     equal(contact.name, 'Ana Silva');
     equal(contact.email, emails[2]);
     equal(contact.userId, joining, 'a contact for an existing e-mail points at that account');
     equal(contact.status, 'pending');
     equal(contact.phone, null);
-    deepEqual((await listContacts(db, stranger)).contacts, []);
-    await rejects(() => saveContact(db, stranger, input, contact.id), HttpNotFoundError);
-    await rejects(() => archiveContact(db, stranger, contact.id), HttpNotFoundError);
+    deepEqual((await ContactRepository.list(db, stranger)).contacts, []);
+    await rejects(() => ContactRepository.save(db, stranger, input, contact.id), HttpNotFoundError);
+    await rejects(() => ContactRepository.archive(db, stranger, contact.id), HttpNotFoundError);
     await rejects(
-      () => saveContact(db, owner, input),
+      () => ContactRepository.save(db, owner, input),
       (error: ApiError) => error.message === DUPLICATE_CONTACT_MESSAGE
     );
-    await rejects(() => saveContact(db, owner, { name: 'Eu', email: emails[0]! }), ApiError);
+    await rejects(() => ContactRepository.save(db, owner, { name: 'Eu', email: emails[0]! }), ApiError);
     // While the account is pending, the agenda may still fix the name, but never onto an e-mail someone else holds.
     await rejects(
-      () => saveContact(db, owner, { ...input, email: emails[1]! }, contact.id),
+      () => ContactRepository.save(db, owner, { ...input, email: emails[1]! }, contact.id),
       (error: ApiError) => error.message === EMAIL_TAKEN_MESSAGE
     );
-    equal((await saveContact(db, owner, { ...input, name: 'Ana S.' }, contact.id)).name, 'Ana S.');
+    equal((await ContactRepository.save(db, owner, { ...input, name: 'Ana S.' }, contact.id)).name, 'Ana S.');
     equal((await db.users.findOne({ select: { name: true }, where: { id: joining } }))?.name, 'Ana S.');
-    await saveContact(db, owner, input, contact.id);
+    await ContactRepository.save(db, owner, input, contact.id);
     await repo.replaceLoginCode({ email: emails[2]!, code: '123456', codeHashKey });
     const session = await confirmEmailCode({ email: emails[2]!, code: '123456' }, { repo, codeHashKey, accessTokenSecret });
     equal(session.user.id, joining);
-    await updateProfile(db, joining, {
+    await AccountRepository.updateProfile(db, joining, {
       name: 'Ana Silva',
       phone: '(11) 99999-1234',
       locale: 'pt-BR',
       timezone: 'America/Sao_Paulo',
       country: 'BR'
     });
-    const active = (await listContacts(db, owner)).contacts.find((row) => row.id === contact.id);
+    const active = (await ContactRepository.list(db, owner)).contacts.find((row) => row.id === contact.id);
     equal(active?.status, 'active');
     equal(active?.phone, '+5511999991234');
     // An active contact mirrors an account: only the nickname is the owner's to change.
     await rejects(
-      () => saveContact(db, owner, { ...input, name: 'Ana' }, contact.id),
+      () => ContactRepository.save(db, owner, { ...input, name: 'Ana' }, contact.id),
       (error: ApiError) => error.message === LINKED_CONTACT_MESSAGE
     );
-    await rejects(() => saveContact(db, owner, { ...input, email: email('moved') }, contact.id), ApiError);
-    const nicknamed = await saveContact(db, owner, normalizeContact({ ...input, nickname: '  Aninha  da  Silva ' }), contact.id);
+    await rejects(() => ContactRepository.save(db, owner, { ...input, email: email('moved') }, contact.id), ApiError);
+    const nicknamed = await ContactRepository.save(db, owner, normalizeContact({ ...input, nickname: '  Aninha  da  Silva ' }), contact.id);
     equal(nicknamed.nickname, 'Aninha da Silva');
     equal(nicknamed.displayName, 'Aninha da Silva');
     equal(nicknamed.name, 'Ana Silva');
     equal(nicknamed.userId, joining);
-    await archiveContact(db, owner, contact.id);
-    await archiveContact(db, owner, contact.id);
-    equal((await listContacts(db, owner, undefined, true)).contacts[0]?.email, emails[2]);
-    const again = await saveContact(db, owner, input);
+    await ContactRepository.archive(db, owner, contact.id);
+    await ContactRepository.archive(db, owner, contact.id);
+    equal((await ContactRepository.list(db, owner, undefined, true)).contacts[0]?.email, emails[2]);
+    const again = await ContactRepository.save(db, owner, input);
     ok(again.id !== contact.id);
     equal(again.userId, joining);
   });
 
   it('keeps a contact without e-mail as a private placeholder until an address is typed', async () => {
-    const saved = await saveContact(db, contacts, normalizeContact({ name: 'Sem Endereço', nickname: 'Vizinho' }));
+    const saved = await ContactRepository.save(db, contacts, normalizeContact({ name: 'Sem Endereço', nickname: 'Vizinho' }));
 
     equal(saved.email, '');
     equal(saved.status, 'pending');
@@ -135,33 +129,33 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
     equal(user?.email ?? null, null);
 
     // A second placeholder for the same name never collides: without an e-mail there is nothing to match.
-    const twin = await saveContact(db, contacts, normalizeContact({ name: 'Sem Endereço' }));
+    const twin = await ContactRepository.save(db, contacts, normalizeContact({ name: 'Sem Endereço' }));
 
     notEqual(twin.userId, saved.userId);
 
     const typed = email('placeholder');
-    const filled = await saveContact(db, contacts, normalizeContact({ name: 'Sem Endereço', email: typed }), saved.id);
+    const filled = await ContactRepository.save(db, contacts, normalizeContact({ name: 'Sem Endereço', email: typed }), saved.id);
 
     equal(filled.email, typed);
     equal(filled.userId, saved.userId);
 
     // Once typed, the address can be corrected but never blanked, and never point at another account.
-    await rejects(saveContact(db, contacts, normalizeContact({ name: 'Sem Endereço' }), saved.id), HttpBadRequestError);
-    await rejects(saveContact(db, contacts, normalizeContact({ name: 'Sem Endereço', email: emails[1]! }), saved.id), ApiError);
+    await rejects(ContactRepository.save(db, contacts, normalizeContact({ name: 'Sem Endereço' }), saved.id), HttpBadRequestError);
+    await rejects(ContactRepository.save(db, contacts, normalizeContact({ name: 'Sem Endereço', email: emails[1]! }), saved.id), ApiError);
 
     // Search reads the name; an empty e-mail never breaks the comparison.
-    const listed = await listContacts(db, contacts, undefined, false, 'sem endere');
+    const listed = await ContactRepository.list(db, contacts, undefined, false, 'sem endere');
 
     deepEqual(listed.contacts.map((contact) => contact.id).sort(), [saved.id, twin.id].sort());
   });
 
   it('keeps the nickname, derives displayName and counts only pending charges', async () => {
-    const plain = await saveContact(db, contacts, { name: 'Camila Soares', email: email('camila') });
+    const plain = await ContactRepository.save(db, contacts, { name: 'Camila Soares', email: email('camila') });
     equal(plain.nickname, null);
     equal(plain.displayName, 'Camila Soares');
     equal(plain.activeCharges, 0);
 
-    const saved = await saveContact(
+    const saved = await ContactRepository.save(
       db,
       contacts,
       normalizeContact({ name: 'Camila Soares', email: plain.email, nickname: '  Mila  ' }),
@@ -170,13 +164,13 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
     equal(saved.nickname, 'Mila');
     equal(saved.displayName, 'Mila');
 
-    const split = { mode: 'equal' as const, parts: [{ kind: 'user' as const, userId: plain.userId }] };
+    const split = { mode: SplitMode.Equal as const, parts: [{ kind: SplitPartKind.User as const, userId: plain.userId }] };
     for (const suffix of ['a', 'b', 'c']) {
-      await createBilling(
+      await BillingRepository.create(
         db,
         contacts,
         `nickname-charge-${suffix}`,
-        { type: 'once', description: 'Rateio', totalCents: 3000, startDate: '2026-12-20', timezone: 'America/Sao_Paulo', split },
+        { type: BillingType.Once, description: 'Rateio', totalCents: 3000, startDate: '2026-12-20', timezone: 'America/Sao_Paulo', split },
         new Date('2026-03-10T12:00:00Z')
       );
     }
@@ -186,24 +180,24 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
     await db.charges.updateOne({
       select: { id: true },
       where: { id: charges.records[0]!.id },
-      data: { state: 'paid', paid_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+      data: { state: ChargeState.Paid, paid_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     });
     await db.charges.updateOne({
       select: { id: true },
       where: { id: charges.records[1]!.id },
-      data: { state: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+      data: { state: ChargeState.Cancelled, cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     });
 
-    const listed = (await listContacts(db, contacts)).contacts.find((row) => row.id === plain.id);
+    const listed = (await ContactRepository.list(db, contacts)).contacts.find((row) => row.id === plain.id);
     equal(listed?.activeCharges, 1);
     equal(listed?.displayName, 'Mila');
 
-    const recent = (await listContacts(db, contacts, undefined, false, '', 'recent')).contacts.find((row) => row.id === plain.id);
+    const recent = (await ContactRepository.list(db, contacts, undefined, false, '', 'recent')).contacts.find((row) => row.id === plain.id);
     equal(recent?.activeCharges, 1);
     equal(recent?.nickname, 'Mila');
 
     // An empty nickname clears it and the full name takes the display slot back.
-    const cleared = await saveContact(
+    const cleared = await ContactRepository.save(
       db,
       contacts,
       normalizeContact({ name: 'Camila Soares', email: plain.email, nickname: '   ' }),
@@ -215,13 +209,14 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
 
   it('serializes duplicate email creation and pages 52 owned records without repetition', async () => {
     const outcomes = await Promise.allSettled(
-      [1, 2].map(() => saveContact(db, owner, { name: 'Race', email: `race-${owner}@example.com` }))
+      [1, 2].map(() => ContactRepository.save(db, owner, { name: 'Race', email: `race-${owner}@example.com` }))
     );
     equal(outcomes.filter((x) => x.status === 'fulfilled').length, 1);
     equal(outcomes.filter((x) => x.status === 'rejected' && x.reason instanceof ApiError).length, 1);
-    for (let index = 0; index < 52; index++) await saveContact(db, stranger, { name: `Contact ${index}`, email: email(`page-${index}`) });
-    const first = await listContacts(db, stranger);
-    const second = await listContacts(db, stranger, first.nextCursor!);
+    for (let index = 0; index < 52; index++)
+      await ContactRepository.save(db, stranger, { name: `Contact ${index}`, email: email(`page-${index}`) });
+    const first = await ContactRepository.list(db, stranger);
+    const second = await ContactRepository.list(db, stranger, first.nextCursor!);
     equal(first.contacts.length, 50);
     equal(second.contacts.length, 2);
     equal(second.nextCursor, null);
@@ -249,18 +244,18 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
   });
 
   it('searches the full owned agenda by literal name or email before pagination', async () => {
-    const target = await saveContact(db, stranger, { name: 'Search target 100%', email: 'needle@example.com' });
+    const target = await ContactRepository.save(db, stranger, { name: 'Search target 100%', email: 'needle@example.com' });
     for (const search of ['TARGET', 'needle@', '100%']) {
       deepEqual(
-        (await listContacts(db, stranger, undefined, false, search)).contacts.map((x) => x.id),
+        (await ContactRepository.list(db, stranger, undefined, false, search)).contacts.map((x) => x.id),
         [target.id]
       );
-      equal((await listContacts(db, owner, undefined, false, search)).contacts.length, 0);
+      equal((await ContactRepository.list(db, owner, undefined, false, search)).contacts.length, 0);
     }
-    equal((await listContacts(db, stranger, undefined, false, 'no-match')).contacts.length, 0);
+    equal((await ContactRepository.list(db, stranger, undefined, false, 'no-match')).contacts.length, 0);
     // UUID/date-like terms must stay text parameters or the driver types them as uuid/date.
     for (const search of [randomUUID(), '2026-10-31', '12:30:00'])
-      equal((await listContacts(db, stranger, undefined, false, search)).contacts.length, 0);
+      equal((await ContactRepository.list(db, stranger, undefined, false, search)).contacts.length, 0);
   });
 
   it('pages the recent order across the NULLS LAST boundary without repeating a contact', async () => {
@@ -270,20 +265,20 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
 
     for (let index = 0; index < 105; index++) {
       const label = String(index).padStart(3, '0');
-      agenda.push(await saveContact(db, paged, { name: `Recent ${label}`, email: email(`recent-${label}`) }));
+      agenda.push(await ContactRepository.save(db, paged, { name: `Recent ${label}`, email: email(`recent-${label}`) }));
     }
 
     const splitOf = (from: number, to: number) => ({
-      mode: 'equal' as const,
-      parts: agenda.slice(from, to).map((contact) => ({ kind: 'user' as const, userId: contact.userId }))
+      mode: SplitMode.Equal as const,
+      parts: agenda.slice(from, to).map((contact) => ({ kind: SplitPartKind.User as const, userId: contact.userId }))
     });
     const billing = (key: string, split: BillingSplit, when: Date) =>
-      createBilling(
+      BillingRepository.create(
         db,
         paged,
         key,
         {
-          type: 'once',
+          type: BillingType.Once,
           description: 'Rateio',
           totalCents: 11_000,
           startDate: '2026-12-20',
@@ -296,9 +291,9 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
     await billing('recent-older-page', splitOf(45, 55), new Date('2026-01-10T12:00:00Z'));
     await billing('recent-newer-page', splitOf(0, 45), new Date('2026-02-10T12:00:00Z'));
 
-    const first = await listContacts(db, paged, undefined, false, '', 'recent');
-    const second = await listContacts(db, paged, first.nextCursor!, false, '', 'recent');
-    const third = await listContacts(db, paged, second.nextCursor!, false, '', 'recent');
+    const first = await ContactRepository.list(db, paged, undefined, false, '', 'recent');
+    const second = await ContactRepository.list(db, paged, first.nextCursor!, false, '', 'recent');
+    const third = await ContactRepository.list(db, paged, second.nextCursor!, false, '', 'recent');
 
     equal(first.contacts.length, 50);
     equal(second.contacts.length, 50);
@@ -325,24 +320,24 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
 
     // Both default-order paths compare the cursor as an id: the paged read and the searched one.
     for (const search of ['', 'recent 0']) {
-      await rejects(() => listContacts(db, paged, 'abc', false, search), HttpBadRequestError);
+      await rejects(() => ContactRepository.list(db, paged, 'abc', false, search), HttpBadRequestError);
       // A keyset cursor replayed without `sort=recent` is not an id either.
-      await rejects(() => listContacts(db, paged, keyset, false, search), HttpBadRequestError);
+      await rejects(() => ContactRepository.list(db, paged, keyset, false, search), HttpBadRequestError);
     }
 
     // The `recent` order refuses a bare id, an unreadable payload and an empty `last` the same way.
-    await rejects(() => listContacts(db, paged, 'abc', false, '', 'recent'), HttpBadRequestError);
-    await rejects(() => listContacts(db, paged, randomUUID(), false, '', 'recent'), HttpBadRequestError);
+    await rejects(() => ContactRepository.list(db, paged, 'abc', false, '', 'recent'), HttpBadRequestError);
+    await rejects(() => ContactRepository.list(db, paged, randomUUID(), false, '', 'recent'), HttpBadRequestError);
     await rejects(
-      () => listContacts(db, paged, encode({ last: '', name: 'Recent 049', id: randomUUID() }), false, '', 'recent'),
+      () => ContactRepository.list(db, paged, encode({ last: '', name: 'Recent 049', id: randomUUID() }), false, '', 'recent'),
       HttpBadRequestError
     );
 
     // The cursors each order does issue keep working.
-    const byId = await listContacts(db, paged);
-    const byRecent = await listContacts(db, paged, undefined, false, '', 'recent');
+    const byId = await ContactRepository.list(db, paged);
+    const byRecent = await ContactRepository.list(db, paged, undefined, false, '', 'recent');
 
-    equal((await listContacts(db, paged, byId.nextCursor!)).contacts.length, 50);
-    equal((await listContacts(db, paged, byRecent.nextCursor!, false, '', 'recent')).contacts.length, 50);
+    equal((await ContactRepository.list(db, paged, byId.nextCursor!)).contacts.length, 50);
+    equal((await ContactRepository.list(db, paged, byRecent.nextCursor!, false, '', 'recent')).contacts.length, 50);
   });
 });

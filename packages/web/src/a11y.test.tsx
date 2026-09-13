@@ -2,6 +2,7 @@ import axe from "axe-core";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BillingCategory, BillingType } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { LoginScreen } from "@/components/screens/login-screen";
 import { CodeScreen } from "@/components/screens/code-screen";
@@ -35,7 +36,7 @@ const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { am
 const user = { id: "user", email: "fixture@example.com", name: "Ana", phone: null, avatarUrl: null, status: "active", locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
 const contact = { id: "contact-1", userId: "user-1", name: "Ana Souza", nickname: "Ana", displayName: "Ana", email: "ana@example.com", phone: null, status: "pending", archivedAt: null, createdAt: "2026-09-01", lastBilledAt: null, activeCharges: 1 };
 const pixMethod = { id: "pix-1", label: "Nubank", pixKey: "52998224725", pixKeyType: "cpf", isDefault: true, archivedAt: null };
-const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 12_000, currency: "BRL" as const }, type: "once" as const, participantCount: 3, category: "food" as const, expired: false };
+const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 12_000, currency: "BRL" as const }, type: BillingType.Once, participantCount: 3, category: BillingCategory.Food, expired: false };
 
 describe("accessibility of the main web screens", () => {
   it("email login form has labelled fields, reachable submit and no axe violations", async () => {

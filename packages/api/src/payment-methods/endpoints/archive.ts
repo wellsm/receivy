@@ -3,7 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { PaymentMethodProvider } from '../provider';
-import { archivePaymentMethod } from '../repositories/payment-method';
+import { PaymentMethodRepository } from '../repositories/payment-method';
 
 declare class ArchiveRequest implements Http.Request {
   identity: SessionIdentity;
@@ -16,8 +16,8 @@ declare class ArchiveResponse implements Http.Response {
 
 export async function archivePaymentMethodHandler(
   request: ArchiveRequest,
-  context: Service.Context<PaymentMethodProvider>
+  { db }: Service.Context<PaymentMethodProvider>
 ): Promise<ArchiveResponse> {
-  await archivePaymentMethod(context.db, request.identity.userId, request.parameters.id);
+  await PaymentMethodRepository.archive(db, request.identity.userId, request.parameters.id);
   return { status: 204 };
 }

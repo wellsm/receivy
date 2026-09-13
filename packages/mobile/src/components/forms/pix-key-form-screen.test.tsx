@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT, type AuthUser, type PaymentMethod } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, UserStatus, type AuthUser, type PaymentMethod } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
@@ -33,7 +33,7 @@ function profile(email = "conta@example.com", phone: string | null = null) {
     name: null,
     phone,
     avatarUrl: null,
-    status: "active",
+    status: UserStatus.Active,
     locale: "pt-BR",
     timezone: "America/Sao_Paulo",
     country: "BR",

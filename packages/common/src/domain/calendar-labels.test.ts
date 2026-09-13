@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { dayDiff, lastBilledHint, shortDayMonth } from './calendar-labels';
+import { dayDiff, endOfMonthOptions, lastBilledHint, shortDayMonth } from './calendar-labels';
+
+describe('endOfMonthOptions', () => {
+  it('lists month ends for the month picker from the current month', () => {
+    expect(endOfMonthOptions('2026-09-12', 3)).toEqual([
+      { value: '2026-09-30', label: 'Setembro de 2026', dueLabel: 'vence 30/09' },
+      { value: '2026-10-31', label: 'Outubro de 2026', dueLabel: 'vence 31/10' },
+      { value: '2026-11-30', label: 'Novembro de 2026', dueLabel: 'vence 30/11' }
+    ]);
+    expect(endOfMonthOptions('2026-12-01', 2).map((option) => option.value)).toEqual(['2026-12-31', '2027-01-31']);
+  });
+});
 
 describe('dayDiff', () => {
   it('counts forward days as positive', () => {

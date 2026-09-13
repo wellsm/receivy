@@ -4,7 +4,7 @@ import type { String } from '@ez4/schema';
 import type { PaymentMethod } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { PaymentMethodProvider } from '../provider';
-import { makeDefaultPaymentMethod } from '../repositories/payment-method';
+import { PaymentMethodRepository } from '../repositories/payment-method';
 
 declare class DefaultRequest implements Http.Request {
   identity: SessionIdentity;
@@ -18,7 +18,7 @@ declare class DefaultResponse implements Http.Response {
 
 export async function defaultPaymentMethodHandler(
   request: DefaultRequest,
-  context: Service.Context<PaymentMethodProvider>
+  { db }: Service.Context<PaymentMethodProvider>
 ): Promise<DefaultResponse> {
-  return { status: 200, body: await makeDefaultPaymentMethod(context.db, request.identity.userId, request.parameters.id) };
+  return { status: 200, body: await PaymentMethodRepository.makeDefault(db, request.identity.userId, request.parameters.id) };
 }

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Alert } from "react-native";
-import type { ChargeDetail, ChargeProof } from "@receivy/common";
+import { BillingType, ChargeState, Direction, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { ProofViewerScreen } from "@/components/screens/proof-viewer-screen";
 
 jest.mock("expo-router", () => {
@@ -22,21 +22,21 @@ jest.mock("expo/fetch", () => ({ fetch: jest.fn() }));
 function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
   return {
     id: "charge",
-    direction: "receivable",
+    direction: Direction.Receivable,
     description: "Aluguel",
     amount: { amountCents: 2500, currency: "BRL" },
     dueDate: "2026-09-10",
-    state: "pending",
+    state: ChargeState.Pending,
     billingId: "b1",
-    billingType: "once",
+    billingType: BillingType.Once,
     installment: 1,
     installmentCount: 1,
     counterpartName: "Ana",
-    proofState: "pending",
+    proofState: ProofState.Pending,
     recipient: { userId: "u1", name: "Ana", email: "ana@example.com" },
     debtorUserId: "u1",
     pix: null,
-    sharingState: "ready",
+    sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
     paidAt: null,
@@ -47,8 +47,8 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
 
 function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
   return {
-    state: "pending",
-    file: { name: "comprovante.png", mime: "image/png", size: 2048 },
+    state: ProofState.Pending,
+    file: { name: "comprovante.png", mime: ProofMime.Png, size: 2048 },
     sentAt: "2026-09-05T14:32:00Z",
     reviewedAt: null,
     reason: null,
@@ -61,7 +61,8 @@ function clientWith(detail: ChargeDetail) {
   return {
     charge: jest.fn().mockResolvedValue(detail),
     startProofUpload: jest.fn(),
-    reviewProof: jest.fn().mockImplementation(async (_id: string, decision: "accepted" | "rejected") => charge({ ...detail, proof: proof({ state: decision }) })),
+    completeProofUpload: jest.fn(),
+    reviewProof: jest.fn().mockImplementation(async (_id: string, decision: ProofState.Accepted | ProofState.Rejected) => charge({ ...detail, proof: proof({ state: decision }) })),
     downloadProof: jest.fn().mockResolvedValue({ url: "https://files.test/proof.png", expiresIn: 60 }),
   };
 }
@@ -98,14 +99,15 @@ describe("ProofViewerScreen", () => {
   });
 
   it("lets the debtor replace a rejected proof and previews the new file", async () => {
-    const rejected = charge({ direction: "payable", proofState: "rejected", proof: proof({ state: "rejected", reason: "Ilegível", file: { name: "antigo.pdf", mime: "application/pdf", size: 2048 }, sentByViewer: true }) });
-    const replaced = charge({ direction: "payable", proofState: "pending", proof: proof({ file: { name: "novo.png", mime: "image/png", size: 14 }, sentByViewer: true }) });
+    const rejected = charge({ direction: Direction.Payable, proofState: ProofState.Rejected, proof: proof({ state: ProofState.Rejected, reason: "Ilegível", file: { name: "antigo.pdf", mime: ProofMime.Pdf, size: 2048 }, sentByViewer: true }) });
+    const replaced = charge({ direction: Direction.Payable, proofState: ProofState.Pending, proof: proof({ file: { name: "novo.png", mime: ProofMime.Png, size: 14 }, sentByViewer: true }) });
     const client = clientWith(rejected);
     const picker = jest.requireMock("expo-document-picker") as { getDocumentAsync: jest.Mock };
     const upload = jest.requireMock("expo/fetch") as { fetch: jest.Mock };
 
-    // The first poll after the PUT still shows the old file; the bucket event lands on the second one.
-    client.charge.mockResolvedValueOnce(rejected).mockResolvedValueOnce(rejected).mockResolvedValue(replaced);
+    // The screen opens on the rejected file; completing the upload answers with the new one.
+    client.charge.mockResolvedValueOnce(rejected).mockResolvedValue(replaced);
+    client.completeProofUpload.mockResolvedValue(replaced);
     picker.getDocumentAsync.mockResolvedValue({ canceled: false, assets: [{ uri: "file:///cache/novo.png", name: "novo.png", mimeType: "image/png", size: 14, file: {} }] });
     upload.fetch.mockResolvedValue({ ok: true });
     client.startProofUpload.mockResolvedValue({ uploadUrl: "https://private.test/put", expiresAt: "2026-09-05T14:40:00Z" });

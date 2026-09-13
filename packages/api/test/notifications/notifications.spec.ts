@@ -1,23 +1,26 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpForbiddenError } from '@ez4/gateway';
-import { createBilling } from '../../src/billings/repositories/billing';
-import { payCharge } from '../../src/charges/repositories/charge';
+import { BillingType, DevicePlatform, Direction, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
+import { BillingRepository } from '../../src/billings/repositories/billing';
+import { ChargeRepository } from '../../src/charges/repositories/charge';
+import { StoredProofState } from '../../src/charges/schemas/charge';
 import { ApiError } from '../../src/common/errors';
-import { listEvents } from '../../src/common/repositories/events';
-import { saveContact } from '../../src/contacts/repositories/contact';
+import { EventRepository } from '../../src/common/repositories/events';
+import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { ReminderQuotaError } from '../../src/notifications/errors';
-import { manualReminder, registerDevice } from '../../src/notifications/repositories/notification';
+import { NotificationRepository } from '../../src/notifications/repositories/notification';
 import { EMAIL_FOLLOWUP_MS, instantAt, REMINDER_HOUR } from '../../src/notifications/services/planner';
 import {
   announceCharges,
   type ChargeNotifyEvent,
   followUpCharge,
+  NoticeTemplate,
   notifyCharge,
   notifyIdentifier,
   sendChargeNotice
 } from '../../src/notifications/services/send';
-import { savePaymentMethod } from '../../src/payment-methods/repositories/payment-method';
+import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
 import { fakeNotice } from '../fixtures/scheduling';
 
@@ -48,7 +51,7 @@ async function person(owner: string, name: string, email: string) {
     return known;
   }
 
-  const created = await saveContact(db, owner, { name, email });
+  const created = await ContactRepository.save(db, owner, { name, email });
 
   people.set(key, created.userId);
 
@@ -62,16 +65,16 @@ async function charge(owner = OWNER, email?: string, announce = false) {
   const address = email ?? `notify-${count}@example.com`;
   const userId = await person(owner, `Recipient ${count}`, address);
 
-  const billing = await createBilling(
+  const billing = await BillingRepository.create(
     db,
     owner,
     `notify-${count}`,
     {
-      type: 'once',
+      type: BillingType.Once,
       totalCents: 1234,
       startDate: DUE_DATE,
       timezone: TZ,
-      split: { mode: 'fixed', parts: [{ kind: 'user', userId, amountCents: 1234 }] }
+      split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId, amountCents: 1234 }] }
     },
     new Date(clock),
     undefined,
@@ -85,18 +88,18 @@ async function charge(owner = OWNER, email?: string, announce = false) {
 async function payableCharge(announce = false) {
   count++;
 
-  const billing = await createBilling(
+  const billing = await BillingRepository.create(
     db,
     OWNER,
     `notify-payable-${count}`,
     {
-      type: 'once',
-      direction: 'payable',
+      type: BillingType.Once,
+      direction: Direction.Payable,
       description: 'Aluguel',
       totalCents: 150_000,
       startDate: DUE_DATE,
       timezone: TZ,
-      pix: { keyType: 'email', key: 'landlord@example.com', label: 'Imobiliária' }
+      pix: { keyType: PixKeyType.Email, key: 'landlord@example.com', label: 'Imobiliária' }
     },
     new Date(clock),
     undefined,
@@ -121,18 +124,18 @@ async function chargeRow(id: string) {
 async function soleDevice(userId: string, token: string, installationId: string) {
   await db.device_tokens.updateMany({ where: { user_id: userId }, data: { active: false } });
 
-  return registerDevice(db, userId, { token, platform: 'ios', installationId });
+  return NotificationRepository.registerDevice(db, userId, { token, platform: DevicePlatform.Ios, installationId });
 }
 
 async function noDevices(userId: string) {
   await db.device_tokens.updateMany({ where: { user_id: userId }, data: { active: false } });
 }
 
-function send(id: string, template: 'initial' | 'reminder' | 'manual' = 'initial', offsetDays?: number) {
+function send(id: string, template: NoticeTemplate = NoticeTemplate.Initial, offsetDays?: number) {
   return sendChargeNotice(db, context, id, template, clock, { offsetDays });
 }
 
-const followUp = (id: string, template: ChargeNotifyEvent['template'] = 'initial', offsetDays?: number) => ({
+const followUp = (id: string, template: ChargeNotifyEvent['template'] = NoticeTemplate.Initial, offsetDays?: number) => ({
   date: new Date(clock + EMAIL_FOLLOWUP_MS),
   event: { chargeId: id, template, stage: 'followup' as const, ...(offsetDays === undefined ? {} : { offsetDays }) }
 });
@@ -144,7 +147,7 @@ describe('charge notices, follow-ups and devices', () => {
     equal(row?.['name'], 'receivy_tests');
 
     await createUser(db, { id: OWNER, email: 'notify-owner@example.com', name: 'Owner' });
-    await savePaymentMethod(db, OWNER, { pixKeyType: 'email', pixKey: 'notify-owner@example.com' });
+    await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'notify-owner@example.com' });
     await createUser(db, { id: DEBTOR, email: DEBTOR_EMAIL, name: 'Debtor' });
     await createUser(db, { id: OTHER, email: 'notify-other@example.com', name: 'Other' });
     await createUser(db, { id: NOPIX, email: 'notify-nopix@example.com', name: 'No Pix' });
@@ -157,7 +160,11 @@ describe('charge notices, follow-ups and devices', () => {
     sent.reset();
 
     await soleDevice(DEBTOR, 'ExpoPushToken[fanout-a]', 'fanout-a');
-    await registerDevice(db, DEBTOR, { token: 'ExpoPushToken[fanout-b]', platform: 'android', installationId: 'fanout-b' });
+    await NotificationRepository.registerDevice(db, DEBTOR, {
+      token: 'ExpoPushToken[fanout-b]',
+      platform: DevicePlatform.Android,
+      installationId: 'fanout-b'
+    });
 
     const { id } = await charge(OWNER, DEBTOR_EMAIL);
 
@@ -167,7 +174,7 @@ describe('charge notices, follow-ups and devices', () => {
     equal(sent.emails.length, 0);
     ok((await chargeRow(id)).public_id, 'sending mints the public link the notice carries');
 
-    const [event] = await listEvents(db, id, 'notice.sent');
+    const [event] = await EventRepository.list(db, id, 'notice.sent');
 
     deepEqual(event?.payload, { template: 'initial', channels: ['push', 'push'] });
     equal(event?.created_at, new Date(clock).toISOString());
@@ -186,12 +193,12 @@ describe('charge notices, follow-ups and devices', () => {
     equal(sent.emails[0]!.key, `${id}:initial:${clock}`);
     equal(sent.emails[0]!.from, context.config.from);
     ok(sent.emails[0]!.text.includes('/pay/'));
-    deepEqual((await listEvents(db, id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
+    deepEqual((await EventRepository.list(db, id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
 
     // A reminder names its offset so a redelivery can be told apart from the next one.
-    deepEqual(await send(id, 'reminder', 0), { channels: ['email'] });
+    deepEqual(await send(id, NoticeTemplate.Reminder, 0), { channels: ['email'] });
 
-    const reminder = (await listEvents(db, id, 'notice.sent')).find((event) => event.payload['template'] === 'reminder');
+    const reminder = (await EventRepository.list(db, id, 'notice.sent')).find((event) => event.payload['template'] === 'reminder');
 
     deepEqual(reminder?.payload, { template: 'reminder', channels: ['email'], offsetDays: 0 });
   });
@@ -217,7 +224,7 @@ describe('charge notices, follow-ups and devices', () => {
 
     // Nothing is retried: the next notice simply finds no device left.
     sent.reset();
-    deepEqual(await send(id, 'reminder', 0), { channels: ['email'] });
+    deepEqual(await send(id, NoticeTemplate.Reminder, 0), { channels: ['email'] });
     equal(sent.pushes.length, 0);
   });
 
@@ -228,7 +235,7 @@ describe('charge notices, follow-ups and devices', () => {
     const { id } = await charge(NOPIX);
 
     deepEqual(await send(id), { channels: [] });
-    deepEqual((await listEvents(db, id, 'notice.skipped'))[0]?.payload, { template: 'initial', reason: 'pix_required' });
+    deepEqual((await EventRepository.list(db, id, 'notice.skipped'))[0]?.payload, { template: 'initial', reason: 'pix_required' });
     equal((await chargeRow(id)).public_id ?? null, null, 'no link is minted for a charge that cannot be paid yet');
 
     const gone = await charge();
@@ -236,15 +243,19 @@ describe('charge notices, follow-ups and devices', () => {
     await db.users.updateOne({ where: { id: gone.userId }, data: { deleted_at: new Date(clock).toISOString() } });
 
     deepEqual(await send(gone.id), { channels: [] });
-    deepEqual((await listEvents(db, gone.id, 'notice.skipped'))[0]?.payload, { template: 'initial', reason: 'no_recipient' });
+    deepEqual((await EventRepository.list(db, gone.id, 'notice.skipped'))[0]?.payload, { template: 'initial', reason: 'no_recipient' });
 
     const silent = await charge();
 
     await db.users.updateOne({ where: { id: silent.userId }, data: { email: null as unknown as undefined } });
     await noDevices(silent.userId);
 
-    deepEqual(await send(silent.id, 'manual'), { channels: [] });
-    deepEqual((await listEvents(db, silent.id, 'notice.skipped'))[0]?.payload, { template: 'manual', channels: [], reason: 'no_channel' });
+    deepEqual(await send(silent.id, NoticeTemplate.Manual), { channels: [] });
+    deepEqual((await EventRepository.list(db, silent.id, 'notice.skipped'))[0]?.payload, {
+      template: 'manual',
+      channels: [],
+      reason: 'no_channel'
+    });
     equal(sent.emails.length, 0);
     equal(sent.pushes.length, 0);
   });
@@ -261,7 +272,7 @@ describe('charge notices, follow-ups and devices', () => {
     equal(sent.emails.length, 0);
     equal(notify.events.has(notifyIdentifier(id)), false, 'only the reminders of the daily plan reach them');
 
-    deepEqual(await send(id, 'reminder', 0), { channels: ['push'] });
+    deepEqual(await send(id, NoticeTemplate.Reminder, 0), { channels: ['push'] });
     equal(sent.pushes[0]!.token, 'ExpoPushToken[owner-self]');
     equal(sent.pushes[0]!.url, '');
     equal(sent.emails.length, 0);
@@ -269,8 +280,8 @@ describe('charge notices, follow-ups and devices', () => {
 
     // Without a device there is no e-mail to fall back to: the owner reads the app.
     await noDevices(OWNER);
-    deepEqual(await send(id, 'reminder', 0), { channels: [] });
-    deepEqual((await listEvents(db, id, 'notice.skipped'))[0]?.payload, {
+    deepEqual(await send(id, NoticeTemplate.Reminder, 0), { channels: [] });
+    deepEqual((await EventRepository.list(db, id, 'notice.skipped'))[0]?.payload, {
       template: 'reminder',
       channels: [],
       offsetDays: 0,
@@ -288,7 +299,7 @@ describe('charge notices, follow-ups and devices', () => {
 
     equal(sent.pushes.length, 1);
     equal(sent.emails.length, 0);
-    deepEqual((await listEvents(db, id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['push'] });
+    deepEqual((await EventRepository.list(db, id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['push'] });
     deepEqual(notify.events.get(notifyIdentifier(id)), followUp(id));
     equal(followUp(id).date.toISOString(), '2029-01-01T13:00:00.000Z');
 
@@ -297,7 +308,7 @@ describe('charge notices, follow-ups and devices', () => {
 
     equal(sent.emails.length, 1);
     equal(sent.emails[0]!.to, plain.address);
-    deepEqual((await listEvents(db, plain.id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
+    deepEqual((await EventRepository.list(db, plain.id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
     equal(notify.events.has(notifyIdentifier(plain.id)), false);
 
     sent.reset();
@@ -314,24 +325,28 @@ describe('charge notices, follow-ups and devices', () => {
 
     const pushed = await charge(OWNER, DEBTOR_EMAIL);
 
-    deepEqual(await notifyCharge(db, context, pushed.id, 'reminder', clock, -3), { channels: ['push'] });
-    deepEqual(notify.events.get(notifyIdentifier(pushed.id)), followUp(pushed.id, 'reminder', -3));
+    deepEqual(await notifyCharge(db, context, pushed.id, NoticeTemplate.Reminder, clock, -3), { channels: ['push'] });
+    deepEqual(notify.events.get(notifyIdentifier(pushed.id)), followUp(pushed.id, NoticeTemplate.Reminder, -3));
 
     const mailed = await charge();
 
-    deepEqual(await notifyCharge(db, context, mailed.id, 'reminder', clock, -3), { channels: ['email'] });
+    deepEqual(await notifyCharge(db, context, mailed.id, NoticeTemplate.Reminder, clock, -3), { channels: ['email'] });
     equal(notify.events.has(notifyIdentifier(mailed.id)), false, 'an e-mail sent right away needs no follow-up');
 
     // A push nobody accepted falls back to e-mail and, again, arms nothing.
     sent.state.pushStatus = 'disabled';
 
     try {
-      deepEqual(await notifyCharge(db, context, pushed.id, 'reminder', clock, 0), { channels: ['email'] });
+      deepEqual(await notifyCharge(db, context, pushed.id, NoticeTemplate.Reminder, clock, 0), { channels: ['email'] });
     } finally {
       sent.state.pushStatus = 'accepted';
     }
 
-    deepEqual(notify.events.get(notifyIdentifier(pushed.id)), followUp(pushed.id, 'reminder', -3), 'the earlier follow-up stays');
+    deepEqual(
+      notify.events.get(notifyIdentifier(pushed.id)),
+      followUp(pushed.id, NoticeTemplate.Reminder, -3),
+      'the earlier follow-up stays'
+    );
   });
 
   it('follows a push up by e-mail once, while the charge is open with nothing under review', async () => {
@@ -342,7 +357,7 @@ describe('charge notices, follow-ups and devices', () => {
 
     const { id } = await charge(OWNER, DEBTOR_EMAIL);
 
-    deepEqual(await notifyCharge(db, context, id, 'reminder', clock, 0), { channels: ['push'] });
+    deepEqual(await notifyCharge(db, context, id, NoticeTemplate.Reminder, clock, 0), { channels: ['push'] });
 
     const armed = notify.events.get(notifyIdentifier(id));
 
@@ -355,7 +370,9 @@ describe('charge notices, follow-ups and devices', () => {
     equal(sent.emails[0]!.to, DEBTOR_EMAIL);
     equal(sent.emails[0]!.key, `${id}:reminder:${clock}`);
 
-    const mailed = (await listEvents(db, id, 'notice.sent')).find((event) => (event.payload['channels'] as string[]).includes('email'));
+    const mailed = (await EventRepository.list(db, id, 'notice.sent')).find((event) =>
+      (event.payload['channels'] as string[]).includes('email')
+    );
 
     deepEqual(mailed?.payload, { template: 'reminder', channels: ['email'], offsetDays: 0 });
 
@@ -368,22 +385,22 @@ describe('charge notices, follow-ups and devices', () => {
 
     // A proof waiting for the creditor silences the follow-up; a rejected one reopens it.
     const reviewing = await charge(OWNER, DEBTOR_EMAIL);
-    const event: ChargeNotifyEvent = { chargeId: reviewing.id, template: 'initial', stage: 'followup' };
+    const event: ChargeNotifyEvent = { chargeId: reviewing.id, template: NoticeTemplate.Initial, stage: 'followup' };
 
-    await db.charges.updateOne({ where: { id: reviewing.id }, data: { proof_state: 'pending' } });
+    await db.charges.updateOne({ where: { id: reviewing.id }, data: { proof_state: StoredProofState.Pending } });
     deepEqual(await followUpCharge(db, context, event, clock), { channels: [] });
-    equal((await listEvents(db, reviewing.id, 'notice.skipped')).length, 0, 'silence is not a skip');
+    equal((await EventRepository.list(db, reviewing.id, 'notice.skipped')).length, 0, 'silence is not a skip');
 
-    await db.charges.updateOne({ where: { id: reviewing.id }, data: { proof_state: 'rejected' } });
+    await db.charges.updateOne({ where: { id: reviewing.id }, data: { proof_state: StoredProofState.Rejected } });
     deepEqual(await followUpCharge(db, context, event, clock), { channels: ['email'] });
 
     // A settled charge sends nothing at all.
     const paid = await charge(OWNER, DEBTOR_EMAIL);
 
-    await payCharge(db, OWNER, paid.id);
+    await ChargeRepository.pay(db, OWNER, paid.id);
     deepEqual(await followUpCharge(db, context, { ...event, chargeId: paid.id }, clock), { channels: [] });
-    deepEqual(await send(paid.id, 'reminder', 0), { channels: [] }, 'a closed charge sends nothing');
-    equal((await listEvents(db, paid.id, 'notice.skipped')).length, 0);
+    deepEqual(await send(paid.id, NoticeTemplate.Reminder, 0), { channels: [] }, 'a closed charge sends nothing');
+    equal((await EventRepository.list(db, paid.id, 'notice.skipped')).length, 0);
     equal(sent.emails.length, 3);
   });
 
@@ -402,27 +419,27 @@ describe('charge notices, follow-ups and devices', () => {
 
     const { id, address } = await charge();
 
-    await rejects(() => manualReminder(db, OTHER, id, context, () => clock), HttpForbiddenError);
-    await rejects(() => manualReminder(db, DEBTOR, id, context, () => clock), HttpForbiddenError);
+    await rejects(() => NotificationRepository.manualReminder(db, OTHER, id, context, () => clock), HttpForbiddenError);
+    await rejects(() => NotificationRepository.manualReminder(db, DEBTOR, id, context, () => clock), HttpForbiddenError);
     const payable = await payableCharge();
 
-    await rejects(() => manualReminder(db, OWNER, payable, context, () => clock), HttpForbiddenError);
+    await rejects(() => NotificationRepository.manualReminder(db, OWNER, payable, context, () => clock), HttpForbiddenError);
 
-    deepEqual(await manualReminder(db, OWNER, id, context, () => clock), { queued: true });
+    deepEqual(await NotificationRepository.manualReminder(db, OWNER, id, context, () => clock), { queued: true });
     equal(sent.emails.length, 1);
     equal(sent.emails[0]!.to, address);
-    deepEqual((await listEvents(db, id, 'notice.sent'))[0]?.payload, { template: 'manual', channels: ['email'] });
+    deepEqual((await EventRepository.list(db, id, 'notice.sent'))[0]?.payload, { template: 'manual', channels: ['email'] });
 
-    await rejects(() => manualReminder(db, OWNER, id, context, () => clock), ReminderQuotaError);
+    await rejects(() => NotificationRepository.manualReminder(db, OWNER, id, context, () => clock), ReminderQuotaError);
     equal(sent.emails.length, 1);
 
     clock += DAY + 1;
 
-    deepEqual(await manualReminder(db, OWNER, id, context, () => clock), { queued: true });
+    deepEqual(await NotificationRepository.manualReminder(db, OWNER, id, context, () => clock), { queued: true });
     equal(sent.emails.length, 2);
 
-    await payCharge(db, OWNER, id);
-    await rejects(() => manualReminder(db, OWNER, id, context, () => clock), ApiError);
+    await ChargeRepository.pay(db, OWNER, id);
+    await rejects(() => NotificationRepository.manualReminder(db, OWNER, id, context, () => clock), ApiError);
   });
 
   it('sends a manual reminder on every channel at once and arms no follow-up', async () => {
@@ -430,19 +447,23 @@ describe('charge notices, follow-ups and devices', () => {
     sent.reset();
 
     await soleDevice(DEBTOR, 'ExpoPushToken[manual-a]', 'manual-a');
-    await registerDevice(db, DEBTOR, { token: 'ExpoPushToken[manual-b]', platform: 'android', installationId: 'manual-b' });
+    await NotificationRepository.registerDevice(db, DEBTOR, {
+      token: 'ExpoPushToken[manual-b]',
+      platform: DevicePlatform.Android,
+      installationId: 'manual-b'
+    });
 
     const { id } = await charge(OWNER, DEBTOR_EMAIL);
 
-    deepEqual(await manualReminder(db, OWNER, id, context, () => clock), { queued: true });
+    deepEqual(await NotificationRepository.manualReminder(db, OWNER, id, context, () => clock), { queued: true });
     deepEqual(sent.pushes.map((push) => push.token).sort(), ['ExpoPushToken[manual-a]', 'ExpoPushToken[manual-b]']);
     equal(sent.emails.length, 1);
     equal(sent.emails[0]!.to, DEBTOR_EMAIL);
-    deepEqual((await listEvents(db, id, 'notice.sent'))[0]?.payload, { template: 'manual', channels: ['push', 'push', 'email'] });
+    deepEqual((await EventRepository.list(db, id, 'notice.sent'))[0]?.payload, { template: 'manual', channels: ['push', 'push', 'email'] });
     equal(notify.events.has(notifyIdentifier(id)), false, 'the creditor pressed the button: nothing to follow up');
 
     // The quota counts the reminder that reached someone, whatever the channel.
-    await rejects(() => manualReminder(db, OWNER, id, context, () => clock), ReminderQuotaError);
+    await rejects(() => NotificationRepository.manualReminder(db, OWNER, id, context, () => clock), ReminderQuotaError);
     equal(sent.pushes.length, 2);
     equal(sent.emails.length, 1);
   });
@@ -457,21 +478,21 @@ describe('charge notices, follow-ups and devices', () => {
     await db.users.updateOne({ where: { id: userId }, data: { email: null as unknown as undefined } });
     await noDevices(userId);
 
-    deepEqual(await manualReminder(db, OWNER, id, context, () => clock), { queued: false });
+    deepEqual(await NotificationRepository.manualReminder(db, OWNER, id, context, () => clock), { queued: false });
     deepEqual(
-      await manualReminder(db, OWNER, id, context, () => clock),
+      await NotificationRepository.manualReminder(db, OWNER, id, context, () => clock),
       { queued: false },
       'a suppressed attempt never blocks the next one'
     );
-    equal((await listEvents(db, id, 'notice.sent')).length, 0);
-    equal((await listEvents(db, id, 'notice.skipped')).length, 2);
+    equal((await EventRepository.list(db, id, 'notice.sent')).length, 0);
+    equal((await EventRepository.list(db, id, 'notice.skipped')).length, 2);
     equal(sent.emails.length, 0);
   });
 
   it('rotates a device token in place and keeps it active', async () => {
-    const input = { token: 'ExpoPushToken[rotation-old]', platform: 'ios' as const, installationId: 'rotation-device' };
+    const input = { token: 'ExpoPushToken[rotation-old]', platform: DevicePlatform.Ios, installationId: 'rotation-device' };
     const device = await soleDevice(DEBTOR, input.token, input.installationId);
-    const rotated = await registerDevice(db, DEBTOR, { ...input, token: 'ExpoPushToken[rotation-new]' });
+    const rotated = await NotificationRepository.registerDevice(db, DEBTOR, { ...input, token: 'ExpoPushToken[rotation-new]' });
 
     equal(rotated.id, device.id);
     equal(rotated.active, true);
@@ -480,16 +501,16 @@ describe('charge notices, follow-ups and devices', () => {
 
     equal(current?.token, 'ExpoPushToken[rotation-new]');
     equal(current?.active, true);
-    ok((await listEvents(db, device.id, 'notifications.device_registered')).length >= 2);
+    ok((await EventRepository.list(db, device.id, 'notifications.device_registered')).length >= 2);
   });
 
   it('refuses to move a device between accounts', async () => {
-    const input = { token: 'ExpoPushToken[account-transfer]', platform: 'ios' as const, installationId: 'account-transfer' };
+    const input = { token: 'ExpoPushToken[account-transfer]', platform: DevicePlatform.Ios, installationId: 'account-transfer' };
 
-    await registerDevice(db, DEBTOR, input);
-    await rejects(() => registerDevice(db, OTHER, input), ApiError);
+    await NotificationRepository.registerDevice(db, DEBTOR, input);
+    await rejects(() => NotificationRepository.registerDevice(db, OTHER, input), ApiError);
     await rejects(
-      () => registerDevice(db, DEBTOR, { ...input, token: 'bad token' }),
+      () => NotificationRepository.registerDevice(db, DEBTOR, { ...input, token: 'bad token' }),
       (error: Error & { status?: number }) => error.status === 400
     );
   });

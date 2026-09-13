@@ -4,7 +4,7 @@ import type { String } from '@ez4/schema';
 import type { Contact } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { ContactProvider } from '../provider';
-import { getContact } from '../repositories/contact';
+import { ContactRepository } from '../repositories/contact';
 
 declare class GetRequest implements Http.Request {
   identity: SessionIdentity;
@@ -16,6 +16,6 @@ declare class GetResponse implements Http.Response {
   body: Contact;
 }
 
-export async function getContactHandler(request: GetRequest, context: Service.Context<ContactProvider>): Promise<GetResponse> {
-  return { status: 200, body: await getContact(context.db, request.identity.userId, request.parameters.id) };
+export async function getContactHandler(request: GetRequest, { db }: Service.Context<ContactProvider>): Promise<GetResponse> {
+  return { status: 200, body: await ContactRepository.get(db, request.identity.userId, request.parameters.id) };
 }

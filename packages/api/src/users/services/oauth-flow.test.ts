@@ -1,7 +1,7 @@
-import type { AuthUser } from '@receivy/common';
+import { type AuthUser, UserStatus } from '@receivy/common';
 import { describe, expect, it, vi } from 'vitest';
-import { hashOauthValue } from './oauth';
-import { beginOauth, completeOauth, exchangeOauthGrant, OauthFlowError, type OauthFlowRepository } from './oauth-flow';
+import { hashOauthValue, OauthProvider } from './oauth';
+import { beginOauth, completeOauth, ErrorCode, exchangeOauthGrant, OauthFlowError, type OauthFlowRepository } from './oauth-flow';
 
 const user: AuthUser = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -9,7 +9,7 @@ const user: AuthUser = {
   name: 'Person',
   phone: null,
   avatarUrl: null,
-  status: 'active',
+  status: UserStatus.Active,
   locale: 'pt-BR',
   timezone: 'America/Sao_Paulo',
   country: 'BR',
@@ -34,13 +34,13 @@ describe('OAuth flow', () => {
     const providerClient = { authorizationUrl: vi.fn(), verifyAuthorizationCode: vi.fn() };
     await expect(
       completeOauth(
-        { code: 'provider-code', provider: 'google', state: 'replayed' },
+        { code: 'provider-code', provider: OauthProvider.Google, state: 'replayed' },
         {
           providerClient,
           repo
         }
       )
-    ).rejects.toEqual(new OauthFlowError('INVALID_STATE'));
+    ).rejects.toEqual(new OauthFlowError(ErrorCode.InvalidState));
     expect(providerClient.verifyAuthorizationCode).not.toHaveBeenCalled();
     expect(repo.createGrant).not.toHaveBeenCalled();
   });
@@ -56,7 +56,7 @@ describe('OAuth flow', () => {
     const providerClient = { authorizationUrl: vi.fn(), verifyAuthorizationCode: vi.fn() };
     expect(
       await completeOauth(
-        { error: 'access_denied', provider: 'apple', state: 'valid' },
+        { error: 'access_denied', provider: OauthProvider.Apple, state: 'valid' },
         {
           providerClient,
           repo
@@ -73,7 +73,7 @@ describe('OAuth flow', () => {
         {
           clientChallenge: 'a'.repeat(43),
           destination: 'https://app.receivy.example/auth/callback',
-          provider: 'google'
+          provider: OauthProvider.Google
         },
         {
           allowList: ['https://app.receivy.example/auth/callback'],
@@ -81,7 +81,7 @@ describe('OAuth flow', () => {
           repo
         }
       )
-    ).rejects.toEqual(new OauthFlowError('PROVIDER_DISABLED'));
+    ).rejects.toEqual(new OauthFlowError(ErrorCode.ProviderDisabled));
     expect(repo.createAttempt).not.toHaveBeenCalled();
   });
 
@@ -103,7 +103,7 @@ describe('OAuth flow', () => {
         {
           clientChallenge: 'a'.repeat(43),
           destination: 'https://app.receivy.example/auth/callback',
-          provider: 'google'
+          provider: OauthProvider.Google
         },
         {
           allowList: ['https://app.receivy.example/auth/callback'],
@@ -142,7 +142,7 @@ describe('OAuth flow', () => {
     };
 
     const result = await completeOauth(
-      { code: 'provider-code', provider: 'google', state: 'state' },
+      { code: 'provider-code', provider: OauthProvider.Google, state: 'state' },
       {
         generateGrant: () => 'receivy-grant',
         providerClient,
@@ -187,6 +187,6 @@ describe('OAuth flow', () => {
           repo: { ...repo, consumeGrant: vi.fn().mockResolvedValue(null) }
         }
       )
-    ).rejects.toEqual(new OauthFlowError('INVALID_GRANT'));
+    ).rejects.toEqual(new OauthFlowError(ErrorCode.InvalidGrant));
   });
 });

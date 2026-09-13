@@ -50,7 +50,13 @@ export interface OauthFlowRepository {
   }>;
 }
 
-type ErrorCode = 'EMAIL_LOGIN_REQUIRED' | 'INVALID_GRANT' | 'INVALID_REDIRECT' | 'INVALID_STATE' | 'PROVIDER_DISABLED';
+export const enum ErrorCode {
+  EmailLoginRequired = 'EMAIL_LOGIN_REQUIRED',
+  InvalidGrant = 'INVALID_GRANT',
+  InvalidRedirect = 'INVALID_REDIRECT',
+  InvalidState = 'INVALID_STATE',
+  ProviderDisabled = 'PROVIDER_DISABLED'
+}
 
 export class OauthFlowError extends Error {
   constructor(readonly code: ErrorCode) {
@@ -70,13 +76,13 @@ export async function beginOauth(
   }
 ): Promise<{ authorizationUrl: string }> {
   if (!dependencies.providerClient) {
-    throw new OauthFlowError('PROVIDER_DISABLED');
+    throw new OauthFlowError(ErrorCode.ProviderDisabled);
   }
   if (input.destination.startsWith('native:') || !isAllowedOauthRedirect(input.destination, dependencies.allowList)) {
-    throw new OauthFlowError('INVALID_REDIRECT');
+    throw new OauthFlowError(ErrorCode.InvalidRedirect);
   }
   if (!/^[A-Za-z0-9_-]{43}$/.test(input.clientChallenge)) {
-    throw new OauthFlowError('INVALID_STATE');
+    throw new OauthFlowError(ErrorCode.InvalidState);
   }
 
   const values = (dependencies.createValues ?? createOauthAttempt)();
@@ -111,7 +117,7 @@ export async function completeOauth(
     stateHash: hashOauthValue(input.state)
   });
   if (!attempt || attempt.destination.startsWith('native:')) {
-    throw new OauthFlowError('INVALID_STATE');
+    throw new OauthFlowError(ErrorCode.InvalidState);
   }
 
   const failure = { destination: attempt.destination, grant: null };
@@ -169,11 +175,11 @@ export async function exchangeOauthGrant(
   }
 ): Promise<AuthSessionResponse> {
   if (!/^[A-Za-z0-9._~-]{43,128}$/.test(input.codeVerifier)) {
-    throw new OauthFlowError('INVALID_GRANT');
+    throw new OauthFlowError(ErrorCode.InvalidGrant);
   }
   const user = await dependencies.repo.consumeGrant(hashOauthValue(input.code), hashOauthValue(input.codeVerifier));
   if (!user) {
-    throw new OauthFlowError('INVALID_GRANT');
+    throw new OauthFlowError(ErrorCode.InvalidGrant);
   }
 
   const session = await dependencies.repo.issueSession(user.id, input.deviceName);

@@ -19,16 +19,19 @@ declare class DetailResponse implements Http.Response {
   body: BillingDetail;
 }
 
-export async function resolveGuestHandler(request: GuestRequest, context: Service.Context<BillingProvider>): Promise<DetailResponse> {
+export async function resolveGuestHandler(
+  request: GuestRequest,
+  { db, variables, email, chargeNotifyScheduler }: Service.Context<BillingProvider>
+): Promise<DetailResponse> {
   const body = await resolveGuest(
-    context.db,
+    db,
     request.identity.userId,
     request.parameters.id,
     request.parameters.guestId,
     request.body as BillingGuestAction,
     new Date(),
-    inviteLink(context),
-    noticeContext(context)
+    inviteLink({ variables }),
+    noticeContext({ chargeNotifyScheduler, email, variables })
   );
 
   return { status: 200, body };

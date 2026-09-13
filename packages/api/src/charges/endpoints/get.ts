@@ -4,7 +4,7 @@ import type { String } from '@ez4/schema';
 import type { ChargeDetail } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { ChargeProvider } from '../provider';
-import { getCharge } from '../repositories/charge';
+import { ChargeRepository } from '../repositories/charge';
 
 declare class IdRequest implements Http.Request {
   identity: SessionIdentity;
@@ -16,6 +16,6 @@ declare class ItemResponse implements Http.Response {
   body: ChargeDetail;
 }
 
-export async function getChargeHandler(request: IdRequest, context: Service.Context<ChargeProvider>): Promise<ItemResponse> {
-  return { status: 200, body: await getCharge(context.db, request.identity.userId, request.parameters.id) };
+export async function getChargeHandler(request: IdRequest, { db }: Service.Context<ChargeProvider>): Promise<ItemResponse> {
+  return { status: 200, body: await ChargeRepository.get(db, request.identity.userId, request.parameters.id) };
 }

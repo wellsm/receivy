@@ -1,13 +1,14 @@
-import type { AuthUser } from '@receivy/common';
+import { AuthProvider, type AuthUser, UserStatus } from '@receivy/common';
 import type { DbClient } from '../../database';
 import { canAttemptEmailCode, createEmailCodeHash, verifyEmailCodeHash } from '../services/code';
-import type { AuthRepository, LoginCodeOutcome } from '../services/email-login';
+import type { AuthRepository as EmailLoginRepository, LoginCodeOutcome } from '../services/email-login';
 import { lockAccountReferences } from '../services/locking';
+import { OauthProvider } from '../services/oauth';
 import type { OauthFlowRepository } from '../services/oauth-flow';
-import { OauthFlowError } from '../services/oauth-flow';
-import type { RotateRefreshTokenOutcome, SessionRepository } from '../services/refresh-session';
+import { ErrorCode, OauthFlowError } from '../services/oauth-flow';
+import type { SessionRepository as RefreshSessionRepository, RotateRefreshTokenOutcome } from '../services/refresh-session';
 import { generateRefreshToken, hashRefreshToken } from '../services/session';
-import { disableSessionDevices, revokeSession } from './sessions';
+import { SessionRepository } from './sessions';
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const CODE_COOLDOWN_MS = 60 * 1000;
@@ -51,6 +52,15 @@ function toAuthUser(row: {
     country: row.country,
     currency: row.currency
   };
+}
+
+/** Identity rows share the provider column with e-mail logins, so the OAuth provider maps onto the wider list. */
+function identityProvider(provider: OauthProvider): AuthProvider {
+  if (provider === OauthProvider.Google) {
+    return AuthProvider.Google;
+  }
+
+  return AuthProvider.Apple;
 }
 
 async function replaceLoginCode(db: DbClient, input: { code: string; codeHashKey: string; email: string }): Promise<{ accepted: boolean }> {
@@ -177,7 +187,7 @@ async function findOrCreateUserByEmail(db: DbClient, email: string): Promise<Aut
       data: {
         id,
         email,
-        status: 'pending',
+        status: UserStatus.Pending,
         locale: 'pt-BR',
         timezone: 'America/Sao_Paulo',
         country: 'BR',
@@ -191,7 +201,7 @@ async function findOrCreateUserByEmail(db: DbClient, email: string): Promise<Aut
       data: {
         id: crypto.randomUUID(),
         user: { id },
-        provider: 'email',
+        provider: AuthProvider.Email,
         provider_user_id: email,
         email,
         email_verified: true,
@@ -313,7 +323,7 @@ async function resolveOauthUser(
     const existingIdentity = await tx.auth_identities.findOne({
       select: { user_id: true },
       where: {
-        provider: input.provider,
+        provider: identityProvider(input.provider),
         provider_user_id: input.identity.subject
       },
       lock: true
@@ -338,7 +348,7 @@ async function resolveOauthUser(
     // An established provider subject may log in above; linking a new subject
     // to an existing email account requires authoritative email ownership.
     if (account && !input.identity.emailAuthoritative) {
-      throw new OauthFlowError('EMAIL_LOGIN_REQUIRED');
+      throw new OauthFlowError(ErrorCode.EmailLoginRequired);
     }
     const now = new Date().toISOString();
     if (!account) {
@@ -349,7 +359,7 @@ async function resolveOauthUser(
           email: input.identity.email,
           name: input.identity.name,
           avatar_url: input.identity.picture,
-          status: 'pending',
+          status: UserStatus.Pending,
           locale: 'pt-BR',
           timezone: 'America/Sao_Paulo',
           country: 'BR',
@@ -365,7 +375,7 @@ async function resolveOauthUser(
       data: {
         id: crypto.randomUUID(),
         user: { id: account.id },
-        provider: input.provider,
+        provider: identityProvider(input.provider),
         provider_user_id: input.identity.subject,
         email: input.identity.email,
         email_verified: true,
@@ -474,7 +484,7 @@ async function rotateRefreshToken(db: DbClient, clearToken: string): Promise<Rot
         data: { revoked_at: new Date().toISOString() },
         where: { id: family.id }
       });
-      await disableSessionDevices(tx, family.user_id, family.id);
+      await SessionRepository.disableDevices(tx, family.user_id, family.id);
       return { kind: 'replayed' };
     }
 
@@ -522,56 +532,58 @@ async function revokeFamilyByRefreshToken(db: DbClient, clearToken: string): Pro
 
   if (token) {
     const family = await db.session_families.findOne({ select: { user_id: true }, where: { id: token.family_id } });
-    if (family) await revokeSession(db, family.user_id, token.family_id);
+    if (family) await SessionRepository.revoke(db, family.user_id, token.family_id);
   }
 }
 
-export function createAuthRepository(db: DbClient): AuthRepository & SessionRepository & OauthFlowRepository {
-  return {
-    replaceLoginCode: (input) => replaceLoginCode(db, input),
-    consumeLoginCode: (input) => consumeLoginCode(db, input),
-    findOrCreateUserByEmail: async (email) => {
-      const user = await findOrCreateUserByEmail(db, email);
-      await markEmailVerified(db, user.id, email);
-      return user;
-    },
-    issueSession: (userId, deviceName) => issueSession(db, userId, deviceName),
-    rotateRefreshToken: (token) => rotateRefreshToken(db, token),
-    revokeFamilyByRefreshToken: (token) => revokeFamilyByRefreshToken(db, token),
-    createAttempt: (input) => createOauthAttempt(db, input),
-    consumeAttempt: (input) => consumeOauthAttempt(db, input),
-    resolveUser: async (input) => {
-      const user = await resolveOauthUser(db, input);
-      if (input.identity.emailAuthoritative && user.email === input.identity.email) {
-        await markEmailVerified(db, user.id, user.email);
-      }
-      return user;
-    },
-    createGrant: (input) => createOauthGrant(db, input),
-    consumeGrant: (grantHash, clientChallenge) => consumeOauthGrant(db, grantHash, clientChallenge)
-  };
-}
+export namespace AuthRepository {
+  export function create(db: DbClient): EmailLoginRepository & RefreshSessionRepository & OauthFlowRepository {
+    return {
+      replaceLoginCode: (input) => replaceLoginCode(db, input),
+      consumeLoginCode: (input) => consumeLoginCode(db, input),
+      findOrCreateUserByEmail: async (email) => {
+        const user = await findOrCreateUserByEmail(db, email);
+        await markEmailVerified(db, user.id, email);
+        return user;
+      },
+      issueSession: (userId, deviceName) => issueSession(db, userId, deviceName),
+      rotateRefreshToken: (token) => rotateRefreshToken(db, token),
+      revokeFamilyByRefreshToken: (token) => revokeFamilyByRefreshToken(db, token),
+      createAttempt: (input) => createOauthAttempt(db, input),
+      consumeAttempt: (input) => consumeOauthAttempt(db, input),
+      resolveUser: async (input) => {
+        const user = await resolveOauthUser(db, input);
+        if (input.identity.emailAuthoritative && user.email === input.identity.email) {
+          await markEmailVerified(db, user.id, user.email);
+        }
+        return user;
+      },
+      createGrant: (input) => createOauthGrant(db, input),
+      consumeGrant: (grantHash, clientChallenge) => consumeOauthGrant(db, grantHash, clientChallenge)
+    };
+  }
 
-export async function findAuthUserById(db: DbClient, id: string): Promise<AuthUser | undefined> {
-  const row = await db.users.findOne({
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      phone: true,
-      avatar_url: true,
-      status: true,
-      locale: true,
-      timezone: true,
-      country: true,
-      currency: true
-    },
-    where: { id, deleted_at: { isNull: true } }
-  });
-  return row ? toAuthUser(row) : undefined;
-}
+  export async function findUserById(db: DbClient, id: string): Promise<AuthUser | undefined> {
+    const row = await db.users.findOne({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        avatar_url: true,
+        status: true,
+        locale: true,
+        timezone: true,
+        country: true,
+        currency: true
+      },
+      where: { id, deleted_at: { isNull: true } }
+    });
+    return row ? toAuthUser(row) : undefined;
+  }
 
-/** A login through a verified channel confirms the address; a pending account created by a contact keeps its id. */
-export async function markEmailVerified(db: DbClient, userId: string, email: string): Promise<void> {
-  await db.users.updateOne({ where: { id: userId, email, deleted_at: { isNull: true } }, data: { verified_email: email } });
+  /** A login through a verified channel confirms the address; a pending account created by a contact keeps its id. */
+  export async function markEmailVerified(db: DbClient, userId: string, email: string): Promise<void> {
+    await db.users.updateOne({ where: { id: userId, email, deleted_at: { isNull: true } }, data: { verified_email: email } });
+  }
 }

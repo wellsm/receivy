@@ -1,6 +1,8 @@
 import type { Http } from '@ez4/gateway';
 import type { sessionAuthorizer } from '../common/authorizers/session';
+import type { completeProofUploadHandler } from './endpoints/complete-upload';
 import type { downloadProofHandler } from './endpoints/download';
+import type { publicCompleteProofUploadHandler } from './endpoints/public-complete-upload';
 import type { publicStartProofUploadHandler } from './endpoints/public-start-upload';
 import type { publicProofStateHandler } from './endpoints/public-state';
 import type { publicWithdrawProofHandler } from './endpoints/public-withdraw';
@@ -14,6 +16,12 @@ export type ProofRoutes = [
     path: 'POST /charges/{id}/proof';
     authorizer: typeof sessionAuthorizer;
     handler: typeof startProofUploadHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'completeProofUpload';
+    path: 'POST /charges/{id}/proof/complete';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof completeProofUploadHandler;
   }>,
   Http.UseRoute<{
     name: 'withdrawProof';
@@ -37,6 +45,11 @@ export type ProofRoutes = [
     name: 'publicStartProofUpload';
     path: 'POST /public/charges/{token}/proof';
     handler: typeof publicStartProofUploadHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'publicCompleteProofUpload';
+    path: 'POST /public/charges/{token}/proof/complete';
+    handler: typeof publicCompleteProofUploadHandler;
   }>,
   Http.UseRoute<{ name: 'publicProofState'; path: 'GET /public/charges/{token}/proof'; handler: typeof publicProofStateHandler }>,
   Http.UseRoute<{ name: 'publicWithdrawProof'; path: 'DELETE /public/charges/{token}/proof'; handler: typeof publicWithdrawProofHandler }>

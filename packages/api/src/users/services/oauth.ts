@@ -1,6 +1,9 @@
 import { createHash, randomBytes as nodeRandomBytes } from 'node:crypto';
 
-export type OauthProvider = 'apple' | 'google';
+export const enum OauthProvider {
+  Apple = 'apple',
+  Google = 'google'
+}
 
 type RandomBytes = (size: number) => Buffer;
 
@@ -35,7 +38,9 @@ export function isAllowedOauthRedirect(redirectUri: string, allowList: readonly 
 }
 
 export function buildAuthorizationUrl(provider: OauthProvider, input: AuthorizationUrlInput): string {
-  const url = new URL(provider === 'google' ? 'https://accounts.google.com/o/oauth2/v2/auth' : 'https://appleid.apple.com/auth/authorize');
+  const url = new URL(
+    provider === OauthProvider.Google ? 'https://accounts.google.com/o/oauth2/v2/auth' : 'https://appleid.apple.com/auth/authorize'
+  );
 
   url.searchParams.set('client_id', input.clientId);
   url.searchParams.set('redirect_uri', input.redirectUri);
@@ -43,7 +48,7 @@ export function buildAuthorizationUrl(provider: OauthProvider, input: Authorizat
   url.searchParams.set('state', input.state);
   url.searchParams.set('nonce', input.nonce);
 
-  if (provider === 'google') {
+  if (provider === OauthProvider.Google) {
     url.searchParams.set('code_challenge', input.codeChallenge);
     url.searchParams.set('code_challenge_method', 'S256');
     url.searchParams.set('scope', 'openid email profile');

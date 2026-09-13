@@ -1,4 +1,4 @@
-import type { ChargeDetail, Contact, ContactLedger } from "@receivy/common";
+import { BillingType, ChargeState, Direction, ProofState, SharingState, UserStatus, type ChargeDetail, type Contact, type ContactLedger } from "@receivy/common";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Share } from "react-native";
 import { ContactLedgerScreen } from "@/components/screens/contact-ledger-screen";
@@ -35,7 +35,7 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     displayName: "Ana Paula Souza",
     email: "ana@example.com",
     phone: null,
-    status: "active",
+    status: UserStatus.Active,
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
     lastBilledAt: null,
@@ -49,18 +49,18 @@ function charge(overrides: Partial<ChargeDetail> & { id: string }): ChargeDetail
     description: "Jantar",
     amount: { amountCents: 6_000, currency: "BRL" },
     dueDate: "2099-01-15",
-    state: "pending",
+    state: ChargeState.Pending,
     billingId: "b1",
-    billingType: "until",
+    billingType: BillingType.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: "Ana Paula Souza",
     proofState: null,
-    direction: "receivable",
+    direction: Direction.Receivable,
     recipient: { userId: "u1", name: "Ana Paula Souza", email: "ana@example.com" },
     debtorUserId: "u1",
     pix: null,
-    sharingState: "ready",
+    sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
     paidAt: null,
@@ -103,7 +103,7 @@ describe("ContactLedgerScreen", () => {
   });
 
   it("tells when the person has not signed in yet", async () => {
-    const client = makeClient(ledger({ status: "pending" }));
+    const client = makeClient(ledger({ status: UserStatus.Pending }));
 
     await render(<ContactLedgerScreen id="p1" client={client} />);
 
@@ -138,8 +138,8 @@ describe("ContactLedgerScreen", () => {
   });
 
   it("splits active charges from the history and sums the balance", async () => {
-    const paid = charge({ id: "c0", description: "Churrasco", state: "paid", paidAt: "2026-09-28T15:00:00Z", amount: { amountCents: 12_000, currency: "BRL" } });
-    const waiting = charge({ id: "c2", description: "Futebol", proofState: "pending", installmentCount: 1, installment: 1 });
+    const paid = charge({ id: "c0", description: "Churrasco", state: ChargeState.Paid, paidAt: "2026-09-28T15:00:00Z", amount: { amountCents: 12_000, currency: "BRL" } });
+    const waiting = charge({ id: "c2", description: "Futebol", proofState: ProofState.Pending, installmentCount: 1, installment: 1 });
     const client = makeClient(ledger({}, [charge({ id: "c1" }), waiting, paid]));
 
     await render(<ContactLedgerScreen id="p1" client={client} onEdit={jest.fn()} onNewCharge={jest.fn()} />);

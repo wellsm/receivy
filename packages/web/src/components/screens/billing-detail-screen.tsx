@@ -151,14 +151,16 @@ function cycleState(cycle: Cycle): "open" | "done" | "cancelled" {
 }
 
 function typeTag(billing: BillingDetail, current: Cycle | null): string {
+  const monthEnd = billing.dueRule === "end_of_month" ? " · final do mês" : "";
+
   if (billing.type === "until") {
     const installment = current?.charges[0]?.installment ?? current?.index ?? 1;
 
-    return `Parcelado (${installment}/${billing.installmentCount ?? "?"})`;
+    return `Parcelado (${installment}/${billing.installmentCount ?? "?"})${monthEnd}`;
   }
 
   if (billing.type === "indefinite") {
-    return billing.frequency === "yearly" ? "Recorrente anual" : "Recorrente mensal";
+    return billing.frequency === "yearly" ? "Recorrente anual" : `Recorrente mensal${monthEnd}`;
   }
 
   return "À vista";
@@ -394,7 +396,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
       {notice && <Toast message={notice} onDismiss={() => setNotice("")} />}
 
       <div className="grid gap-5 md:grid-cols-2 md:items-start">
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           {/* Hero */}
           <article className="flex flex-col gap-3 overflow-hidden rounded-2xl border border-outline/30 bg-surface p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -439,11 +441,12 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
             <div className="flex items-center justify-between border-t border-outline/20 pt-3">
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <KeyRound size={14} aria-hidden="true" className="shrink-0 text-primary-strong" />
+                {/* Only the owner reaches this screen, so the key itself is safe to show here. */}
                 <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
                   {pix ? (
                     <>
-                      Chave Pix: <span className="font-medium text-ink">{pix.key}</span>
-                      {` • ${PIX_TYPE_LABELS[pix.keyType]}`}
+                      {`Pix - ${PIX_TYPE_LABELS[pix.keyType]}: `}
+                      <span className="font-medium text-ink">{pix.key}</span>
                     </>
                   ) : payable ? (
                     "Sem chave Pix"
@@ -493,7 +496,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
           )}
         </div>
 
-        <div className="flex flex-col gap-5">
+        <div className="flex min-w-0 flex-col gap-5">
           {/* Convidados — people who joined by the link and wait for the owner to say who they are */}
           {billing.guests.length > 0 && (
             <div className="flex flex-col gap-3">

@@ -2,7 +2,7 @@ import type { Environment, Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import { HttpUnauthorizedError } from '@ez4/gateway';
 import type { Db } from '../../database';
-import { assertActiveSession } from '../../users/repositories/sessions';
+import { SessionRepository } from '../../users/repositories/sessions';
 import { verifyAccessToken } from '../../users/services/session';
 
 export declare class SessionAuthorizerProvider implements Http.Provider {
@@ -28,7 +28,7 @@ declare class SessionAuthResponse implements Http.AuthResponse {
 
 export async function sessionAuthorizer(
   request: SessionAuthRequest,
-  context: Service.Context<SessionAuthorizerProvider>
+  { db, variables }: Service.Context<SessionAuthorizerProvider>
 ): Promise<SessionAuthResponse> {
   const [scheme, token] = request.headers.authorization?.split(' ') ?? [];
 
@@ -39,9 +39,9 @@ export async function sessionAuthorizer(
   try {
     const identity = verifyAccessToken({
       token,
-      secret: context.variables.AUTH_JWT_SECRET
+      secret: variables.AUTH_JWT_SECRET
     });
-    await assertActiveSession(context.db, identity);
+    await SessionRepository.assertActive(db, identity);
     return { identity };
   } catch {
     throw new HttpUnauthorizedError();

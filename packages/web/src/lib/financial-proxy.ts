@@ -20,7 +20,7 @@ export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["POST", new RegExp(`^payment-methods/${ID}/(?:default|archive)$`)],
   ["GET", new RegExp(`^charges/${ID}$`)], ["POST", new RegExp(`^charges/${ID}/(?:cancel|pay|reopen|public-link|public-link/rotate)$`)],
   ["DELETE", new RegExp(`^charges/${ID}/public-link$`)], ["GET", new RegExp(`^contacts/${ID}/ledger$`)],
-  ["POST", new RegExp(`^charges/${ID}/proof(?:/review)?$`)], ["DELETE", new RegExp(`^charges/${ID}/proof$`)],
+  ["POST", new RegExp(`^charges/${ID}/proof(?:/review|/complete)?$`)], ["DELETE", new RegExp(`^charges/${ID}/proof$`)],
   ["GET", new RegExp(`^charges/${ID}/proof/download$`)],
 ];
 

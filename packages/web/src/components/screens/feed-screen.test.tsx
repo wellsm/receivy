@@ -224,7 +224,7 @@ describe("FeedScreen", () => {
     expect(screen.queryByRole("button", { name: "Lembrar" })).not.toBeInTheDocument();
   });
 
-  it("links a payable charge with no proof to Pagar via Pix", async () => {
+  it("links a payable charge with no proof to Pagar", async () => {
     vi.mocked(browserFetch).mockResolvedValue(
       Response.json({
         summary,
@@ -233,7 +233,7 @@ describe("FeedScreen", () => {
       }),
     );
     render(<FeedScreen />);
-    const link = await screen.findByRole("link", { name: "Pagar via Pix" });
+    const link = await screen.findByRole("link", { name: "Pagar" });
     expect(link).toHaveAttribute("href", "/charges/charge-9");
   });
 });

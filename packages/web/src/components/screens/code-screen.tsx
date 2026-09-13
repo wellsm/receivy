@@ -63,13 +63,15 @@ export function CodeScreen() {
 
       if (!response.ok) {
         setError(await responseMessage(response, "Código inválido ou expirado. Peça um novo código e tente novamente."));
+        setBusy(false);
         return;
       }
 
+      // Left busy on purpose: the full page navigation replaces this screen, and clearing it
+      // here would flash the button back to idle mid-navigation.
       window.location.assign(pending.nextPath);
     } catch {
       setError("Não foi possível entrar agora.");
-    } finally {
       setBusy(false);
     }
   }

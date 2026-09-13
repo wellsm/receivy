@@ -1,14 +1,12 @@
 import { DatabaseTester } from '@ez4/local-database/test';
-import { createBilling } from '../../src/billings/repositories/billing';
+import { BillingType, SplitMode, SplitPartKind, UserStatus } from '@receivy/common';
+import { BillingRepository } from '../../src/billings/repositories/billing';
 import type { Db, DbClient } from '../../src/database';
 import type { NoticeContext } from '../../src/notifications/services/send';
 
 export const db = DatabaseTester.getClient<Db>('Db');
 
-export async function createUser(
-  client: DbClient,
-  input: { id: string; email: string; name: string; status?: 'pending' | 'active' | 'removed' }
-) {
+export async function createUser(client: DbClient, input: { id: string; email: string; name: string; status?: UserStatus }) {
   const now = new Date().toISOString();
   await client.users.insertOne({
     data: {
@@ -16,7 +14,7 @@ export async function createUser(
       email: input.email,
       verified_email: input.email,
       name: input.name,
-      status: input.status ?? 'active',
+      status: input.status ?? UserStatus.Active,
       locale: 'pt-BR',
       timezone: 'America/Sao_Paulo',
       country: 'BR',
@@ -32,7 +30,10 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
   const owned = await client.contacts.findMany({ select: { user_id: true }, where: { owner_id: { isIn: userIds } } });
   const pending = await client.users.findMany({
     select: { id: true },
-    where: { id: { isIn: [...new Set(owned.records.map((row) => row.user_id))].filter((id) => !userIds.includes(id)) }, status: 'pending' }
+    where: {
+      id: { isIn: [...new Set(owned.records.map((row) => row.user_id))].filter((id) => !userIds.includes(id)) },
+      status: UserStatus.Pending
+    }
   });
   const pendingIds = pending.records.map((row) => row.id);
   const billings = await client.billings.findMany({ select: { id: true }, where: { owner_id: { isIn: userIds } } });
@@ -70,17 +71,17 @@ export async function createOnceCharge(
   input: { userId: string; amountCents: number; dueDate: string; paymentMethodId?: string },
   notice?: NoticeContext
 ) {
-  const billing = await createBilling(
+  const billing = await BillingRepository.create(
     client,
     ownerId,
     key,
     {
-      type: 'once',
+      type: BillingType.Once,
       totalCents: input.amountCents,
       startDate: input.dueDate,
       timezone: 'America/Sao_Paulo',
       paymentMethodId: input.paymentMethodId,
-      split: { mode: 'fixed', parts: [{ kind: 'user', userId: input.userId, amountCents: input.amountCents }] }
+      split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: input.userId, amountCents: input.amountCents }] }
     },
     new Date(),
     undefined,

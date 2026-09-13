@@ -2,9 +2,33 @@ import type { BillingCategory } from './billing-category';
 import type { ChargeDetail, Direction, Money, PixKeyType, PixSnapshot, SplitMode } from './contracts';
 import type { BillingSplit } from './split';
 
-export type BillingType = 'once' | 'until' | 'indefinite';
-export type BillingFrequency = 'monthly' | 'yearly';
-export type BillingState = 'active' | 'paused' | 'ended';
+export const enum BillingType {
+  Once = 'once',
+  Until = 'until',
+  Indefinite = 'indefinite'
+}
+
+export const enum BillingFrequency {
+  Monthly = 'monthly',
+  Yearly = 'yearly'
+}
+
+export const enum BillingState {
+  Active = 'active',
+  Paused = 'paused',
+  Ended = 'ended'
+}
+
+/** 'fixed' repeats the start day (clamped to short months); 'end_of_month' always lands on the last day. */
+export const enum BillingDueRule {
+  Fixed = 'fixed',
+  EndOfMonth = 'end_of_month'
+}
+
+export const enum SplitPartKind {
+  Owner = 'owner',
+  User = 'user'
+}
 
 export type BillingReminder = { offsetDays: number; enabled: boolean };
 
@@ -24,6 +48,8 @@ export type BillingInput = {
   totalCents: number;
   startDate: string;
   endDate?: string;
+  /** 'end_of_month' lands every occurrence on the last day of its month (monthly or once). Absent means 'fixed'. */
+  dueRule?: BillingDueRule;
   timezone: string;
   paymentMethodId?: string;
   reminders?: BillingReminder[];
@@ -52,13 +78,15 @@ export type BillingPatch = {
   clearPayee?: boolean;
   /** Recorrente only: the next due date; occurrences already generated keep theirs. */
   startDate?: string;
+  /** Recorrente only, sent with startDate: a fixed day or the last day of each month. */
+  dueRule?: BillingDueRule;
   reminders?: BillingReminder[];
   state?: BillingState;
   category?: BillingCategory;
 };
 
 export type BillingAllocation = {
-  kind: 'owner' | 'user';
+  kind: SplitPartKind;
   userId: string | null;
   splitMode: SplitMode;
   amount: Money;
@@ -87,6 +115,8 @@ export type BillingSummary = {
   total: Money;
   startDate: string;
   endDate?: string;
+  /** Always sent by the API; absent on older payloads, read as 'fixed'. */
+  dueRule?: BillingDueRule;
   state: BillingState;
   installmentCount?: number;
   nextDueDate: string | null;
@@ -113,6 +143,8 @@ export type BillingDetail = {
   total: Money;
   startDate: string;
   endDate?: string;
+  /** Always sent by the API; absent on older payloads, read as 'fixed'. */
+  dueRule?: BillingDueRule;
   state: BillingState;
   installmentCount?: number;
   nextDueDate: string | null;

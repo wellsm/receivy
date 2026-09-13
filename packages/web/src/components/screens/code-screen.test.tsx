@@ -72,6 +72,24 @@ describe("CodeScreen", () => {
     expect(resend).toHaveTextContent("Reenviar código");
   });
 
+  it("keeps confirm busy after a successful code, so the spinner survives the navigation", async () => {
+    writePendingLogin({ email: "ana@example.com", sentAt: Date.now(), nextPath: "/charges" });
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
+
+    render(<CodeScreen />);
+    const confirm = screen.getByRole("button", { name: /Confirmar e Entrar/ });
+
+    fireEvent.change(screen.getByLabelText("Código de 6 dígitos"), { target: { value: "123456" } });
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/charges"));
+
+    // Clearing it here would flash the button back mid-navigation.
+    expect(confirm).toBeDisabled();
+  });
+
   it("shows the same actionable error for any rejected code", async () => {
     writePendingLogin({ email: "ana@example.com", sentAt: Date.now(), nextPath: "/" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({

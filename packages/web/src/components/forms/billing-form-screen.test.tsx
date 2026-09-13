@@ -1,4 +1,4 @@
-import { addCalendarDays, calendarDate, EMPTY_BILLING_DRAFT, type BillingDetail } from "@receivy/common";
+import { addCalendarDays, BillingCategory, BillingFrequency, BillingState, BillingType, calendarDate, Direction, EMPTY_BILLING_DRAFT, endOfMonth, endOfMonthOptions, PixKeyType, SplitMode, SplitPartKind, type BillingDetail } from "@receivy/common";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
@@ -301,6 +301,38 @@ it("sets the due date from the date field and brings it back to today with the q
   expect(due).toHaveValue(today());
 });
 
+it("lands the due date on the last day of the picked month with Final do mês", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await pickAna(user);
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+  await user.click(screen.getByRole("button", { name: "Final do mês" }));
+
+  expect(screen.queryByLabelText("Vencimento")).not.toBeInTheDocument();
+
+  const next = endOfMonthOptions(today(), 2)[1]!;
+
+  await user.click(screen.getByRole("combobox", { name: "Mês do vencimento" }));
+  await user.click(screen.getByRole("option", { name: new RegExp(next.label) }));
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  const post = sent.find(entry => entry.init.method === "POST");
+  expect(JSON.parse(String(post?.init.body))).toMatchObject({ type: "once", startDate: next.value, dueRule: "end_of_month" });
+});
+
+it("offers Final do mês only while the billing is once or monthly", async () => {
+  api();
+  const { user } = renderForm();
+
+  expect(await screen.findByRole("button", { name: "Final do mês" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("radio", { name: "Recorrente" }));
+  await user.selectOptions(screen.getByLabelText("Frequência"), "yearly");
+
+  expect(screen.queryByRole("button", { name: "Final do mês" })).not.toBeInTheDocument();
+});
+
 it("saves the draft and navigates when the user creates a new contact", async () => {
   api();
   const { user } = renderForm();
@@ -421,6 +453,8 @@ it("creates the billing in one step, with category, shares and an idempotency ke
   });
   expect((post?.init.headers as Record<string, string>)["idempotency-key"]).toMatch(/\w/);
   expect(onSaved).toHaveBeenCalledWith({ id: "b1", charges: [{ id: "c1" }] });
+  // Clearing it here would flash the button back to idle while this screen is still on top.
+  expect(screen.getByRole("button", { name: "Criar conta" })).toBeDisabled();
 });
 
 it("keeps the payload and the idempotency key across an uncertain retry", async () => {
@@ -539,7 +573,7 @@ it("creates a conta a pagar without contacts, with a payee and a typed Pix key",
 
 it("removes the payee with its chip and creates a conta a pagar that is the owner's alone", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
-  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), direction: "payable", payee: "u1", amount: "50,00" }, "/billings/new");
+  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), direction: Direction.Payable, payee: "u1", amount: "50,00" }, "/billings/new");
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("button", { name: "Ana" }));
@@ -557,7 +591,7 @@ it("removes the payee with its chip and creates a conta a pagar that is the owne
 
 it("never gates a conta a pagar on a wallet key", async () => {
   withoutPixKeys();
-  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), direction: "payable", amount: "70,00" }, "/billings/new");
+  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), direction: Direction.Payable, amount: "70,00" }, "/billings/new");
   renderForm();
 
   expect(await screen.findByLabelText("Valor total")).toHaveValue("70,00");
@@ -580,26 +614,26 @@ it("shows the inline key error of a conta a pagar without leaving the form", asy
 
 const onceBilling: BillingDetail = {
   id: "b1",
-  type: "once",
-  direction: "receivable",
+  type: BillingType.Once,
+  direction: Direction.Receivable,
   payee: null,
   pix: null,
   description: "Jantar",
   total: { amountCents: 9_000, currency: "BRL" },
   startDate: "2026-10-31",
-  state: "active",
+  state: BillingState.Active,
   nextDueDate: "2026-10-31",
   createdAt: "2026-09-01T00:00:00Z",
   updatedAt: "2026-09-01T00:00:00Z",
   timezone: TIMEZONE,
   paymentMethodId: "pix-1",
   reminders: [{ offsetDays: -3, enabled: true }],
-  split: { mode: "equal", parts: [{ kind: "user", userId: "u1" }] },
+  split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
   allocations: [],
   charges: [],
   previews: [],
   nextMaterialization: null,
-  category: "other",
+  category: BillingCategory.Other,
   invite: null,
   guests: [],
   linkableContacts: [],
@@ -629,7 +663,7 @@ it("freezes a finite billing and patches only category, Pix and reminders", asyn
   });
 });
 
-const payableBilling: BillingDetail = { ...onceBilling, id: "b3", direction: "payable", paymentMethodId: undefined, payee: { userId: "u1", name: "Ana" }, pix: { keyType: "email", key: "ana@example.com", label: "Nubank" } };
+const payableBilling: BillingDetail = { ...onceBilling, id: "b3", direction: Direction.Payable, paymentMethodId: undefined, payee: { userId: "u1", name: "Ana" }, pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" } };
 
 it("seeds a conta a pagar with its payee and inline key and patches them back", async () => {
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(payableBilling) : undefined));
@@ -655,7 +689,7 @@ it("seeds a conta a pagar with its payee and inline key and patches them back", 
   expect(JSON.parse(String(patch?.init.body)).paymentMethodId).toBeUndefined();
 });
 
-const indefiniteBilling: BillingDetail = { ...onceBilling, id: "b2", type: "indefinite", frequency: "monthly", nextDueDate: null };
+const indefiniteBilling: BillingDetail = { ...onceBilling, id: "b2", type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, nextDueDate: null };
 
 it("keeps the schedule read-only while editing an open-ended billing", async () => {
   api();
@@ -673,4 +707,18 @@ it("keeps the schedule read-only while editing an open-ended billing", async () 
   expect(screen.getByLabelText("Título")).toBeEnabled();
   expect(screen.getByRole("radio", { name: "Cotas" })).toBeEnabled();
   expect(screen.queryByText("Contas já geradas só permitem categoria, Pix e lembretes.")).not.toBeInTheDocument();
+});
+
+it("switches an open-ended billing to the end of the month on edit", async () => {
+  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(indefiniteBilling) : undefined));
+  const { user } = renderForm(indefiniteBilling);
+
+  expect(await screen.findByRole("button", { name: /E-mail/ })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Final do mês" }));
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  const start = indefiniteBilling.startDate >= today() ? indefiniteBilling.startDate : today();
+  const patch = sent.find(entry => entry.init.method === "PATCH");
+  expect(JSON.parse(String(patch?.init.body))).toMatchObject({ dueRule: "end_of_month", startDate: endOfMonth(start) });
 });

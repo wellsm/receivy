@@ -1,8 +1,10 @@
 import { HttpBadRequestError, HttpUnauthorizedError } from '@ez4/gateway';
-import { CHARGE_SELECT } from '../../charges/repositories/charge';
-import { recordEvent } from '../../common/repositories/events';
+import { BillingState, UserStatus } from '@receivy/common';
+import { ChargeRepository } from '../../charges/repositories/charge';
+import { EventRepository } from '../../common/repositories/events';
+import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
-import { disableSessionDevices } from '../repositories/sessions';
+import { SessionRepository } from '../repositories/sessions';
 import { lockAccountReferences } from './locking';
 
 // EZ4 scalar nullable boundary: relation objects cannot express SQL NULL.
@@ -33,7 +35,7 @@ export async function eraseAccount(
       await tx.billings.updateOne({
         where: { id: billing.id },
         data: {
-          state: 'ended',
+          state: BillingState.Ended,
           description: 'Registro de conta excluída',
           payment_method: { id: sqlNull },
           reminders: sqlNull,
@@ -46,9 +48,9 @@ export async function eraseAccount(
       where: { OR: [{ creditor_id: userId }, { debtor_user_id: userId }, { proof_sender_user_id: userId }] },
       lock: true
     });
-    await disableSessionDevices(tx, userId);
+    await SessionRepository.disableDevices(tx, userId);
     for (const { id: chargeId } of [...charges.records].sort((a, b) => a.id.localeCompare(b.id))) {
-      const charge = await tx.charges.findOne({ select: CHARGE_SELECT, where: { id: chargeId }, lock: true });
+      const charge = await tx.charges.findOne({ select: ChargeRepository.SELECT, where: { id: chargeId }, lock: true });
       if (!charge) continue;
       const creditorDeleted = charge.creditor_id === userId;
       const senderDeleted = charge.proof_sender_user_id === userId;
@@ -91,7 +93,7 @@ export async function eraseAccount(
     await tx.oauth_grants.deleteMany({ where: { user_id: userId } });
     if (user.email) await tx.login_codes.deleteMany({ where: { email: user.email } });
     // The log keeps its lines but forgets who acted; the account's own history goes with it.
-    await tx.events.deleteMany({ where: { eventable_type: 'account', eventable_id: userId } });
+    await tx.events.deleteMany({ where: { eventable_type: EventableType.Account, eventable_id: userId } });
     await tx.rawQuery('UPDATE events SET actor_user_id = NULL WHERE actor_user_id = :id::uuid', { id: userId });
     await tx.users.updateOne({
       where: { id: userId },
@@ -101,13 +103,13 @@ export async function eraseAccount(
         name: 'Conta excluída',
         phone: sqlNull,
         avatar_url: sqlNull,
-        status: 'removed',
+        status: UserStatus.Removed,
         timezone: 'UTC',
         deleted_at: now,
         updated_at: now
       }
     });
-    await recordEvent(tx, { type: 'account.deleted', eventableType: 'account', eventableId: userId, at: now });
+    await EventRepository.record(tx, { type: 'account.deleted', eventableType: EventableType.Account, eventableId: userId, at: now });
     // The caller sends these only after this transaction commits.
     return { deleted: true, objectKeys };
   });

@@ -63,10 +63,10 @@ export function CodeScreen({ client = authClient, email, sentAt, onAuthenticated
 
     try {
       await client.confirmEmailCode({ email, code });
+      // Left busy on purpose: the caller leaves this screen.
       onAuthenticated();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível entrar agora.");
-    } finally {
       setBusy(false);
     }
   }

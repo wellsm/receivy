@@ -119,6 +119,9 @@ importers:
       '@ez4/docs-gateway':
         specifier: 0.52.0
         version: 0.52.0
+      '@ez4/docs-gateway-ui':
+        specifier: 0.52.0
+        version: 0.52.0
       '@ez4/local-database':
         specifier: 0.52.0
         version: 0.52.0
@@ -397,6 +400,10 @@ packages:
 
   '@aws-sdk/checksums@3.1000.29':
     resolution: {integrity: sha512-Dtu0gr4dnATZAPwEYbpCsG+MpLM7OAliy2gTepEFQwl1vZ6DL3QMH2FveMa3HLvPsOdhJsPRB3KtxVhph9T75A==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-account@3.1131.0':
+    resolution: {integrity: sha512-TM9UNhAHsNoR9Drw8g7rajWmzITpKKCUNbhIc7wj3/4QyMsZ4kyoWpxlIQaW2mBLCqSjH2qqwNksUvRfSeef6A==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-apigatewaymanagementapi@3.1126.0':
@@ -1565,7 +1572,7 @@ packages:
     engines: {node: '>=22.7'}
 
   '@ez4/aws-common@file:vendor/ez4-aws-common-0.52.0.tgz':
-    resolution: {integrity: sha512-oFvlOv2LyZsKVavuFaL115PslipGb0XfsKl273WViGOz/68grNWf1C9fx4Cx4pTWU6QAf9UWtTL1mZKxgRkbMQ==, tarball: file:vendor/ez4-aws-common-0.52.0.tgz}
+    resolution: {integrity: sha512-FHRJsSaJ54pBFhupDymPge1jeypUIqeNl3kUWEASbB0cauMSZMY4hHdCG4vQ3rnJGqGyn0uoBSJ0EpaaDF0pZQ==, tarball: file:vendor/ez4-aws-common-0.52.0.tgz}
     version: 0.52.0
     engines: {node: '>=22.7'}
 
@@ -1603,6 +1610,10 @@ packages:
 
   '@ez4/database@0.52.0':
     resolution: {integrity: sha512-Ps8rfmpmrERlQJ3ke2r3V9W5GOtu2HdxH3EseAbFOtg565E8PirNmxa7QDPclLueSK1B/CrfieLc3zn3I50VAw==}
+    engines: {node: '>=22.7'}
+
+  '@ez4/docs-gateway-ui@0.52.0':
+    resolution: {integrity: sha512-LPobziXiMYZ2Rlb2/eq/0Gm+TDWve+lJGHa6UDXScu15UvXE07Uc9U92q4mU/G10bdLWPetYHfJ/e8Z67blI9g==}
     engines: {node: '>=22.7'}
 
   '@ez4/docs-gateway@0.52.0':
@@ -2578,6 +2589,10 @@ packages:
 
   '@smithy/core@3.33.3':
     resolution: {integrity: sha512-CsOeKq/9kA3y6VJHt+/+VTCtBaxJ4OTFpgrjIUhPpDIKxBci1k2bJaQASF2h/ELWrulGp+t97DZ0mevfAD8idg==}
+    engines: {node: '>=18.0.0'}
+
+  '@smithy/core@3.34.0':
+    resolution: {integrity: sha512-YvlfAEyHmuWpwjEKgq4FBaXhLEoSEwS/nNbyCF/ef05ZvSuwMDB4NIMgXqkJojzYyQWjhVDapPHXfhkz/tZYlg==}
     engines: {node: '>=18.0.0'}
 
   '@smithy/credential-provider-imds@4.5.2':
@@ -6009,6 +6024,9 @@ packages:
   react-is@19.2.8:
     resolution: {integrity: sha512-s5un28nYxKJw5gvUHyW5PCC28CvBqLu9r3cWgzHT4Vo/5fqqkFcdRYsGcKf50WMPpjjFZS5d76fn3YCo2njKwQ==}
 
+  react-is@19.3.0:
+    resolution: {integrity: sha512-UpMYezM4v5/18F28aC66AEsjXIgE02kyEMH6yLdgLXu/UTfa1Ntwck/nNLrbqJsEXW7gPb0coNO9FQse9WTovA==}
+
   react-native-blob-util@0.24.11:
     resolution: {integrity: sha512-stwl/2Ye4Y7LJI/+u463H1fCu97qM+cwRMzjk2haLp9EgBMhRqUVj2IGdbW8BcxvRtprG8JIHK7dv1U7BcYo5g==}
     peerDependencies:
@@ -7170,6 +7188,17 @@ snapshots:
       '@aws-sdk/core': 3.977.9
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-account@3.1131.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.34.0
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -8799,6 +8828,7 @@ snapshots:
 
   '@ez4/aws-common@file:vendor/ez4-aws-common-0.52.0.tgz':
     dependencies:
+      '@aws-sdk/client-account': 3.1131.0
       '@aws-sdk/client-dynamodb': 3.1126.0
       '@aws-sdk/client-s3': 3.1127.0
       '@aws-sdk/client-sts': 3.1126.0
@@ -8910,6 +8940,13 @@ snapshots:
       '@ez4/reflection': 0.52.0
       '@ez4/schema': 0.52.0
       '@ez4/utils': 0.52.0
+
+  '@ez4/docs-gateway-ui@0.52.0':
+    dependencies:
+      '@ez4/docs-gateway': 0.52.0
+      '@ez4/gateway': 0.52.0
+      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
+      yaml: 2.9.0
 
   '@ez4/docs-gateway@0.52.0':
     dependencies:
@@ -9960,6 +9997,11 @@ snapshots:
       '@sinonjs/commons': 3.0.1
 
   '@smithy/core@3.33.3':
+    dependencies:
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
+  '@smithy/core@3.34.0':
     dependencies:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
@@ -13998,7 +14040,7 @@ snapshots:
   pretty-format@30.5.1:
     dependencies:
       '@jest/react-is-18': react-is@18.3.1
-      '@jest/react-is-19': react-is@19.2.8
+      '@jest/react-is-19': react-is@19.3.0
       '@jest/schemas': 30.5.0
       ansi-styles: 5.2.0
 
@@ -14072,6 +14114,8 @@ snapshots:
   react-is@18.3.1: {}
 
   react-is@19.2.8: {}
+
+  react-is@19.3.0: {}
 
   react-native-blob-util@0.24.11(react-native@0.85.3(@babel/core@7.29.7)(@react-native/jest-preset@0.85.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
     dependencies:

@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT, type Contact } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, UserStatus, type Contact } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
 import { ContactsRequestError } from "@/contacts/client";
@@ -13,7 +13,7 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     displayName: "Ana Paula Souza",
     email: "ana@example.com",
     phone: null,
-    status: "pending",
+    status: UserStatus.Pending,
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
     lastBilledAt: null,
@@ -110,7 +110,7 @@ describe("ContactFormScreen", () => {
   });
 
   it("freezes the name and the e-mail of an active contact", async () => {
-    const client = contactsApi(contact({ status: "active" }));
+    const client = contactsApi(contact({ status: UserStatus.Active }));
 
     await render(<ContactFormScreen contactId="p1" client={client} />);
 
@@ -121,7 +121,7 @@ describe("ContactFormScreen", () => {
   });
 
   it("blames the link, not a duplicate e-mail, when an active contact conflicts", async () => {
-    const client = contactsApi(contact({ status: "active" }));
+    const client = contactsApi(contact({ status: UserStatus.Active }));
 
     client.save.mockRejectedValue(new ContactsRequestError("Já existe um contato com esse e-mail.", 409));
 

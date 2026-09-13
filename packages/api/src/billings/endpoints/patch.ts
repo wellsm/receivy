@@ -5,7 +5,7 @@ import type { BillingDetail, BillingPatch } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { noticeContext } from '../../notifications/services/context';
 import type { BillingProvider } from '../provider';
-import { patchBilling } from '../repositories/billing';
+import { BillingRepository } from '../repositories/billing';
 import type { PatchBody } from '../utils/body';
 import { inviteLink, validation } from '../utils/context';
 
@@ -20,16 +20,19 @@ declare class DetailResponse implements Http.Response {
   body: BillingDetail;
 }
 
-export async function patchBillingHandler(request: PatchRequest, context: Service.Context<BillingProvider>): Promise<DetailResponse> {
+export async function patchBillingHandler(
+  request: PatchRequest,
+  { db, variables, email, chargeNotifyScheduler }: Service.Context<BillingProvider>
+): Promise<DetailResponse> {
   const body = await validation(() =>
-    patchBilling(
-      context.db,
+    BillingRepository.patch(
+      db,
       request.identity.userId,
       request.parameters.id,
       request.body as BillingPatch,
       new Date(),
-      inviteLink(context),
-      noticeContext(context)
+      inviteLink({ variables }),
+      noticeContext({ chargeNotifyScheduler, email, variables })
     )
   );
 

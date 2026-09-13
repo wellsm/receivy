@@ -1,5 +1,6 @@
 import { equal, rejects } from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { ProofMime } from '@receivy/common';
 import { TooManyRequestsError } from '../../src/common/errors';
 import { publicStartProofUploadHandler } from '../../src/proofs/endpoints/public-start-upload';
 import { throttleProof } from '../../src/proofs/services/throttle';
@@ -15,7 +16,7 @@ describe('link quotas on PostgreSQL', () => {
     for (let index = 0; index < 20; index++) {
       const request = {
         parameters: { token: `invalid-${crypto.randomUUID()}` },
-        body: { filename: 'fixture.pdf', mime: 'application/pdf' as const, size: 12 }
+        body: { filename: 'fixture.pdf', mime: ProofMime.Pdf, size: 12 }
       };
       await rejects(
         () => publicStartProofUploadHandler(request, context),

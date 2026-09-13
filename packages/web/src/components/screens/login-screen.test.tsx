@@ -56,6 +56,22 @@ describe("LoginScreen", () => {
     expect(typeof pending.sentAt).toBe("number");
   });
 
+  it("keeps the e-mail button busy after a successful send, so the spinner survives the route change", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    const user = userEvent.setup();
+    render(<LoginScreen nextPath="/charges" providers={ALL} />);
+
+    const button = screen.getByRole("button", { name: "Continuar com E-mail" });
+
+    await user.type(screen.getByLabelText("Seu e-mail"), "ana@example.com");
+    await user.click(button);
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/login/code"));
+
+    // Clearing it here would flash the button back while the old screen is still on top.
+    expect(button).toBeDisabled();
+  });
+
   it("hides provider buttons and the e-mail divider when both providers are disabled, without fetching", async () => {
     const fetchSpy = fetchMock();
     vi.stubGlobal("fetch", fetchSpy);

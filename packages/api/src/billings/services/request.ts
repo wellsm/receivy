@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { NormalizedBillingInput } from '@receivy/common';
+import { BillingCategory, BillingDueRule, type NormalizedBillingInput } from '@receivy/common';
 
 /** Canonical hash of a create request so an Idempotency-Key replay with a different body is refused. */
 export function billingRequestFingerprint(input: NormalizedBillingInput): string {
@@ -8,10 +8,12 @@ export function billingRequestFingerprint(input: NormalizedBillingInput): string
       type: input.type,
       frequency: input.frequency ?? null,
       description: input.description,
-      category: input.category ?? 'other',
+      category: input.category ?? BillingCategory.Other,
       totalCents: input.totalCents,
       startDate: input.startDate,
       endDate: input.endDate ?? null,
+      // Only the month end enters the hash, so replays of older fixed requests keep their fingerprint.
+      ...(input.dueRule === BillingDueRule.EndOfMonth ? { dueRule: input.dueRule } : {}),
       timezone: input.timezone,
       paymentMethodId: input.paymentMethodId ?? null,
       reminders: input.reminders ?? null,

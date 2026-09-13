@@ -22,12 +22,12 @@ declare class EmailConfirmResponse implements Http.Response {
 
 export async function emailConfirmHandler(
   request: EmailConfirmRequest,
-  context: Service.Context<UserProvider>
+  { db, variables }: Service.Context<UserProvider>
 ): Promise<EmailConfirmResponse> {
   try {
-    const body = await confirmEmailAtomically(context.db, request.body, {
-      accessTokenSecret: context.variables.AUTH_JWT_SECRET,
-      codeHashKey: context.variables.LOGIN_CODE_HASH_KEY
+    const body = await confirmEmailAtomically(db, request.body, {
+      accessTokenSecret: variables.AUTH_JWT_SECRET,
+      codeHashKey: variables.LOGIN_CODE_HASH_KEY
     });
     return { status: 200, body };
   } catch (error) {

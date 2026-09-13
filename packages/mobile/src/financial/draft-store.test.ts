@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT } from "@receivy/common";
+import { Direction, EMPTY_BILLING_DRAFT } from "@receivy/common";
 import { clearDraft, patchDraft, saveDraft, takeDraft } from "./draft-store";
 
 function draft() {
@@ -28,7 +28,7 @@ describe("billing draft store", () => {
   });
 
   it("seats the contact a side trip created as the payee of a conta a pagar", () => {
-    saveDraft({ ...draft(), direction: "payable", selected: [] });
+    saveDraft({ ...draft(), direction: Direction.Payable, selected: [] });
     patchDraft({ selected: ["p2"] });
 
     expect(takeDraft()).toMatchObject({ payee: "p2", selected: [] });

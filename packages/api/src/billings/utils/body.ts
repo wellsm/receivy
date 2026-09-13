@@ -1,17 +1,28 @@
 import type { Http } from '@ez4/gateway';
 import type { Integer, String } from '@ez4/schema';
+import type {
+  BillingCategory,
+  BillingDueRule,
+  BillingFrequency,
+  BillingState,
+  BillingType,
+  Direction,
+  PixKeyType,
+  SplitMode,
+  SplitPartKind
+} from '@receivy/common';
 
 // Keep the arms explicit: EZ4 reflection cannot extract intersections out of a union.
 export declare class SplitBody {
-  mode: 'fixed' | 'equal' | 'percentage' | 'shares';
+  mode: SplitMode;
   parts: (
-    | { kind: 'owner'; basisPoints?: number; shares?: Integer.Range<1, 1000> }
-    | { kind: 'user'; userId: String.UUID; amountCents?: number; basisPoints?: number; shares?: Integer.Range<1, 1000> }
+    | { kind: SplitPartKind.Owner; basisPoints?: number; shares?: Integer.Range<1, 1000> }
+    | { kind: SplitPartKind.User; userId: String.UUID; amountCents?: number; basisPoints?: number; shares?: Integer.Range<1, 1000> }
   )[];
 }
 
 export declare class PixBody {
-  keyType: 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+  keyType: PixKeyType;
   key: String.Max<254>;
   label?: String.Max<120>;
 }
@@ -22,21 +33,22 @@ export declare class ReminderBody {
 }
 
 export declare class BillingBody implements Http.JsonBody {
-  type: 'once' | 'until' | 'indefinite';
-  frequency?: 'monthly' | 'yearly';
+  type: BillingType;
+  frequency?: BillingFrequency;
   description?: String.Max<500>;
   totalCents: Integer.Min<1>;
   startDate: String.Date;
   endDate?: String.Date;
+  dueRule?: BillingDueRule;
   timezone: String.Max<100>;
   paymentMethodId?: String.UUID;
   reminders?: ReminderBody[];
   /** Required on a conta a receber; a conta a pagar (direction 'payable') has no participants. */
   split?: SplitBody;
-  direction?: 'receivable' | 'payable';
+  direction?: Direction;
   payeeUserId?: String.UUID;
   pix?: PixBody;
-  category?: 'food' | 'transport' | 'groceries' | 'subscription' | 'loan' | 'housing' | 'travel' | 'other';
+  category?: BillingCategory;
 }
 
 export declare class PatchBody implements Http.JsonBody {
@@ -50,7 +62,8 @@ export declare class PatchBody implements Http.JsonBody {
   payeeUserId?: String.UUID;
   clearPayee?: boolean;
   startDate?: String.Date;
+  dueRule?: BillingDueRule;
   reminders?: ReminderBody[];
-  state?: 'active' | 'paused' | 'ended';
-  category?: 'food' | 'transport' | 'groceries' | 'subscription' | 'loan' | 'housing' | 'travel' | 'other';
+  state?: BillingState;
+  category?: BillingCategory;
 }

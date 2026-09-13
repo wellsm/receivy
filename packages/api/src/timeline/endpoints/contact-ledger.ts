@@ -4,7 +4,7 @@ import type { String } from '@ez4/schema';
 import type { ContactLedger } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { TimelineProvider } from '../provider';
-import { getContactLedger } from '../repositories/timeline';
+import { TimelineRepository } from '../repositories/timeline';
 
 declare class LedgerRequest implements Http.Request {
   identity: SessionIdentity;
@@ -17,6 +17,9 @@ declare class LedgerResponse implements Http.Response {
   body: ContactLedger;
 }
 
-export async function contactLedgerHandler(request: LedgerRequest, context: Service.Context<TimelineProvider>): Promise<LedgerResponse> {
-  return { status: 200, body: await getContactLedger(context.db, request.identity.userId, request.parameters.id, request.query.cursor) };
+export async function contactLedgerHandler(request: LedgerRequest, { db }: Service.Context<TimelineProvider>): Promise<LedgerResponse> {
+  return {
+    status: 200,
+    body: await TimelineRepository.contactLedger(db, request.identity.userId, request.parameters.id, request.query.cursor)
+  };
 }

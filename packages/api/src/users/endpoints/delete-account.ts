@@ -4,7 +4,7 @@ import type { String } from '@ez4/schema';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { bucketProofStorage } from '../../proofs/services/bucket-storage';
 import type { UserProvider } from '../provider';
-import { eraseAccount } from '../repositories/account';
+import { eraseAccount } from '../services/deletion';
 
 declare class DeleteRequest implements Http.Request {
   identity: SessionIdentity;
@@ -16,10 +16,10 @@ declare class DeleteResponse implements Http.Response {
   body: { deleted: boolean };
 }
 
-export async function deleteHandler(request: DeleteRequest, context: Service.Context<UserProvider>): Promise<DeleteResponse> {
-  const { objectKeys, ...body } = await eraseAccount(context.db, request.identity.userId, request.body.confirmation);
+export async function deleteHandler(request: DeleteRequest, { db, proofFiles }: Service.Context<UserProvider>): Promise<DeleteResponse> {
+  const { objectKeys, ...body } = await eraseAccount(db, request.identity.userId, request.body.confirmation);
   // The erasure is already committed; the files follow best-effort, nothing references them any more.
-  const storage = bucketProofStorage(context.proofFiles);
+  const storage = bucketProofStorage(proofFiles);
 
   for (const key of objectKeys) {
     await storage.delete(key).catch(() => console.error('Account file deletion failed'));

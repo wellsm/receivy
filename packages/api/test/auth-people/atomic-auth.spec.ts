@@ -1,7 +1,7 @@
 import { equal, ok, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, describe, it } from 'node:test';
-import { createAuthRepository } from '../../src/users/repositories/auth';
+import { AuthRepository } from '../../src/users/repositories/auth';
 import { AuthFlowError } from '../../src/users/services/email-login';
 import { hashOauthValue } from '../../src/users/services/oauth';
 import { confirmEmailAtomically, exchangeOauthAtomically } from '../../src/users/utils/atomic';
@@ -11,7 +11,7 @@ const email = `atomic-${randomUUID()}@example.com`;
 const codeHashKey = 'atomic-test-code-secret-only';
 const accessTokenSecret = 'atomic-test-session-secret-only';
 const config = { codeHashKey, accessTokenSecret };
-const repo = createAuthRepository(db);
+const repo = AuthRepository.create(db);
 const ids: string[] = [];
 
 describe('atomic authentication on PostgreSQL', () => {

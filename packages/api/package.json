@@ -49,6 +49,7 @@
     "@ez4/aws-queue": "0.52.0",
     "@ez4/aws-scheduler": "0.52.0",
     "@ez4/docs-gateway": "0.52.0",
+    "@ez4/docs-gateway-ui": "0.52.0",
     "@ez4/local-database": "0.52.0",
     "@ez4/local-gateway": "0.52.0",
     "@ez4/local-queue": "0.52.0",

@@ -1,4 +1,4 @@
-import type { ChargeDetail, Contact, ContactLedger } from "@receivy/common";
+import { BillingType, ChargeState, Direction, ProofState, SharingState, UserStatus, type ChargeDetail, type Contact, type ContactLedger } from "@receivy/common";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -37,7 +37,7 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     phone: null,
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
-    status: "pending",
+    status: UserStatus.Pending,
     lastBilledAt: null,
     activeCharges: 0,
     ...overrides,
@@ -49,18 +49,18 @@ function charge(overrides: Partial<ChargeDetail> & { id: string }): ChargeDetail
     description: "Jantar",
     amount: { amountCents: 6_000, currency: "BRL" },
     dueDate: "2099-01-15",
-    state: "pending",
+    state: ChargeState.Pending,
     billingId: "b1",
-    billingType: "until",
+    billingType: BillingType.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: "Ana Paula Souza",
     proofState: null,
-    direction: "receivable",
+    direction: Direction.Receivable,
     recipient: { userId: "u1", name: "Ana Paula Souza", email: "ana@example.com" },
     debtorUserId: "u1",
     pix: null,
-    sharingState: "ready",
+    sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
     paidAt: null,
@@ -115,11 +115,11 @@ describe("ContactLedgerScreen", () => {
     const paid = charge({
       id: "c0",
       description: "Churrasco",
-      state: "paid",
+      state: ChargeState.Paid,
       paidAt: "2026-09-28T15:00:00Z",
       amount: { amountCents: 12_000, currency: "BRL" },
     });
-    const waiting = charge({ id: "c2", description: "Futebol", proofState: "pending", installmentCount: 1, installment: 1 });
+    const waiting = charge({ id: "c2", description: "Futebol", proofState: ProofState.Pending, installmentCount: 1, installment: 1 });
 
     mockApi(ledger({}, [charge({ id: "c1" }), waiting, paid]));
 

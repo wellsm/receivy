@@ -3,7 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { NotificationProvider } from '../provider';
-import { manualReminder } from '../repositories/notification';
+import { NotificationRepository } from '../repositories/notification';
 import { noticeContext } from '../services/context';
 
 declare class IdRequest implements Http.Request {
@@ -16,9 +16,17 @@ declare class QueuedResponse implements Http.Response {
   body: { queued: boolean };
 }
 
-export async function manualReminderHandler(request: IdRequest, context: Service.Context<NotificationProvider>): Promise<QueuedResponse> {
+export async function manualReminderHandler(
+  request: IdRequest,
+  { db, variables, email, chargeNotifyScheduler }: Service.Context<NotificationProvider>
+): Promise<QueuedResponse> {
   return {
     status: 202,
-    body: await manualReminder(context.db, request.identity.userId, request.parameters.id, noticeContext(context))
+    body: await NotificationRepository.manualReminder(
+      db,
+      request.identity.userId,
+      request.parameters.id,
+      noticeContext({ variables, email, chargeNotifyScheduler })
+    )
   };
 }

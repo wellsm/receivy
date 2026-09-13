@@ -4,7 +4,7 @@ import type { String } from '@ez4/schema';
 import type { BillingDetail } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { BillingProvider } from '../provider';
-import { getBilling } from '../repositories/billing';
+import { BillingRepository } from '../repositories/billing';
 import { inviteLink } from '../utils/context';
 
 declare class ReadRequest implements Http.Request {
@@ -17,9 +17,12 @@ declare class DetailResponse implements Http.Response {
   body: BillingDetail;
 }
 
-export async function getBillingHandler(request: ReadRequest, context: Service.Context<BillingProvider>): Promise<DetailResponse> {
+export async function getBillingHandler(
+  request: ReadRequest,
+  { db, variables }: Service.Context<BillingProvider>
+): Promise<DetailResponse> {
   return {
     status: 200,
-    body: await getBilling(context.db, request.identity.userId, request.parameters.id, new Date(), inviteLink(context))
+    body: await BillingRepository.get(db, request.identity.userId, request.parameters.id, new Date(), inviteLink({ variables }))
   };
 }

@@ -1,5 +1,5 @@
 import type { EmailClient } from '../../common/services/email/client';
-import { isEmailTransport } from '../../common/services/email/client';
+import { EmailTransport, isEmailTransport } from '../../common/services/email/client';
 import { createEmailClient } from '../../common/services/email/compose';
 import { createExpoPushClient } from '../../vendors/expo/client';
 
@@ -35,7 +35,7 @@ export function notificationTransport(
 
   return {
     async email(input) {
-      if (!isEmailTransport(emailTransport) || emailTransport === 'disabled') {
+      if (!isEmailTransport(emailTransport) || emailTransport === EmailTransport.Disabled) {
         return { status: 'disabled' };
       }
 

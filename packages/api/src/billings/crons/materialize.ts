@@ -5,7 +5,7 @@ import type { Db } from '../../database';
 import type { ChargeNotifyScheduler } from '../../notifications/schedulers/charge-notify';
 import { notificationConfigFrom } from '../../notifications/services/planner';
 import { notificationTransport } from '../../notifications/services/transport';
-import { materializeDueBillings } from '../repositories/billing';
+import { BillingRepository } from '../repositories/billing';
 
 /**
  * Daily at 05:00 UTC, past midnight in every Brazilian timezone: every active assinatura gets the
@@ -43,15 +43,18 @@ export declare class BillingCron extends Cron.Service {
   };
 }
 
-export async function handler(_request: Cron.Incoming<null>, context: Service.Context<BillingCron>): Promise<void> {
+export async function handler(
+  _request: Cron.Incoming<null>,
+  { db, variables, email, chargeNotifyScheduler }: Service.Context<BillingCron>
+): Promise<void> {
   const now = new Date();
   const notice = {
-    config: notificationConfigFrom(context.variables),
-    transport: notificationTransport(context.variables, globalThis.fetch, context.email),
-    notify: context.chargeNotifyScheduler
+    config: notificationConfigFrom(variables),
+    transport: notificationTransport(variables, globalThis.fetch, email),
+    notify: chargeNotifyScheduler
   };
 
-  const materialized = await materializeDueBillings(context.db, notice, now);
+  const materialized = await BillingRepository.materializeDueBillings(db, notice, now);
 
   // Counts only; never owner or recipient data.
   console.info('Billing cron', { materialized });

@@ -1,6 +1,6 @@
 "use client";
 
-import { pixKeyField, type PixKeyType } from "@receivy/common";
+import { pixKeyField, PixKeyType } from "@receivy/common";
 import { X } from "lucide-react";
 import { useRef } from "react";
 import { PIX_TYPE_LABELS, PixTypeIcon } from "@/components/ui/pix-type-icon";
@@ -16,7 +16,7 @@ type PixKeyFieldsProps = {
   onChange: (raw: string) => void;
 };
 
-const TYPES: { value: PixKeyType; wide?: boolean }[] = [{ value: "cpf" }, { value: "cnpj" }, { value: "phone" }, { value: "email" }, { value: "random", wide: true }];
+const TYPES: { value: PixKeyType; wide?: boolean }[] = [{ value: PixKeyType.Cpf }, { value: PixKeyType.Cnpj }, { value: PixKeyType.Phone }, { value: PixKeyType.Email }, { value: PixKeyType.Random, wide: true }];
 
 // `keyboard` is the shared vocabulary with the native app; the web maps it to
 // the matching `inputMode` so the mobile keyboard opens on the right layout.

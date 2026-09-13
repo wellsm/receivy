@@ -830,26 +830,20 @@ paths:
           in: query
           required: false
           schema:
-            enum: 
-              - 'receivable'
-              - 'payable'
+            type: string
+            maxLength: 64
         - name: status
           in: query
           required: false
           schema:
-            enum: 
-              - 'pending'
-              - 'paid'
-              - 'cancelled'
-              - 'overdue'
+            type: string
+            maxLength: 64
         - name: type
           in: query
           required: false
           schema:
-            enum: 
-              - 'once'
-              - 'until'
-              - 'indefinite'
+            type: string
+            maxLength: 64
         - name: from
           in: query
           required: false
@@ -932,6 +926,25 @@ paths:
       responses:
         204:
           description: "Successful response."
+  /charges/{id}/proof/complete:
+    post:
+      operationId: completeProofUpload
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/completeProofUploadHandler'
   /charges/{id}/proof/review:
     post:
       operationId: reviewProof
@@ -1025,6 +1038,23 @@ paths:
       responses:
         204:
           description: "Successful response."
+  /public/charges/{token}/proof/complete:
+    post:
+      operationId: publicCompleteProofUpload
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/publicCompleteProofUploadHandler'
   /devices:
     post:
       operationId: registerDevice
@@ -1315,6 +1345,10 @@ components:
         endDate:
           type: string
           format: date
+        dueRule:
+          enum: 
+            - 'fixed'
+            - 'end_of_month'
         timezone:
           type: string
           maxLength: 100
@@ -1525,6 +1559,10 @@ components:
         startDate:
           type: string
           format: date
+        dueRule:
+          enum: 
+            - 'fixed'
+            - 'end_of_month'
         reminders:
           type: array
           items:
@@ -2360,6 +2398,10 @@ components:
           type: string
         endDate:
           type: string
+        dueRule:
+          enum: 
+            - 'fixed'
+            - 'end_of_month'
         state:
           enum: 
             - 'active'
@@ -2881,6 +2923,10 @@ components:
                 type: string
               endDate:
                 type: string
+              dueRule:
+                enum: 
+                  - 'fixed'
+                  - 'end_of_month'
               state:
                 enum: 
                   - 'active'
@@ -2997,6 +3043,10 @@ components:
           type: string
         endDate:
           type: string
+        dueRule:
+          enum: 
+            - 'fixed'
+            - 'end_of_month'
         state:
           enum: 
             - 'active'
@@ -3582,6 +3632,10 @@ components:
           type: string
         endDate:
           type: string
+        dueRule:
+          enum: 
+            - 'fixed'
+            - 'end_of_month'
         state:
           enum: 
             - 'active'
@@ -4125,6 +4179,10 @@ components:
           type: string
         endDate:
           type: string
+        dueRule:
+          enum: 
+            - 'fixed'
+            - 'end_of_month'
         state:
           enum: 
             - 'active'
@@ -5920,6 +5978,162 @@ components:
       required:
         - uploadUrl
         - expiresAt
+    completeProofUploadHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        billingId:
+          type: string
+        billingType:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        installment:
+          type: number
+        installmentCount:
+          type: number
+        counterpartName:
+          type: string
+        proofState:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+        payer:
+          enum: 
+            - 'person'
+            - 'owner'
+        ownedByViewer:
+          type: boolean
+        hasPix:
+          type: boolean
+        counterpartReachable:
+          type: boolean
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        recipient:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+          required:
+            - name
+        debtorUserId:
+          type: string
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        sharingState:
+          enum: 
+            - 'ready'
+            - 'pix_required'
+            - 'legacy_without_pix'
+            - 'closed'
+        proof:
+          type: object
+          additionalProperties: false
+          properties:
+            state:
+              enum: 
+                - 'pending'
+                - 'accepted'
+                - 'rejected'
+            file:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                mime:
+                  enum: 
+                    - 'image/jpeg'
+                    - 'image/png'
+                    - 'application/pdf'
+                size:
+                  type: number
+              required:
+                - name
+                - mime
+                - size
+            sentAt:
+              type: string
+            reviewedAt:
+              type: string
+            reason:
+              type: string
+            sentByViewer:
+              type: boolean
+          required:
+            - state
+            - file
+            - sentAt
+            - sentByViewer
+        cancelledAt:
+          type: string
+        paidAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - description
+        - amount
+        - dueDate
+        - state
+        - billingId
+        - billingType
+        - counterpartName
+        - direction
+        - recipient
+        - sharingState
+        - createdAt
     reviewProofHandler:
       type: object
       additionalProperties: false
@@ -6098,6 +6312,35 @@ components:
       required:
         - uploadUrl
         - expiresAt
+    publicCompleteProofUploadHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+            - 'uploading'
+        reason:
+          type: string
+        file:
+          type: object
+          additionalProperties: false
+          properties:
+            name:
+              type: string
+            mime:
+              enum: 
+                - 'image/jpeg'
+                - 'image/png'
+                - 'application/pdf'
+            size:
+              type: number
+          required:
+            - name
+            - mime
+            - size
     publicProofStateHandler:
       type: object
       additionalProperties: false

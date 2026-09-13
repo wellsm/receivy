@@ -6,10 +6,41 @@ export type Money = {
   currency: 'BRL';
 };
 
-export type Direction = 'receivable' | 'payable';
-export type ChargeState = 'pending' | 'paid' | 'cancelled';
-export type ProofState = 'pending' | 'accepted' | 'rejected';
-export type SplitMode = 'fixed' | 'equal' | 'percentage' | 'shares';
+export const enum Direction {
+  Receivable = 'receivable',
+  Payable = 'payable'
+}
+
+export const enum ChargeState {
+  Pending = 'pending',
+  Paid = 'paid',
+  Cancelled = 'cancelled'
+}
+
+export const enum ProofState {
+  Pending = 'pending',
+  Accepted = 'accepted',
+  Rejected = 'rejected'
+}
+
+export const enum SplitMode {
+  Fixed = 'fixed',
+  Equal = 'equal',
+  Percentage = 'percentage',
+  Shares = 'shares'
+}
+
+export const enum ChargePayer {
+  Person = 'person',
+  Owner = 'owner'
+}
+
+export const enum SharingState {
+  Ready = 'ready',
+  PixRequired = 'pix_required',
+  LegacyWithoutPix = 'legacy_without_pix',
+  Closed = 'closed'
+}
 
 export type ChargeSummary = {
   id: string;
@@ -26,16 +57,20 @@ export type ChargeSummary = {
   /** State of the most recent proof on this charge, if any. */
   proofState: ProofState | null;
   /** Who pays: a contact (default) or the billing owner on a conta a pagar. Omitted by older payloads means 'person'. */
-  payer?: 'person' | 'owner';
+  payer?: ChargePayer;
   /** True when the viewer owns the billing behind this charge; owner powers key on this, never on direction. */
   ownedByViewer?: boolean;
-  /** A Pix key is attached; the feed offers "Pagar via Pix" only then. */
+  /** A Pix key is attached; the feed offers "Pagar" only then. */
   hasPix?: boolean;
   /** The other side has an e-mail or phone on file, so a reminder can reach them; false hides "Lembrar". */
   counterpartReachable?: boolean;
 };
 
-export type ProofMime = 'image/jpeg' | 'image/png' | 'application/pdf';
+export const enum ProofMime {
+  Jpeg = 'image/jpeg',
+  Png = 'image/png',
+  Pdf = 'application/pdf'
+}
 
 export type ProofFile = { name: string; mime: ProofMime; size: number };
 
@@ -74,7 +109,13 @@ export type HealthResponse = {
   service: 'receivy-api';
 };
 
-export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+export const enum PixKeyType {
+  Cpf = 'cpf',
+  Cnpj = 'cnpj',
+  Email = 'email',
+  Phone = 'phone',
+  Random = 'random'
+}
 
 export type PaymentMethod = {
   id: string;
@@ -114,7 +155,7 @@ export type ChargeDetail = ChargeSummary & {
   /** The person who owes (or, on a conta a pagar, who receives); null when the bill is the owner's alone. */
   debtorUserId: string | null;
   pix: PixSnapshot | null;
-  sharingState: 'ready' | 'pix_required' | 'legacy_without_pix' | 'closed';
+  sharingState: SharingState;
   proof: ChargeProof | null;
   cancelledAt: string | null;
   paidAt: string | null;

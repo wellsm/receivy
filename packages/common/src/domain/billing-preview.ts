@@ -1,4 +1,6 @@
+import { SplitPartKind } from './billing';
 import type { BillingDraft } from './billing-draft';
+import { SplitMode } from './contracts';
 import { parseBRLCents, parsePercentageBasisPoints } from './financial-form';
 import { formatMoney } from './money';
 import { type BillingSplit, resolveBillingSplit, type SplitParty } from './split';
@@ -12,12 +14,15 @@ export type BillingSplitPreview = {
 
 /** Stable key for a party: the contact id, or `owner` for the account holder. */
 export function splitPartyKey(party: SplitParty): string {
-  return party.kind === 'owner' ? 'owner' : party.userId;
+  return party.kind === SplitPartKind.Owner ? 'owner' : party.userId;
 }
 
 /** Everyone who takes part in the draft: the selected contacts, then the owner. */
 export function splitParties(draft: BillingDraft): SplitParty[] {
-  return [...draft.selected.map((userId) => ({ kind: 'user' as const, userId })), ...(draft.owner ? [{ kind: 'owner' as const }] : [])];
+  return [
+    ...draft.selected.map((userId) => ({ kind: SplitPartKind.User, userId }) satisfies SplitParty),
+    ...(draft.owner ? [{ kind: SplitPartKind.Owner } satisfies SplitParty] : [])
+  ];
 }
 
 /**
@@ -27,39 +32,39 @@ export function splitParties(draft: BillingDraft): SplitParty[] {
 function previewSplit(draft: BillingDraft): BillingSplit {
   const parties = splitParties(draft);
 
-  if (draft.mode === 'fixed') {
+  if (draft.mode === SplitMode.Fixed) {
     const values = draft.values.fixed;
 
     return {
-      mode: 'fixed',
+      mode: SplitMode.Fixed,
       parts: draft.selected.map((userId) => ({
-        kind: 'user',
+        kind: SplitPartKind.User,
         userId,
         amountCents: parseBRLCents(values[userId] ?? '')
       }))
     };
   }
 
-  if (draft.mode === 'shares') {
+  if (draft.mode === SplitMode.Shares) {
     const values = draft.values.shares;
 
-    return { mode: 'shares', parts: parties.map((party) => ({ ...party, shares: Number(values[splitPartyKey(party)] || '1') })) };
+    return { mode: SplitMode.Shares, parts: parties.map((party) => ({ ...party, shares: Number(values[splitPartyKey(party)] || '1') })) };
   }
 
-  if (draft.mode === 'percentage') {
+  if (draft.mode === SplitMode.Percentage) {
     const values = draft.values.percentage;
 
     return {
-      mode: 'percentage',
+      mode: SplitMode.Percentage,
       parts: parties.map((party) => ({ ...party, basisPoints: parsePercentageBasisPoints(values[splitPartyKey(party)] ?? '') }))
     };
   }
 
-  return { mode: 'equal', parts: parties };
+  return { mode: SplitMode.Equal, parts: parties };
 }
 
 function remainderHint(draft: BillingDraft, totalCents: number): string {
-  if (draft.mode === 'percentage') {
+  if (draft.mode === SplitMode.Percentage) {
     try {
       const values = draft.values.percentage;
       const sum = splitParties(draft).reduce((total, party) => total + parsePercentageBasisPoints(values[splitPartyKey(party)] ?? ''), 0);
@@ -70,7 +75,7 @@ function remainderHint(draft: BillingDraft, totalCents: number): string {
     }
   }
 
-  if (draft.mode === 'fixed') {
+  if (draft.mode === SplitMode.Fixed) {
     // When the owner takes part, the remainder is already the owner's share: no hint to close it.
     if (draft.owner) {
       return '';

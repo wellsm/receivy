@@ -1,5 +1,6 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
+import type { UserStatus } from '@receivy/common';
 
 export interface UserSchema extends Database.Schema {
   id: String.UUID;
@@ -14,7 +15,7 @@ export interface UserSchema extends Database.Schema {
    * `pending`: created by a contact or a first login, onboarding not done; agendas may still edit name and e-mail.
    * `active`: onboarding done; only the person edits their data. `removed`: account deleted; the id survives for history.
    */
-  status: 'pending' | 'active' | 'removed';
+  status: UserStatus;
   locale: 'pt-BR';
   timezone: String.Max<64>;
   country: 'BR';

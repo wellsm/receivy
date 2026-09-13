@@ -10,6 +10,7 @@ export function bucketProofStorage(bucket: Client): ProofStorage {
   return {
     uploadUrl: (key, mime) => bucket.getWriteUrl(key, { expiresIn: 300, contentType: mime }),
     read: (key) => bucket.read(key),
+    exists: (key) => bucket.exists(key),
     downloadUrl: (key) => bucket.getReadUrl(key, { expiresIn: 60 }),
 
     // Deleting an object that is already gone must succeed: callers fire and forget.

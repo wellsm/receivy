@@ -1,4 +1,4 @@
-import { pixKeyField, type PixKeyType } from "@receivy/common";
+import { pixKeyField, PixKeyType } from "@receivy/common";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useState } from "react";
@@ -16,11 +16,11 @@ type PixKeyFieldsProps = {
 };
 
 const TYPES: { value: PixKeyType; label: string; wide?: boolean }[] = [
-  { value: "cpf", label: "CPF" },
-  { value: "cnpj", label: "CNPJ" },
-  { value: "phone", label: "Celular" },
-  { value: "email", label: "E-mail" },
-  { value: "random", label: "Chave aleatória", wide: true },
+  { value: PixKeyType.Cpf, label: "CPF" },
+  { value: PixKeyType.Cnpj, label: "CNPJ" },
+  { value: PixKeyType.Phone, label: "Celular" },
+  { value: PixKeyType.Email, label: "E-mail" },
+  { value: PixKeyType.Random, label: "Chave aleatória", wide: true },
 ];
 
 export const PIX_TYPE_ICONS: Record<PixKeyType, number> = {

@@ -1,9 +1,9 @@
 import { HttpUnauthorizedError } from '@ez4/gateway';
 import type { AuthSessionResponse } from '@receivy/common';
 import type { DbClient } from '../../database';
-import { createAuthRepository } from '../repositories/auth';
+import { AuthRepository } from '../repositories/auth';
 import { lockAccountReferences } from './locking';
-import { createOauthAttempt, hashOauthValue } from './oauth';
+import { createOauthAttempt, hashOauthValue, OauthProvider } from './oauth';
 import type { OauthProviderClient } from './oauth-flow';
 import { issueAccessToken } from './session';
 
@@ -11,12 +11,12 @@ const DESTINATION = 'native:apple';
 export async function beginNativeApple(db: DbClient, clientChallenge: string) {
   if (!/^[A-Za-z0-9_-]{43}$/.test(clientChallenge)) throw new HttpUnauthorizedError();
   const values = createOauthAttempt();
-  await createAuthRepository(db).createAttempt({
+  await AuthRepository.create(db).createAttempt({
     clientChallenge,
     stateHash: hashOauthValue(values.state),
     nonce: values.nonce,
     codeVerifier: values.codeVerifier,
-    provider: 'apple',
+    provider: OauthProvider.Apple,
     destination: DESTINATION,
     expiresAt: new Date(Date.now() + 10 * 60_000)
   });
@@ -30,7 +30,7 @@ export async function exchangeNativeApple(
 ): Promise<AuthSessionResponse> {
   if (!/^[A-Za-z0-9._~-]{43,128}$/.test(input.codeVerifier)) throw new HttpUnauthorizedError();
   const attempt = await db.transaction(async (tx) => {
-    const row = await createAuthRepository(tx).consumeAttempt({ provider: 'apple', stateHash: hashOauthValue(input.state) });
+    const row = await AuthRepository.create(tx).consumeAttempt({ provider: OauthProvider.Apple, stateHash: hashOauthValue(input.state) });
     if (!row || row.destination !== DESTINATION || row.clientChallenge !== hashOauthValue(input.codeVerifier))
       throw new HttpUnauthorizedError();
     return row;
@@ -44,8 +44,8 @@ export async function exchangeNativeApple(
   });
   return db.transaction(async (tx) => {
     await lockAccountReferences(tx, 'write');
-    const repo = createAuthRepository(tx),
-      user = await repo.resolveUser({ provider: 'apple', identity });
+    const repo = AuthRepository.create(tx),
+      user = await repo.resolveUser({ provider: OauthProvider.Apple, identity });
     const session = await repo.issueSession(user.id, input.deviceName);
     return {
       accessToken: issueAccessToken({ familyId: session.familyId, secret, userId: user.id }),

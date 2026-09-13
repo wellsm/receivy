@@ -1,4 +1,4 @@
-import { addCalendarDays, calendarDate, EMPTY_BILLING_DRAFT, type BillingDetail, type Contact } from "@receivy/common";
+import { addCalendarDays, BillingCategory, BillingState, BillingType, calendarDate, Direction, EMPTY_BILLING_DRAFT, endOfMonthOptions, PixKeyType, SplitMode, SplitPartKind, UserStatus, type BillingDetail, type Contact } from "@receivy/common";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { FinancialRequestError } from "@/financial/client";
 import { clearDraft, patchDraft, saveDraft, takeDraft } from "@/financial/draft-store";
@@ -80,7 +80,7 @@ function contact(id: string, userId: string, name: string, lastBilledAt: string 
     displayName: name,
     email: `${name.toLowerCase()}@example.com`,
     phone: null,
-    status: "active",
+    status: UserStatus.Active,
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
     lastBilledAt,
@@ -155,26 +155,26 @@ async function fillQuickBilling() {
 
 const onceBilling: BillingDetail = {
   id: "b1",
-  type: "once",
-  direction: "receivable",
+  type: BillingType.Once,
+  direction: Direction.Receivable,
   payee: null,
   pix: null,
   description: "Jantar",
   total: { amountCents: 9_000, currency: "BRL" },
   startDate: "2026-10-31",
-  state: "active",
+  state: BillingState.Active,
   nextDueDate: "2026-10-31",
   createdAt: "2026-09-01T00:00:00Z",
   updatedAt: "2026-09-01T00:00:00Z",
   timezone: "America/Sao_Paulo",
   paymentMethodId: "pix-1",
   reminders: [{ offsetDays: 0, enabled: true }],
-  split: { mode: "equal", parts: [{ kind: "user", userId: "u1" }] },
+  split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
   allocations: [],
   charges: [],
   previews: [],
   nextMaterialization: null,
-  category: "food",
+  category: BillingCategory.Food,
   invite: null,
   guests: [],
   linkableContacts: [],
@@ -182,11 +182,11 @@ const onceBilling: BillingDetail = {
 
 const payableBilling: BillingDetail = {
   ...onceBilling,
-  direction: "payable",
+  direction: Direction.Payable,
   payee: { userId: "u1", name: "Ana" },
-  pix: { keyType: "phone", key: "+5511987654321", label: "Inter" },
+  pix: { keyType: PixKeyType.Phone, key: "+5511987654321", label: "Inter" },
   paymentMethodId: undefined,
-  split: { mode: "equal", parts: [{ kind: "owner" }] },
+  split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] },
 };
 
 /** Flips the form to a conta a pagar; the participants and the split leave the screen. */
@@ -223,8 +223,13 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Mercado" }));
     expect(screen.queryByRole("button", { name: "Revisar cobrança" })).toBeNull();
 
-    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    const create = screen.getByRole("button", { name: "Criar conta" });
+
+    await fireEvent.press(create);
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ id: "b1", charges: [{ id: "c1" }] }));
+
+    // Clearing it here would flash the button back to idle while this screen is still on top.
+    expect(create).toBeDisabled();
 
     expect(client.createBilling.mock.calls[0][0]).toMatchObject({
       type: "once",
@@ -297,6 +302,36 @@ describe("BillingFormScreen", () => {
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
 
     expect(client.createBilling.mock.calls[0][0]).toMatchObject({ type: "until", endDate: "2026-03-31" });
+  });
+
+  it("picks the month of a due date on the last day with Final do mês", async () => {
+    const { client } = await quickForm();
+
+    await fillQuickBilling();
+    await fireEvent.press(screen.getByRole("button", { name: "Final do mês" }));
+
+    expect(screen.queryByLabelText("Vencimento")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abrir calendário" })).toBeNull();
+
+    const next = endOfMonthOptions(calendarDate(new Date(), TIMEZONE), 2)[1]!;
+
+    await fireEvent.press(screen.getByRole("button", { name: "Mês do vencimento" }));
+    await fireEvent.press(await screen.findByRole("button", { name: next.label }));
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ startDate: next.value, dueRule: "end_of_month" });
+  });
+
+  it("hides Final do mês on a yearly billing", async () => {
+    await quickForm();
+
+    expect(screen.getByRole("button", { name: "Final do mês" })).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Recorrente" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Anual" }));
+
+    expect(screen.queryByRole("button", { name: "Final do mês" })).toBeNull();
   });
 
   it("moves the due date with the quick button and the calendar", async () => {

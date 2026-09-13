@@ -160,7 +160,9 @@ describe("ContactsScreen", () => {
   });
 });
 
-describe("contextual back links", () => {
+// The header back button goes one history entry back; its href stays the declared destination,
+// which is what a modified click and a pre-hydration click still use.
+describe("back button destinations", () => {
   function emptyApi() {
     vi.mocked(browserFetch).mockImplementation(async path =>
       String(path).includes("payment-methods")
@@ -175,47 +177,47 @@ describe("contextual back links", () => {
     emptyApi();
     render(await ContactsPage({ searchParams: Promise.resolve({ returnTo: "/billings/new" }) }));
 
-    expect(screen.getByRole("link", { name: "← Nova conta" })).toHaveAttribute("href", "/billings/new");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/billings/new");
   });
 
   it("falls back to the profile when the contacts page was opened on its own", async () => {
     emptyApi();
     render(await ContactsPage({ searchParams: Promise.resolve({}) }));
 
-    expect(screen.getByRole("link", { name: "← Perfil" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/settings");
   });
 
   it("sends the contact history back to the contact list", async () => {
     emptyApi();
     render(await ContactPage({ params: Promise.resolve({ id: "ana" }) }));
 
-    expect(screen.getByRole("link", { name: "← Contatos" })).toHaveAttribute("href", "/contacts");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/contacts");
   });
 
   it("sends the contact form back to the list, or to the screen that asked for it", async () => {
     emptyApi();
     render(await NewContactPage({ searchParams: Promise.resolve({}) }));
 
-    expect(screen.getByRole("link", { name: "← Contatos" })).toHaveAttribute("href", "/contacts");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/contacts");
 
     cleanup();
     render(await NewContactPage({ searchParams: Promise.resolve({ returnTo: "/billings/new" }) }));
 
-    expect(screen.getByRole("link", { name: "← Nova conta" })).toHaveAttribute("href", "/billings/new");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/billings/new");
   });
 
   it("sends the contact edit form back to the contact it came from", async () => {
     emptyApi();
     render(await EditContactPage({ params: Promise.resolve({ id: "ana" }), searchParams: Promise.resolve({}) }));
 
-    expect(screen.getByRole("link", { name: "← Contato" })).toHaveAttribute("href", "/contacts/ana");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/contacts/ana");
   });
 
   it("names the screen the Pix keys page came from", async () => {
     emptyApi();
     render(await PixSettingsPage({ searchParams: Promise.resolve({ returnTo: "/billings/new", required: "1" }) }));
 
-    expect(screen.getByRole("link", { name: "← Nova conta" })).toHaveAttribute("href", "/billings/new");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/billings/new");
     expect(screen.getByText("Você precisa de uma chave Pix para criar cobranças.")).toBeInTheDocument();
   });
 
@@ -223,13 +225,13 @@ describe("contextual back links", () => {
     emptyApi();
     render(await PixSettingsPage({ searchParams: Promise.resolve({}) }));
 
-    expect(screen.getByRole("link", { name: "← Perfil" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/settings");
   });
 
   it("sends the Pix key form back to the key list", async () => {
     emptyApi();
     render(await NewPixKeyPage({ searchParams: Promise.resolve({}) }));
 
-    expect(screen.getByRole("link", { name: "← Chaves Pix" })).toHaveAttribute("href", "/settings/pix");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/settings/pix");
   });
 });

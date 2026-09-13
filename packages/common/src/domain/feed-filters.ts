@@ -1,12 +1,21 @@
-import type { BillingType } from './billing';
+import { BillingType } from './billing';
 import { addCalendarDays } from './billing-calendar';
-import type { Direction } from './contracts';
+import { Direction } from './contracts';
 import { calendarDate } from './financial-form';
 
 /** `overdue` is not a stored state: it is a pending charge whose due date already passed. */
-export type FeedStatus = 'pending' | 'overdue' | 'paid' | 'cancelled';
+export const enum FeedStatus {
+  Pending = 'pending',
+  Overdue = 'overdue',
+  Paid = 'paid',
+  Cancelled = 'cancelled'
+}
 
-export type FeedPeriod = 'any' | 'today' | 'week';
+export const enum FeedPeriod {
+  Any = 'any',
+  Today = 'today',
+  Week = 'week'
+}
 
 /** Every list is an "any of"; an empty one means no restriction on that group. */
 export type FeedFilters = {
@@ -17,45 +26,50 @@ export type FeedFilters = {
 };
 
 /** The feed opens on everything but the cancelled charges, which nobody has to act on. */
-export const DEFAULT_FEED_FILTERS: FeedFilters = { direction: [], status: ['pending', 'overdue', 'paid'], type: [], period: 'any' };
+export const DEFAULT_FEED_FILTERS: FeedFilters = {
+  direction: [],
+  status: [FeedStatus.Pending, FeedStatus.Overdue, FeedStatus.Paid],
+  type: [],
+  period: FeedPeriod.Any
+};
 
 export const FEED_DIRECTIONS: { value: Direction; label: string }[] = [
-  { value: 'receivable', label: 'A receber' },
-  { value: 'payable', label: 'A pagar' }
+  { value: Direction.Receivable, label: 'A receber' },
+  { value: Direction.Payable, label: 'A pagar' }
 ];
 
 export const FEED_STATUSES: { value: FeedStatus; label: string }[] = [
-  { value: 'pending', label: 'Pendentes' },
-  { value: 'overdue', label: 'Atrasadas' },
-  { value: 'paid', label: 'Pagas' },
-  { value: 'cancelled', label: 'Canceladas' }
+  { value: FeedStatus.Pending, label: 'Pendentes' },
+  { value: FeedStatus.Overdue, label: 'Atrasadas' },
+  { value: FeedStatus.Paid, label: 'Pagas' },
+  { value: FeedStatus.Cancelled, label: 'Canceladas' }
 ];
 
 export const FEED_TYPES: { value: BillingType; label: string }[] = [
-  { value: 'once', label: 'À vista' },
-  { value: 'until', label: 'Parcelado' },
-  { value: 'indefinite', label: 'Recorrente' }
+  { value: BillingType.Once, label: 'À vista' },
+  { value: BillingType.Until, label: 'Parcelado' },
+  { value: BillingType.Indefinite, label: 'Recorrente' }
 ];
 
 export const FEED_PERIODS: { value: FeedPeriod; label: string }[] = [
-  { value: 'any', label: 'Qualquer data' },
-  { value: 'today', label: 'Hoje' },
-  { value: 'week', label: 'Esta semana' }
+  { value: FeedPeriod.Any, label: 'Qualquer data' },
+  { value: FeedPeriod.Today, label: 'Hoje' },
+  { value: FeedPeriod.Week, label: 'Esta semana' }
 ];
 
 /** Paid and cancelled close a charge; everything else is still open. */
-export const CLOSED_FEED_STATUSES: FeedStatus[] = ['paid', 'cancelled'];
+export const CLOSED_FEED_STATUSES: FeedStatus[] = [FeedStatus.Paid, FeedStatus.Cancelled];
 
 export function toggleFeedValue<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value];
 }
 
 function periodRange(period: FeedPeriod, today: string): { from: string; to: string } | null {
-  if (period === 'today') {
+  if (period === FeedPeriod.Today) {
     return { from: today, to: today };
   }
 
-  if (period === 'week') {
+  if (period === FeedPeriod.Week) {
     return { from: today, to: addCalendarDays(today, 7) };
   }
 

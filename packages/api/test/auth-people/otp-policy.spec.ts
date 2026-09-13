@@ -2,7 +2,7 @@ import { equal } from 'node:assert/strict';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { after, before, it } from 'node:test';
 import { allowEmailCode } from '../../src/common/utils/throttle';
-import { createAuthRepository } from '../../src/users/repositories/auth';
+import { AuthRepository } from '../../src/users/repositories/auth';
 import { requestEmailCode } from '../../src/users/services/email-login';
 import { db } from '../fixtures/financial';
 
@@ -24,7 +24,7 @@ it('serializes first-code creation so simultaneous requests retain anti-enumerat
       requestEmailCode(
         { email },
         {
-          repo: createAuthRepository(db),
+          repo: AuthRepository.create(db),
           codeHashKey,
           generateCode: () => '123456',
           transport: {

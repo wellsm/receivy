@@ -39,7 +39,7 @@ export function ScopeModal({ title, subtitle, explanation, primaryLabel, seconda
             <Pressable accessibilityRole="button" accessibilityLabel={secondaryLabel} disabled={busy} onPress={onSecondary} className={`h-11 items-center justify-center rounded-lg ${secondary.button}`}>
               <Text className={`text-xs font-semibold ${secondary.label}`}>{secondaryLabel}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Voltar" onPress={onCancel} className="h-11 items-center justify-center rounded-lg">
+            <Pressable accessibilityRole="button" accessibilityLabel="Voltar" disabled={busy} onPress={onCancel} className="h-11 items-center justify-center rounded-lg">
               <Text className="text-xs font-semibold text-muted">Voltar</Text>
             </Pressable>
           </View>

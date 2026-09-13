@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 type ScopeDialogProps = {
   title: string;
@@ -26,6 +26,7 @@ const SECONDARY_STYLES = {
 /** A choice with two outcomes plus Voltar: Pausar, Encerrar and the scope of a recorrente edit. */
 export function ScopeDialog({ title, subtitle, icon: Icon, explanation, primaryLabel, secondaryLabel, secondaryTone = "neutral", busy = false, onPrimary, onSecondary, onCancel }: ScopeDialogProps) {
   const back = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     back.current?.focus();
@@ -42,13 +43,13 @@ export function ScopeDialog({ title, subtitle, icon: Icon, explanation, primaryL
         }
       }}
     >
-      <div role="dialog" aria-modal="true" aria-labelledby="scope-dialog-title" className="flex w-full max-w-sm flex-col gap-4 rounded-2xl border border-outline/30 bg-surface p-5 shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="flex w-full max-w-sm flex-col gap-4 rounded-2xl border border-outline/30 bg-surface p-5 shadow-2xl">
         <div className="flex items-center gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary-strong">
             <Icon size={22} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h2 id="scope-dialog-title" className="m-0 text-[17px] font-bold text-ink">
+            <h2 id={titleId} className="m-0 text-[17px] font-bold text-ink">
               {title}
             </h2>
             {subtitle && <p className="m-0 text-[11px] text-muted">{subtitle}</p>}

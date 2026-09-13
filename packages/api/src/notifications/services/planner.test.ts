@@ -45,4 +45,19 @@ describe('shouldSendInitialNotice', () => {
       false
     );
   });
+
+  it('announces a future charge with no reminders at all, since none of them will ever reach it', () => {
+    expect(shouldSendInitialNotice({ dueDate: '2026-03-20', now: at('2026-03-10T15:00:00Z'), timezone: TZ, reminders: [] })).toBe(true);
+  });
+
+  it('leaves a future charge to a positive-offset reminder whose instant is still ahead', () => {
+    expect(
+      shouldSendInitialNotice({
+        dueDate: '2026-03-20',
+        now: at('2026-03-10T15:00:00Z'),
+        timezone: TZ,
+        reminders: [{ offsetDays: 2, enabled: true }]
+      })
+    ).toBe(false);
+  });
 });

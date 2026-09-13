@@ -546,6 +546,12 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   const pixSpec = pixKeyField(draft.pixInline.type);
   const action = editing ? "Salvar conta" : "Criar conta";
 
+  function scopeExplanation(detail: BillingDetail): string {
+    const today = todayIn(detail.timezone);
+
+    return editScopeExplanation(editableMonthCharges(detail, today).length, today);
+  }
+
   return (
     <form className="mx-auto flex w-full max-w-md min-w-0 flex-col gap-4 pb-6 md:max-w-4xl" onSubmit={submit}>
       {frozen && <p className="m-0 rounded-2xl bg-primary-soft/50 p-4 text-sm text-primary-strong">{FROZEN_NOTE}</p>}
@@ -1001,7 +1007,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
         <ScopeDialog
           title="Aplicar às cobranças deste mês?"
           icon={CalendarClock}
-          explanation={editScopeExplanation(editableMonthCharges(billing, todayIn(billing.timezone)).length, todayIn(billing.timezone))}
+          explanation={scopeExplanation(billing)}
           primaryLabel="Aplicar também às deste mês"
           secondaryLabel="Só a partir do mês seguinte"
           busy={busy}

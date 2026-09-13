@@ -784,6 +784,14 @@ describe('billings on native PostgreSQL', () => {
       },
       date('2026-01-01')
     );
+
+    // January materializes at creation now: one charge, for the split's only `user` part (the owner's
+    // `percentage` part is absorbed, never billed), due on the start date itself.
+    deepEqual(
+      indefinite.charges.map((charge) => charge.dueDate),
+      ['2026-01-31']
+    );
+
     const patched = await BillingRepository.patch(db, OWNER, indefinite.id, { totalCents: 20_003 }, date('2026-01-01'));
     equal(patched.total.amountCents, 20_003);
     const reallocated = resolveBillingSplit(20_003, split);

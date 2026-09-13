@@ -6,6 +6,7 @@ import {
   type BillingInput,
   BillingState,
   BillingType,
+  Direction,
   EditScope,
   PendingChargesAction,
   PixKeyType,
@@ -458,5 +459,52 @@ describe('month materialized: pending charges and current month edits', () => {
     const ana = (await chargeRows(billing.id)).find((row) => row.debtor_user_id === anaId);
 
     equal(ana?.amount_cents, 6_000);
+  });
+
+  it('clearPayee on a conta a pagar cancels the payee charge and keeps the bill owner-only for CurrentMonth', async () => {
+    const billing = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-payable-clear-payee',
+      {
+        type: BillingType.Indefinite,
+        frequency: BillingFrequency.Monthly,
+        direction: Direction.Payable,
+        description: 'Aluguel',
+        totalCents: 10_000,
+        startDate: '2026-03-20',
+        timezone: TZ,
+        payeeUserId: anaId,
+        pix: { keyType: PixKeyType.Cpf, key: '52998224725', label: 'Imobiliária' }
+      },
+      date('2026-03-05')
+    );
+    const [anaCharge] = await chargeRows(billing.id);
+
+    ok(anaCharge);
+    equal(anaCharge.debtor_user_id, anaId);
+
+    await BillingRepository.patch(db, OWNER, billing.id, { clearPayee: true, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+
+    const rows = await chargeRows(billing.id);
+    const cancelled = rows.find((row) => row.id === anaCharge.id);
+
+    equal(cancelled?.state, 'cancelled');
+    deepEqual((await EventRepository.list(db, anaCharge.id, 'charge.cancelled'))[0]?.payload, { reason: 'billing_edited' });
+
+    // Clearing the payee plans a charge with userId: null (planBillingCharges, payer: owner). monthChanges
+    // matches planned charges by debtor id, so Ana's charge (debtor_user_id: anaId) does not match the
+    // planned null id: it is cancelled above and the null-debtor occurrence lands in `changes.create`
+    // instead of `changes.update`. The billing_id:debtor_user_id:due_date unique index has no existing
+    // row for (billing, null, 2026-03-20) - only Ana's row held that date - so the create is not skipped
+    // as "taken" and a fresh owner-only charge is persisted alongside the cancelled one.
+    const ownerOnly = rows.find((row) => row.debtor_user_id === null);
+
+    ok(ownerOnly, 'the owner keeps paying the bill even without a payee on record');
+    equal(ownerOnly?.state, 'pending');
+    equal(ownerOnly?.due_date, '2026-03-20');
+    equal(ownerOnly?.amount_cents, 10_000);
+    equal(ownerOnly?.pix_key_snapshot, '52998224725');
+    equal(rows.length, 2);
   });
 });

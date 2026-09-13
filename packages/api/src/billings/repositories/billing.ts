@@ -418,7 +418,20 @@ async function searchBillingIds(
   return rows.map((row) => String(row['id']));
 }
 
-async function cancelPendingCharges(db: DbClient, ownerId: string, billingId: string, now: string, reason: string, after?: string) {
+const enum ChargeCancelReason {
+  BillingPaused = 'billing_paused',
+  BillingEnded = 'billing_ended',
+  BillingEdited = 'billing_edited'
+}
+
+async function cancelPendingCharges(
+  db: DbClient,
+  ownerId: string,
+  billingId: string,
+  now: string,
+  reason: ChargeCancelReason,
+  after?: string
+) {
   const pending = await db.charges.findMany({
     select: ChargeRepository.SELECT,
     where: { billing_id: billingId, state: ChargeState.Pending, ...(after ? { due_date: { gt: after } } : {}) },
@@ -446,7 +459,7 @@ async function cancelPendingCharges(db: DbClient, ownerId: string, billingId: st
  */
 async function settlePendingCharges(db: DbClient, ownerId: string, billingId: string, patch: BillingPatch, today: string, now: string) {
   const ended = patch.state === BillingState.Ended;
-  const reason = ended ? 'billing_ended' : 'billing_paused';
+  const reason = ended ? ChargeCancelReason.BillingEnded : ChargeCancelReason.BillingPaused;
 
   if (!ended) {
     if (patch.pendingCharges === PendingChargesAction.Cancel) {
@@ -583,7 +596,7 @@ async function rewriteMonthCharges(
       eventableType: EventableType.Charge,
       eventableId: charge.id,
       actorId: row.owner_id,
-      payload: { reason: 'billing_edited' },
+      payload: { reason: ChargeCancelReason.BillingEdited },
       at: now
     });
   }

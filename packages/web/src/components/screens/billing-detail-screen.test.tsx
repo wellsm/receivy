@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PixKeyType, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
 
@@ -140,6 +140,13 @@ async function open(detail = billing(), handler?: Handler) {
   await screen.findByRole("heading", { name: "Jantar de despedida" });
 
   return calls;
+}
+
+function patchBodies(): unknown[] {
+  return vi
+    .mocked(browserFetch)
+    .mock.calls.filter(([, init]) => init?.method === "PATCH")
+    .map(([, init]) => JSON.parse(String(init?.body)));
 }
 
 it("sums the current cycle in the hero and lists its participants with their status", async () => {
@@ -307,17 +314,32 @@ it("shares an invite that already exists instead of issuing a new one", async ()
   expect(writeText).toHaveBeenCalled();
 });
 
-it("pauses and resumes only a subscription", async () => {
-  const calls = await open(billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined }));
+it("asks what to do with the pending charges before pausing a subscription", async () => {
+  await open(billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined }));
   const user = setup();
 
   expect(screen.getByText("Recorrente mensal")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Pausar" }));
 
-  expect(calls).toContain("PATCH /api/financial/billings/b1");
+  const dialog = await screen.findByRole("dialog", { name: "Pausar conta?" });
+  expect(patchBodies()).toEqual([]);
+
+  await user.click(within(dialog).getByRole("button", { name: "Manter as deste mês" }));
+
+  expect(patchBodies()).toEqual([{ state: "paused", pendingCharges: PendingChargesAction.Keep }]);
   expect(await screen.findByRole("button", { name: "Retomar" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Convidar" })).not.toBeInTheDocument();
+});
+
+it("pauses right away when nothing is pending", async () => {
+  await open(billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: firstCycle }));
+  const user = setup();
+
+  await user.click(screen.getByRole("button", { name: "Pausar" }));
+
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(patchBodies()).toEqual([{ state: "paused" }]);
 });
 
 it("has no pause for a finite billing", async () => {
@@ -336,26 +358,36 @@ it("names the Pix key from the wallet while no charge has been generated", async
   expect(screen.queryByText("Sem chave Pix vinculada")).not.toBeInTheDocument();
 });
 
-it("ends only after confirmation, revokes the invite and hides the actions", async () => {
+it("ends cancelling the pending charges, revokes the invite and hides the actions", async () => {
   const calls = await open(billing({ invite: { url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" } }));
   const user = setup();
 
   await user.click(screen.getByRole("button", { name: "Encerrar" }));
 
   expect(await screen.findByRole("dialog", { name: "Encerrar conta?" })).toBeInTheDocument();
-  expect(calls).not.toContain("PATCH /api/financial/billings/b1");
 
-  await user.click(screen.getByRole("button", { name: "Cancelar" }));
+  await user.click(screen.getByRole("button", { name: "Voltar" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Encerrar" }));
-  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Encerrar" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancelar pendentes (1)" }));
 
   expect(await screen.findByText("Encerrada")).toBeInTheDocument();
-  expect(calls).toContain("PATCH /api/financial/billings/b1");
+  expect(patchBodies()).toEqual([{ state: "ended", pendingCharges: PendingChargesAction.Cancel }]);
   expect(calls).toContain("DELETE /api/financial/billings/b1/invite");
   expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Compartilhar link de pagamento" })).not.toBeInTheDocument();
+});
+
+it("ends with the simple confirmation when nothing is pending", async () => {
+  await open(billing({ charges: firstCycle }));
+  const user = setup();
+
+  await user.click(screen.getByRole("button", { name: "Encerrar" }));
+  await user.click(within(await screen.findByRole("dialog", { name: "Encerrar conta?" })).getByRole("button", { name: "Encerrar" }));
+
+  expect(await screen.findByText("Encerrada")).toBeInTheDocument();
+  expect(patchBodies()).toEqual([{ state: "ended" }]);
 });
 
 it("shows a conta a pagar with its inline key and payee, without invite, link or reminders", async () => {

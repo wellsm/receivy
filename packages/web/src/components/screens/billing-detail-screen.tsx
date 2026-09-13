@@ -1,11 +1,12 @@
 "use client";
 
-import { billingCategoryLabel, calendarDate, chargeShareText, formatMoney, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod, type PixSnapshot } from "@receivy/common";
+import { billingCategoryLabel, calendarDate, chargeShareText, formatMoney, pendingChargesOf, PendingChargesAction, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod, type PixSnapshot } from "@receivy/common";
 import { Bell, Check, CircleDashed, CirclePause, CirclePlay, CircleStop, KeyRound, Pencil, Receipt, RotateCcw, Share2, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
+import { ScopeDialog } from "@/components/app/scope-dialog";
 import { Toast } from "@/components/app/toast";
 import { ActionTile } from "@/components/ui/action-tile";
 import { CategoryIcon } from "@/components/ui/category-icon";
@@ -179,6 +180,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [scope, setScope] = useState<"paused" | "ended" | null>(null);
   // The row being settled by hand, with the name the notice will use.
   const [confirmPaid, setConfirmPaid] = useState<{ charge: ChargeDetail; name: string } | null>(null);
   const [confirmReopen, setConfirmReopen] = useState<ChargeDetail | null>(null);
@@ -259,12 +261,14 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
     }, "Não foi possível revogar o convite.");
   }
 
-  async function transition(detail: BillingDetail, state: "active" | "paused" | "ended") {
+  async function transition(detail: BillingDetail, state: "active" | "paused" | "ended", pendingCharges?: PendingChargesAction) {
     await run(async () => {
-      const updated = await request<BillingDetail>(`/api/financial/billings/${detail.id}`, jsonInit("PATCH", { state }), "Não foi possível atualizar a cobrança.");
+      const body = pendingCharges ? { state, pendingCharges } : { state };
+      const updated = await request<BillingDetail>(`/api/financial/billings/${detail.id}`, jsonInit("PATCH", body), "Não foi possível atualizar a cobrança.");
 
       setBilling(updated);
       setConfirmEnd(false);
+      setScope(null);
 
       // The server keeps the invite alive after the billing ends, so drop it here; a failure must not block the transition.
       if (state === "ended" && invite) {
@@ -319,6 +323,24 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
       setConfirmReopen(null);
       load();
     }, "Não foi possível reabrir a cobrança.");
+  }
+
+  function pause(detail: BillingDetail) {
+    if (!pendingChargesOf(detail).length) {
+      void transition(detail, "paused");
+      return;
+    }
+
+    setScope("paused");
+  }
+
+  function end(detail: BillingDetail) {
+    if (!pendingChargesOf(detail).length) {
+      setConfirmEnd(true);
+      return;
+    }
+
+    setScope("ended");
   }
 
   if (!billing) {
@@ -479,10 +501,10 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                     icon={billing.state === "active" ? CirclePause : CirclePlay}
                     hint={billing.state === "active" ? "Suspende as próximas ocorrências" : "Volta a gerar ocorrências"}
                     disabled={busy}
-                    onClick={() => void transition(billing, billing.state === "active" ? "paused" : "active")}
+                    onClick={() => (billing.state === "active" ? pause(billing) : void transition(billing, "active"))}
                   />
                 )}
-                <ActionTile label="Encerrar" icon={CircleStop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onClick={() => setConfirmEnd(true)} />
+                <ActionTile label="Encerrar" icon={CircleStop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onClick={() => end(billing)} />
               </div>
               {invite && billing.state === "active" && !payable && (
                 <div className="flex items-center justify-between px-1">
@@ -787,6 +809,22 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
           busy={busy}
           onConfirm={() => void transition(billing, "ended")}
           onCancel={() => setConfirmEnd(false)}
+        />
+      )}
+
+      {scope && (
+        <ScopeDialog
+          title={scope === "paused" ? "Pausar conta?" : "Encerrar conta?"}
+          subtitle={scope === "ended" ? "Esta ação não pode ser desfeita." : undefined}
+          icon={scope === "paused" ? CirclePause : CircleStop}
+          explanation={scope === "paused" ? `Novas cobranças deixam de ser geradas. E as pendentes de “${billing.description}”?` : `Encerrar impede novas ocorrências de “${billing.description}”. E as pendentes?`}
+          primaryLabel="Manter as deste mês"
+          secondaryLabel={`Cancelar pendentes (${pendingChargesOf(billing).length})`}
+          secondaryTone="danger"
+          busy={busy}
+          onPrimary={() => void transition(billing, scope, PendingChargesAction.Keep)}
+          onSecondary={() => void transition(billing, scope, PendingChargesAction.Cancel)}
+          onCancel={() => setScope(null)}
         />
       )}
 

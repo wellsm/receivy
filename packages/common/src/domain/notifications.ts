@@ -1,4 +1,4 @@
-export enum DevicePlatform {
+export const enum DevicePlatform {
   Ios = 'ios',
   Android = 'android'
 }

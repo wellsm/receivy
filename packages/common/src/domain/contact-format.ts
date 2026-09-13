@@ -1,7 +1,7 @@
 import type { PixKeyType } from './contracts';
 import { BadgeTone } from './feed';
 
-export enum PixKeyboard {
+export const enum PixKeyboard {
   Numeric = 'numeric',
   Tel = 'tel',
   Email = 'email',

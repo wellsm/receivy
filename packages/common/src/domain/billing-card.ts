@@ -4,7 +4,7 @@ import { Direction, SplitMode } from './contracts';
 import { BadgeTone } from './feed';
 import { formatMoney } from './money';
 
-export enum BillingShareAction {
+export const enum BillingShareAction {
   Share = 'share',
   Open = 'open'
 }

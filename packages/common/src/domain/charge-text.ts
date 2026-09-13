@@ -2,7 +2,7 @@ import { BillingType } from './billing';
 import { type ChargeDetail, ChargePayer, type ChargeProof, ChargeState, type ChargeSummary, Direction, ProofState } from './contracts';
 import { formatMoney } from './money';
 
-export enum ChargeTone {
+export const enum ChargeTone {
   Success = 'success',
   Warning = 'warning',
   Info = 'info',

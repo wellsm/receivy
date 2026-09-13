@@ -4,14 +4,14 @@ import { Direction } from './contracts';
 import { calendarDate } from './financial-form';
 
 /** `overdue` is not a stored state: it is a pending charge whose due date already passed. */
-export enum FeedStatus {
+export const enum FeedStatus {
   Pending = 'pending',
   Overdue = 'overdue',
   Paid = 'paid',
   Cancelled = 'cancelled'
 }
 
-export enum FeedPeriod {
+export const enum FeedPeriod {
   Any = 'any',
   Today = 'today',
   Week = 'week'

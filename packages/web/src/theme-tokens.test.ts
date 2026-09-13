@@ -32,7 +32,11 @@ function sources(directory: string, found: string[] = []): string[] {
 }
 
 it("keeps fixed palette colors out of components", () => {
-  const offenders = sources(ROOT)
+  const files = sources(ROOT);
+
+  expect(files.length).toBeGreaterThan(20);
+
+  const offenders = files
     .filter(file => !EXCEPTIONS.has(relative(ROOT, file)))
     .flatMap(file =>
       readFileSync(file, "utf8")

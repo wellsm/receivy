@@ -14,12 +14,14 @@ export const designTokens = {
     danger: '#B91C1C',
     dangerSoft: '#FEF2F2',
     dangerSolid: '#DC2626',
+    onDanger: '#FFFFFF',
     warning: '#78350F',
     warningSoft: '#FFFBEB',
     info: '#1E40AF',
     infoSoft: '#EFF6FF',
     success: '#065F46',
-    successSoft: '#ECFDF5'
+    successSoft: '#ECFDF5',
+    scrim: 'rgba(0,0,0,.4)'
   },
   colorDark: {
     primary: '#5BD3A2',
@@ -36,12 +38,14 @@ export const designTokens = {
     danger: '#F4A6A3',
     dangerSoft: '#3B1A1D',
     dangerSolid: '#C23B3B',
+    onDanger: '#FFFFFF',
     warning: '#F2C274',
     warningSoft: '#33260E',
     info: '#9FBEF7',
     infoSoft: '#16233F',
     success: '#86D9B1',
-    successSoft: '#10332A'
+    successSoft: '#10332A',
+    scrim: 'rgba(0,0,0,.6)'
   },
   radius: {
     sm: 8,

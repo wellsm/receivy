@@ -1,6 +1,7 @@
 import "@fontsource-variable/plus-jakarta-sans";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { THEME_SCRIPT } from "@/lib/theme-script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,12 +15,6 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#0d1320" },
   ],
 };
-
-/**
- * Runs before first paint so a pinned or system dark theme never flashes light. It mirrors
- * `resolveTheme` from @receivy/common (an inline script cannot import) and lib/theme.ts keeps it in sync afterwards.
- */
-const THEME_SCRIPT = `(function(){try{var p=localStorage.getItem("receivy-theme");var d=p==="dark"||(p!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.dataset.theme=d?"dark":"light";r.style.colorScheme=d?"dark":"light";}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

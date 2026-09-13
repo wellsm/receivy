@@ -227,6 +227,7 @@ curl -s $API/auth/email/code -H 'content-type: application/json' -d '{"email":"x
 ## 18. Dark mode
 
 - [ ] Web, Perfil › Aparência em Sistema com o sistema no escuro: Feed, Contas, detalhe da conta, cobrança e Perfil escuros, sem flash claro ao recarregar.
+- [ ] Web, Sistema com o Feed aberto: trocar o modo do sistema aplica na hora, sem recarregar.
 - [ ] Web, trocar para Claro e depois Escuro: aplica na hora e sobrevive ao recarregar a página.
 - [ ] Web, modais (Pausar/Encerrar, edição com escopo, sair, excluir conta): fundo escurecido e textos legíveis nos dois temas.
 - [ ] Web, selos Atrasada, Em análise, Paga e Lembrete: cores de status legíveis no escuro.

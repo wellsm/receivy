@@ -43,7 +43,11 @@ function sources(directory: string, found: string[] = []): string[] {
 }
 
 it("keeps fixed palette colors and hex literals out of components", () => {
-  const offenders = sources(ROOT).flatMap((file) =>
+  const files = sources(ROOT);
+
+  expect(files.length).toBeGreaterThan(20);
+
+  const offenders = files.flatMap((file) =>
     readFileSync(file, "utf8")
       .split("\n")
       .flatMap((line, index) => (PALETTE.test(line) || HEX.test(line) ? [`${relative(ROOT, file)}:${index + 1}: ${line.trim()}`] : [])),

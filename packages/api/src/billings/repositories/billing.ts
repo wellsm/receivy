@@ -452,6 +452,23 @@ async function settlePendingCharges(db: DbClient, ownerId: string, billingId: st
   await cancelPendingCharges(db, ownerId, billingId, now, reason, endOfMonth(today));
 }
 
+/** Whether the patch changes anything a charge carries; reminders and category never reach a materialized charge. */
+function touchesCharges(patch: BillingPatch): boolean {
+  return (
+    patch.totalCents !== undefined ||
+    patch.split !== undefined ||
+    patch.description !== undefined ||
+    patch.paymentMethodId !== undefined ||
+    patch.clearPaymentMethod !== undefined ||
+    patch.pix !== undefined ||
+    patch.clearPix !== undefined ||
+    patch.payeeUserId !== undefined ||
+    patch.clearPayee !== undefined ||
+    patch.startDate !== undefined ||
+    patch.dueRule !== undefined
+  );
+}
+
 /** EditScope.CurrentMonth: this month's charges that are not due yet follow the edit; returns the created charge ids to announce. */
 async function rewriteMonthCharges(db: DbClient, row: BillingRepository.Row, today: string, now: string): Promise<string[]> {
   const monthEnd = endOfMonth(today);
@@ -1113,7 +1130,7 @@ export namespace BillingRepository {
         await settlePendingCharges(tx, ownerId, id, patch, today, instant);
       }
 
-      if (patch.applyTo === EditScope.CurrentMonth) {
+      if (patch.applyTo === EditScope.CurrentMonth && touchesCharges(patch)) {
         noticeChargeIds.push(...(await rewriteMonthCharges(tx, await billingRow(tx, ownerId, id), today, instant)));
       }
 

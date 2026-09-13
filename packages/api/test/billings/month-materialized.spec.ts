@@ -249,6 +249,25 @@ describe('month materialized: pending charges and current month edits', () => {
 
     await BillingRepository.patch(db, OWNER, later.id, { totalCents: 5_000, applyTo: EditScope.NextMonth }, date('2026-03-06'));
     equal((await chargeRows(later.id))[0]?.amount_cents, 10_000);
+
+    const reminded = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-reminders',
+      recurring('Lembrete', '2026-03-20', [anaId]),
+      date('2026-03-05')
+    );
+    const [remindedCharge] = await chargeRows(reminded.id);
+
+    await BillingRepository.patch(
+      db,
+      OWNER,
+      reminded.id,
+      { reminders: [{ offsetDays: -1, enabled: true }], applyTo: EditScope.CurrentMonth },
+      date('2026-03-06')
+    );
+    equal((await chargeRows(reminded.id))[0]?.amount_cents, 10_000);
+    equal((await EventRepository.list(db, remindedCharge!.id, 'charge.edited')).length, 0);
   });
 
   it('moves the due day inside the month and skips a person whose cancelled charge holds the date', async () => {

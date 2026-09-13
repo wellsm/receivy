@@ -6,6 +6,7 @@ import type {
   BillingNotPausableError,
   BillingPreviewUnavailableError,
   BillingSnapshotLockedError,
+  EditScopeNotRecurringError,
   GuestAlreadyResolvedError,
   IdempotencyMismatchError,
   PayableHasNoSplitError,
@@ -100,7 +101,8 @@ export declare class Api extends Http.Service {
         ProofSizeMismatchError,
         ProofReviewInvalidError,
         TimelineOverflowError,
-        PendingChargesWithoutStateError
+        PendingChargesWithoutStateError,
+        EditScopeNotRecurringError
       ];
       429: [TooManyRequestsError, ReminderQuotaError];
     };

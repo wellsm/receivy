@@ -40,6 +40,13 @@ class to that status. The base classes (`ConflictError` 409, `UnprocessableEntit
 `RateLimitedError` 429) live in `packages/api/src/common/errors.ts` and carry the same status so
 the request listener logs it.
 
+## Billing scope errors
+
+| Code | Status | When |
+|---|---|---|
+| `PENDING_CHARGES_WITHOUT_STATE` | 422 | `PATCH /billings/{id}` sends `pendingCharges` without `state` `paused`/`ended` |
+| `EDIT_SCOPE_NOT_RECURRING` | 422 | `PATCH /billings/{id}` sends `applyTo` for a Única or Parcelado billing |
+
 ## Quotas
 
 No quota is keyed by client IP: the stock gateway does not expose one, and browsers reach the API

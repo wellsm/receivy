@@ -6,14 +6,16 @@ import {
   type BillingInput,
   BillingState,
   BillingType,
+  EditScope,
   PendingChargesAction,
   PixKeyType,
   SplitMode,
   SplitPartKind,
   type SplitParty
 } from '@receivy/common';
-import { PendingChargesWithoutStateError } from '../../src/billings/errors';
+import { EditScopeNotRecurringError, PendingChargesWithoutStateError } from '../../src/billings/errors';
 import { BillingRepository } from '../../src/billings/repositories/billing';
+import { StoredProofState } from '../../src/charges/schemas/charge';
 import { EventRepository } from '../../src/common/repositories/events';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
@@ -66,10 +68,6 @@ describe('month materialized: pending charges and current month edits', () => {
     brunoId = (await ContactRepository.save(db, OWNER, { name: 'Bruno', email: 'month-bruno@example.com' })).userId;
     carlaId = (await ContactRepository.save(db, OWNER, { name: 'Carla', email: 'month-carla@example.com' })).userId;
     pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
-
-    // Task 6 uses brunoId/carlaId; this keeps noUnusedLocals quiet until then.
-    void brunoId;
-    void carlaId;
   });
 
   after(async () => cleanupUsers(db, [OWNER]));
@@ -182,6 +180,125 @@ describe('month materialized: pending charges and current month edits', () => {
     await rejects(
       () => BillingRepository.patch(db, OWNER, kept.id, { pendingCharges: PendingChargesAction.Cancel }, date('2026-03-06')),
       PendingChargesWithoutStateError
+    );
+  });
+
+  it('rewrites the not yet due charges of this month on CurrentMonth', async () => {
+    sent.reset();
+
+    const billing = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-edit',
+      recurring('Casa', '2026-03-20', [anaId, brunoId]),
+      date('2026-03-05')
+    );
+    const [anaCharge] = (await chargeRows(billing.id)).filter((row) => row.debtor_user_id === anaId);
+
+    ok(anaCharge);
+
+    await BillingRepository.patch(
+      db,
+      OWNER,
+      billing.id,
+      {
+        totalCents: 12_000,
+        split: { mode: SplitMode.Equal, parts: [anaId, carlaId].map((userId): SplitParty => ({ kind: SplitPartKind.User, userId })) },
+        applyTo: EditScope.CurrentMonth
+      },
+      date('2026-03-06'),
+      undefined,
+      context
+    );
+
+    const rows = await chargeRows(billing.id);
+    const ana = rows.find((row) => row.debtor_user_id === anaId);
+    const bruno = rows.find((row) => row.debtor_user_id === brunoId);
+    const carla = rows.find((row) => row.debtor_user_id === carlaId);
+
+    equal(ana?.id, anaCharge.id, 'the charge keeps its id and public link');
+    equal(ana?.amount_cents, 6_000);
+    equal(bruno?.state, 'cancelled');
+    deepEqual((await EventRepository.list(db, bruno!.id, 'charge.cancelled'))[0]?.payload, { reason: 'billing_edited' });
+    equal(carla?.state, 'pending');
+    equal(carla?.amount_cents, 6_000);
+    equal((await EventRepository.list(db, anaCharge.id, 'charge.edited')).length, 1);
+    equal(sent.emails.length, 0, 'Carla meets her charge through the reminder');
+  });
+
+  it('leaves charges due today or with a proof under review, and NextMonth touches nothing', async () => {
+    const today = await BillingRepository.create(db, OWNER, 'month-today', recurring('Hoje', '2026-03-05', [anaId]), date('2026-03-05'));
+
+    await BillingRepository.patch(db, OWNER, today.id, { totalCents: 5_000, applyTo: EditScope.CurrentMonth }, date('2026-03-05'));
+    equal((await chargeRows(today.id))[0]?.amount_cents, 10_000);
+
+    const reviewed = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-review',
+      recurring('Revisão', '2026-03-20', [anaId]),
+      date('2026-03-05')
+    );
+    const [row] = await chargeRows(reviewed.id);
+
+    await db.charges.updateOne({ where: { id: row!.id }, data: { proof_state: StoredProofState.Pending } });
+    await BillingRepository.patch(db, OWNER, reviewed.id, { totalCents: 5_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+    equal((await chargeRows(reviewed.id))[0]?.amount_cents, 10_000);
+
+    const later = await BillingRepository.create(db, OWNER, 'month-next', recurring('Depois', '2026-03-20', [anaId]), date('2026-03-05'));
+
+    await BillingRepository.patch(db, OWNER, later.id, { totalCents: 5_000, applyTo: EditScope.NextMonth }, date('2026-03-06'));
+    equal((await chargeRows(later.id))[0]?.amount_cents, 10_000);
+  });
+
+  it('moves the due day inside the month and skips a person whose cancelled charge holds the date', async () => {
+    const moved = await BillingRepository.create(db, OWNER, 'month-move', recurring('Mudou', '2026-03-20', [anaId]), date('2026-03-05'));
+    const [before] = await chargeRows(moved.id);
+
+    await BillingRepository.patch(db, OWNER, moved.id, { startDate: '2026-03-25', applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+
+    const after = await chargeRows(moved.id);
+
+    equal(after.length, 1, 'the month never gets a second charge');
+    equal(after[0]?.id, before!.id);
+    equal(after[0]?.due_date, '2026-03-25');
+
+    const back = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-back',
+      recurring('Volta', '2026-03-20', [anaId, brunoId]),
+      date('2026-03-05')
+    );
+    const onlyAna = { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: anaId }] } satisfies BillingInput['split'];
+    const both = {
+      mode: SplitMode.Equal,
+      parts: [anaId, brunoId].map((userId): SplitParty => ({ kind: SplitPartKind.User, userId }))
+    } satisfies BillingInput['split'];
+
+    await BillingRepository.patch(db, OWNER, back.id, { split: onlyAna, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+    await BillingRepository.patch(db, OWNER, back.id, { split: both, applyTo: EditScope.CurrentMonth }, date('2026-03-07'));
+
+    const brunoRows = (await chargeRows(back.id)).filter((row) => row.debtor_user_id === brunoId);
+
+    deepEqual(
+      brunoRows.map((row) => row.state),
+      ['cancelled']
+    );
+  });
+
+  it('refuses applyTo on a finite billing', async () => {
+    const course = await BillingRepository.create(
+      db,
+      OWNER,
+      'month-finite-scope',
+      { ...recurring('Curso', '2026-03-20', [anaId]), type: BillingType.Until, endDate: '2026-04-20' },
+      date('2026-03-05')
+    );
+
+    await rejects(
+      () => BillingRepository.patch(db, OWNER, course.id, { applyTo: EditScope.CurrentMonth }, date('2026-03-06')),
+      EditScopeNotRecurringError
     );
   });
 });

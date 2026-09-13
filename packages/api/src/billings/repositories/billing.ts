@@ -24,6 +24,7 @@ import {
   ChargeState,
   calendarDate,
   Direction,
+  EditScope,
   endOfMonth,
   materializationDate,
   materializationHorizon,
@@ -38,6 +39,7 @@ import {
   UserStatus
 } from '@receivy/common';
 import { ChargeRepository } from '../../charges/repositories/charge';
+import { StoredProofState } from '../../charges/schemas/charge';
 import {
   lockOwner,
   type PayableMaterialization,
@@ -55,12 +57,14 @@ import {
   BillingNotPausableError,
   BillingPreviewUnavailableError,
   BillingSnapshotLockedError,
+  EditScopeNotRecurringError,
   IdempotencyMismatchError,
   PayableHasNoSplitError,
   PendingChargesWithoutStateError,
   ReceivableHasNoPayeeError
 } from '../errors';
 import { BillingGuestState } from '../schemas/billing-guest';
+import { type MonthCharge, monthChanges } from '../services/month-scope';
 import { effectiveReminders, parseReminders } from '../services/reminders';
 import { billingRequestFingerprint } from '../services/request';
 
@@ -448,6 +452,116 @@ async function settlePendingCharges(db: DbClient, ownerId: string, billingId: st
   await cancelPendingCharges(db, ownerId, billingId, now, reason, endOfMonth(today));
 }
 
+/** EditScope.CurrentMonth: this month's charges that are not due yet follow the edit; returns the created charge ids to announce. */
+async function rewriteMonthCharges(db: DbClient, row: BillingRepository.Row, today: string, now: string): Promise<string[]> {
+  const monthEnd = endOfMonth(today);
+  const { records } = await db.charges.findMany({
+    select: ChargeRepository.SELECT,
+    where: { billing_id: row.id, state: ChargeState.Pending, due_date: { gt: today, lte: monthEnd } },
+    lock: true
+  });
+  const editable = records.filter((charge) => !charge.proof_state || charge.proof_state === StoredProofState.Rejected);
+
+  if (!editable.length) {
+    return [];
+  }
+
+  // Monthly and yearly rules have one occurrence per month: the new day inside the month, or the current one.
+  const dueDate = billingDates(calendarRule(row), addCalendarDays(today, 1), monthEnd, 1)[0] ?? editable[0]!.due_date;
+  const { split } = await BillingRepository.splitFor(db, row.id);
+  const payable = payableOf(row);
+  const counterparts = payable ? (row.payee_user_id ? [row.payee_user_id] : []) : userIds(split);
+  const context = await prepareChargeMaterialization(db, row.owner_id, counterparts, row.payment_method_id, payable);
+  const plan = planBillingCharges({
+    description: row.description,
+    totalCents: row.total_cents,
+    split,
+    dueDates: [dueDate],
+    numbered: false,
+    payer: context.payer,
+    payeeUserId: row.payee_user_id ?? null
+  });
+  const existing: MonthCharge[] = editable.map((charge) => ({
+    id: charge.id,
+    debtorUserId: charge.debtor_user_id ?? null,
+    dueDate: charge.due_date
+  }));
+  const changes = monthChanges(existing, plan.charges);
+
+  for (const { charge, planned } of changes.update) {
+    const moving = planned.dueDate !== charge.dueDate;
+    const blocked =
+      moving &&
+      (await db.charges.count({
+        where: { billing_id: row.id, debtor_user_id: charge.debtorUserId ?? sqlNull, due_date: planned.dueDate }
+      }));
+
+    if (blocked) {
+      continue;
+    }
+
+    await db.charges.updateOne({
+      where: { id: charge.id },
+      data: {
+        description: planned.description,
+        amount_cents: planned.amountCents,
+        due_date: planned.dueDate,
+        pix_key_type_snapshot: context.pix?.keyType ?? sqlNull,
+        pix_key_snapshot: context.pix?.key ?? sqlNull,
+        pix_label_snapshot: context.pix?.label ?? sqlNull,
+        updated_at: now
+      }
+    });
+    await EventRepository.record(db, {
+      type: 'charge.edited',
+      eventableType: EventableType.Charge,
+      eventableId: charge.id,
+      actorId: row.owner_id,
+      at: now
+    });
+  }
+
+  for (const charge of changes.cancel) {
+    await db.charges.updateOne({ where: { id: charge.id }, data: { state: ChargeState.Cancelled, cancelled_at: now, updated_at: now } });
+    await EventRepository.record(db, {
+      type: 'charge.cancelled',
+      eventableType: EventableType.Charge,
+      eventableId: charge.id,
+      actorId: row.owner_id,
+      payload: { reason: 'billing_edited' },
+      at: now
+    });
+  }
+
+  const creatable: typeof plan.charges = [];
+
+  for (const planned of changes.create) {
+    // A cancelled charge of the same person on the same date holds the unique index: the person joins next month.
+    const taken = await db.charges.count({
+      where: { billing_id: row.id, debtor_user_id: planned.userId ?? sqlNull, due_date: planned.dueDate }
+    });
+
+    if (!taken) {
+      creatable.push(planned);
+    }
+  }
+
+  if (!creatable.length) {
+    return [];
+  }
+
+  const persisted = await persistChargePlan(
+    db,
+    row.owner_id,
+    { ...plan, charges: creatable },
+    { id: row.id, type: BillingType.Indefinite },
+    context,
+    now
+  );
+
+  return persisted.noticeChargeIds;
+}
+
 function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
   if (row.state === BillingState.Ended) {
     throw new BillingEndedError();
@@ -457,6 +571,10 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
 
   if (patch.pendingCharges !== undefined && !settles) {
     throw new PendingChargesWithoutStateError();
+  }
+
+  if (patch.applyTo !== undefined && row.type !== BillingType.Indefinite) {
+    throw new EditScopeNotRecurringError();
   }
 
   if (patch.state === BillingState.Paused && row.type !== BillingType.Indefinite) {
@@ -912,6 +1030,7 @@ export namespace BillingRepository {
     link?: InviteLinkContext,
     notice?: NoticeContext
   ): Promise<BillingDetail> {
+    const noticeChargeIds: string[] = [];
     const detail = await db.transaction(async (tx) => {
       await lockOwner(tx, ownerId);
 
@@ -994,10 +1113,18 @@ export namespace BillingRepository {
         await settlePendingCharges(tx, ownerId, id, patch, today, instant);
       }
 
+      if (patch.applyTo === EditScope.CurrentMonth) {
+        noticeChargeIds.push(...(await rewriteMonthCharges(tx, await billingRow(tx, ownerId, id), today, instant)));
+      }
+
       await audit(tx, ownerId, id, patch.state ? `billing.${patch.state}` : 'billing.edited', instant);
 
       return dto(tx, await billingRow(tx, ownerId, id), now, link);
     });
+
+    if (notice && noticeChargeIds.length) {
+      await announceCharges(db, notice, noticeChargeIds, now.getTime());
+    }
 
     // A due day moved into the past, or a resumed billing, may owe an occurrence right away.
     if (notice && (patch.startDate !== undefined || patch.dueRule !== undefined || patch.state === BillingState.Active)) {

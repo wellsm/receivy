@@ -1562,6 +1562,14 @@ components:
             - 'active'
             - 'paused'
             - 'ended'
+        pendingCharges:
+          enum: 
+            - 'keep'
+            - 'cancel'
+        applyTo:
+          enum: 
+            - 'current_month'
+            - 'next_month'
         category:
           enum: 
             - 'food'

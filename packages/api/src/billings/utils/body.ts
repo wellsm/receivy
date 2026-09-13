@@ -7,6 +7,7 @@ import type {
   BillingState,
   BillingType,
   Direction,
+  EditScope,
   PendingChargesAction,
   PixKeyType,
   SplitMode,
@@ -67,5 +68,6 @@ export declare class PatchBody implements Http.JsonBody {
   reminders?: ReminderBody[];
   state?: BillingState;
   pendingCharges?: PendingChargesAction;
+  applyTo?: EditScope;
   category?: BillingCategory;
 }

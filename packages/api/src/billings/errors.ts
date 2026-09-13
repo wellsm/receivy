@@ -59,3 +59,9 @@ export class PendingChargesWithoutStateError extends UnprocessableEntityError {
     super(message, 'PENDING_CHARGES_WITHOUT_STATE');
   }
 }
+
+export class EditScopeNotRecurringError extends UnprocessableEntityError {
+  constructor(message = 'Só contas recorrentes aplicam a edição às cobranças do mês.') {
+    super(message, 'EDIT_SCOPE_NOT_RECURRING');
+  }
+}

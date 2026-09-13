@@ -37,7 +37,8 @@ Tokens novos:
 | on-primary | `#FFFFFF` | `#052B1E` | `text-white` sobre primário |
 | danger | `#B91C1C` | `#F4A6A3` | `text-red-700` |
 | danger-soft | `#FEF2F2` | `#3B1A1D` | `bg-red-50`, `red-100` |
-| danger-solid | `#DC2626` | `#C23B3B` | `bg-red-600` (texto branco nos dois temas) |
+| danger-solid | `#DC2626` | `#C23B3B` | `bg-red-600` |
+| on-danger | `#FFFFFF` | `#FFFFFF` | `text-white` sobre `danger-solid` (4,83:1 claro, 5,27:1 escuro; `on-primary` daria 2,91:1 no escuro) |
 | warning | `#78350F` | `#F2C274` | `text-amber-700/800/900` |
 | warning-soft | `#FFFBEB` | `#33260E` | `bg-amber-50/100` |
 | info | `#1E40AF` | `#9FBEF7` | `text-blue-800/900` |
@@ -48,7 +49,7 @@ Tokens novos:
 
 - Bordas `*-200` viram o token com opacidade (`border-danger/30`, `border-warning/30`…).
 - `bg-white` vira `bg-surface`; `text-white` fora de fundo primário usa o token do fundo onde está
-  (`on-primary` sobre primário; branco literal só sobre `danger-solid`).
+  (`on-primary` sobre primário; `on-danger` sobre `danger-solid`).
 - Exceção: `web/src/components/app/brand-marks.tsx` mantém as cores oficiais do Google.
 - Contraste conferido (WCAG 2.1): os 12 pares principais passam AA (≥ 4,5:1) nos dois temas; o mais
   apertado é branco sobre `danger-solid` (4,83:1 claro, 5,27:1 escuro).
@@ -100,8 +101,8 @@ Tokens novos:
 
 - Todo `src/components/**` e `src/app/**` troca classe de paleta fixa e hex por token (tabela acima).
 - Teste de guarda `src/theme-tokens.test.ts`: varre `src/**/*.tsx` (exceto testes e `brand-marks.tsx`) e falha
-  com `\b(bg|text|border|ring|fill|stroke|divide|placeholder|from|to|via)-(white|black|red|amber|blue|green|emerald|gray|slate|zinc|neutral|yellow|orange|sky|rose)(-\d{2,3})?\b`
-  ou hex `#[0-9a-fA-F]{3,8}` em `className`.
+  com classe de paleta fixa (incluindo bordas por lado `border-l-*`… e as famílias violet, purple, indigo,
+  pink, fuchsia, teal, cyan e lime) ou hex arbitrário (`-[#…]`) em `className`.
 
 ## Mobile
 

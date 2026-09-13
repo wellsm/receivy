@@ -4,8 +4,9 @@ import { Check, ChevronRight, KeyRound, LogOut, Mail, Pencil, Trash2, TriangleAl
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, type AuthUser } from "@receivy/common";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, THEME_PREFERENCE_OPTIONS, type AuthUser } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
+import { useThemePreference } from "@/lib/theme";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 type Dialog = "logout" | "delete" | null;
@@ -109,6 +110,7 @@ export function ProfileScreen() {
   // Holds the `deleted` outcome while the browser session could not be cleared yet.
   const [logoutRetry, setLogoutRetry] = useState<boolean | null>(null);
   const cancel = useRef<HTMLButtonElement>(null);
+  const [themePreference, chooseTheme] = useThemePreference();
 
   useEffect(() => {
     let active = true;
@@ -343,6 +345,39 @@ export function ProfileScreen() {
                 <Row icon={Users} label="Gerenciar contatos" title="Meus Contatos" subtitle="Gerenciar pessoas e dados salvos de cobrança" href="/contacts" />
                 <Divider />
                 <Row icon={KeyRound} label="Gerenciar chaves Pix" title="Minhas Chaves Pix" subtitle="Chaves cadastradas para receber pagamentos" href="/settings/pix" />
+              </div>
+            </section>
+
+            <section className="flex flex-col gap-2" aria-labelledby="profile-appearance-title">
+              <h2 className={SECTION_TITLE} id="profile-appearance-title">
+                APARÊNCIA
+              </h2>
+
+              <div
+                role="radiogroup"
+                aria-labelledby="profile-appearance-title"
+                className="flex gap-2 rounded-3xl border border-outline/40 bg-surface p-2"
+              >
+                {THEME_PREFERENCE_OPTIONS.map(option => {
+                  const selected = option.value === themePreference;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => chooseTheme(option.value)}
+                      className={`min-h-11 flex-1 rounded-2xl text-sm font-semibold transition ${
+                        selected
+                          ? "bg-primary-soft/60 text-primary-strong"
+                          : "text-muted hover:bg-surface-muted"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
               </div>
             </section>
 

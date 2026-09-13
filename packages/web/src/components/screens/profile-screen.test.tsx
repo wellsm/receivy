@@ -205,4 +205,29 @@ describe("ProfileScreen", () => {
     expect(screen.queryByRole("button", { name: "Tentar encerrar a sessão novamente" })).not.toBeInTheDocument();
     expect(direct.mock.calls.filter(([path]) => path === "/api/auth/logout")).toHaveLength(2);
   });
+
+  describe("appearance", () => {
+    afterEach(() => {
+      window.localStorage.clear();
+      delete document.documentElement.dataset.theme;
+    });
+
+    it("pins the dark theme from Aparência and remembers it in the browser", async () => {
+      vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+      loadAccount();
+      const user = userEvent.setup();
+
+      render(<ProfileScreen />);
+
+      const group = await screen.findByRole("radiogroup", { name: "APARÊNCIA" });
+      expect(screen.getByRole("radio", { name: "Sistema" })).toHaveAttribute("aria-checked", "true");
+
+      await user.click(screen.getByRole("radio", { name: "Escuro" }));
+
+      expect(group).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "Escuro" })).toHaveAttribute("aria-checked", "true");
+      expect(document.documentElement.dataset.theme).toBe("dark");
+      expect(window.localStorage.getItem("receivy-theme")).toBe("dark");
+    });
+  });
 });

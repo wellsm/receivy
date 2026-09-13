@@ -498,7 +498,7 @@ describe('billing invites on native PostgreSQL', () => {
       detail.guests.map((guest) => [guest.userId, guest.name, guest.email]),
       [[PARKED, 'Paula Reis', PARKED_EMAIL]]
     );
-    deepEqual(detail.linkableContacts, [{ contactId: placeholder.id, displayName: 'Zezinho' }]);
+    deepEqual(detail.linkableContacts, [{ contactId: placeholder.id, displayName: 'Zezinho', avatar: null }]);
 
     const linked = await resolveGuest(db, OWNER, billing.id, detail.guests[0]!.id, { action: 'link', contactId: placeholder.id }, now);
 

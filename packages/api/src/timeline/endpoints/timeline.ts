@@ -3,6 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import { BillingType, ChargeState, Direction, FeedStatus, type TimelinePage } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import { InvalidTimelineFilterError } from '../errors';
 import type { TimelineProvider } from '../provider';
 import { TimelineRepository } from '../repositories/timeline';
@@ -56,7 +57,7 @@ function parseList<T extends string>(field: string, raw: string | undefined, all
 
 export async function timelineHandler(
   { identity, query }: TimelineRequest,
-  { db }: Service.Context<TimelineProvider>
+  { db, proofFiles }: Service.Context<TimelineProvider>
 ): Promise<TimelineResponse> {
   const { cursor, direction, status, type, from, to } = query;
 
@@ -69,5 +70,5 @@ export async function timelineHandler(
     type: parseList('type', type, TYPES)
   };
 
-  return { status: 200, body: await TimelineRepository.get(db, identity.userId, filters) };
+  return { status: 200, body: await AvatarRepository.sign(proofFiles, await TimelineRepository.get(db, identity.userId, filters)) };
 }

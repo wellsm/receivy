@@ -4,6 +4,7 @@ import type { String } from '@ez4/schema';
 import type { BillingDetail, BillingPatch } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { noticeContext } from '../../notifications/services/context';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import type { BillingProvider } from '../provider';
 import { BillingRepository } from '../repositories/billing';
 import type { PatchBody } from '../utils/body';
@@ -22,7 +23,7 @@ declare class DetailResponse implements Http.Response {
 
 export async function patchBillingHandler(
   request: PatchRequest,
-  { db, variables, email, chargeNotifyScheduler }: Service.Context<BillingProvider>
+  { db, variables, email, chargeNotifyScheduler, proofFiles }: Service.Context<BillingProvider>
 ): Promise<DetailResponse> {
   const body = await validation(() =>
     BillingRepository.patch(
@@ -36,5 +37,5 @@ export async function patchBillingHandler(
     )
   );
 
-  return { status: 200, body };
+  return { status: 200, body: await AvatarRepository.sign(proofFiles, body) };
 }

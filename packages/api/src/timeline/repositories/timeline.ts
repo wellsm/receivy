@@ -152,6 +152,7 @@ export namespace TimelineRepository {
           installment: row.installment ?? null,
           installmentCount: row.installment_count ?? null,
           counterpartName: await ChargeRepository.counterpartName(db, row, userId),
+          counterpartAvatar: await ChargeRepository.counterpartAvatar(db, row, userId),
           proofState: visibleProofState(row),
           payer: ChargeRepository.payer(row),
           ownedByViewer: ChargeRepository.owns(row, userId),

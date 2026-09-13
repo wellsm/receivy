@@ -3,6 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { ContactsPage } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ContactProvider } from '../provider';
 import { ContactRepository } from '../repositories/contact';
 
@@ -17,16 +18,22 @@ declare class ListResponse implements Http.Response {
   body: ContactsPage;
 }
 
-export async function listContactsHandler(request: ListRequest, { db }: Service.Context<ContactProvider>): Promise<ListResponse> {
+export async function listContactsHandler(
+  request: ListRequest,
+  { db, proofFiles }: Service.Context<ContactProvider>
+): Promise<ListResponse> {
   return {
     status: 200,
-    body: await ContactRepository.list(
-      db,
-      request.identity.userId,
-      request.query.cursor,
-      request.query.archived,
-      request.query.search,
-      request.query.sort
+    body: await AvatarRepository.sign(
+      proofFiles,
+      await ContactRepository.list(
+        db,
+        request.identity.userId,
+        request.query.cursor,
+        request.query.archived,
+        request.query.search,
+        request.query.sort
+      )
     )
   };
 }

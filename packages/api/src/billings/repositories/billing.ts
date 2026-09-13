@@ -52,6 +52,7 @@ import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
 import { activeInvite, type InviteLinkContext } from '../../invites/services/links';
 import { announceCharges, type NoticeContext } from '../../notifications/services/send';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import {
   BillingEndedError,
   BillingNotPausableError,
@@ -80,7 +81,7 @@ async function payeeOf(db: DbClient, row: Pick<BillingRepository.Row, 'payee_use
 
   const person = await ContactRepository.counterpartOf(db, row.payee_user_id);
 
-  return person ? { userId: row.payee_user_id, name: person.name } : null;
+  return person ? { userId: row.payee_user_id, name: person.name, avatar: person.avatar } : null;
 }
 
 /** What `prepareChargeMaterialization` needs to know about a conta a pagar, or undefined for a conta a receber. */
@@ -870,7 +871,7 @@ export namespace BillingRepository {
     }
 
     const { records: users } = await db.users.findMany({
-      select: { id: true, name: true, email: true, status: true },
+      select: { id: true, name: true, email: true, status: true, avatar_updated_at: true },
       where: { id: { isIn: records.map((row) => row.user_id) } }
     });
     const byId = new Map(users.map((user) => [user.id, user]));
@@ -885,7 +886,14 @@ export namespace BillingRepository {
         }
 
         return [
-          { id: row.id, userId: row.user_id, name: ContactRepository.personName(user), email: user.email ?? '', createdAt: row.created_at }
+          {
+            id: row.id,
+            userId: row.user_id,
+            name: ContactRepository.personName(user),
+            email: user.email ?? '',
+            createdAt: row.created_at,
+            avatar: AvatarRepository.ref(user.id, user.avatar_updated_at)
+          }
         ];
       });
   }

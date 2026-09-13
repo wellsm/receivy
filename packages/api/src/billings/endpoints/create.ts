@@ -4,6 +4,7 @@ import type { String } from '@ez4/schema';
 import type { BillingDetail, BillingInput } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { noticeContext } from '../../notifications/services/context';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import type { BillingProvider } from '../provider';
 import { BillingRepository } from '../repositories/billing';
 import type { BillingBody } from '../utils/body';
@@ -22,7 +23,7 @@ declare class CreateResponse implements Http.Response {
 
 export async function createBillingHandler(
   request: CreateRequest,
-  { db, variables, email, chargeNotifyScheduler }: Service.Context<BillingProvider>
+  { db, variables, email, chargeNotifyScheduler, proofFiles }: Service.Context<BillingProvider>
 ): Promise<CreateResponse> {
   const body = await validation(() =>
     BillingRepository.create(
@@ -36,5 +37,5 @@ export async function createBillingHandler(
     )
   );
 
-  return { status: 201, body };
+  return { status: 201, body: await AvatarRepository.sign(proofFiles, body) };
 }

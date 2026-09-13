@@ -102,7 +102,7 @@ describe('financial repositories on PostgreSQL', () => {
       pix.id
     );
     const snapshot = await ChargeRepository.get(db, OWNER, created.charges[0]!.id);
-    deepEqual(snapshot.recipient, { userId: debtor, name: 'Contato Editado', email: 'bruno@example.com' });
+    deepEqual(snapshot.recipient, { userId: debtor, name: 'Contato Editado', email: 'bruno@example.com', avatar: null });
     equal(snapshot.pix?.key, '11144477735');
     await rejects(() => ChargeRepository.get(db, STRANGER, snapshot.id), HttpForbiddenError);
     await rejects(() => TimelineRepository.contactLedger(db, STRANGER, person.id), HttpNotFoundError);

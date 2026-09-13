@@ -3,6 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { ChargeDetail, ProofState } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ProofProvider } from '../provider';
 import { ProofRepository } from '../repositories/proof';
 
@@ -17,6 +18,15 @@ declare class ChargeResponse implements Http.Response {
   body: ChargeDetail;
 }
 
-export async function reviewProofHandler(request: ReviewRequest, { db }: Service.Context<ProofProvider>): Promise<ChargeResponse> {
-  return { status: 200, body: await ProofRepository.review(db, request.parameters.id, request.identity.userId, request.body) };
+export async function reviewProofHandler(
+  request: ReviewRequest,
+  { db, proofFiles }: Service.Context<ProofProvider>
+): Promise<ChargeResponse> {
+  return {
+    status: 200,
+    body: await AvatarRepository.sign(
+      proofFiles,
+      await ProofRepository.review(db, request.parameters.id, request.identity.userId, request.body)
+    )
+  };
 }

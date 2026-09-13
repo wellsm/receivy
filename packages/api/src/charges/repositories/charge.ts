@@ -9,7 +9,8 @@ import {
   type PixKeyType,
   type ProofMime,
   ProofState,
-  SharingState
+  SharingState,
+  type UserAvatar
 } from '@receivy/common';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
@@ -46,12 +47,12 @@ async function recipientOf(db: DbClient, row: ChargeRepository.Row): Promise<Cha
   const person = await ContactRepository.counterpartOf(db, row.debtor_user_id);
 
   if (person) {
-    return { userId: row.debtor_user_id!, name: person.name, email: person.email };
+    return { userId: row.debtor_user_id!, name: person.name, email: person.email, avatar: person.avatar };
   }
 
   const owner = await ContactRepository.counterpartOf(db, row.creditor_id);
 
-  return { userId: null, name: owner?.name ?? 'Conta excluída', email: null };
+  return { userId: null, name: owner?.name ?? 'Conta excluída', email: null, avatar: owner?.avatar ?? null };
 }
 
 export namespace ChargeRepository {
@@ -206,6 +207,17 @@ export namespace ChargeRepository {
     return ContactRepository.displayNameFor(db, userId, row.debtor_user_id);
   }
 
+  /** Photo of the person `counterpartName` names; null on a bill that is the owner's alone. */
+  export async function counterpartAvatar(db: DbClient, row: Row, userId: string): Promise<UserAvatar | null> {
+    const otherId = owns(row, userId) ? row.debtor_user_id : row.creditor_id;
+
+    if (!otherId) {
+      return null;
+    }
+
+    return (await ContactRepository.counterpartOf(db, otherId))?.avatar ?? null;
+  }
+
   export async function dto(db: DbClient, row: Row, userId: string): Promise<ChargeDetail> {
     const direction = ChargeRepository.direction(row, userId);
     const payer = ChargeRepository.payer(row);
@@ -222,6 +234,7 @@ export namespace ChargeRepository {
       installment: row.installment ?? null,
       installmentCount: row.installment_count ?? null,
       counterpartName: await counterpartName(db, row, userId),
+      counterpartAvatar: await counterpartAvatar(db, row, userId),
       counterpartReachable: await reachable(db, row),
       proofState: visibleProofState(row),
       payer,

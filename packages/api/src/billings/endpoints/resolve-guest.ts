@@ -4,6 +4,7 @@ import type { String } from '@ez4/schema';
 import type { BillingDetail, BillingGuestAction } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { noticeContext } from '../../notifications/services/context';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import type { BillingProvider } from '../provider';
 import { resolveGuest } from '../services/guests';
 import { inviteLink } from '../utils/context';
@@ -21,7 +22,7 @@ declare class DetailResponse implements Http.Response {
 
 export async function resolveGuestHandler(
   request: GuestRequest,
-  { db, variables, email, chargeNotifyScheduler }: Service.Context<BillingProvider>
+  { db, variables, email, chargeNotifyScheduler, proofFiles }: Service.Context<BillingProvider>
 ): Promise<DetailResponse> {
   const body = await resolveGuest(
     db,
@@ -34,5 +35,5 @@ export async function resolveGuestHandler(
     noticeContext({ chargeNotifyScheduler, email, variables })
   );
 
-  return { status: 200, body };
+  return { status: 200, body: await AvatarRepository.sign(proofFiles, body) };
 }

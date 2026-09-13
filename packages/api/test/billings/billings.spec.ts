@@ -78,7 +78,7 @@ describe('billings on native PostgreSQL', () => {
     // The counterpart is the account itself: a pending contact edit is read live, while the Pix key stays a snapshot.
     await ContactRepository.save(db, OWNER, { name: 'Bruno Editado', email: 'billing-edited@example.com' }, debtorContactId);
     const snapshot = await ChargeRepository.get(db, OWNER, created.charges[0]!.id);
-    deepEqual(snapshot.recipient, { userId: debtorId, name: 'Bruno Editado', email: 'billing-edited@example.com' });
+    deepEqual(snapshot.recipient, { userId: debtorId, name: 'Bruno Editado', email: 'billing-edited@example.com', avatar: null });
     equal(snapshot.debtorUserId, debtorId);
     equal(snapshot.pix?.key, '52998224725');
     await ContactRepository.save(db, OWNER, { name: 'Bruno', email: 'billing-debtor@example.com' }, debtorContactId);

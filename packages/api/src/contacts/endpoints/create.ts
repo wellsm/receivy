@@ -3,6 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { Contact } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ContactProvider } from '../provider';
 import { ContactRepository } from '../repositories/contact';
 import { parseContactInput } from '../utils/parse';
@@ -17,6 +18,15 @@ declare class CreateResponse implements Http.Response {
   body: Contact;
 }
 
-export async function createContactHandler(request: CreateRequest, { db }: Service.Context<ContactProvider>): Promise<CreateResponse> {
-  return { status: 201, body: await ContactRepository.save(db, request.identity.userId, parseContactInput(request.body)) };
+export async function createContactHandler(
+  request: CreateRequest,
+  { db, proofFiles }: Service.Context<ContactProvider>
+): Promise<CreateResponse> {
+  return {
+    status: 201,
+    body: await AvatarRepository.sign(
+      proofFiles,
+      await ContactRepository.save(db, request.identity.userId, parseContactInput(request.body))
+    )
+  };
 }

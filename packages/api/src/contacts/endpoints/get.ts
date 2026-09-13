@@ -3,6 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { Contact } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ContactProvider } from '../provider';
 import { ContactRepository } from '../repositories/contact';
 
@@ -16,6 +17,9 @@ declare class GetResponse implements Http.Response {
   body: Contact;
 }
 
-export async function getContactHandler(request: GetRequest, { db }: Service.Context<ContactProvider>): Promise<GetResponse> {
-  return { status: 200, body: await ContactRepository.get(db, request.identity.userId, request.parameters.id) };
+export async function getContactHandler(request: GetRequest, { db, proofFiles }: Service.Context<ContactProvider>): Promise<GetResponse> {
+  return {
+    status: 200,
+    body: await AvatarRepository.sign(proofFiles, await ContactRepository.get(db, request.identity.userId, request.parameters.id))
+  };
 }

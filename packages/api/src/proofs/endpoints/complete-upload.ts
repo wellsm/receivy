@@ -4,6 +4,7 @@ import type { String } from '@ez4/schema';
 import type { ChargeDetail } from '@receivy/common';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import type { SessionIdentity } from '../../common/authorizers/session';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ProofProvider } from '../provider';
 import { ProofRepository } from '../repositories/proof';
 import { bucketProofStorage } from '../services/bucket-storage';
@@ -25,5 +26,5 @@ export async function completeProofUploadHandler(
   const { userId } = request.identity;
   const row = await ProofRepository.completeUpload(db, bucketProofStorage(proofFiles), request.parameters.id, { userId });
 
-  return { status: 200, body: await ChargeRepository.dto(db, row, userId) };
+  return { status: 200, body: await AvatarRepository.sign(proofFiles, await ChargeRepository.dto(db, row, userId)) };
 }

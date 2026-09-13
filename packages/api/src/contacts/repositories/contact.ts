@@ -1,12 +1,13 @@
 import { Order } from '@ez4/database';
 import { HttpBadRequestError, HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
-import { type Contact, type ContactInput, type ContactsPage, type LinkableContact, UserStatus } from '@receivy/common';
+import { type Contact, type ContactInput, type ContactsPage, type LinkableContact, type UserAvatar, UserStatus } from '@receivy/common';
 import type { DbClient } from '../../database';
+import { AvatarRepository } from '../../users/repositories/avatar';
 import { lockAccountReferences } from '../../users/services/locking';
 import { DuplicateContactError, EmailTakenError, LinkedContactError, NotLinkableError, OwnEmailError } from '../errors';
 
 const SELECT = { id: true, owner_id: true, user_id: true, nickname: true, archived_at: true, created_at: true } as const;
-const USER_SELECT = { id: true, name: true, email: true, phone: true, status: true } as const;
+const USER_SELECT = { id: true, name: true, email: true, phone: true, status: true, avatar_updated_at: true } as const;
 const sqlNull = null as unknown as string | undefined;
 const PAGE_SIZE = 50;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,7 +21,7 @@ type ContactRow = {
   created_at: string;
 };
 
-type UserRow = { id: string; name?: string; email?: string; phone?: string; status: UserStatus };
+type UserRow = { id: string; name?: string; email?: string; phone?: string; status: UserStatus; avatar_updated_at?: string };
 
 async function lockOwner(db: DbClient, ownerId: string) {
   await lockAccountReferences(db, 'write');
@@ -69,6 +70,7 @@ async function details(db: DbClient, rows: ContactRow[]): Promise<Contact[]> {
       name,
       nickname: row.nickname ?? null,
       displayName: row.nickname || name,
+      avatar: user.status === UserStatus.Removed ? null : AvatarRepository.ref(user.id, user.avatar_updated_at),
       email: user.status === UserStatus.Removed ? '' : (user.email ?? ''),
       phone: user.phone ?? null,
       status: user.status,
@@ -330,12 +332,17 @@ export namespace ContactRepository {
   /** Unarchived contacts of the owner whose person has no e-mail yet: the only ones a guest can be linked to. */
   export async function linkable(db: DbClient, ownerId: string): Promise<LinkableContact[]> {
     const rows = await db.rawQuery(
-      `SELECT c.id, COALESCE(c.nickname, u.name, '') AS display_name FROM contacts c JOIN users u ON u.id = c.user_id
+      `SELECT c.id, COALESCE(c.nickname, u.name, '') AS display_name, u.id AS user_id, u.avatar_updated_at
+      FROM contacts c JOIN users u ON u.id = c.user_id
       WHERE c.owner_id = :ownerId::uuid AND c.archived_at IS NULL AND u.email IS NULL AND u.status = 'pending'
       ORDER BY display_name ASC, c.id ASC`,
       { ownerId }
     );
-    return rows.map((row) => ({ contactId: String(row['id']), displayName: String(row['display_name']) }));
+    return rows.map((row) => ({
+      contactId: String(row['id']),
+      displayName: String(row['display_name']),
+      avatar: AvatarRepository.ref(String(row['user_id']), row['avatar_updated_at'] as string | Date | null)
+    }));
   }
 
   /**
@@ -387,7 +394,7 @@ export namespace ContactRepository {
   export async function counterpartOf(
     db: DbClient,
     userId: string | undefined
-  ): Promise<{ name: string; email: string | null; phone: string | null; status: UserStatus } | null> {
+  ): Promise<{ name: string; email: string | null; phone: string | null; status: UserStatus; avatar: UserAvatar | null } | null> {
     if (!userId) return null;
     const user = await db.users.findOne({ select: USER_SELECT, where: { id: userId } });
     if (!user) return null;
@@ -395,7 +402,8 @@ export namespace ContactRepository {
       name: personName(user),
       email: user.status === UserStatus.Removed ? null : (user.email ?? null),
       phone: user.status === UserStatus.Removed ? null : (user.phone ?? null),
-      status: user.status
+      status: user.status,
+      avatar: user.status === UserStatus.Removed ? null : AvatarRepository.ref(user.id, user.avatar_updated_at)
     };
   }
 }

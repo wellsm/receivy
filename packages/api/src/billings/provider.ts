@@ -3,12 +3,14 @@ import type { Http } from '@ez4/gateway';
 import type { EmailService } from '../common/services/email/service';
 import type { Db } from '../database';
 import type { ChargeNotifyScheduler } from '../notifications/schedulers/charge-notify';
+import type { ProofFiles } from '../storage';
 
 export declare class BillingProvider implements Http.Provider {
   services: {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
     chargeNotifyScheduler: Environment.Service<ChargeNotifyScheduler>;
+    proofFiles: Environment.Service<ProofFiles>;
     variables: Environment.ServiceVariables;
   };
 

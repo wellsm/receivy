@@ -1,5 +1,5 @@
 import "@fontsource-variable/plus-jakarta-sans";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
@@ -8,9 +8,25 @@ export const metadata: Metadata = {
   description: "Cobranças pessoais claras para quem recebe e para quem paga.",
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf8ff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d1320" },
+  ],
+};
+
+/**
+ * Runs before first paint so a pinned or system dark theme never flashes light. It mirrors
+ * `resolveTheme` from @receivy/common (an inline script cannot import) and lib/theme.ts keeps it in sync afterwards.
+ */
+const THEME_SCRIPT = `(function(){try{var p=localStorage.getItem("receivy-theme");var d=p==="dark"||(p!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.dataset.theme=d?"dark":"light";r.style.colorScheme=d?"dark":"light";}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
         {children}
       </body>

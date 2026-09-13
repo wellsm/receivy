@@ -1,4 +1,4 @@
-import type { BillingPreview, BillingType } from './billing';
+import type { BillingType } from './billing';
 import type { Contact } from './contacts';
 
 export type Money = {
@@ -94,15 +94,8 @@ export type ProofUploadTicket = { uploadUrl: string; expiresAt: string };
 /** What the public payment page may know: its own upload, never the charge's history. */
 export type PublicProofState = { state: ProofState | 'uploading' | null; reason: string | null; file: ProofFile | null };
 
-export type ProofSummary = { chargeId: string; state: ProofState; sentAt: string };
-
-export type PaymentSummary = { chargeId: string; amount: Money; paidAt: string };
-
-export type TimelineItem =
-  | { kind: 'charge'; direction: Direction; charge: ChargeSummary }
-  | { kind: 'proof'; direction: Direction; proof: ProofSummary }
-  | { kind: 'payment'; direction: Direction; payment: PaymentSummary }
-  | { kind: 'billing_preview'; direction: Direction; preview: BillingPreview };
+/** The feed lists charges only: no billing previews, no proof or payment history rows. */
+export type TimelineItem = { kind: 'charge'; direction: Direction; charge: ChargeSummary };
 
 export type HealthResponse = {
   status: 'ok';

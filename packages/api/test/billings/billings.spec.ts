@@ -693,7 +693,7 @@ describe('billings on native PostgreSQL', () => {
     );
   });
 
-  it('projects indefinite previews in the timeline and removes them after materialization', async () => {
+  it('lists only the materialized charges of an indefinite billing in the timeline, never future previews', async () => {
     const now = new Date();
     const local = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(now);
     const rule = await BillingRepository.create(
@@ -710,20 +710,14 @@ describe('billings on native PostgreSQL', () => {
       },
       now
     );
-    // The occurrence due today is materialized at creation: the timeline shows a charge, never a preview, for it.
+    // The occurrence due today is materialized at creation; later occurrences are not projected into the feed.
     equal(rule.charges.length, 1);
     equal(rule.charges[0]!.dueDate, local);
     const timeline = await TimelineRepository.get(db, OWNER, { type: [BillingType.Indefinite], from: local });
-    ok(timeline.items.some((item) => item.kind === 'charge' && item.charge.billingId === rule.id && item.charge.dueDate === local));
-    equal(
-      timeline.items.some(
-        (item) => item.kind === 'billing_preview' && item.preview.billingId === rule.id && item.preview.occurrenceDate === local
-      ),
-      false
-    );
-    ok(
-      timeline.items.some((item) => item.kind === 'billing_preview' && item.preview.billingId === rule.id),
-      'later occurrences stay projected'
+    const fromRule = timeline.items.filter((item) => item.charge.billingId === rule.id);
+    deepEqual(
+      fromRule.map((item) => item.charge.dueDate),
+      [local]
     );
     deepEqual(await BillingRepository.materializeNextOccurrence(db, rule.id, now), {
       materialized: false,

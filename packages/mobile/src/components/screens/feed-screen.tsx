@@ -41,27 +41,11 @@ const BADGE_CLASS: Record<BadgeTone, string> = {
 };
 
 
-function itemDate(item: TimelineItem): string {
-  if (item.kind === "charge") {
-    return item.charge.dueDate;
-  }
-
-  if (item.kind === "billing_preview") {
-    return item.preview.occurrenceDate;
-  }
-
-  if (item.kind === "proof") {
-    return item.proof.sentAt.slice(0, 10);
-  }
-
-  return item.payment.paidAt.slice(0, 10);
-}
-
 function groupByDay(items: TimelineItem[]): [string, TimelineItem[]][] {
   const groups = new Map<string, TimelineItem[]>();
 
   for (const item of items) {
-    const date = itemDate(item);
+    const date = item.charge.dueDate;
     groups.set(date, [...(groups.get(date) ?? []), item]);
   }
 
@@ -317,38 +301,17 @@ export function FeedScreen({
                 <View className={`h-2 w-2 rounded-full ${date === today ? "bg-primary" : "bg-outline"}`} />
                 <Text className={`text-sm font-bold tracking-wide ${date === today ? "text-primary" : "text-muted"}`}>{feedDayLabel(date, today)}</Text>
               </View>
-              {items.map((item, index) => {
-                if (item.kind === "charge") {
-                  return (
-                    <ChargeCard
-                      key={item.charge.id}
-                      charge={item.charge}
-                      direction={item.direction}
-                      today={today}
-                      reminded={reminded[item.charge.id] ?? null}
-                      onOpen={() => onOpenCharge?.(item.charge.id)}
-                      onRemind={() => confirmRemind(item.charge)}
-                    />
-                  );
-                }
-
-                if (item.kind === "billing_preview") {
-                  return (
-                    <View key={`${item.kind}-${index}`} className="gap-1 rounded-2xl border border-dashed border-outline bg-surface p-4">
-                      <Text className="text-sm font-bold text-ink">{item.preview.description}</Text>
-                      <Text className="text-xs text-muted">Previsto · {formatMoney(item.preview.amount)} · ainda não é cobrança</Text>
-                    </View>
-                  );
-                }
-
-                return (
-                  <View key={`${item.kind}-${item.kind === "payment" ? item.payment.chargeId : item.proof.chargeId}`} className="rounded-2xl bg-surface-muted px-4 py-3">
-                    <Text className="text-xs font-semibold text-muted">
-                      {item.kind === "payment" ? `Pagamento registrado · ${formatMoney(item.payment.amount)}` : "Comprovante enviado"}
-                    </Text>
-                  </View>
-                );
-              })}
+              {items.map((item) => (
+                <ChargeCard
+                  key={item.charge.id}
+                  charge={item.charge}
+                  direction={item.direction}
+                  today={today}
+                  reminded={reminded[item.charge.id] ?? null}
+                  onOpen={() => onOpenCharge?.(item.charge.id)}
+                  onRemind={() => confirmRemind(item.charge)}
+                />
+              ))}
             </View>
           ))}
 

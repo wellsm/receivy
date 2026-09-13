@@ -449,14 +449,6 @@ paths:
       security:
         - sessionAuthorizer: []
       parameters:
-        - name: type
-          in: query
-          required: false
-          schema:
-            enum: 
-              - 'once'
-              - 'until'
-              - 'indefinite'
         - name: state
           in: query
           required: false
@@ -484,19 +476,6 @@ paths:
           schema:
             type: string
             maxLength: 80
-        - name: category
-          in: query
-          required: false
-          schema:
-            enum: 
-              - 'food'
-              - 'transport'
-              - 'groceries'
-              - 'subscription'
-              - 'loan'
-              - 'housing'
-              - 'travel'
-              - 'other'
       responses:
         200:
           description: "Successful response."
@@ -5451,202 +5430,84 @@ components:
         items:
           type: array
           items:
-            anyOf:
-            - type: object
-              additionalProperties: false
-              properties:
-                kind:
-                  type: string
-                  enum: ["charge"]
-                direction:
-                  enum: 
-                    - 'receivable'
-                    - 'payable'
-                charge:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    id:
-                      type: string
-                    description:
-                      type: string
-                    amount:
-                      type: object
-                      additionalProperties: false
-                      properties:
-                        amountCents:
-                          type: number
-                        currency:
-                          type: string
-                          enum: ["BRL"]
-                      required:
-                        - amountCents
-                        - currency
-                    dueDate:
-                      type: string
-                    state:
-                      enum: 
-                        - 'pending'
-                        - 'paid'
-                        - 'cancelled'
-                    billingId:
-                      type: string
-                    billingType:
-                      enum: 
-                        - 'once'
-                        - 'until'
-                        - 'indefinite'
-                    installment:
-                      type: number
-                    installmentCount:
-                      type: number
-                    counterpartName:
-                      type: string
-                    proofState:
-                      enum: 
-                        - 'pending'
-                        - 'accepted'
-                        - 'rejected'
-                    payer:
-                      enum: 
-                        - 'person'
-                        - 'owner'
-                    ownedByViewer:
-                      type: boolean
-                    hasPix:
-                      type: boolean
-                    counterpartReachable:
-                      type: boolean
-                  required:
-                    - id
-                    - description
-                    - amount
-                    - dueDate
-                    - state
-                    - billingId
-                    - billingType
-                    - counterpartName
-              required:
-                - kind
-                - direction
-                - charge
-            - type: object
-              additionalProperties: false
-              properties:
-                kind:
-                  type: string
-                  enum: ["proof"]
-                direction:
-                  enum: 
-                    - 'receivable'
-                    - 'payable'
-                proof:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    chargeId:
-                      type: string
-                    state:
-                      enum: 
-                        - 'pending'
-                        - 'accepted'
-                        - 'rejected'
-                    sentAt:
-                      type: string
-                  required:
-                    - chargeId
-                    - state
-                    - sentAt
-              required:
-                - kind
-                - direction
-                - proof
-            - type: object
-              additionalProperties: false
-              properties:
-                kind:
-                  type: string
-                  enum: ["payment"]
-                direction:
-                  enum: 
-                    - 'receivable'
-                    - 'payable'
-                payment:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    chargeId:
-                      type: string
-                    amount:
-                      type: object
-                      additionalProperties: false
-                      properties:
-                        amountCents:
-                          type: number
-                        currency:
-                          type: string
-                          enum: ["BRL"]
-                      required:
-                        - amountCents
-                        - currency
-                    paidAt:
-                      type: string
-                  required:
-                    - chargeId
-                    - amount
-                    - paidAt
-              required:
-                - kind
-                - direction
-                - payment
-            - type: object
-              additionalProperties: false
-              properties:
-                kind:
-                  type: string
-                  enum: ["billing_preview"]
-                direction:
-                  enum: 
-                    - 'receivable'
-                    - 'payable'
-                preview:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    billingId:
-                      type: string
-                    direction:
-                      enum: 
-                        - 'receivable'
-                        - 'payable'
-                    description:
-                      type: string
-                    amount:
-                      type: object
-                      additionalProperties: false
-                      properties:
-                        amountCents:
-                          type: number
-                        currency:
-                          type: string
-                          enum: ["BRL"]
-                      required:
-                        - amountCents
-                        - currency
-                    occurrenceDate:
-                      type: string
-                    materializationDate:
-                      type: string
-                  required:
-                    - billingId
-                    - direction
-                    - description
-                    - amount
-                    - occurrenceDate
-              required:
-                - kind
-                - direction
-                - preview
+            type: object
+            additionalProperties: false
+            properties:
+              kind:
+                type: string
+                enum: ["charge"]
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              charge:
+                type: object
+                additionalProperties: false
+                properties:
+                  id:
+                    type: string
+                  description:
+                    type: string
+                  amount:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      amountCents:
+                        type: number
+                      currency:
+                        type: string
+                        enum: ["BRL"]
+                    required:
+                      - amountCents
+                      - currency
+                  dueDate:
+                    type: string
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'paid'
+                      - 'cancelled'
+                  billingId:
+                    type: string
+                  billingType:
+                    enum: 
+                      - 'once'
+                      - 'until'
+                      - 'indefinite'
+                  installment:
+                    type: number
+                  installmentCount:
+                    type: number
+                  counterpartName:
+                    type: string
+                  proofState:
+                    enum: 
+                      - 'pending'
+                      - 'accepted'
+                      - 'rejected'
+                  payer:
+                    enum: 
+                      - 'person'
+                      - 'owner'
+                  ownedByViewer:
+                    type: boolean
+                  hasPix:
+                    type: boolean
+                  counterpartReachable:
+                    type: boolean
+                required:
+                  - id
+                  - description
+                  - amount
+                  - dueDate
+                  - state
+                  - billingId
+                  - billingType
+                  - counterpartName
+            required:
+              - kind
+              - direction
+              - charge
         summary:
           type: object
           additionalProperties: false

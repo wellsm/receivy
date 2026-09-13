@@ -211,7 +211,7 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
     equal(await ProofRepository.receiveObject(db, storage, key), 'ignored');
     equal(await bucket.exists(key), true);
     equal((await row(id)).proof_state, 'pending');
-    ok((await TimelineRepository.get(db, OWNER, {})).items.some((item) => item.kind === 'proof' && item.proof.chargeId === id));
+    ok((await TimelineRepository.get(db, OWNER, {})).items.some((item) => item.charge.id === id && item.charge.proofState === 'pending'));
   });
 
   it('attaches the landed bytes when the client completes, whether or not the bucket event comes', async () => {

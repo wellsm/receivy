@@ -869,21 +869,6 @@ export namespace BillingRepository {
     return { previews: await previewsFor(db, row, effectiveReminders(row), now) };
   }
 
-  /** Timeline projection: every active indefinite billing of the owner. */
-  export async function indefinitePreviews(db: DbClient, ownerId: string, now = new Date()): Promise<BillingPreview[]> {
-    const rows = await db.billings.findMany({
-      select: SELECT,
-      where: { owner_id: ownerId, type: BillingType.Indefinite, state: BillingState.Active }
-    });
-    const previews: BillingPreview[] = [];
-
-    for (const row of rows.records) {
-      previews.push(...(await previewsFor(db, row, effectiveReminders(row), now)));
-    }
-
-    return previews;
-  }
-
   export async function patch(
     db: DbClient,
     ownerId: string,

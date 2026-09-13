@@ -30,27 +30,11 @@ import { StatusTag } from "@/components/ui/status-tag";
 const FEED_ERROR = "Não foi possível carregar seu feed.";
 const REMIND_ERROR = "Não foi possível enviar o lembrete.";
 
-function itemDate(item: TimelineItem): string {
-  if (item.kind === "charge") {
-    return item.charge.dueDate;
-  }
-
-  if (item.kind === "billing_preview") {
-    return item.preview.occurrenceDate;
-  }
-
-  if (item.kind === "proof") {
-    return item.proof.sentAt.slice(0, 10);
-  }
-
-  return item.payment.paidAt.slice(0, 10);
-}
-
 function groupByDay(items: TimelineItem[]): [string, TimelineItem[]][] {
   const groups = new Map<string, TimelineItem[]>();
 
   for (const item of items) {
-    const date = itemDate(item);
+    const date = item.charge.dueDate;
     groups.set(date, [...(groups.get(date) ?? []), item]);
   }
 
@@ -338,40 +322,16 @@ export function FeedScreen({ onSummary }: { onSummary?: (summary: TimelineSummar
                 <span aria-hidden="true" className={`h-2 w-2 rounded-full ${isToday ? "bg-primary" : "bg-outline"}`} />
                 <span className={`text-sm font-bold tracking-wide ${isToday ? "text-primary" : "text-muted"}`}>{feedDayLabel(date, today)}</span>
               </h2>
-              {items.map((item, index) => {
-                if (item.kind === "charge") {
-                  return (
-                    <ChargeCard
-                      key={item.charge.id}
-                      charge={item.charge}
-                      direction={item.direction}
-                      today={today}
-                      reminded={reminded[item.charge.id] ?? null}
-                      onRemind={() => void remind(item.charge.id)}
-                    />
-                  );
-                }
-
-                if (item.kind === "billing_preview") {
-                  return (
-                    <div key={`${item.kind}-${index}`} className="flex flex-col gap-1 rounded-2xl border border-dashed border-outline bg-surface p-4">
-                      <p className="m-0 text-sm font-bold text-ink">{item.preview.description}</p>
-                      <span className="text-xs text-muted">Previsto · {formatMoney(item.preview.amount)} · ainda não é cobrança</span>
-                    </div>
-                  );
-                }
-
-                // A charge carries one payment and one live proof, so the kind and the charge name the row.
-                const chargeId = item.kind === "payment" ? item.payment.chargeId : item.proof.chargeId;
-
-                return (
-                  <div key={`${item.kind}-${chargeId}`} className="rounded-2xl bg-surface-muted px-4 py-3">
-                    <span className="text-xs font-semibold text-muted">
-                      {item.kind === "payment" ? `Pagamento registrado · ${formatMoney(item.payment.amount)}` : "Comprovante enviado"}
-                    </span>
-                  </div>
-                );
-              })}
+              {items.map(item => (
+                <ChargeCard
+                  key={item.charge.id}
+                  charge={item.charge}
+                  direction={item.direction}
+                  today={today}
+                  reminded={reminded[item.charge.id] ?? null}
+                  onRemind={() => void remind(item.charge.id)}
+                />
+              ))}
             </section>
           );
         })}

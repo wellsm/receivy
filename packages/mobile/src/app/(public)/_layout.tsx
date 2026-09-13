@@ -1,13 +1,15 @@
 import { Stack } from "expo-router";
-import { HEADER } from "@/navigation/header";
+import { useHeaderOptions } from "@/navigation/header";
 
 /**
  * Login draws its own brand hero; every other public screen gets the native header.
  * Onboarding and the OAuth callback are entered by `replace`, so they hide the back button.
  */
 export default function PublicLayout() {
+  const header = useHeaderOptions();
+
   return (
-    <Stack screenOptions={HEADER}>
+    <Stack screenOptions={header}>
       <Stack.Screen name="login" options={{ title: "Entrar", headerShown: false }} />
       <Stack.Screen name="login/code" options={{ title: "Código" }} />
       <Stack.Screen name="onboarding" options={{ title: "Boas-vindas", headerBackVisible: false, gestureEnabled: false }} />

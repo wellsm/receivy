@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { Stack } from "expo-router";
-import { HEADER } from "@/navigation/header";
+import { useHeaderOptions } from "@/navigation/header";
 import { ProfileGuard } from "@/components/app/profile-guard";
 import { SessionGate } from "@/components/app/session-gate";
 
@@ -13,10 +13,12 @@ const logoMark = require("../../../assets/icons/ios-light.png");
  * selected tab already names the screen. Its title and actions come from `useTabHeader`.
  */
 export default function ProtectedLayout() {
+  const header = useHeaderOptions();
+
   return (
     <SessionGate>
       <ProfileGuard />
-      <Stack screenOptions={HEADER}>
+      <Stack screenOptions={header}>
         <Stack.Screen
           name="(tabs)"
           options={{

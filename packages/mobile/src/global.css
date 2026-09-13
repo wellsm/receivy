@@ -1,15 +1,56 @@
 @import "tailwindcss";
 @import "uniwind";
 
-@theme {
-  --color-canvas: #faf8ff;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f2f3ff;
-  --color-primary: #0b513d;
-  --color-primary-strong: #003828;
-  --color-primary-soft: #b0f0d6;
-  --color-accent: #4edea3;
-  --color-ink: #131b2e;
-  --color-muted: #566070;
-  --color-outline: #bfc9c3;
+@layer theme {
+  :root {
+    @variant light {
+      --color-canvas: #faf8ff;
+      --color-surface: #ffffff;
+      --color-surface-muted: #f2f3ff;
+      --color-primary: #0b513d;
+      --color-primary-strong: #003828;
+      --color-primary-soft: #b0f0d6;
+      --color-accent: #4edea3;
+      --color-ink: #131b2e;
+      --color-muted: #566070;
+      --color-outline: #bfc9c3;
+      --color-on-primary: #ffffff;
+      --color-on-danger: #ffffff;
+      --color-danger: #b91c1c;
+      --color-danger-soft: #fef2f2;
+      --color-danger-solid: #dc2626;
+      --color-warning: #78350f;
+      --color-warning-soft: #fffbeb;
+      --color-info: #1e40af;
+      --color-info-soft: #eff6ff;
+      --color-success: #065f46;
+      --color-success-soft: #ecfdf5;
+      --color-scrim: rgba(0, 0, 0, 0.4);
+    }
+
+    @variant dark {
+      --color-canvas: #0d1320;
+      --color-surface: #151c2b;
+      --color-surface-muted: #1c2536;
+      --color-primary: #5bd3a2;
+      --color-primary-strong: #a6efcf;
+      --color-primary-soft: #133b2e;
+      --color-accent: #4edea3;
+      --color-ink: #e5e9f2;
+      --color-muted: #98a2b3;
+      --color-outline: #2c374a;
+      --color-on-primary: #052b1e;
+      --color-on-danger: #ffffff;
+      --color-danger: #f4a6a3;
+      --color-danger-soft: #3b1a1d;
+      --color-danger-solid: #c23b3b;
+      --color-warning: #f2c274;
+      --color-warning-soft: #33260e;
+      --color-info: #9fbef7;
+      --color-info-soft: #16233f;
+      --color-success: #86d9b1;
+      --color-success-soft: #10332a;
+      --color-scrim: rgba(0, 0, 0, 0.6);
+    }
+  }
 }

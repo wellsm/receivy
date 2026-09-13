@@ -2,7 +2,7 @@ import { Image } from "expo-image";
 import { Tabs } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { Platform } from "react-native";
-import { ACTIVE_TINT, MUTED_TINT } from "@/theme/colors";
+import { useThemeColors } from "@/theme/colors";
 
 const TABS = [
   {
@@ -27,9 +27,11 @@ const TABS = [
 
 /** iOS gets the system tab bar (SF Symbols, liquid glass); Android falls back to the JS tabs with the SVG icons. */
 export default function TabsLayout() {
+  const colors = useThemeColors();
+
   if (Platform.OS === "ios") {
     return (
-      <NativeTabs tintColor={ACTIVE_TINT} iconColor={MUTED_TINT}>
+      <NativeTabs tintColor={colors.primaryStrong} iconColor={colors.muted}>
         {TABS.map((tab) => (
           <NativeTabs.Trigger key={tab.name} name={tab.name}>
             <NativeTabs.Trigger.Icon sf={tab.sf} />
@@ -44,9 +46,9 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: ACTIVE_TINT,
-        tabBarInactiveTintColor: MUTED_TINT,
-        tabBarStyle: { backgroundColor: "#ffffff", borderTopColor: "#bfc9c3" },
+        tabBarActiveTintColor: colors.primaryStrong,
+        tabBarInactiveTintColor: colors.muted,
+        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.outline },
         tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
       }}
     >
@@ -57,7 +59,7 @@ export default function TabsLayout() {
           options={{
             title: tab.label,
             tabBarIcon: ({ focused }) => (
-              <Image source={tab.src} tintColor={focused ? ACTIVE_TINT : MUTED_TINT} style={{ width: 22, height: 22 }} />
+              <Image source={tab.src} tintColor={focused ? colors.primaryStrong : colors.muted} style={{ width: 22, height: 22 }} />
             ),
           }}
         />

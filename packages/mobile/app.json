@@ -4,6 +4,7 @@
     "slug": "receivy",
     "version": "1.0.0",
     "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/icons/ios-light.png",
     "scheme": "receivy",
     "ios": {

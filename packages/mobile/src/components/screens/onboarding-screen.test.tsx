@@ -7,7 +7,7 @@ const user: AuthUser = {
   email: "ana@example.com",
   name: null,
   phone: null,
-  avatarUrl: null,
+  avatar: null,
   status: UserStatus.Pending,
   locale: "pt-BR",
   timezone: "America/Sao_Paulo",

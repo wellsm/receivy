@@ -4,6 +4,7 @@ import { ChargeRepository } from '../../charges/repositories/charge';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
+import { AvatarRepository } from '../repositories/avatar';
 import { SessionRepository } from '../repositories/sessions';
 import { lockAccountReferences } from './locking';
 
@@ -23,6 +24,7 @@ export async function eraseAccount(
     const user = await tx.users.findOne({ select: { id: true, email: true, deleted_at: true }, where: { id: userId }, lock: true });
     if (!user) throw new HttpUnauthorizedError();
     if (user.deleted_at) return { deleted: true, objectKeys };
+    objectKeys.push(AvatarRepository.key(userId));
     const now = new Date().toISOString();
     await tx.session_families.updateMany({ where: { user_id: userId }, data: { revoked_at: now, device_name: sqlNull } });
     const families = await tx.session_families.findMany({ select: { id: true }, where: { user_id: userId } });
@@ -103,6 +105,7 @@ export async function eraseAccount(
         name: 'Conta excluída',
         phone: sqlNull,
         avatar_url: sqlNull,
+        avatar_updated_at: sqlNull,
         status: UserStatus.Removed,
         timezone: 'UTC',
         deleted_at: now,

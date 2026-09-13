@@ -9,7 +9,7 @@ const session = {
     id: "00000000-0000-4000-8000-000000000001",
     email: "ana@example.com",
     name: null,
-    avatarUrl: null,
+    avatar: null,
     locale: "pt-BR",
     timezone: "America/Sao_Paulo",
     country: "BR",

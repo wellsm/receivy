@@ -9,7 +9,7 @@ const user = {
   email: "lucas@email.com",
   name: "Lucas Silveira",
   phone: null,
-  avatarUrl: null,
+  avatar: null,
   status: "active",
   locale: "pt-BR",
   timezone: "America/Sao_Paulo",

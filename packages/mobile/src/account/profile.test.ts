@@ -6,7 +6,7 @@ const user = {
   email: "ana@example.com",
   name: "Ana",
   phone: null,
-  avatarUrl: null,
+  avatar: null,
   status: UserStatus.Active,
   locale: "pt-BR" as const,
   timezone: "America/Sao_Paulo",

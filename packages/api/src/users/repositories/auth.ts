@@ -8,6 +8,7 @@ import type { OauthFlowRepository } from '../services/oauth-flow';
 import { ErrorCode, OauthFlowError } from '../services/oauth-flow';
 import type { SessionRepository as RefreshSessionRepository, RotateRefreshTokenOutcome } from '../services/refresh-session';
 import { generateRefreshToken, hashRefreshToken } from '../services/session';
+import { AvatarRepository } from './avatar';
 import { SessionRepository } from './sessions';
 
 const CODE_TTL_MS = 10 * 60 * 1000;
@@ -29,6 +30,7 @@ function toAuthUser(row: {
   name?: string;
   phone?: string;
   avatar_url?: string;
+  avatar_updated_at?: string;
   status: AuthUser['status'];
   locale: 'pt-BR';
   timezone: string;
@@ -45,7 +47,7 @@ function toAuthUser(row: {
     email: row.email,
     name: row.name ?? null,
     phone: row.phone ?? null,
-    avatarUrl: row.avatar_url ?? null,
+    avatar: AvatarRepository.ref(row.id, row.avatar_updated_at),
     status: row.status,
     locale: row.locale,
     timezone: row.timezone,
@@ -167,6 +169,7 @@ async function findOrCreateUserByEmail(db: DbClient, email: string): Promise<Aut
     name: true,
     phone: true,
     avatar_url: true,
+    avatar_updated_at: true,
     status: true,
     locale: true,
     timezone: true,
@@ -312,6 +315,7 @@ async function resolveOauthUser(
     name: true,
     phone: true,
     avatar_url: true,
+    avatar_updated_at: true,
     status: true,
     locale: true,
     timezone: true,
@@ -428,6 +432,7 @@ async function consumeOauthGrant(
         name: true,
         phone: true,
         avatar_url: true,
+        avatar_updated_at: true,
         status: true,
         locale: true,
         timezone: true,
@@ -571,6 +576,7 @@ export namespace AuthRepository {
         name: true,
         phone: true,
         avatar_url: true,
+        avatar_updated_at: true,
         status: true,
         locale: true,
         timezone: true,

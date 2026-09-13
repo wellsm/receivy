@@ -13,8 +13,7 @@ export type AuthUser = {
   name: string | null;
   /** Filled at onboarding by the person; the base for future WhatsApp validation. */
   phone: string | null;
-  avatarUrl: string | null;
-  avatar?: UserAvatar | null;
+  avatar: UserAvatar | null;
   /** 'pending' until onboarding completes; 'active' afterwards; 'removed' after account deletion. */
   status: UserStatus;
   locale: 'pt-BR';

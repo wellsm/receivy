@@ -33,7 +33,7 @@ async function expectNoViolations(container: HTMLElement) {
 }
 
 const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { amountCents: 0, currency: "BRL" }, overdue: { amountCents: 0, currency: "BRL" }, pending: { amountCents: 0, currency: "BRL" }, proofsToReview: 0, receivableCount: 0, payableCount: 0 };
-const user = { id: "user", email: "fixture@example.com", name: "Ana", phone: null, avatarUrl: null, status: "active", locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
+const user = { id: "user", email: "fixture@example.com", name: "Ana", phone: null, avatar: null, status: "active", locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
 const contact = { id: "contact-1", userId: "user-1", name: "Ana Souza", nickname: "Ana", displayName: "Ana", email: "ana@example.com", phone: null, status: "pending", archivedAt: null, createdAt: "2026-09-01", lastBilledAt: null, activeCharges: 1 };
 const pixMethod = { id: "pix-1", label: "Nubank", pixKey: "52998224725", pixKeyType: "cpf", isDefault: true, archivedAt: null };
 const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 12_000, currency: "BRL" as const }, type: BillingType.Once, participantCount: 3, category: BillingCategory.Food, expired: false };

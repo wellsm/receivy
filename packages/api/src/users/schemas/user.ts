@@ -11,6 +11,8 @@ export interface UserSchema extends Database.Schema {
   /** Filled by the person at onboarding, never by whoever added them as a contact. */
   phone?: String.Max<40>;
   avatar_url?: String.Max<512>;
+  /** When the photo at `avatars/<id>` was last replaced; absent means no photo. */
+  avatar_updated_at?: String.DateTime;
   /**
    * `pending`: created by a contact or a first login, onboarding not done; agendas may still edit name and e-mail.
    * `active`: onboarding done; only the person edits their data. `removed`: account deleted; the id survives for history.

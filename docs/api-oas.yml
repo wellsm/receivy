@@ -202,6 +202,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/profileHandler'
+  /account/avatar:
+    post:
+      operationId: startAvatarUpload
+      security:
+        - sessionAuthorizer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/startAvatarUploadHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/startAvatarUploadHandler'
+  /account/avatar/complete:
+    post:
+      operationId: completeAvatarUpload
+      security:
+        - sessionAuthorizer: []
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/completeAvatarUploadHandler'
   /account:
     delete:
       operationId: deleteAccount
@@ -1220,6 +1249,16 @@ components:
         - locale
         - timezone
         - country
+    startAvatarUploadHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        mime:
+          enum: 
+            - 'image/jpeg'
+            - 'image/png'
+      required:
+        - mime
     deleteHandler:
       type: object
       additionalProperties: false
@@ -1436,6 +1475,9 @@ components:
             - 'loan'
             - 'housing'
             - 'travel'
+            - 'health'
+            - 'education'
+            - 'leisure'
             - 'other'
       required:
         - type
@@ -1579,6 +1621,9 @@ components:
             - 'loan'
             - 'housing'
             - 'travel'
+            - 'health'
+            - 'education'
+            - 'leisure'
             - 'other'
     resolveGuestHandler:
       anyOf:
@@ -1735,8 +1780,17 @@ components:
               type: string
             phone:
               type: string
-            avatarUrl:
-              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
             status:
               enum: 
                 - 'pending'
@@ -1788,8 +1842,17 @@ components:
               type: string
             phone:
               type: string
-            avatarUrl:
-              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
             status:
               enum: 
                 - 'pending'
@@ -1863,8 +1926,17 @@ components:
               type: string
             phone:
               type: string
-            avatarUrl:
-              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
             status:
               enum: 
                 - 'pending'
@@ -1924,8 +1996,17 @@ components:
               type: string
             phone:
               type: string
-            avatarUrl:
-              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
             status:
               enum: 
                 - 'pending'
@@ -1968,8 +2049,17 @@ components:
               type: string
             phone:
               type: string
-            avatarUrl:
-              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
             status:
               enum: 
                 - 'pending'
@@ -1996,6 +2086,34 @@ components:
             - currency
       required:
         - user
+    startAvatarUploadHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        uploadUrl:
+          type: string
+        expiresAt:
+          type: string
+      required:
+        - uploadUrl
+        - expiresAt
+    completeAvatarUploadHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        avatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
+      required:
+        - avatar
     deleteHandler:
       type: object
       additionalProperties: false
@@ -2018,6 +2136,17 @@ components:
           type: string
         displayName:
           type: string
+        avatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
         email:
           type: string
         phone:
@@ -2064,6 +2193,17 @@ components:
                 type: string
               displayName:
                 type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
               email:
                 type: string
               phone:
@@ -2108,6 +2248,17 @@ components:
           type: string
         displayName:
           type: string
+        avatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
         email:
           type: string
         phone:
@@ -2148,6 +2299,17 @@ components:
           type: string
         displayName:
           type: string
+        avatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
         email:
           type: string
         phone:
@@ -2341,6 +2503,17 @@ components:
               type: string
             name:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - userId
             - name
@@ -2636,6 +2809,17 @@ components:
                 type: number
               counterpartName:
                 type: string
+              counterpartAvatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
               proofState:
                 enum: 
                   - 'pending'
@@ -2665,6 +2849,17 @@ components:
                     type: string
                   email:
                     type: string
+                  avatar:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      url:
+                        type: string
+                      version:
+                        type: string
+                    required:
+                      - url
+                      - version
                 required:
                   - name
               debtorUserId:
@@ -2799,6 +2994,9 @@ components:
             - 'loan'
             - 'housing'
             - 'travel'
+            - 'health'
+            - 'education'
+            - 'leisure'
             - 'other'
         invite:
           type: object
@@ -2827,6 +3025,17 @@ components:
                 type: string
               createdAt:
                 type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
             required:
               - id
               - userId
@@ -2843,6 +3052,17 @@ components:
                 type: string
               displayName:
                 type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
             required:
               - contactId
               - displayName
@@ -2934,6 +3154,9 @@ components:
                   - 'loan'
                   - 'housing'
                   - 'travel'
+                  - 'health'
+                  - 'education'
+                  - 'leisure'
                   - 'other'
               participantCount:
                 type: number
@@ -2986,6 +3209,17 @@ components:
               type: string
             name:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - userId
             - name
@@ -3281,6 +3515,17 @@ components:
                 type: number
               counterpartName:
                 type: string
+              counterpartAvatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
               proofState:
                 enum: 
                   - 'pending'
@@ -3310,6 +3555,17 @@ components:
                     type: string
                   email:
                     type: string
+                  avatar:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      url:
+                        type: string
+                      version:
+                        type: string
+                    required:
+                      - url
+                      - version
                 required:
                   - name
               debtorUserId:
@@ -3444,6 +3700,9 @@ components:
             - 'loan'
             - 'housing'
             - 'travel'
+            - 'health'
+            - 'education'
+            - 'leisure'
             - 'other'
         invite:
           type: object
@@ -3472,6 +3731,17 @@ components:
                 type: string
               createdAt:
                 type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
             required:
               - id
               - userId
@@ -3488,6 +3758,17 @@ components:
                 type: string
               displayName:
                 type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
             required:
               - contactId
               - displayName
@@ -3575,6 +3856,17 @@ components:
               type: string
             name:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - userId
             - name
@@ -3870,6 +4162,17 @@ components:
                 type: number
               counterpartName:
                 type: string
+              counterpartAvatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
               proofState:
                 enum: 
                   - 'pending'
@@ -3899,6 +4202,17 @@ components:
                     type: string
                   email:
                     type: string
+                  avatar:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      url:
+                        type: string
+                      version:
+                        type: string
+                    required:
+                      - url
+                      - version
                 required:
                   - name
               debtorUserId:
@@ -4033,6 +4347,9 @@ components:
             - 'loan'
             - 'housing'
             - 'travel'
+            - 'health'
+            - 'education'
+            - 'leisure'
             - 'other'
         invite:
           type: object
@@ -4061,6 +4378,17 @@ components:
                 type: string
               createdAt:
                 type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
             required:
               - id
               - userId
@@ -4077,6 +4405,17 @@ components:
                 type: string
               displayName:
                 type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
             required:
               - contactId
               - displayName
@@ -4122,6 +4461,17 @@ components:
               type: string
             name:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - userId
             - name
@@ -4417,6 +4767,17 @@ components:
                 type: number
               counterpartName:
                 type: string
+              counterpartAvatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
               proofState:
                 enum: 
                   - 'pending'
@@ -4446,6 +4807,17 @@ components:
                     type: string
                   email:
                     type: string
+                  avatar:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      url:
+                        type: string
+                      version:
+                        type: string
+                    required:
+                      - url
+                      - version
                 required:
                   - name
               debtorUserId:
@@ -4580,6 +4952,9 @@ components:
             - 'loan'
             - 'housing'
             - 'travel'
+            - 'health'
+            - 'education'
+            - 'leisure'
             - 'other'
         invite:
           type: object
@@ -4608,6 +4983,17 @@ components:
                 type: string
               createdAt:
                 type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
             required:
               - id
               - userId
@@ -4624,6 +5010,17 @@ components:
                 type: string
               displayName:
                 type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
             required:
               - contactId
               - displayName
@@ -4686,6 +5083,17 @@ components:
           type: number
         counterpartName:
           type: string
+        counterpartAvatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
         proofState:
           enum: 
             - 'pending'
@@ -4715,6 +5123,17 @@ components:
               type: string
             email:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - name
         debtorUserId:
@@ -4842,6 +5261,17 @@ components:
           type: number
         counterpartName:
           type: string
+        counterpartAvatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
         proofState:
           enum: 
             - 'pending'
@@ -4871,6 +5301,17 @@ components:
               type: string
             email:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - name
         debtorUserId:
@@ -4998,6 +5439,17 @@ components:
           type: number
         counterpartName:
           type: string
+        counterpartAvatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
         proofState:
           enum: 
             - 'pending'
@@ -5027,6 +5479,17 @@ components:
               type: string
             email:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - name
         debtorUserId:
@@ -5154,6 +5617,17 @@ components:
           type: number
         counterpartName:
           type: string
+        counterpartAvatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
         proofState:
           enum: 
             - 'pending'
@@ -5183,6 +5657,17 @@ components:
               type: string
             email:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - name
         debtorUserId:
@@ -5406,6 +5891,9 @@ components:
               - 'loan'
               - 'housing'
               - 'travel'
+              - 'health'
+              - 'education'
+              - 'leisure'
               - 'other'
         required:
           - expired
@@ -5488,6 +5976,17 @@ components:
                     type: number
                   counterpartName:
                     type: string
+                  counterpartAvatar:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      url:
+                        type: string
+                      version:
+                        type: string
+                    required:
+                      - url
+                      - version
                   proofState:
                     enum: 
                       - 'pending'
@@ -5607,6 +6106,17 @@ components:
               type: string
             displayName:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
             email:
               type: string
             phone:
@@ -5711,6 +6221,17 @@ components:
                 type: number
               counterpartName:
                 type: string
+              counterpartAvatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
               proofState:
                 enum: 
                   - 'pending'
@@ -5740,6 +6261,17 @@ components:
                     type: string
                   email:
                     type: string
+                  avatar:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      url:
+                        type: string
+                      version:
+                        type: string
+                    required:
+                      - url
+                      - version
                 required:
                   - name
               debtorUserId:
@@ -5887,6 +6419,17 @@ components:
           type: number
         counterpartName:
           type: string
+        counterpartAvatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
         proofState:
           enum: 
             - 'pending'
@@ -5916,6 +6459,17 @@ components:
               type: string
             email:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - name
         debtorUserId:
@@ -6043,6 +6597,17 @@ components:
           type: number
         counterpartName:
           type: string
+        counterpartAvatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
         proofState:
           enum: 
             - 'pending'
@@ -6072,6 +6637,17 @@ components:
               type: string
             email:
               type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
           required:
             - name
         debtorUserId:

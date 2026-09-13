@@ -32,7 +32,7 @@ function profile(email = "conta@example.com", phone: string | null = null) {
     email,
     name: null,
     phone,
-    avatarUrl: null,
+    avatar: null,
     status: UserStatus.Active,
     locale: "pt-BR",
     timezone: "America/Sao_Paulo",

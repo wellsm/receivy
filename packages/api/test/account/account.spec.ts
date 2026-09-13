@@ -17,6 +17,7 @@ import { deleteHandler } from '../../src/users/endpoints/delete-account';
 import type { UserProvider } from '../../src/users/provider';
 import { AccountRepository } from '../../src/users/repositories/account';
 import { AuthRepository } from '../../src/users/repositories/auth';
+import { AvatarRepository } from '../../src/users/repositories/avatar';
 import { SessionRepository } from '../../src/users/repositories/sessions';
 import { eraseAccount } from '../../src/users/services/deletion';
 import { issueAccessToken } from '../../src/users/services/session';
@@ -146,7 +147,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     await attachProof(rollbackChargeId, 'invalid-legacy-key', id, StoredProofState.Pending);
     // An unroutable key can no longer make an account undeletable: the caller drops it best-effort.
     const { objectKeys } = await eraseAccount(db, id, 'EXCLUIR');
-    deepEqual(objectKeys, ['invalid-legacy-key']);
+    deepEqual(objectKeys, [AvatarRepository.key(id), 'invalid-legacy-key']);
     await rejects(() => authorize(auth.access), HttpUnauthorizedError);
     equal((await ChargeRepository.get(db, owner, rollbackChargeId)).recipient.email, null);
     deepEqual(await proofColumns(rollbackChargeId), { state: null, key: null, sender: null });
@@ -212,7 +213,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     // Only the erasure that did the work reports files, and only the ones it owned.
     deepEqual(
       concurrent.flatMap((result) => result.objectKeys),
-      [ownKey]
+      [AvatarRepository.key(debtor), ownKey]
     );
     ok(await bucket.read(anonymousKey), 'unattributed counterparty file preserved');
     const replacement = await repository.findOrCreateUserByEmail('account-debtor@example.com');

@@ -20,7 +20,7 @@ const account = {
   id: "user-1",
   email: "lucas@email.com",
   name: "Lucas Silveira",
-  avatarUrl: null,
+  avatar: null,
   locale: "pt-BR" as const,
   timezone: "America/Sao_Paulo",
   country: "BR" as const,

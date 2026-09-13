@@ -2,6 +2,7 @@ import type { Http } from '@ez4/gateway';
 import type { sessionAuthorizer } from '../common/authorizers/session';
 import type { appleCallbackHandler } from './endpoints/apple-callback';
 import type { nativeAppleExchangeHandler, nativeAppleStartHandler } from './endpoints/apple-native';
+import type { completeAvatarUploadHandler, startAvatarUploadHandler } from './endpoints/avatar';
 import type { deleteHandler } from './endpoints/delete-account';
 import type { emailCodeHandler } from './endpoints/email-code';
 import type { emailConfirmHandler } from './endpoints/email-confirm';
@@ -73,6 +74,18 @@ export type UserRoutes = [
     path: 'PATCH /account/profile';
     authorizer: typeof sessionAuthorizer;
     handler: typeof profileHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'startAvatarUpload';
+    path: 'POST /account/avatar';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof startAvatarUploadHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'completeAvatarUpload';
+    path: 'POST /account/avatar/complete';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof completeAvatarUploadHandler;
   }>,
   Http.UseRoute<{ name: 'deleteAccount'; path: 'DELETE /account'; authorizer: typeof sessionAuthorizer; handler: typeof deleteHandler }>
 ];

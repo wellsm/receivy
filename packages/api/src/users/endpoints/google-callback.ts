@@ -5,9 +5,9 @@ import type { String } from '@ez4/schema';
 import type { UserProvider } from '../provider';
 import { AuthRepository } from '../repositories/auth';
 import { OauthProvider } from '../services/oauth';
-import { adoptProviderPicture } from '../services/provider-picture';
 import { commitOauthIdentity } from '../services/oauth-commit';
 import { completeOauth, OauthFlowError } from '../services/oauth-flow';
+import { adoptProviderPicture } from '../services/provider-picture';
 import { appendOauthGrant, oauthDependencies } from '../utils/oauth';
 
 declare class GoogleCallbackRequest implements Http.Request {
@@ -32,7 +32,6 @@ export async function googleCallbackHandler(
     throw new HttpNotFoundError();
   }
   try {
-    const repository = AuthRepository.create(db);
     const result = await completeOauth(
       {
         code: request.query.code,
@@ -42,17 +41,16 @@ export async function googleCallbackHandler(
       },
       {
         providerClient: dependencies.client,
-        repo: {
-          ...repository,
-          resolveUser: async (input) => {
-            const user = await repository.resolveUser(input);
-
-            await adoptProviderPicture({ db, bucket: proofFiles, userId: user.id, picture: input.identity.picture });
-
-            return user;
-          }
-        },
-        commitGrant: (input) => commitOauthIdentity(db, input)
+        repo: AuthRepository.create(db),
+        commitGrant: async (input) => {
+          const userId = await commitOauthIdentity(db, input);
+          await adoptProviderPicture({
+            db,
+            bucket: proofFiles,
+            userId,
+            picture: input.identity.picture
+          });
+        }
       }
     );
     return {

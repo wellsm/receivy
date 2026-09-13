@@ -3,8 +3,8 @@ import { AuthRepository } from '../repositories/auth';
 import { lockAccountReferences } from './locking';
 import type { OauthGrantCommit } from './oauth-flow';
 
-export async function commitOauthIdentity(db: DbClient, input: OauthGrantCommit): Promise<void> {
-  await db.transaction(async (tx) => {
+export async function commitOauthIdentity(db: DbClient, input: OauthGrantCommit): Promise<string> {
+  return await db.transaction(async (tx) => {
     await lockAccountReferences(tx, 'write');
     const repo = AuthRepository.create(tx),
       user = await repo.resolveUser(input);
@@ -14,5 +14,6 @@ export async function commitOauthIdentity(db: DbClient, input: OauthGrantCommit)
       grantHash: input.grantHash,
       userId: user.id
     });
+    return user.id;
   });
 }

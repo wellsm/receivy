@@ -44,7 +44,9 @@ export async function appleCallbackHandler(
       {
         providerClient: dependencies.client,
         repo: AuthRepository.create(db),
-        commitGrant: (input) => commitOauthIdentity(db, input)
+        commitGrant: async (input) => {
+          await commitOauthIdentity(db, input);
+        }
       }
     );
     return {

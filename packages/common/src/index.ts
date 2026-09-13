@@ -1,6 +1,7 @@
 export * from './auth/auth';
 export * from './auth/login-code';
 export * from './auth/onboarding';
+export * from './design/theme';
 export * from './design/tokens';
 export * from './domain/account';
 export * from './domain/api-error';

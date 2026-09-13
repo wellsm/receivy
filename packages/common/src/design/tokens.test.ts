@@ -51,3 +51,39 @@ describe('design token contrast', () => {
     expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(3);
   });
 });
+
+const d = designTokens.colorDark;
+
+describe('dark design tokens', () => {
+  it('defines exactly the same token names as the light palette', () => {
+    expect(Object.keys(d).sort()).toEqual(Object.keys(c).sort());
+  });
+
+  it.each([
+    ['body text on canvas', d.text, d.canvas],
+    ['body text on surface', d.text, d.surface],
+    ['muted text on surface', d.textMuted, d.surface],
+    ['muted text on muted surface', d.textMuted, d.surfaceMuted],
+    ['primary text on surface', d.primary, d.surface],
+    ['label on primary button', d.onPrimary, d.primary],
+    ['strong primary label on soft primary badge', d.primaryStrong, d.primarySoft],
+    ['danger text on soft danger', d.danger, d.dangerSoft],
+    ['white label on solid danger', '#ffffff', d.dangerSolid],
+    ['warning text on soft warning', d.warning, d.warningSoft],
+    ['info text on soft info', d.info, d.infoSoft],
+    ['success text on soft success', d.success, d.successSoft]
+  ])('%s meets AA 4.5:1', (_label, foreground, background) => {
+    expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each([
+    ['danger text on soft danger', c.danger, c.dangerSoft],
+    ['white label on solid danger', '#ffffff', c.dangerSolid],
+    ['warning text on soft warning', c.warning, c.warningSoft],
+    ['info text on soft info', c.info, c.infoSoft],
+    ['success text on soft success', c.success, c.successSoft],
+    ['label on primary button', c.onPrimary, c.primary]
+  ])('light status pair %s meets AA 4.5:1', (_label, foreground, background) => {
+    expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(4.5);
+  });
+});

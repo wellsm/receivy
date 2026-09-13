@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import { Alert, Share } from "react-native";
-import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PixKeyType, ProofMime, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofMime, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
 
 jest.mock("expo-router", () => {
@@ -295,9 +295,9 @@ describe("BillingDetailScreen", () => {
     expect(screen.queryByText("José Silva")).toBeNull();
   });
 
-  it("pauses and resumes only a subscription", async () => {
+  it("asks what to do with the pending charges before pausing a subscription", async () => {
     const detail = billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined });
-    const client = makeClient(detail, { patchBilling: jest.fn().mockResolvedValue({ ...detail, state: "paused" }) });
+    const client = makeClient(detail, { patchBilling: jest.fn().mockResolvedValue({ ...detail, state: BillingState.Paused }) });
 
     await open(client);
 
@@ -305,9 +305,25 @@ describe("BillingDetailScreen", () => {
 
     await fireEvent.press(screen.getByRole("button", { name: "Pausar" }));
 
-    await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: "paused" }));
+    expect(screen.getByRole("header", { name: "Pausar conta?" })).toBeOnTheScreen();
+    expect(client.patchBilling).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Manter as deste mês" }));
+
+    await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: BillingState.Paused, pendingCharges: PendingChargesAction.Keep }));
     expect(await screen.findByRole("button", { name: "Retomar" })).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Convidar" })).toBeNull();
+  });
+
+  it("pauses right away when nothing is pending", async () => {
+    const detail = billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: firstCycle });
+    const client = makeClient(detail, { patchBilling: jest.fn().mockResolvedValue({ ...detail, state: BillingState.Paused }) });
+
+    await open(client);
+    await fireEvent.press(screen.getByRole("button", { name: "Pausar" }));
+
+    await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: BillingState.Paused }));
+    expect(screen.queryByRole("header", { name: "Pausar conta?" })).toBeNull();
   });
 
   it("names the Pix key from the wallet while no charge has been generated", async () => {
@@ -326,21 +342,31 @@ describe("BillingDetailScreen", () => {
     expect(screen.queryByRole("button", { name: "Pausar" })).toBeNull();
   });
 
-  it("ends only after confirmation, revokes the invite and hides the actions", async () => {
+  it("ends cancelling the pending charges, revokes the invite and hides the actions", async () => {
     const detail = billing({ invite: { url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" } });
     const { client } = await open(makeClient(detail));
 
     await fireEvent.press(screen.getByRole("button", { name: "Encerrar" }));
 
+    expect(screen.getByRole("header", { name: "Encerrar conta?" })).toBeOnTheScreen();
     expect(client.patchBilling).not.toHaveBeenCalled();
 
-    await fireEvent.press(screen.getByRole("button", { name: "Confirmar encerramento" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Cancelar pendentes (1)" }));
 
-    await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: "ended" }));
+    await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: BillingState.Ended, pendingCharges: PendingChargesAction.Cancel }));
     await waitFor(() => expect(client.revokeInvite).toHaveBeenCalledWith("b1"));
     expect(await screen.findByText("Encerrada")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Compartilhar link de pagamento" })).toBeNull();
+  });
+
+  it("ends with the simple confirmation when nothing is pending", async () => {
+    const { client } = await open(makeClient(billing({ charges: firstCycle })));
+
+    await fireEvent.press(screen.getByRole("button", { name: "Encerrar" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Confirmar encerramento" }));
+
+    await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: BillingState.Ended }));
   });
 
   it("reports a billing that cannot be loaded and retries", async () => {

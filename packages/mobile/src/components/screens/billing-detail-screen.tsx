@@ -8,6 +8,8 @@ import {
   calendarDate,
   chargeShareText,
   formatMoney,
+  pendingChargesOf,
+  PendingChargesAction,
   type BillingDetail,
   type BillingGuest,
   type BillingGuestAction,
@@ -18,6 +20,7 @@ import {
   type PixKeyType,
   type PixSnapshot,
 } from "@receivy/common";
+import { ScopeModal } from "@/components/app/scope-modal";
 import { Toast } from "@/components/app/toast";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { ActionTile } from "@/components/ui/action-tile";
@@ -194,6 +197,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [scope, setScope] = useState<BillingState.Paused | BillingState.Ended | null>(null);
   const [chooser, setChooser] = useState(false);
   // The guest whose answer is in flight: only that card locks while the others stay answerable.
   const [resolvingGuest, setResolvingGuest] = useState<string | null>(null);
@@ -277,19 +281,38 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
     }
   }
 
-  async function transition(detail: BillingDetail, state: BillingState) {
+  async function transition(detail: BillingDetail, state: BillingState, pendingCharges?: PendingChargesAction) {
     await run(async () => {
-      const updated = await client.patchBilling(detail.id, { state });
+      const updated = await client.patchBilling(detail.id, pendingCharges ? { state, pendingCharges } : { state });
 
       setBilling(updated);
       setConfirmEnd(false);
+      setScope(null);
 
       // The server keeps the invite alive after the billing ends, so drop it here; a failure must not block the transition.
-      if (state === "ended" && invite) {
+      if (state === BillingState.Ended && invite) {
         await client.revokeInvite(detail.id).catch(() => undefined);
         setInvite(null);
       }
     }, "Não foi possível atualizar a conta.");
+  }
+
+  function pause(detail: BillingDetail) {
+    if (!pendingChargesOf(detail).length) {
+      void transition(detail, BillingState.Paused);
+      return;
+    }
+
+    setScope(BillingState.Paused);
+  }
+
+  function end(detail: BillingDetail) {
+    if (!pendingChargesOf(detail).length) {
+      setConfirmEnd(true);
+      return;
+    }
+
+    setScope(BillingState.Ended);
   }
 
   async function shareCharge(charge: ChargeDetail) {
@@ -493,10 +516,10 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                   icon={billing.state === "active" ? ICONS.pause : ICONS.play}
                   hint={billing.state === "active" ? "Suspende as próximas ocorrências" : "Volta a gerar ocorrências"}
                   disabled={busy}
-                  onPress={() => void transition(billing, billing.state === "active" ? BillingState.Paused : BillingState.Active)}
+                  onPress={() => (billing.state === "active" ? pause(billing) : void transition(billing, BillingState.Active))}
                 />
               )}
-              <ActionTile label="Encerrar" icon={ICONS.stop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onPress={() => setConfirmEnd(true)} />
+              <ActionTile label="Encerrar" icon={ICONS.stop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onPress={() => end(billing)} />
             </View>
             {!payable && invite && billing.state === "active" && (
               <View className="flex-row items-center justify-between px-1">
@@ -831,6 +854,25 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             </View>
           </View>
         </Modal>
+      )}
+
+      {scope && (
+        <ScopeModal
+          title={scope === BillingState.Paused ? "Pausar conta?" : "Encerrar conta?"}
+          subtitle={scope === BillingState.Ended ? "Esta ação não pode ser desfeita." : undefined}
+          explanation={
+            scope === BillingState.Paused
+              ? `Novas cobranças deixam de ser geradas. E as pendentes de “${billing.description}”?`
+              : `Encerrar impede novas ocorrências de “${billing.description}”. E as pendentes?`
+          }
+          primaryLabel="Manter as deste mês"
+          secondaryLabel={`Cancelar pendentes (${pendingChargesOf(billing).length})`}
+          secondaryTone="danger"
+          busy={busy}
+          onPrimary={() => void transition(billing, scope, PendingChargesAction.Keep)}
+          onSecondary={() => void transition(billing, scope, PendingChargesAction.Cancel)}
+          onCancel={() => setScope(null)}
+        />
       )}
 
       {chooser && (

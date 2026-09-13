@@ -9,6 +9,7 @@ const ID = "[A-Za-z0-9-]+";
 /** Exported only so the OpenAPI contract test can prove every entry maps to a real API operation. */
 export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["PATCH", /^account\/profile$/], ["DELETE", /^account$/],
+  ["POST", /^account\/avatar(?:\/complete)?$/],
   ["POST", new RegExp(`^charges/${ID}/reminders$`)],
   ["GET", /^billings(?:\?.*)?$/], ["POST", /^billings$/], ["GET", new RegExp(`^billings/${ID}(?:/preview)?$`)],
   ["PATCH", new RegExp(`^billings/${ID}$`)],

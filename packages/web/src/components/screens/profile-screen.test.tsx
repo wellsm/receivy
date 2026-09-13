@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED } from "@receivy/common";
@@ -9,6 +9,10 @@ const routerMock = { replace: vi.fn(), push: vi.fn() };
 
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
+vi.mock("@/lib/avatar-upload", () => ({
+  squareJpeg: vi.fn(async () => new Blob(["j"], { type: "image/jpeg" })),
+  uploadAvatar: vi.fn(async () => ({ url: "https://bucket.test/new", version: "v3" })),
+}));
 
 afterEach(() => {
   cleanup();
@@ -94,6 +98,21 @@ describe("ProfileScreen", () => {
       country: "BR",
       timezone: expectedTimezone(),
     });
+  });
+
+  it("changes the profile photo from Perfil", async () => {
+    loadAccount();
+
+    const { container } = render(<ProfileScreen />);
+    const user = userEvent.setup();
+
+    const input = await screen.findByLabelText("Trocar foto");
+    const file = new File(["png"], "photo.png", { type: "image/png" });
+
+    await user.upload(input, file);
+
+    // alt="" gives the <img> role "presentation", not "img", so findByRole cannot see it.
+    await waitFor(() => expect(container.querySelector("img")).toHaveAttribute("src", "https://bucket.test/new"));
   });
 
   it("links to contacts, pix keys, terms and privacy", async () => {

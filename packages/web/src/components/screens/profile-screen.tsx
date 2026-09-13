@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, ChevronRight, KeyRound, LogOut, Mail, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
+import { Check, ChevronRight, KeyRound, Loader2, LogOut, Mail, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, THEME_PREFERENCE_OPTIONS, type AuthUser } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
+import { squareJpeg, uploadAvatar } from "@/lib/avatar-upload";
 import { useThemePreference } from "@/lib/theme";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
@@ -106,6 +107,8 @@ export function ProfileScreen() {
   const [confirmation, setConfirmation] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   const [ended, setEnded] = useState(false);
   // Holds the `deleted` outcome while the browser session could not be cleared yet.
   const [logoutRetry, setLogoutRetry] = useState<boolean | null>(null);
@@ -166,6 +169,25 @@ export function ProfileScreen() {
       setNotice("Não foi possível salvar o nome.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function changePhoto(file: File | undefined) {
+    if (!file || !user) {
+      return;
+    }
+
+    setPhotoBusy(true);
+    setPhotoError("");
+
+    try {
+      const avatar = await uploadAvatar(await squareJpeg(file));
+
+      setUser({ ...user, avatar });
+    } catch (reason) {
+      setPhotoError(reason instanceof Error ? reason.message : "Não foi possível trocar a foto.");
+    } finally {
+      setPhotoBusy(false);
     }
   }
 
@@ -289,7 +311,35 @@ export function ProfileScreen() {
       {!ended && user && (
         <div className="grid gap-5 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:items-start md:gap-6">
           <section className="flex flex-col items-center gap-3 rounded-3xl border border-outline/40 bg-surface p-6">
-            <InitialsAvatar name={initial} size={96} />
+            <div className="relative h-24 w-24">
+              <InitialsAvatar name={initial} size={96} avatar={user.avatar} />
+
+              <label
+                className={`absolute inset-0 m-auto flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-surface/90 text-primary-strong shadow-md transition hover:bg-surface has-disabled:cursor-not-allowed has-focus-visible:ring-2 has-focus-visible:ring-primary ${photoBusy ? "opacity-90" : ""}`}
+              >
+                {photoBusy ? <Loader2 size={18} aria-hidden="true" className="animate-spin" /> : <Pencil size={18} aria-hidden="true" />}
+                <span className="sr-only">{photoBusy ? "Enviando foto…" : "Trocar foto"}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/heic"
+                  aria-label="Trocar foto"
+                  disabled={photoBusy}
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+
+                    event.target.value = "";
+                    void changePhoto(file);
+                  }}
+                />
+              </label>
+            </div>
+
+            {photoError && (
+              <p role="alert" className="m-0 rounded-xl bg-danger-soft px-3 py-2 text-center text-sm text-danger">
+                {photoError}
+              </p>
+            )}
 
             {editing ? (
               <div className="flex w-full items-center gap-2">

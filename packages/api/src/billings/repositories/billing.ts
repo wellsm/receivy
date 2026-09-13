@@ -24,7 +24,9 @@ import {
   ChargeState,
   calendarDate,
   Direction,
+  endOfMonth,
   materializationDate,
+  materializationHorizon,
   normalizeBillingInput,
   type PixKeyType,
   type PixSnapshot,
@@ -476,6 +478,19 @@ function rescheduledCursor(row: BillingRepository.Row, startDate: string, today:
   return (row.processed_through ?? boundary) > boundary ? row.processed_through! : boundary;
 }
 
+/** A new due day never adds a second charge to a month that already has one: that month is skipped. */
+async function rescheduledMonthCursor(db: DbClient, row: BillingRepository.Row, startDate: string, today: string): Promise<string> {
+  const cursor = rescheduledCursor(row, startDate, today);
+  const monthEnd = endOfMonth(startDate);
+  const taken = await db.charges.count({ where: { billing_id: row.id, due_date: { gte: `${startDate.slice(0, 7)}-01`, lte: monthEnd } } });
+
+  if (!taken) {
+    return cursor;
+  }
+
+  return cursor > monthEnd ? cursor : monthEnd;
+}
+
 function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): BillingInput {
   const direction = BillingRepository.direction(row);
   const pix = billingPix(row);
@@ -504,11 +519,8 @@ function dueOccurrences(row: BillingRepository.Row, now: Date, limit: number): s
     return [];
   }
 
-  const offsets = effectiveReminders(row)
-    .filter((reminder) => reminder.enabled)
-    .map((reminder) => reminder.offsetDays);
   const today = calendarDate(now, row.timezone);
-  const latest = addCalendarDays(today, -(offsets.length ? Math.min(...offsets) : 0));
+  const latest = materializationHorizon(today, effectiveReminders(row));
   const cursor = row.processed_through ?? addCalendarDays(row.start_date, -1);
 
   return billingDates(calendarRule(row), addCalendarDays(cursor, 1), latest, limit);
@@ -801,7 +813,7 @@ export namespace BillingRepository {
       await announceCharges(db, notice, noticeChargeIds, now.getTime());
     }
 
-    // An assinatura whose first occurrence is already due gets its charge now instead of waiting for the schedule.
+    // An assinatura gets the charges of its first month right away instead of waiting for the daily sweep.
     const materialized =
       input.type === BillingType.Indefinite && detail.state === BillingState.Active && !detail.charges.length
         ? (await materializeDue(db, detail.id, notice, now)).materialized
@@ -929,6 +941,8 @@ export namespace BillingRepository {
         normalizeBillingInput({ ...billingInputFrom(row, split), totalCents, startDate, dueRule });
       }
 
+      const cursor = rescheduled ? await rescheduledMonthCursor(tx, row, startDate, today) : undefined;
+
       const updated = await tx.billings.updateOne({
         select: SELECT,
         where: { id },
@@ -945,7 +959,7 @@ export namespace BillingRepository {
           ...(patch.state ? { state: patch.state } : {}),
           ...(resumed ? { processed_through: (row.processed_through ?? boundary) > boundary ? row.processed_through : boundary } : {}),
           // A new due day wins over the resume cursor: both only ever move the cursor forward.
-          ...(rescheduled ? { start_date: startDate, due_rule: dueRule, processed_through: rescheduledCursor(row, startDate, today) } : {}),
+          ...(rescheduled ? { start_date: startDate, due_rule: dueRule, processed_through: cursor } : {}),
           updated_at: instant
         }
       });

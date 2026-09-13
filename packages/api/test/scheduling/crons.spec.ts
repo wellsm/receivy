@@ -120,33 +120,36 @@ describe('daily cron: materialization and reminder plan', () => {
       )
     ).id;
 
-    deepEqual(await dueDates(monthlyId), [], 'nothing is due at creation');
+    deepEqual(await dueDates(monthlyId), ['2026-01-31'], 'the month of creation exists right away');
     deepEqual(await dueDates(earlyId), []);
   });
 
   after(async () => cleanupUsers(db, [OWNER]));
 
-  it('materializes every due occurrence of every active assinatura and announces the charges once', async () => {
+  it('materializes every occurrence up to the month end and announces only what is already due', async () => {
     sent.reset();
 
     ok((await BillingRepository.materializeDueBillings(db, context, cronAt('2026-03-05'))) >= 1);
-    deepEqual(await dueDates(monthlyId), ['2026-01-31', '2026-02-28']);
-    equal(await cursorOf(monthlyId), '2026-02-28');
-    equal((await auditTypes(monthlyId)).filter((type) => type === 'billing.materialized').length, 2);
+    deepEqual(await dueDates(monthlyId), ['2026-01-31', '2026-02-28', '2026-03-31']);
+    equal(await cursorOf(monthlyId), '2026-03-31');
+    equal((await auditTypes(monthlyId)).filter((type) => type === 'billing.materialized').length, 3);
     deepEqual(await dueDates(earlyId), [], 'June is not due in March');
 
-    equal(debtorEmails().length, 2, 'each new charge says hello once');
+    equal(debtorEmails().length, 1, 'only the late February charge says hello; March waits for its reminder');
 
-    for (const { id } of await charges(monthlyId)) {
-      deepEqual((await EventRepository.list(db, id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
-      equal(notify.events.has(notifyIdentifier(id)), false, 'an e-mail sent right away needs no follow-up');
-    }
+    const [january, february, march] = await charges(monthlyId);
+
+    ok(january && february && march);
+    deepEqual((await EventRepository.list(db, february.id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
+    equal(notify.events.has(notifyIdentifier(february.id)), false, 'an e-mail sent right away needs no follow-up');
+    deepEqual(await EventRepository.list(db, march.id, 'notice.sent'), []);
+    deepEqual(await EventRepository.list(db, january.id, 'notice.sent'), [], 'created with its month, left to the reminder');
 
     // Both steps are idempotent: the same day again finds nothing to do.
     sent.reset();
     deepEqual(await BillingRepository.materializeDue(db, monthlyId, context, cronAt('2026-03-05')), { materialized: false });
     await BillingRepository.materializeDueBillings(db, context, cronAt('2026-03-05'));
-    deepEqual(await dueDates(monthlyId), ['2026-01-31', '2026-02-28']);
+    deepEqual(await dueDates(monthlyId), ['2026-01-31', '2026-02-28', '2026-03-31']);
     equal(debtorEmails().length, 0);
   });
 
@@ -265,17 +268,17 @@ describe('daily cron: materialization and reminder plan', () => {
     await ContactRepository.archive(db, OWNER, archived.id);
 
     ok(
-      (await BillingRepository.materializeDueBillings(db, context, cronAt('2026-03-31'))) >= 1,
+      (await BillingRepository.materializeDueBillings(db, context, cronAt('2026-04-01'))) >= 1,
       'the healthy billing still gets its charge'
     );
-    deepEqual(await dueDates(monthlyId), ['2026-01-31', '2026-02-28', '2026-03-31']);
-    equal(debtorEmails().length, 1);
+    deepEqual(await dueDates(monthlyId), ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30']);
+    equal(debtorEmails().length, 0, 'April waits for its reminder');
 
     deepEqual(await dueDates(billing.id), []);
     equal(await cursorOf(billing.id), '2025-12-31', 'the cursor stays where creation left it');
     ok((await auditTypes(billing.id)).includes('billing.materialization_skipped'));
     equal(sent.emails.filter((email) => email.to === 'daily-cron-archived@example.com').length, 0);
-    deepEqual(await BillingRepository.materializeDue(db, billing.id, context, cronAt('2026-03-31')), {
+    deepEqual(await BillingRepository.materializeDue(db, billing.id, context, cronAt('2026-04-01')), {
       materialized: false,
       skipped: 'Contato indisponível.'
     });

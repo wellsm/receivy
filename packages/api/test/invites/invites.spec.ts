@@ -341,12 +341,15 @@ describe('billing invites on native PostgreSQL', () => {
       once({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-10-06', paymentMethodId: pixId }),
       now
     );
+
+    ok(endless.charges.length > 0, 'the month of creation exists right away');
+
     const endlessInvite = await createInvite(db, OWNER, endless.id, SECRET, ORIGIN, now);
     const joined = await InviteRepository.accept(db, GUEST, tokenOf(endlessInvite.url), SECRET, now);
 
     deepEqual(joined, { billingId: endless.id, chargeId: null, joinedSplit: true, awaitingOwner: false });
     equal(await db.allocations.count({ where: { billing_id: endless.id } }), 2);
-    equal((await chargesOf(endless.id)).length, 0);
+    equal((await chargesOf(endless.id)).length, endless.charges.length, 'the guest joins the split from next month');
 
     const fixed = await BillingRepository.create(
       db,

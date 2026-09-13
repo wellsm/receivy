@@ -191,7 +191,11 @@ describe('billings on native PostgreSQL', () => {
       date('2026-09-01')
     );
     equal(rent.dueRule, 'fixed');
-    await BillingRepository.materializeNextOccurrence(db, rent.id, date('2026-09-15'));
+    deepEqual(
+      rent.charges.map((charge) => charge.dueDate),
+      ['2026-09-15'],
+      'the month of creation already has its charge'
+    );
 
     const switched = await BillingRepository.patch(
       db,
@@ -201,7 +205,12 @@ describe('billings on native PostgreSQL', () => {
       date('2026-09-16')
     );
     equal(switched.dueRule, 'end_of_month');
-    deepEqual(switched.previews.map((preview) => preview.occurrenceDate).slice(0, 3), ['2026-09-30', '2026-10-31', '2026-11-30']);
+    deepEqual(
+      switched.previews.map((preview) => preview.occurrenceDate).slice(0, 3),
+      ['2026-10-31', '2026-11-30'],
+      'September already has its charge: the new day starts next month'
+    );
+    equal(switched.charges.length, 1);
     equal(switched.charges[0]!.dueDate, '2026-09-15', 'generated charges keep their date');
     await rejects(
       () =>
@@ -227,9 +236,9 @@ describe('billings on native PostgreSQL', () => {
       },
       date('2026-01-01')
     );
-    equal(created.charges.length, 0);
+    equal(created.charges.length, 1, 'January exists from creation');
     ok(created.previews.length > 0);
-    equal(created.nextMaterialization, '2026-01-31');
+    equal(created.nextMaterialization, '2026-02-01');
     await rejects(
       () =>
         BillingRepository.create(
@@ -277,7 +286,7 @@ describe('billings on native PostgreSQL', () => {
         ...once(),
         type: BillingType.Indefinite,
         frequency: BillingFrequency.Monthly,
-        startDate: '2026-01-15',
+        startDate: '2026-02-15',
         split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: archived.userId }] }
       },
       date('2026-01-01')
@@ -290,14 +299,14 @@ describe('billings on native PostgreSQL', () => {
         ...once({ totalCents: 2_000 }),
         type: BillingType.Indefinite,
         frequency: BillingFrequency.Monthly,
-        startDate: '2026-01-15',
+        startDate: '2026-02-15',
         split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: debtorId }] }
       },
       date('2026-01-01')
     );
     await ContactRepository.archive(db, OWNER, archived.id);
-    const skipped = await BillingRepository.materializeNextOccurrence(db, invalid.id, date('2026-01-15'));
-    const done = await BillingRepository.materializeNextOccurrence(db, valid.id, date('2026-01-15'));
+    const skipped = await BillingRepository.materializeNextOccurrence(db, invalid.id, date('2026-02-01'));
+    const done = await BillingRepository.materializeNextOccurrence(db, valid.id, date('2026-02-01'));
     ok(skipped.skipped, 'an archived recipient never throws out of the consumer');
     equal(done.materialized, true);
     equal((await db.billings.findOne({ select: { processed_through: true }, where: { id: invalid.id } }))?.processed_through, '2025-12-31');
@@ -306,7 +315,7 @@ describe('billings on native PostgreSQL', () => {
       OWNER,
       valid.id,
       { description: 'Editada', totalCents: 3_000, reminders: [{ offsetDays: -5, enabled: true }] },
-      date('2026-01-16')
+      date('2026-02-16')
     );
     equal(edited.description, 'Editada');
     deepEqual(edited.reminders, [{ offsetDays: -5, enabled: true }]);

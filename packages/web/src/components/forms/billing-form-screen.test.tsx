@@ -1,4 +1,4 @@
-import { addCalendarDays, BillingCategory, BillingFrequency, BillingState, BillingType, calendarDate, Direction, EMPTY_BILLING_DRAFT, endOfMonth, endOfMonthOptions, PixKeyType, SplitMode, SplitPartKind, type BillingDetail } from "@receivy/common";
+import { addCalendarDays, BillingCategory, BillingFrequency, BillingState, BillingType, calendarDate, ChargeState, Direction, EMPTY_BILLING_DRAFT, endOfMonth, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
@@ -15,6 +15,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+  vi.useRealTimers();
   window.sessionStorage.clear();
 });
 
@@ -721,4 +722,85 @@ it("switches an open-ended billing to the end of the month on edit", async () =>
   const start = indefiniteBilling.startDate >= today() ? indefiniteBilling.startDate : today();
   const patch = sent.find(entry => entry.init.method === "PATCH");
   expect(JSON.parse(String(patch?.init.body))).toMatchObject({ dueRule: "end_of_month", startDate: endOfMonth(start) });
+});
+
+const monthCharge: ChargeDetail = {
+  id: "c9",
+  description: "Jantar",
+  amount: { amountCents: 9_000, currency: "BRL" },
+  dueDate: "2026-09-20",
+  state: ChargeState.Pending,
+  billingId: "b2",
+  billingType: BillingType.Indefinite,
+  installment: null,
+  installmentCount: null,
+  counterpartName: "Ana",
+  proofState: null,
+  direction: Direction.Receivable,
+  recipient: { userId: "u1", name: "Ana", email: null },
+  debtorUserId: "u1",
+  pix: null,
+  sharingState: SharingState.Ready,
+  proof: null,
+  cancelledAt: null,
+  paidAt: null,
+  createdAt: "2026-09-01T00:00:00Z",
+};
+
+const recurringWithCharge: BillingDetail = { ...indefiniteBilling, startDate: "2026-09-20", charges: [monthCharge] };
+
+function onSeptemberTenth() {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-09-10T15:00:00Z"));
+}
+
+it("asks whether an amount change also reaches this month's charges", async () => {
+  onSeptemberTenth();
+  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(recurringWithCharge) : undefined));
+  const { user } = renderForm(recurringWithCharge);
+
+  expect(await screen.findByRole("button", { name: /E-mail/ })).toBeInTheDocument();
+
+  await user.clear(screen.getByLabelText("Valor por ocorrência"));
+  await user.type(screen.getByLabelText("Valor por ocorrência"), "12000");
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  const dialog = await screen.findByRole("dialog", { name: "Aplicar às cobranças deste mês?" });
+
+  expect(within(dialog).getByText("1 cobrança de setembro ainda não venceu.")).toBeInTheDocument();
+  expect(sent.some(entry => entry.init.method === "PATCH")).toBe(false);
+
+  await user.click(within(dialog).getByRole("button", { name: "Aplicar também às deste mês" }));
+
+  const patch = sent.find(entry => entry.init.method === "PATCH");
+  expect(JSON.parse(String(patch?.init.body))).toMatchObject({ totalCents: 12_000, applyTo: "current_month" });
+});
+
+it("sends no scope when the owner keeps this month as it is", async () => {
+  onSeptemberTenth();
+  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(recurringWithCharge) : undefined));
+  const { user } = renderForm(recurringWithCharge);
+
+  expect(await screen.findByRole("button", { name: /E-mail/ })).toBeInTheDocument();
+
+  await user.clear(screen.getByLabelText("Valor por ocorrência"));
+  await user.type(screen.getByLabelText("Valor por ocorrência"), "12000");
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+  await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Só a partir do mês seguinte" }));
+
+  const patch = sent.find(entry => entry.init.method === "PATCH");
+  expect(JSON.parse(String(patch?.init.body)).applyTo).toBeUndefined();
+});
+
+it("saves an untouched recurring billing without asking", async () => {
+  onSeptemberTenth();
+  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(recurringWithCharge) : undefined));
+  const { user } = renderForm(recurringWithCharge);
+
+  expect(await screen.findByRole("button", { name: /E-mail/ })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(sent.some(entry => entry.init.method === "PATCH")).toBe(true);
 });

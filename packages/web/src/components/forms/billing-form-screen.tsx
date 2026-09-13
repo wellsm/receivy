@@ -8,6 +8,8 @@ import {
   buildBillingInput,
   calendarDate,
   draftTotalCents,
+  editableMonthCharges,
+  editScopeExplanation,
   EMPTY_BILLING_DRAFT,
   EMPTY_SPLIT_VALUES,
   endOfMonth,
@@ -16,12 +18,14 @@ import {
   parseBRLCents,
   pixKeyField,
   previewBillingSplit,
+  shouldAskEditScope,
   splitPartyKey,
   splitParties,
   BillingDueRule,
   BillingFrequency,
   BillingType,
   Direction,
+  EditScope,
   PixKeyType,
   SplitMode,
   SplitPartKind,
@@ -29,6 +33,7 @@ import {
   type BillingDetail,
   type BillingDraft,
   type BillingInput,
+  type BillingPatch,
   type PaymentMethod,
   type Contact,
   type ContactsPage,
@@ -36,12 +41,13 @@ import {
   type SplitParty,
   type SplitValues,
 } from "@receivy/common";
-import { Check, ChevronDown, KeyRound, Loader2, Plus, X } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, KeyRound, Loader2, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
+import { ScopeDialog } from "@/components/app/scope-dialog";
 import { CategorySelect } from "@/components/app/category-select";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
 import { MonthSelect } from "@/components/app/month-select";
@@ -51,7 +57,7 @@ import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { PIX_TYPE_LABELS, PixTypeIcon } from "@/components/ui/pix-type-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 
-type Attempt = { input: BillingInput; key: string; uncertain: boolean };
+type Attempt = { input: BillingInput; key: string; uncertain: boolean; applyTo?: EditScope };
 
 type BillingFormScreenProps = {
   billing: BillingDetail | null;
@@ -213,6 +219,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   const [payeePicker, setPayeePicker] = useState(false);
   const [pixOpen, setPixOpen] = useState(false);
   const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [scopeAttempt, setScopeAttempt] = useState<Attempt | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -344,7 +351,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
         ? await request<BillingDetail>(`/api/financial/billings/${billing.id}`, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(patchBody(sent.input)),
+            body: JSON.stringify(sent.applyTo ? { ...patchBody(sent.input), applyTo: sent.applyTo } : patchBody(sent.input)),
           })
         : await request<BillingDetail>("/api/financial/billings", {
             method: "POST",
@@ -366,7 +373,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     }
   }
 
-  function patchBody(input: BillingInput) {
+  function patchBody(input: BillingInput): BillingPatch {
     const editable =
       input.direction === "payable"
         ? {
@@ -388,7 +395,18 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
     const split = input.direction === "payable" ? {} : { split: input.split };
 
-    return { description: input.description, totalCents: input.totalCents, startDate: input.startDate, dueRule: input.dueRule ?? "fixed", ...split, ...editable };
+    return { description: input.description, totalCents: input.totalCents, startDate: input.startDate, dueRule: input.dueRule ?? BillingDueRule.Fixed, ...split, ...editable };
+  }
+
+  function applyScope(applyTo?: EditScope) {
+    if (!scopeAttempt) {
+      return;
+    }
+
+    const sent = applyTo ? { ...scopeAttempt, applyTo } : scopeAttempt;
+
+    setScopeAttempt(null);
+    void save(sent);
   }
 
   function submit(event: FormEvent) {
@@ -401,7 +419,15 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     }
 
     try {
-      void save({ input: buildBillingInput(draft), key: crypto.randomUUID(), uncertain: false });
+      const next: Attempt = { input: buildBillingInput(draft), key: crypto.randomUUID(), uncertain: false };
+
+      // Only a recorrente edit that changes what its charges carry, with charges of this month still ahead, needs the answer.
+      if (billing && shouldAskEditScope(billing, patchBody(next.input), todayIn(billing.timezone))) {
+        setScopeAttempt(next);
+        return;
+      }
+
+      void save(next);
     } catch (reason) {
       setError((reason as Error).message);
     }
@@ -969,6 +995,20 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
         )}
       </ScreenFooter>
         </>
+      )}
+
+      {scopeAttempt && billing && (
+        <ScopeDialog
+          title="Aplicar às cobranças deste mês?"
+          icon={CalendarClock}
+          explanation={editScopeExplanation(editableMonthCharges(billing, todayIn(billing.timezone)).length, todayIn(billing.timezone))}
+          primaryLabel="Aplicar também às deste mês"
+          secondaryLabel="Só a partir do mês seguinte"
+          busy={busy}
+          onPrimary={() => applyScope(EditScope.CurrentMonth)}
+          onSecondary={() => applyScope()}
+          onCancel={() => setScopeAttempt(null)}
+        />
       )}
     </form>
   );

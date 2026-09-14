@@ -236,6 +236,18 @@ curl -s $API/auth/email/code -H 'content-type: application/json' -d '{"email":"x
 - [ ] Mobile, fechar e reabrir o app com Escuro fixado: abre direto escuro, sem flash.
 - [ ] Mobile iOS (NativeTabs) e Android (Tabs): ícones ativo e inativo legíveis nos dois temas.
 
+## 19. Categorias e foto de perfil
+
+- [ ] Web e mobile, nova conta: Saúde, Educação e Lazer aparecem antes de Outro, com ícone e cor próprios; salvar com Saúde funciona (exige `ez4 serve --local` ou deploy com a restrição atualizada).
+- [ ] Web, Perfil › lápis no meio da foto: escolher JPG, PNG ou HEIC (Safari); spinner durante o envio; a foto aparece recortada em círculo.
+- [ ] Web, trocar de novo: a foto nova substitui a anterior (mesma chave `avatars/<id>` no bucket).
+- [ ] Mobile (após rebuild), Perfil › lápis: galeria abre com recorte quadrado; cancelar não muda nada; a foto aparece.
+- [ ] Outra conta que cobra ou paga essa pessoa: a foto aparece no Feed, no detalhe da cobrança, no detalhe da conta (participantes, recebedor, links), em Contatos, no extrato do contato, no seletor de contatos e na divisão.
+- [ ] Pessoa sem foto: continua com a inicial em todos esses lugares.
+- [ ] Primeiro login com Google numa conta nova: a foto do Google vira a foto do perfil. Login posterior com Google numa conta que já tem foto: a foto enviada continua.
+- [ ] `/pay/<token>`: continua sem foto.
+- [ ] Excluir a conta: o objeto `avatars/<id>` some do bucket.
+
 ## Divergências
 
 Copie um bloco por item:

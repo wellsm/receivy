@@ -1,5 +1,5 @@
 import type { Client } from '@ez4/storage';
-import { AVATAR_MAX_BYTES } from '@receivy/common';
+import { isAvatarUpload } from '@receivy/common';
 import type { DbClient } from '../../database';
 import { AvatarRepository } from '../repositories/avatar';
 
@@ -48,14 +48,9 @@ export async function adoptProviderPicture({
       return false;
     }
     const type = response.headers.get('content-type')?.split(';', 1)[0]?.trim() ?? '';
-
-    if (!type.startsWith('image/')) {
-      return false;
-    }
-
     const bytes = Buffer.from(await response.arrayBuffer());
 
-    if (!bytes.length || bytes.length > AVATAR_MAX_BYTES) {
+    if (!isAvatarUpload(type, bytes.length)) {
       return false;
     }
 

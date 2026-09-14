@@ -147,7 +147,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     await attachProof(rollbackChargeId, 'invalid-legacy-key', id, StoredProofState.Pending);
     // An unroutable key can no longer make an account undeletable: the caller drops it best-effort.
     const { objectKeys } = await eraseAccount(db, id, 'EXCLUIR');
-    deepEqual(objectKeys, [AvatarRepository.key(id), 'invalid-legacy-key']);
+    deepEqual(objectKeys, [AvatarRepository.key(id), AvatarRepository.stagingKey(id), 'invalid-legacy-key']);
     await rejects(() => authorize(auth.access), HttpUnauthorizedError);
     equal((await ChargeRepository.get(db, owner, rollbackChargeId)).recipient.email, null);
     deepEqual(await proofColumns(rollbackChargeId), { state: null, key: null, sender: null });
@@ -213,7 +213,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     // Only the erasure that did the work reports files, and only the ones it owned.
     deepEqual(
       concurrent.flatMap((result) => result.objectKeys),
-      [AvatarRepository.key(debtor), ownKey]
+      [AvatarRepository.key(debtor), AvatarRepository.stagingKey(debtor), ownKey]
     );
     ok(await bucket.read(anonymousKey), 'unattributed counterparty file preserved');
     const replacement = await repository.findOrCreateUserByEmail('account-debtor@example.com');

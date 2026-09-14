@@ -97,6 +97,27 @@ describe("ChargeDetailScreen", () => {
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith("pix@example.com");
   });
 
+  it("never shows the viewer's own photo next to the counterpart when the counterpart has none", async () => {
+    const client = {
+      charge: jest.fn().mockResolvedValue(
+        charge({
+          ownedByViewer: false,
+          counterpartAvatar: null,
+          recipient: { userId: "u1", name: "Ana", email: "ana@example.com", avatar: { url: "https://bucket.test/viewer", version: "v1" } },
+        }),
+      ),
+      cancel: jest.fn(),
+      pay: jest.fn(),
+      publicLink: jest.fn(),
+      publicChargeUrl: jest.fn(),
+    };
+
+    await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
+
+    expect(await screen.findByText("Ana")).toBeOnTheScreen();
+    expect(screen.queryByTestId("initials-avatar-photo")).toBeNull();
+  });
+
   it.each([
     [ChargeState.Paid, "Esta cobrança já foi paga. Nenhuma nova transferência é necessária."],
     [ChargeState.Cancelled, "Esta cobrança foi cancelada e não deve ser paga."],

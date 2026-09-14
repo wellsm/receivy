@@ -94,6 +94,15 @@ describe('adoptProviderPicture', () => {
         bucket,
         userId: 'u1',
         picture: 'https://lh3.test/p',
+        fetcher: image('image/svg+xml', 10)
+      })
+    ).toBe(false);
+    expect(
+      await adoptProviderPicture({
+        db,
+        bucket,
+        userId: 'u1',
+        picture: 'https://lh3.test/p',
         fetcher: vi.fn(async () => {
           throw new Error('down');
         }) as unknown as typeof fetch

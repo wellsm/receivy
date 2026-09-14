@@ -21,6 +21,11 @@ export namespace AvatarRepository {
     return `${PREFIX}${userId}`;
   }
 
+  /** Where an upload lands before `complete` validates and promotes it; never read for display. */
+  export function stagingKey(userId: string): string {
+    return `avatar-uploads/${userId}`;
+  }
+
   /** Unsigned reference for a DTO: the object key stands in for the URL until the endpoint signs the body. */
   export function ref(userId: string, updatedAt: string | Date | null | undefined): UserAvatar | null {
     if (!updatedAt) {
@@ -76,28 +81,39 @@ export namespace AvatarRepository {
     }
 
     return {
-      uploadUrl: await bucket.getWriteUrl(key(userId), { expiresIn: UPLOAD_SECONDS, contentType: mime }),
+      uploadUrl: await bucket.getWriteUrl(stagingKey(userId), { expiresIn: UPLOAD_SECONDS, contentType: mime }),
       expiresAt: new Date(now.getTime() + UPLOAD_SECONDS * 1000).toISOString()
     };
   }
 
-  /** Confirms the bytes landed and are acceptable; a bad file is removed so the previous photo never points at it. */
+  /** Confirms the staged bytes are acceptable and promotes them; a bad upload never touches the published photo. */
   export async function complete(db: DbClient, bucket: Client, userId: string, now = new Date()): Promise<{ avatar: UserAvatar }> {
-    const stats = await bucket.stat(key(userId));
+    const uploadKey = stagingKey(userId);
+    const stats = await bucket.stat(uploadKey);
 
     if (!stats) {
       throw new HttpNotFoundError();
     }
 
     if (!isAvatarUpload(stats.type, stats.size)) {
-      await bucket.delete(key(userId));
+      await bucket.delete(uploadKey);
       throw new AvatarInvalidError();
     }
+
+    const user = await db.users.findOne({ select: { id: true }, where: { id: userId, deleted_at: { isNull: true } } });
+
+    if (!user) {
+      await bucket.delete(uploadKey);
+      throw new HttpNotFoundError();
+    }
+
+    await bucket.copy(uploadKey, key(userId));
+    await bucket.delete(uploadKey);
 
     const instant = now.toISOString();
 
     await db.users.updateOne({
-      where: { id: userId, deleted_at: { isNull: true } },
+      where: { id: userId },
       data: { avatar_updated_at: instant, updated_at: instant }
     });
 

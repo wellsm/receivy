@@ -25,6 +25,7 @@ export async function eraseAccount(
     if (!user) throw new HttpUnauthorizedError();
     if (user.deleted_at) return { deleted: true, objectKeys };
     objectKeys.push(AvatarRepository.key(userId));
+    objectKeys.push(AvatarRepository.stagingKey(userId));
     const now = new Date().toISOString();
     await tx.session_families.updateMany({ where: { user_id: userId }, data: { revoked_at: now, device_name: sqlNull } });
     const families = await tx.session_families.findMany({ select: { id: true }, where: { user_id: userId } });

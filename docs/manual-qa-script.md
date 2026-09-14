@@ -246,6 +246,8 @@ curl -s $API/auth/email/code -H 'content-type: application/json' -d '{"email":"x
 - [ ] Pessoa sem foto: continua com a inicial em todos esses lugares.
 - [ ] Primeiro login com Google numa conta nova: a foto do Google vira a foto do perfil. Login posterior com Google numa conta que já tem foto: a foto enviada continua.
 - [ ] `/pay/<token>`: continua sem foto.
+- [ ] Mobile, cobrança vista por quem deve, com credor sem foto: aparece a inicial do credor, nunca a própria foto.
+- [ ] Mobile Android, foto grande da galeria: o envio aceita ou mostra "Envie uma imagem JPG ou PNG de até 2 MB."; a foto carrega sem demora para a outra pessoa.
 - [ ] Excluir a conta: o objeto `avatars/<id>` some do bucket.
 
 ## Divergências

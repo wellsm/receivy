@@ -623,6 +623,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             const reviewing = isPending && charge.proofState === "pending";
             const statusColor = { success: "text-primary", warning: "text-warning", danger: "text-danger", neutral: "text-muted" }[status.tone];
             const name = payable ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
+            const avatar = payable ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
 
             return (
               <View
@@ -636,7 +637,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                   className="flex-row items-center justify-between gap-3"
                 >
                   <View className="flex-1 flex-row items-center gap-3">
-                    <InitialsAvatar name={name} size={40} />
+                    <InitialsAvatar name={name} size={40} avatar={avatar} />
                     <View className="flex-1">
                       <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
                         {name}
@@ -891,7 +892,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                   onPress={() => void shareCharge(charge)}
                   className="min-h-14 flex-row items-center gap-3 rounded-2xl border border-outline/40 bg-surface px-4"
                 >
-                  <InitialsAvatar name={charge.recipient.name} size={36} />
+                  <InitialsAvatar name={charge.recipient.name} size={36} avatar={charge.recipient.avatar} />
                   <Text className="flex-1 font-semibold text-ink">{charge.recipient.name}</Text>
                   <Text className="text-sm font-semibold text-primary">{formatMoney(charge.amount)}</Text>
                 </Pressable>

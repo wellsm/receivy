@@ -650,6 +650,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
       value: modeValues[key] ?? "",
       // A fixed row is the amount itself, so repeating it beside the field says nothing.
       amountText: draft.mode === "fixed" || cents === undefined ? "" : money(cents),
+      avatar: key === "owner" ? null : (directory.find((contact) => contact.userId === key)?.avatar ?? null),
     };
   });
 
@@ -780,7 +781,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                   onPress={() => update({ payee: "" })}
                   className="flex-row items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
                 >
-                  <InitialsAvatar name={payee.displayName} size={24} />
+                  <InitialsAvatar name={payee.displayName} size={24} avatar={payee.avatar} />
                   <Text className="text-xs font-semibold text-ink">{payee.displayName}</Text>
                   <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
                 </Pressable>
@@ -827,7 +828,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                     onPress={() => toggle(contact.userId)}
                     className="flex-row items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
                   >
-                    <InitialsAvatar name={contact.displayName} size={24} />
+                    <InitialsAvatar name={contact.displayName} size={24} avatar={contact.avatar} />
                     <Text className="text-xs font-semibold text-ink">{contact.displayName}</Text>
                     <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
                   </Pressable>

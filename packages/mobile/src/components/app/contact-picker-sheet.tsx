@@ -106,7 +106,7 @@ export function ContactPickerSheet({ selected, contacts = contactsClient, onTogg
                   onPress={() => onToggle(contact.userId)}
                   className={`min-h-14 flex-row items-center gap-3 rounded-2xl border px-4 ${checked ? "border-primary bg-primary-soft" : "border-outline bg-surface"}`}
                 >
-                  <InitialsAvatar name={contact.displayName} size={36} />
+                  <InitialsAvatar name={contact.displayName} size={36} avatar={contact.avatar} />
                   <Text className="flex-1 font-semibold text-ink">{contact.displayName}</Text>
                   {checked && <Text className="font-bold text-primary">✓</Text>}
                 </Pressable>

@@ -3,6 +3,7 @@ import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { contactsClient } from "@/contacts/client";
 import { useThemeColors } from "@/theme/colors";
@@ -62,9 +63,13 @@ function ContactCard({ contact, onPress }: { contact: Contact; onPress: () => vo
       onPress={onPress}
       className="min-h-16 flex-row items-center gap-3 rounded-2xl border border-outline/40 bg-surface p-4"
     >
-      <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft">
-        <Text className="text-sm font-extrabold text-primary-strong">{initialsOf(contact.displayName)}</Text>
-      </View>
+      {contact.avatar ? (
+        <InitialsAvatar name={contact.displayName} size={44} avatar={contact.avatar} />
+      ) : (
+        <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft">
+          <Text className="text-sm font-extrabold text-primary-strong">{initialsOf(contact.displayName)}</Text>
+        </View>
+      )}
 
       <View className="flex-1 gap-1">
         <View className="flex-row items-center gap-2">

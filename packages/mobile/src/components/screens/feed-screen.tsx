@@ -19,6 +19,7 @@ import {
   type TimelinePage,
 } from "@receivy/common";
 import { FeedFiltersSheet } from "@/components/app/feed-filters-sheet";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { financialClient, type FinancialClient } from "@/financial/client";
@@ -103,9 +104,13 @@ function ChargeCard({
       className="gap-3 rounded-2xl border border-outline/40 bg-surface p-4"
     >
       <View className="flex-row items-center gap-3">
-        <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft/50">
-          <Text className="text-base font-extrabold text-primary-strong">{charge.counterpartName.slice(0, 1).toUpperCase()}</Text>
-        </View>
+        {charge.counterpartAvatar ? (
+          <InitialsAvatar name={charge.counterpartName} size={44} avatar={charge.counterpartAvatar} />
+        ) : (
+          <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft/50">
+            <Text className="text-base font-extrabold text-primary-strong">{charge.counterpartName.slice(0, 1).toUpperCase()}</Text>
+          </View>
+        )}
         <View className="flex-1 gap-1">
           <Text className="text-sm text-muted" numberOfLines={1}>
             <Text className="font-bold text-ink">{charge.counterpartName}</Text> · {charge.description}

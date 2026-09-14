@@ -1,4 +1,4 @@
-import type { SplitMode } from "@receivy/common";
+import type { SplitMode, UserAvatar } from "@receivy/common";
 import { Text, TextInput, View } from "react-native";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { useThemeColors } from "@/theme/colors";
@@ -10,6 +10,7 @@ export type SplitRow = {
   amountText: string;
   /** Set on a row the user cannot edit, such as the owner's remainder on a fixed split. */
   readonlyText?: string;
+  avatar?: UserAvatar | null;
 };
 
 type SplitEditorProps = {
@@ -48,7 +49,7 @@ export function SplitEditor({ mode, rows, hint, disabled, onChange }: SplitEdito
 
         return (
           <View key={row.key} className="min-h-12 flex-row items-center gap-2 rounded-xl border border-outline/20 bg-surface-muted/60 px-2.5 py-2">
-            <InitialsAvatar name={row.name} />
+            <InitialsAvatar name={row.name} avatar={row.avatar} />
             <Text className="flex-1 text-sm font-semibold text-ink" numberOfLines={1}>
               {row.name}
             </Text>

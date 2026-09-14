@@ -344,7 +344,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
           </Text>
 
           <View className="flex-row items-center gap-3">
-            <InitialsAvatar name={name} size={40} />
+            <InitialsAvatar name={name} size={40} avatar={charge.counterpartAvatar ?? charge.recipient.avatar} />
             <View className="flex-1">
               <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
                 {name}

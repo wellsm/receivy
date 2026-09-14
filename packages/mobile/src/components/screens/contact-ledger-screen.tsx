@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, Share, Text, View } fr
 import { calendarDate, formatMoney, formatPhoneBR, initialsOf, type ChargeDetail, type Contact, type ContactLedger } from "@receivy/common";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { ActionTile } from "@/components/ui/action-tile";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { notificationClient } from "@/notifications/client";
 import { contactsClient } from "@/contacts/client";
@@ -224,9 +225,15 @@ export function ContactLedgerScreen({
         {/* Perfil */}
         <View className="items-center overflow-hidden rounded-xl border border-outline/30 bg-surface p-5">
           <View className="absolute left-0 right-0 top-0 h-1.5 bg-primary" />
-          <View className="mb-3 h-20 w-20 items-center justify-center rounded-full border-2 border-surface bg-primary-soft/60">
-            <Text className="text-[22px] font-bold text-primary-strong">{initialsOf(contact.displayName)}</Text>
-          </View>
+          {contact.avatar ? (
+            <View className="mb-3 rounded-full border-2 border-surface">
+              <InitialsAvatar name={contact.displayName} size={80} avatar={contact.avatar} />
+            </View>
+          ) : (
+            <View className="mb-3 h-20 w-20 items-center justify-center rounded-full border-2 border-surface bg-primary-soft/60">
+              <Text className="text-[22px] font-bold text-primary-strong">{initialsOf(contact.displayName)}</Text>
+            </View>
+          )}
           <Text accessibilityRole="header" className="text-[22px] font-bold text-ink">
             {contact.displayName}
           </Text>

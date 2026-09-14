@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, THEME_PREFERENCE_OPTIONS, type AuthUser } from "@receivy/common";
+import { pickAndUploadAvatar } from "@/account/avatar";
 import { accountClient, type AccountClient } from "@/account/client";
 import { profileStore, type ProfileStore } from "@/account/profile";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { LegalSheet, type LegalKind } from "@/components/app/legal-sheet";
@@ -12,7 +14,7 @@ import { useThemeColors } from "@/theme/colors";
 import { useThemePreference } from "@/theme/preference";
 
 type ProfileScreenProps = {
-  client?: Pick<AccountClient, "profile" | "save" | "logout" | "erase">;
+  client?: Pick<AccountClient, "profile" | "save" | "logout" | "erase" | "startAvatarUpload" | "completeAvatarUpload">;
   store?: Pick<ProfileStore, "remember">;
   version?: string;
   onOpenContacts?: () => void;
@@ -96,6 +98,7 @@ export function ProfileScreen({
   const [confirmation, setConfirmation] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [ended, setEnded] = useState(false);
   const [legal, setLegal] = useState<LegalKind | null>(null);
   const [themePreference, chooseTheme] = useThemePreference();
@@ -141,6 +144,27 @@ export function ProfileScreen({
       setNotice("Não foi possível salvar o nome.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function changePhoto() {
+    if (!user) {
+      return;
+    }
+
+    setPhotoBusy(true);
+    setNotice("");
+
+    try {
+      const avatar = await pickAndUploadAvatar(client);
+
+      if (avatar) {
+        setUser({ ...user, avatar });
+      }
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : "Não foi possível trocar a foto.");
+    } finally {
+      setPhotoBusy(false);
     }
   }
 
@@ -191,8 +215,6 @@ export function ProfileScreen({
     setConfirmation("");
   }
 
-  const initial = (user?.name?.trim().charAt(0) || "R").toUpperCase();
-
   useTabHeader({ title: "Perfil" });
 
   return (
@@ -208,8 +230,23 @@ export function ProfileScreen({
           {!ended && user ? (
             <>
               <View className="items-center gap-3 rounded-3xl border border-outline/40 bg-surface p-6">
-                <View className="h-24 w-24 items-center justify-center rounded-full bg-primary-soft">
-                  <Text className="text-4xl font-extrabold text-primary-strong">{initial}</Text>
+                <View className="h-24 w-24 items-center justify-center">
+                  <InitialsAvatar name={user.name?.trim() || "R"} size={96} avatar={user.avatar} />
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Trocar foto"
+                    accessibilityState={{ disabled: photoBusy, busy: photoBusy }}
+                    disabled={photoBusy}
+                    onPress={() => void changePhoto()}
+                    className="absolute h-10 w-10 items-center justify-center rounded-full bg-surface/90"
+                  >
+                    {photoBusy ? (
+                      <ActivityIndicator color={colors.primaryStrong} />
+                    ) : (
+                      <Image source={ICONS.edit} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
+                    )}
+                  </Pressable>
                 </View>
 
                 {editing ? (

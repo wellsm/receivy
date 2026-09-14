@@ -3,6 +3,7 @@ import { ACCOUNT_DELETED } from "@receivy/common";
 import { ProfileScreen } from "@/components/screens/profile-screen";
 
 jest.mock("@/navigation/tab-header", () => ({ useTabHeader: () => {} }));
+jest.mock("@/account/avatar", () => ({ pickAndUploadAvatar: jest.fn(async () => ({ url: "https://bucket.test/new", version: "v2" })) }));
 
 const user = {
   id: "u1",
@@ -17,12 +18,16 @@ const user = {
   currency: "BRL",
 } as const;
 
-function client(overrides: Partial<Record<"profile" | "save" | "logout" | "erase", jest.Mock>> = {}) {
+function client(
+  overrides: Partial<Record<"profile" | "save" | "logout" | "erase" | "startAvatarUpload" | "completeAvatarUpload", jest.Mock>> = {},
+) {
   return {
     profile: jest.fn().mockResolvedValue(user),
     save: jest.fn().mockResolvedValue(user),
     logout: jest.fn().mockResolvedValue(undefined),
     erase: jest.fn().mockResolvedValue(true),
+    startAvatarUpload: jest.fn(),
+    completeAvatarUpload: jest.fn(),
     ...overrides,
   };
 }
@@ -112,6 +117,14 @@ describe("ProfileScreen", () => {
     await waitFor(() => expect(api.erase).toHaveBeenCalled());
     expect(await screen.findByText(ACCOUNT_DELETED)).toBeOnTheScreen();
     expect(onLoggedOut).toHaveBeenCalled();
+  });
+
+  it("changes the photo through the picker", async () => {
+    await render(<ProfileScreen client={client()} store={store} version="1.0.0" />);
+
+    await fireEvent.press(await screen.findByLabelText("Trocar foto"));
+
+    await waitFor(() => expect(screen.getByTestId("initials-avatar-photo").props.source[0].uri).toBe("https://bucket.test/new"));
   });
 
   it("pins the dark theme from Aparência and stores it on the device", async () => {

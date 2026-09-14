@@ -45,6 +45,14 @@
         }
       ],
       "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O Receivy usa suas fotos para trocar a foto do perfil.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "expo-notifications",
       "@react-native-community/datetimepicker"
     ],

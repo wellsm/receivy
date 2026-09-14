@@ -66,13 +66,16 @@ Decisões de 2026-09-13. Duas mudanças independentes na mesma entrega:
 ### API
 
 - `POST /account/avatar` com body `{ mime: 'image/jpeg' | 'image/png' }` → `200 { uploadUrl, expiresAt }`: PUT
-  assinado por 300 s para `avatars/<userId>` com `contentType: mime` (o iOS ignora `quality` em PNG, então o picker
-  pode devolver PNG).
-- `POST /account/avatar/complete` → `stat('avatars/<userId>')`:
+  assinado por 300 s para a chave provisória `avatar-uploads/<userId>` com `contentType: mime` (o iOS ignora
+  `quality` em PNG, então o picker pode devolver PNG). Emenda da revisão final: o PUT nunca grava direto na chave
+  publicada, então pular o `complete` não publica bytes sem validação e um upload ruim não apaga a foto anterior.
+- `POST /account/avatar/complete` → `stat('avatar-uploads/<userId>')`:
   - ausente → `404`;
-  - `type` fora de `image/jpeg`/`image/png`, `size > 2 * 1024 * 1024` ou `size === 0` → `delete` do objeto e `422`
-    com mensagem "Envie uma imagem JPG ou PNG de até 2 MB.";
-  - válido → `avatar_updated_at = now`, `200 { avatar: UserAvatar }`.
+  - `type` fora de `image/jpeg`/`image/png`, `size > 2 * 1024 * 1024` ou `size === 0` → `delete` da chave provisória
+    e `422` com mensagem "Envie uma imagem JPG ou PNG de até 2 MB." (a foto publicada fica como está);
+  - conta excluída → `delete` da chave provisória e `404`;
+  - válido → `copy` para `avatars/<userId>`, `delete` da provisória, `avatar_updated_at = now`,
+    `200 { avatar: UserAvatar }`.
 - Assinatura em dois passos (emenda de 2026-09-13, na escrita do plano: os repositórios não recebem o bucket, que só
   existe no contexto do endpoint, e ~22 endpoints autenticados devolvem esses DTOs):
   - `AvatarRepository.ref(userId, updatedAt): UserAvatar | null` — síncrono, sem bucket; devolve
@@ -91,7 +94,8 @@ Decisões de 2026-09-13. Duas mudanças independentes na mesma entrega:
   - baixa a imagem (só `https:`, timeout 3 s, `content-type` `image/*`, até 2 MB), grava com `write('avatars/<id>',
     bytes, { contentType })` e preenche `avatar_updated_at`;
   - qualquer falha é registrada em log (sem URL nem dados pessoais) e ignorada: o login nunca falha por causa da foto.
-- Exclusão de conta (`users/services/deletion.ts`): `delete('avatars/<id>')` e `avatar_updated_at = null`.
+- Exclusão de conta (`users/services/deletion.ts`): `delete('avatars/<id>')`, `delete('avatar-uploads/<id>')` e
+  `avatar_updated_at = null`.
 - OpenAPI regenerado (`openapi:generate`); web adiciona `["POST", /^account\/avatar(?:\/complete)?$/]` à allowlist do
   `financial-proxy.ts`.
 

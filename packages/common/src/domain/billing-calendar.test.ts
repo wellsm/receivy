@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BillingDueRule, BillingFrequency, BillingType, DEFAULT_BILLING_REMINDERS, SplitPartKind } from './billing';
+import { BillingDueRule, BillingFrequency, type BillingInput, BillingType, DEFAULT_BILLING_REMINDERS, SplitPartKind } from './billing';
 import {
   addCalendarDays,
   billingDates,
@@ -9,9 +9,10 @@ import {
   materializationDate,
   materializationHorizon,
   normalizeBillingInput,
+  normalizeCounterpartLabel,
   zonedInstant
 } from './billing-calendar';
-import { SplitMode } from './contracts';
+import { Direction, PixKeyType, SplitMode } from './contracts';
 import type { BillingSplit } from './split';
 
 const split = { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: 'ana' }] } satisfies BillingSplit;
@@ -203,6 +204,71 @@ describe('billing calendar', () => {
         reminders: [{ offsetDays: 91, enabled: true }]
       })
     ).toThrow(/lembretes/i);
+  });
+});
+
+describe('registros', () => {
+  const now = new Date('2026-09-15T12:00:00Z');
+  const registro: BillingInput = {
+    type: BillingType.Once,
+    totalCents: 500_000,
+    startDate: '2026-08-05',
+    timezone: 'America/Sao_Paulo',
+    settled: true,
+    counterpartLabel: '  Empresa X  '
+  };
+
+  it('keeps only the owner, trims the name and accepts a past date on a single registro', () => {
+    const normalized = normalizeBillingInput(registro, now);
+
+    expect(normalized.split).toEqual({ mode: 'equal', parts: [{ kind: 'owner' }] });
+    expect(normalized.direction).toBe('receivable');
+    expect(normalized.settled).toBe(true);
+    expect(normalized.counterpartLabel).toBe('Empresa X');
+    expect(normalized.startDate).toBe('2026-08-05');
+    expect(normalized.reminders).toBeUndefined();
+  });
+
+  it('asks for the name by direction, 1 to 120 characters', () => {
+    expect(() => normalizeBillingInput({ ...registro, counterpartLabel: '   ' }, now)).toThrow('Informe de quem é o valor.');
+    expect(() => normalizeBillingInput({ ...registro, direction: Direction.Payable, counterpartLabel: undefined }, now)).toThrow(
+      'Informe para quem é o valor.'
+    );
+    expect(() => normalizeBillingInput({ ...registro, counterpartLabel: 'x'.repeat(121) }, now)).toThrow('Informe de quem é o valor.');
+    expect(normalizeCounterpartLabel('x'.repeat(120), Direction.Payable)).toHaveLength(120);
+  });
+
+  it('refuses participants, a payee, a wallet key, a typed Pix and reminders', () => {
+    const message = 'Registro não tem participantes nem avisos.';
+
+    expect(() => normalizeBillingInput({ ...registro, split }, now)).toThrow(message);
+    expect(() => normalizeBillingInput({ ...registro, direction: Direction.Payable, payeeUserId: 'ana' }, now)).toThrow(message);
+    expect(() => normalizeBillingInput({ ...registro, paymentMethodId: 'pix-1' }, now)).toThrow(message);
+    expect(() =>
+      normalizeBillingInput({ ...registro, direction: Direction.Payable, pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } }, now)
+    ).toThrow(message);
+    expect(() => normalizeBillingInput({ ...registro, reminders: [{ offsetDays: 0, enabled: true }] }, now)).toThrow(message);
+  });
+
+  it('starts a recorrente registro today or later, checked only when a clock is given', () => {
+    const monthly: BillingInput = { ...registro, type: BillingType.Indefinite, frequency: BillingFrequency.Monthly };
+
+    expect(() => normalizeBillingInput(monthly, now)).toThrow('Registro recorrente começa hoje ou depois.');
+    expect(() => normalizeBillingInput({ ...monthly, type: BillingType.Until, endDate: '2026-12-05' }, now)).toThrow(
+      'Registro recorrente começa hoje ou depois.'
+    );
+    expect(normalizeBillingInput({ ...monthly, startDate: '2026-09-15' }, now).startDate).toBe('2026-09-15');
+    // Edits normalize without a clock, so an old recorrente registro stays editable.
+    expect(normalizeBillingInput(monthly).settled).toBe(true);
+  });
+
+  it('still refuses a conta a receber without a contact when it is not a registro', () => {
+    expect(() => normalizeBillingInput({ ...registro, settled: undefined, counterpartLabel: undefined })).toThrow(
+      'Selecione ao menos um contato.'
+    );
+    expect(() =>
+      normalizeBillingInput({ ...registro, settled: false, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } })
+    ).toThrow('Selecione ao menos um contato.');
   });
 });
 

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BillingType, ChargeState, Direction, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import { BillingType, ChargeState, Direction, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ProofViewerScreen } from "@/components/screens/proof-viewer-screen";
 
@@ -13,6 +13,7 @@ afterEach(() => { cleanup(); vi.resetAllMocks(); });
 function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
   return {
     state: ProofState.Pending,
+    kind: ProofKind.File,
     file: { name: "comprovante.png", mime: ProofMime.Png, size: 2048 },
     sentAt: "2026-09-05T14:32:00Z",
     reviewedAt: null,
@@ -61,7 +62,7 @@ function serve(detail: ChargeDetail, extra: Record<string, (init?: RequestInit) 
     }
 
     if (key === "GET /api/financial/charges/charge/proof/download") {
-      return Response.json({ url: `https://files.test/${current.proof?.file.name}` });
+      return Response.json({ url: `https://files.test/${current.proof?.file?.name}` });
     }
 
     return Response.json(current);

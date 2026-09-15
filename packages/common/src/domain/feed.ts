@@ -1,5 +1,5 @@
 import { BillingType } from './billing';
-import { ChargePayer, ChargeState, type ChargeSummary, Direction, ProofState } from './contracts';
+import { ChargePayer, ChargeState, type ChargeSummary, Direction, ProofKind, ProofState } from './contracts';
 
 export const enum BadgeTone {
   Danger = 'danger',
@@ -10,8 +10,9 @@ export const enum BadgeTone {
 }
 
 export const enum ChargeActionKind {
-  Open = 'open',
-  Remind = 'remind'
+  Remind = 'remind',
+  MarkPaid = 'mark_paid',
+  DeclarePayment = 'declare_payment'
 }
 
 export type ChargeBadge = { label: string; tone: BadgeTone };
@@ -61,16 +62,26 @@ export function feedDayLabel(date: string, today: string): string {
   return sameYear ? `${day} de ${month}` : `${day} de ${month} de ${date.slice(0, 4)}`;
 }
 
+/** The "Registro" seal rides beside whatever else the card says. */
+function registroBadges(charge: ChargeSummary): ChargeBadge[] {
+  if (charge.settled !== true) {
+    return [];
+  }
+
+  return [{ label: 'Registro', tone: BadgeTone.Neutral }];
+}
+
 export function chargeBadges(charge: ChargeSummary, today: string): ChargeBadge[] {
   if (charge.state === ChargeState.Cancelled) {
-    return [{ label: 'Cancelado', tone: BadgeTone.Neutral }];
+    return [{ label: 'Cancelado', tone: BadgeTone.Neutral }, ...registroBadges(charge)];
   }
 
   if (charge.state === ChargeState.Paid) {
     return [
       charge.proofState === ProofState.Accepted
         ? { label: 'Validado', tone: BadgeTone.Success }
-        : { label: 'Pago', tone: BadgeTone.Success }
+        : { label: 'Pago', tone: BadgeTone.Success },
+      ...registroBadges(charge)
     ];
   }
 
@@ -89,12 +100,17 @@ export function chargeBadges(charge: ChargeSummary, today: string): ChargeBadge[
   }
 
   if (charge.proofState === ProofState.Pending) {
-    badges.push({ label: 'Comprovante enviado', tone: BadgeTone.Info });
+    badges.push({
+      label: charge.proofKind === ProofKind.Declaration ? 'Pagamento informado' : 'Comprovante enviado',
+      tone: BadgeTone.Info
+    });
   }
 
   if (charge.payer === ChargePayer.Owner && charge.ownedByViewer) {
     badges.push({ label: 'Minha conta', tone: BadgeTone.Info });
   }
+
+  badges.push(...registroBadges(charge));
 
   return badges;
 }
@@ -108,38 +124,46 @@ export function chargeStateLabel(charge: ChargeSummary, direction: Direction): s
     return 'Liquidado';
   }
 
+  if (charge.proofState === ProofState.Pending) {
+    return 'Em análise';
+  }
+
   return direction === Direction.Receivable ? 'A receber' : 'A pagar';
 }
 
-/** The single call to action a feed card offers; null once the charge is settled. */
+/**
+ * The action a feed card runs in place, behind a confirmation. Null means the card only opens the
+ * charge (shown as an arrow): settled charges, proofs to review and anything that needs the detail screen.
+ */
 export function chargeAction(charge: ChargeSummary, direction: Direction): ChargeAction | null {
   if (charge.state !== ChargeState.Pending) {
+    return null;
+  }
+
+  if (charge.proofState === ProofState.Pending) {
     return null;
   }
 
   const ownBill = charge.payer === ChargePayer.Owner;
 
   if (direction === Direction.Receivable) {
-    if (charge.proofState === ProofState.Pending) {
-      return { kind: ChargeActionKind.Open, label: 'Ver comprovante' };
-    }
-
     // The payee of a conta a pagar only confirms; reminders belong to whoever collects, and only
     // reach someone with an address on file.
-    if (ownBill || charge.counterpartReachable === false) {
-      return { kind: ChargeActionKind.Open, label: 'Ver cobrança' };
+    // A registro has nobody to remind either.
+    if (ownBill || charge.counterpartReachable === false || charge.settled === true) {
+      return null;
     }
 
     return { kind: ChargeActionKind.Remind, label: 'Lembrar' };
   }
 
-  if (charge.proofState === ProofState.Pending) {
-    return { kind: ChargeActionKind.Open, label: 'Ver cobrança' };
-  }
-
+  // Without a Pix key there is nothing to pay from the detail: the owner settles their own bill by hand,
+  // or declares it when the payee has to confirm.
   if (ownBill && charge.ownedByViewer && !charge.hasPix) {
-    return { kind: ChargeActionKind.Open, label: 'Marcar pago' };
+    return charge.confirmationRequired
+      ? { kind: ChargeActionKind.DeclarePayment, label: 'Marcar pago' }
+      : { kind: ChargeActionKind.MarkPaid, label: 'Marcar pago' };
   }
 
-  return { kind: ChargeActionKind.Open, label: 'Pagar' };
+  return null;
 }

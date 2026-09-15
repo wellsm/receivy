@@ -75,6 +75,10 @@ export type BillingInput = {
   payeeUserId?: string;
   /** Conta a pagar only: where the owner pays. */
   pix?: BillingPixInput;
+  /** Registro: the owner already received or paid it. Every charge settles on its due date and nobody is notified. */
+  settled?: boolean;
+  /** Registro only: who the money came from (a receber) or went to (a pagar), 1 to 120 characters. */
+  counterpartLabel?: string;
 };
 
 export type NormalizedBillingInput = BillingInput & { description: string; split: BillingSplit; direction: Direction };
@@ -100,6 +104,10 @@ export type BillingPatch = {
   /** Recorrente only. Absent means next month. */
   applyTo?: EditScope;
   category?: BillingCategory;
+  /** Never changes after creation: a value other than the stored one answers 409 SETTLED_LOCKED. */
+  settled?: boolean;
+  /** Registro only: renames the counterpart. On any other conta it answers 409 SETTLED_LOCKED. */
+  counterpartLabel?: string;
 };
 
 export type BillingAllocation = {
@@ -108,6 +116,8 @@ export type BillingAllocation = {
   splitMode: SplitMode;
   amount: Money;
   order: number;
+  /** The participant's "Não notificar": the value new charges of theirs start with. Always false on the owner part. */
+  silenced: boolean;
   shares?: number;
 };
 
@@ -127,6 +137,10 @@ export type BillingSummary = {
   direction: Direction;
   /** Conta a pagar: who receives, or null when the bill is the owner's alone. */
   payeeName: string | null;
+  /** Registro: the owner alone, already settled. The API always sends it; absent on older payloads, read as false. */
+  settled?: boolean;
+  /** Registro only: the counterpart typed by the owner; null on every other conta. */
+  counterpartLabel?: string | null;
   frequency?: BillingFrequency;
   description: string;
   total: Money;
@@ -153,6 +167,10 @@ export type BillingDetail = {
   type: BillingType;
   direction: Direction;
   payee: BillingPayee | null;
+  /** Registro: the owner alone, already settled. The API always sends it; absent on older payloads, read as false. */
+  settled?: boolean;
+  /** Registro only: the counterpart typed by the owner; null on every other conta. */
+  counterpartLabel?: string | null;
   /** Inline key of a conta a pagar; null on a conta a receber, which uses paymentMethodId. */
   pix: PixSnapshot | null;
   frequency?: BillingFrequency;

@@ -502,3 +502,103 @@ it("reports a billing that cannot be loaded and retries", async () => {
 
   expect(await screen.findByRole("heading", { name: "Jantar de despedida" })).toBeInTheDocument();
 });
+
+it("badges each silenced charge on its own row and shows the participant action once", async () => {
+  await open(
+    billing({
+      charges: [
+        charge({ id: "c6", name: "Carlos", silenced: true }),
+        charge({ id: "c7", name: "Carlos", state: ChargeState.Cancelled, cancelledAt: "2026-11-01T00:00:00Z" }),
+      ],
+      allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, silenced: false }],
+    }),
+  );
+
+  expect(screen.getAllByRole("button", { name: "Abrir cobrança de Carlos" })).toHaveLength(2);
+  expect(screen.getAllByText("Sem avisos")).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "Não notificar Carlos" })).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "Voltar a notificar Carlos" })).not.toBeInTheDocument();
+});
+
+it("silences a participant after confirmation and turns the notices back on without asking", async () => {
+  const quietBilling = billing({
+    charges: [charge({ id: "c6", name: "Carlos", silenced: true })],
+    allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, silenced: true }],
+  });
+  const loudBilling = billing({ charges: [charge({ id: "c6", name: "Carlos", silenced: false })], allocations: [{ ...quietBilling.allocations[0]!, silenced: false }] });
+  const bodies: string[] = [];
+  const calls = await open(loudBilling, (path, init) => {
+    if (path !== "/api/financial/billings/b1/participants/u1/silenced" || init?.method !== "PUT") return undefined;
+
+    bodies.push(String(init.body));
+
+    return Response.json(JSON.parse(String(init.body)).silenced ? quietBilling : loudBilling);
+  });
+  const user = setup();
+
+  expect(screen.queryByText("Sem avisos")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Não notificar Carlos" }));
+
+  const dialog = await screen.findByRole("dialog", { name: "Não notificar Carlos?" });
+
+  expect(within(dialog).getByText("Os lembretes automáticos das cobranças pendentes e futuras de Carlos nesta conta param.")).toBeInTheDocument();
+  expect(calls).not.toContain("PUT /api/financial/billings/b1/participants/u1/silenced");
+
+  await user.click(within(dialog).getByRole("button", { name: "Não notificar" }));
+
+  expect(await screen.findByText("Sem avisos")).toBeInTheDocument();
+  expect(bodies).toEqual(['{"silenced":true}']);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Voltar a notificar Carlos" }));
+
+  expect(await screen.findByText("Avisos reativados para Carlos.")).toBeInTheDocument();
+  expect(bodies).toEqual(['{"silenced":true}', '{"silenced":false}']);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByText("Sem avisos")).not.toBeInTheDocument();
+});
+
+it("heads a registro with its counterpart and hides the invite and the payment links", async () => {
+  const salary = charge({
+    id: "c8",
+    name: "Empresa X",
+    recipient: { userId: null, name: "Empresa X", email: null },
+    debtorUserId: null,
+    pix: null,
+    sharingState: SharingState.Closed,
+    settled: true,
+    counterpartLabel: "Empresa X",
+  });
+
+  await open(billing({ settled: true, counterpartLabel: "Empresa X", paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] }, charges: [salary] }));
+
+  expect(screen.getByText("De Empresa X")).toBeInTheDocument();
+  expect(screen.getByText("Registro")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Cobranças" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Participantes" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Marcar Empresa X como pago" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Convidar" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Compartilhar link de Empresa X" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Compartilhar link de pagamento" })).not.toBeInTheDocument();
+});
+
+it("heads a registro a pagar with Para and names its rows after the counterpart", async () => {
+  const rent = charge({
+    id: "c9",
+    name: "Imobiliária",
+    direction: Direction.Payable,
+    payer: ChargePayer.Owner,
+    ownedByViewer: true,
+    recipient: { userId: null, name: "Imobiliária", email: null },
+    debtorUserId: null,
+    pix: null,
+    settled: true,
+    counterpartLabel: "Imobiliária",
+  });
+
+  await open(billing({ direction: Direction.Payable, settled: true, counterpartLabel: "Imobiliária", paymentMethodId: undefined, charges: [rent] }));
+
+  expect(screen.getByText("Para Imobiliária")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeInTheDocument();
+});

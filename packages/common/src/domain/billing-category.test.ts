@@ -14,6 +14,7 @@ describe('billing categories', () => {
       'Saúde',
       'Educação',
       'Lazer',
+      'Salário e renda',
       'Outro'
     ]);
   });
@@ -26,5 +27,11 @@ describe('billing categories', () => {
     expect(billingCategoryColor(BillingCategory.Education)).toBe('#5B6BD6');
     expect(billingCategoryColor(BillingCategory.Leisure)).toBe('#C9971C');
     expect(isBillingCategory('health')).toBe(true);
+  });
+
+  it('labels and tints Salário e renda', () => {
+    expect(billingCategoryLabel(BillingCategory.Income)).toBe('Salário e renda');
+    expect(billingCategoryColor(BillingCategory.Income)).toBe('#6E9A1F');
+    expect(isBillingCategory('income')).toBe(true);
   });
 });

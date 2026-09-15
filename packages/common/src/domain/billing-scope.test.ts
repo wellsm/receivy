@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type BillingDetail, BillingDueRule, BillingFrequency, BillingState, BillingType, SplitPartKind } from './billing';
 import { BillingCategory } from './billing-category';
 import { editableMonthCharges, editScopeExplanation, patchTouchesCharges, pendingChargesOf, shouldAskEditScope } from './billing-scope';
-import { type ChargeDetail, ChargeState, Direction, ProofMime, ProofState, SharingState, SplitMode } from './contracts';
+import { type ChargeDetail, ChargeState, Direction, ProofKind, ProofMime, ProofState, SharingState, SplitMode } from './contracts';
 
 function charge(overrides: Partial<ChargeDetail> & { id: string }): ChargeDetail {
   return {
@@ -69,7 +69,15 @@ describe('billing scope helpers', () => {
 
   it('keeps only this month charges that are pending, not due yet and without a proof under way', () => {
     const file = { name: 'p.pdf', mime: ProofMime.Pdf, size: 1 };
-    const proof = (state: ProofState) => ({ state, file, sentAt: '', reviewedAt: null, reason: null, sentByViewer: false });
+    const proof = (state: ProofState) => ({
+      state,
+      kind: ProofKind.File,
+      file,
+      sentAt: '',
+      reviewedAt: null,
+      reason: null,
+      sentByViewer: false
+    });
     const billing = {
       charges: [
         charge({ id: 'future' }),

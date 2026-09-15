@@ -1,8 +1,9 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpForbiddenError } from '@ez4/gateway';
-import { BillingType, DevicePlatform, Direction, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
+import { BillingType, DevicePlatform, Direction, PixKeyType, ProofKind, SplitMode, SplitPartKind } from '@receivy/common';
 import { BillingRepository } from '../../src/billings/repositories/billing';
+import { ChargeInReviewError, SettledNoRemindersError } from '../../src/charges/errors';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { StoredProofState } from '../../src/charges/schemas/charge';
 import { ApiError } from '../../src/common/errors';
@@ -10,6 +11,7 @@ import { EventRepository } from '../../src/common/repositories/events';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { ReminderQuotaError } from '../../src/notifications/errors';
 import { NotificationRepository } from '../../src/notifications/repositories/notification';
+import { PaymentNotice, pushPaymentNotice } from '../../src/notifications/services/payment-notices';
 import { EMAIL_FOLLOWUP_MS, instantAt, REMINDER_HOUR } from '../../src/notifications/services/planner';
 import {
   announceCharges,
@@ -18,6 +20,7 @@ import {
   NoticeTemplate,
   notifyCharge,
   notifyIdentifier,
+  planReminders,
   sendChargeNotice
 } from '../../src/notifications/services/send';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
@@ -104,6 +107,30 @@ async function payableCharge(announce = false) {
     new Date(clock),
     undefined,
     announce ? context : undefined
+  );
+
+  return billing.charges[0]!.id;
+}
+
+/** A registro due on DUE_DATE, created before it: still pending, with nobody on the other side. */
+async function registroCharge(direction: Direction = Direction.Receivable) {
+  count++;
+
+  const billing = await BillingRepository.create(
+    db,
+    OWNER,
+    `notify-registro-${count}`,
+    {
+      type: BillingType.Once,
+      direction,
+      description: 'Salário',
+      totalCents: 500_000,
+      startDate: DUE_DATE,
+      timezone: TZ,
+      settled: true,
+      counterpartLabel: 'Empresa X'
+    },
+    new Date(clock)
   );
 
   return billing.charges[0]!.id;
@@ -413,6 +440,195 @@ describe('charge notices, follow-ups and devices', () => {
     deepEqual(await send(paid.id, NoticeTemplate.Reminder, 0), { channels: [] }, 'a closed charge sends nothing');
     equal((await EventRepository.list(db, paid.id, 'notice.skipped')).length, 0);
     equal(sent.emails.length, 3);
+  });
+
+  it('sends nothing while a payment waits in review and refuses the manual reminder', async () => {
+    const { id } = await charge();
+
+    await db.charges.updateOne({
+      where: { id },
+      data: { proof_state: StoredProofState.Pending, proof_kind: ProofKind.Declaration, proof_sent_at: new Date(clock).toISOString() }
+    });
+    sent.reset();
+
+    deepEqual(await send(id, NoticeTemplate.Reminder, 0), { channels: [] });
+    equal(sent.pushes.length + sent.emails.length, 0);
+    equal((await EventRepository.list(db, id, 'notice.skipped'))[0]?.payload['reason'], 'in_review');
+    await rejects(() => NotificationRepository.manualReminder(db, OWNER, id, context, () => clock), ChargeInReviewError);
+
+    notify.events.clear();
+    await planReminders(db, notify, instantAt(DUE_DATE, REMINDER_HOUR, TZ).getTime() - 3600_000);
+    equal(notify.events.has(notifyIdentifier(id)), false);
+  });
+
+  it('keeps every automatic notice of a silenced charge quiet and lets the manual reminder through', async () => {
+    clock = Date.parse(`${DUE_DATE}T11:00:00Z`);
+    sent.reset();
+
+    const quiet = await charge();
+    const control = await charge();
+
+    await ChargeRepository.silence(db, OWNER, quiet.id, true);
+
+    deepEqual(await send(quiet.id, NoticeTemplate.Initial), { channels: [] });
+    deepEqual(await send(quiet.id, NoticeTemplate.Reminder, 0), { channels: [] });
+    deepEqual(await sendChargeNotice(db, context, quiet.id, NoticeTemplate.Reminder, clock, { offsetDays: 0, channel: 'email' }), {
+      channels: []
+    });
+    equal(sent.pushes.length + sent.emails.length, 0);
+
+    const skipped = (await EventRepository.list(db, quiet.id, 'notice.skipped')).map((event) => event.payload);
+
+    equal(skipped.length, 3);
+    ok(skipped.every((payload) => payload['reason'] === 'silenced'));
+    deepEqual(skipped.map((payload) => payload['template']).sort(), ['initial', 'reminder', 'reminder']);
+    ok(skipped.some((payload) => payload['offsetDays'] === 0));
+
+    await announceCharges(db, context, [quiet.id], clock);
+
+    equal(sent.pushes.length + sent.emails.length, 0, 'no initial notice for a silenced charge');
+    equal(notify.events.has(notifyIdentifier(quiet.id)), false);
+
+    notify.events.clear();
+    await planReminders(db, notify, instantAt(DUE_DATE, REMINDER_HOUR, TZ).getTime() - 3600_000);
+
+    equal(notify.events.has(notifyIdentifier(quiet.id)), false);
+    ok(notify.events.has(notifyIdentifier(control.id)), 'the charge beside it is still planned');
+
+    deepEqual(await NotificationRepository.manualReminder(db, OWNER, quiet.id, context, () => clock), { queued: true });
+    equal(sent.emails.length, 1);
+    equal(sent.emails[0]!.to, quiet.address);
+  });
+
+  it('drops the e-mail follow-up of a charge silenced after its push', async () => {
+    clock = start;
+    sent.reset();
+
+    await soleDevice(DEBTOR, 'ExpoPushToken[silenced-followup]', 'silenced-followup');
+
+    const { id } = await charge(OWNER, DEBTOR_EMAIL);
+
+    deepEqual(await notifyCharge(db, context, id, NoticeTemplate.Reminder, clock, 0), { channels: ['push'] });
+
+    const armed = notify.events.get(notifyIdentifier(id));
+
+    ok(armed);
+    await ChargeRepository.silence(db, OWNER, id, true);
+
+    deepEqual(await followUpCharge(db, context, armed.event, armed.date.getTime()), { channels: [] });
+    equal(sent.emails.length, 0);
+  });
+
+  it('never notifies about a registro and refuses its manual reminder', async () => {
+    clock = start;
+    sent.reset();
+
+    const received = await registroCharge();
+    const paid = await registroCharge(Direction.Payable);
+    const control = await charge();
+
+    deepEqual(await send(received, NoticeTemplate.Reminder, 0), { channels: [] });
+    deepEqual(await send(paid, NoticeTemplate.Reminder, -1), { channels: [] });
+    deepEqual(await sendChargeNotice(db, context, received, NoticeTemplate.Manual, clock, { channel: 'both' }), { channels: [] });
+    equal(sent.pushes.length + sent.emails.length, 0);
+
+    const skipped = [
+      ...(await EventRepository.list(db, received, 'notice.skipped')),
+      ...(await EventRepository.list(db, paid, 'notice.skipped'))
+    ].map((event) => event.payload);
+
+    equal(skipped.length, 3);
+    ok(skipped.every((payload) => payload['reason'] === 'settled'));
+    ok(skipped.some((payload) => payload['offsetDays'] === -1));
+
+    const recorded = await db.events.count({ where: { eventable_id: received, type: 'notice.skipped' } });
+
+    await announceCharges(db, context, [received, paid], Date.parse(`${DUE_DATE}T11:00:00Z`));
+    deepEqual(
+      await followUpCharge(db, context, { chargeId: received, template: NoticeTemplate.Reminder, stage: 'followup', offsetDays: 0 }, clock),
+      { channels: [] }
+    );
+
+    equal(
+      await db.events.count({ where: { eventable_id: received, type: 'notice.skipped' } }),
+      recorded,
+      'the initial notice and the follow-up skip a registro without an event'
+    );
+    equal(sent.pushes.length + sent.emails.length, 0);
+
+    notify.events.clear();
+    await planReminders(db, notify, instantAt(DUE_DATE, REMINDER_HOUR, TZ).getTime() - 3600_000);
+
+    equal(notify.events.has(notifyIdentifier(received)), false);
+    equal(notify.events.has(notifyIdentifier(paid)), false);
+    ok(notify.events.has(notifyIdentifier(control.id)), 'the charge beside them is still planned');
+
+    await rejects(() => NotificationRepository.manualReminder(db, OWNER, received, context, () => clock), SettledNoRemindersError);
+  });
+
+  it('refuses the manual reminder of a registro even with a payment under review', async () => {
+    clock = start;
+
+    const reviewing = await registroCharge();
+
+    await db.charges.updateOne({ where: { id: reviewing }, data: { proof_state: StoredProofState.Pending } });
+
+    await rejects(() => NotificationRepository.manualReminder(db, OWNER, reviewing, context, () => clock), SettledNoRemindersError);
+  });
+
+  it('never pushes a payment notice to the person whose own action it reports', async () => {
+    const { id, userId } = await charge();
+    const payments = { transport: sent.transport, origin: 'https://receivy.example' };
+
+    await soleDevice(OWNER, 'ExponentPushToken[owner-self]', 'owner-self');
+    await soleDevice(userId, 'ExponentPushToken[debtor-self]', 'debtor-self');
+    await db.charges.updateOne({
+      where: { id },
+      data: { proof_state: StoredProofState.Accepted, proof_kind: ProofKind.File, proof_sent_at: new Date(clock).toISOString() }
+    });
+    sent.reset();
+
+    // The payer settled it themselves: a confirmation of their own act is nobody's news.
+    await pushPaymentNotice(db, payments, id, PaymentNotice.Confirmed, userId);
+
+    equal(sent.pushes.length, 0);
+
+    await pushPaymentNotice(db, payments, id, PaymentNotice.Confirmed, OWNER);
+
+    equal(sent.pushes.length, 1);
+    equal(sent.pushes[0]?.token, 'ExponentPushToken[debtor-self]');
+    equal(sent.pushes[0]?.title, 'Pagamento confirmado');
+  });
+
+  it('pushes who has to answer a declared payment and who paid once it is answered, never twice', async () => {
+    const { id, userId } = await charge();
+    const payments = { transport: sent.transport, origin: 'https://receivy.example' };
+
+    await soleDevice(OWNER, 'ExponentPushToken[owner-review]', 'owner-review');
+    await soleDevice(userId, 'ExponentPushToken[debtor-review]', 'debtor-review');
+    await db.charges.updateOne({
+      where: { id },
+      data: { proof_state: StoredProofState.Pending, proof_kind: ProofKind.Declaration, proof_sent_at: new Date(clock).toISOString() }
+    });
+    sent.reset();
+
+    await pushPaymentNotice(db, payments, id, PaymentNotice.Declared);
+    await pushPaymentNotice(db, payments, id, PaymentNotice.Declared);
+
+    equal(sent.pushes.length, 1, 'the same submission is pushed once');
+    equal(sent.pushes[0]?.token, 'ExponentPushToken[owner-review]');
+    equal(sent.pushes[0]?.title, 'Pagamento informado');
+    ok(/^Recipient disse que pagou .+ · R\$\s12,34\. Confirme o recebimento\.$/.test(sent.pushes[0]?.body ?? ''));
+    equal(sent.pushes[0]?.url, `https://receivy.example/charges/${id}`);
+
+    await db.charges.updateOne({ where: { id }, data: { proof_state: StoredProofState.Rejected, proof_reason: 'Não caiu' } });
+    await pushPaymentNotice(db, payments, id, PaymentNotice.NotIdentified);
+
+    equal(sent.pushes.length, 2);
+    equal(sent.pushes[1]?.token, 'ExponentPushToken[debtor-review]');
+    equal(sent.pushes[1]?.title, 'Pagamento não identificado');
+    ok(sent.pushes[1]?.body.endsWith(': Não caiu'));
+    equal(sent.emails.length, 0, 'payment notices never e-mail');
   });
 
   it('computes reminder instants at 06:00 of the billing timezone', () => {

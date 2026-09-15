@@ -71,6 +71,11 @@ function renderForm(billing: BillingDetail | null = null) {
   return { user: userEvent.setup(), onSaved };
 }
 
+/** Scopes a query to the Divisão card, since the footer summary can echo the same money text. */
+function splitSection() {
+  return within(screen.getByText("Divisão da Conta").closest("fieldset")!);
+}
+
 /** Contacts only enter through the agenda dialog: open it, tick Ana, close it. */
 async function pickAna(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("button", { name: "Adicionar" }));
@@ -215,7 +220,7 @@ it("computes the live amount for each share row", async () => {
   await user.clear(screen.getByLabelText("Cotas de Eu"));
   await user.type(screen.getByLabelText("Cotas de Eu"), "2");
 
-  expect(screen.getAllByText("R$ 50,00")).toHaveLength(2);
+  expect(splitSection().getAllByText("R$ 50,00")).toHaveLength(2);
   expect(screen.getByText("4 cotas no total")).toBeInTheDocument();
 });
 
@@ -243,8 +248,9 @@ it("shows the owner remainder as read-only text on a fixed split", async () => {
 
   expect(screen.getByText("Você fica com R$ 40,00")).toBeInTheDocument();
   expect(screen.queryByLabelText("Valor de Eu")).not.toBeInTheDocument();
-  expect(screen.queryByText("R$ 60,00")).not.toBeInTheDocument();
-  // The read-only remainder row above is the only place the owner's share shows up.
+  // The read-only remainder row above is the only place the owner's share shows up
+  // inside the split card; the footer's own total is a separate, expected R$ 60,00.
+  expect(splitSection().queryByText("R$ 60,00")).not.toBeInTheDocument();
   expect(screen.queryByText(/Faltam/)).not.toBeInTheDocument();
 });
 
@@ -497,6 +503,91 @@ it("shows the validation error inline when no contact is selected", async () => 
   expect(screen.getByRole("alert")).toHaveTextContent("Selecione ao menos um contato.");
 });
 
+it("sends Não notificar on the participant it was switched for", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await pickAna(user);
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+
+  const quiet = screen.getByRole("switch", { name: "Não notificar Ana" });
+
+  expect(quiet).not.toBeChecked();
+  expect(screen.getByText("Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.")).toBeInTheDocument();
+
+  await user.click(quiet);
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  const post = sent.find(entry => entry.init.method === "POST");
+  expect(JSON.parse(String(post?.init.body)).split).toEqual({
+    mode: "equal",
+    parts: [{ kind: "user", userId: "u1", silenced: true }, { kind: "owner" }],
+  });
+});
+
+it("offers Não notificar only on a conta a receber", async () => {
+  api();
+  const { user } = renderForm();
+
+  await pickAna(user);
+
+  expect(screen.getByRole("switch", { name: "Não notificar Ana" })).toBeInTheDocument();
+  expect(screen.getByText("Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("radio", { name: "Vou pagar" }));
+
+  expect(screen.queryByRole("switch", { name: "Não notificar Ana" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.")).not.toBeInTheDocument();
+});
+
+it("records a registro with the name typed in De quem and nobody to split with or pay through", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("switch", { name: "Já recebi" }));
+
+  expect(screen.getByText("Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento.")).toBeInTheDocument();
+  expect(screen.queryByText("Participantes")).not.toBeInTheDocument();
+  expect(screen.queryByText("Divisão da Conta")).not.toBeInTheDocument();
+  expect(screen.queryByText("Receber via Pix")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("De quem")).toHaveAttribute("placeholder", "Ex.: Empresa X");
+
+  await user.type(screen.getByLabelText("De quem"), "Empresa X");
+  await user.type(screen.getByLabelText("Valor total"), "5000,00");
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  const post = sent.find(entry => entry.init.method === "POST");
+  const body = JSON.parse(String(post?.init.body));
+
+  expect(body).toMatchObject({
+    direction: "receivable",
+    settled: true,
+    counterpartLabel: "Empresa X",
+    totalCents: 500_000,
+    split: { mode: "equal", parts: [{ kind: "owner" }] },
+  });
+  expect(body.reminders).toBeUndefined();
+  expect(body.paymentMethodId).toBeUndefined();
+});
+
+it("names a registro a pagar Para quem and keeps a recorrente from starting before today", async () => {
+  api();
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("switch", { name: "Já recebi" }));
+  await user.click(screen.getByRole("radio", { name: "Vou pagar" }));
+
+  expect(screen.getByRole("switch", { name: "Já paguei" })).toBeChecked();
+  expect(screen.getByLabelText("Para quem")).toBeInTheDocument();
+  expect(screen.queryByText("Para quem (opcional)")).not.toBeInTheDocument();
+  expect(screen.queryByText("Chave Pix (opcional)")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Vencimento")).not.toHaveAttribute("min");
+
+  await user.click(screen.getByRole("radio", { name: "Recorrente" }));
+
+  expect(screen.getByLabelText("Vencimento")).toHaveAttribute("min", today());
+});
+
 function withoutPixKeys() {
   return api(path => (path.includes("payment-methods") ? Response.json({ paymentMethods: [] }) : undefined));
 }
@@ -524,6 +615,18 @@ it("keeps the form open for a conta a pagar even without a key", async () => {
 
   expect(screen.queryByText("Cadastre uma chave Pix")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Criar conta" })).toBeInTheDocument();
+});
+
+it("opens the form of a registro a receber even without a key", async () => {
+  withoutPixKeys();
+  const { user } = renderForm();
+
+  expect(await screen.findByText("Cadastre uma chave Pix")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("switch", { name: "Já recebi" }));
+
+  expect(screen.queryByText("Cadastre uma chave Pix")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("De quem")).toBeInTheDocument();
 });
 
 it("never gates the form once a key exists", async () => {
@@ -803,4 +906,138 @@ it("saves an untouched recurring billing without asking", async () => {
 
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(sent.some(entry => entry.init.method === "PATCH")).toBe(true);
+});
+
+it("seeds Não notificar from the allocations and sends the new value on edit", async () => {
+  const silencedBilling: BillingDetail = {
+    ...indefiniteBilling,
+    allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, silenced: true }],
+  };
+  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(silencedBilling) : undefined));
+  const { user } = renderForm(silencedBilling);
+
+  const quiet = await screen.findByRole("switch", { name: "Não notificar Ana" });
+
+  expect(quiet).toBeChecked();
+
+  await user.click(quiet);
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  const patch = sent.find(entry => entry.init.method === "PATCH");
+  expect(JSON.parse(String(patch?.init.body)).split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", silenced: false }] });
+});
+
+it("keeps the registro switch locked on edit and patches only the new name", async () => {
+  const registroBilling: BillingDetail = {
+    ...onceBilling,
+    id: "b4",
+    settled: true,
+    counterpartLabel: "Empresa X",
+    paymentMethodId: undefined,
+    reminders: [],
+    split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] },
+  };
+  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(registroBilling) : undefined));
+  const { user } = renderForm(registroBilling);
+
+  const toggle = await screen.findByRole("switch", { name: "Já recebi" });
+
+  expect(toggle).toBeChecked();
+  expect(toggle).toBeDisabled();
+  expect(screen.getByText("Não dá para mudar depois de criada.")).toBeInTheDocument();
+  expect(screen.getByLabelText("De quem")).toHaveValue("Empresa X");
+
+  await user.clear(screen.getByLabelText("De quem"));
+  await user.type(screen.getByLabelText("De quem"), "Empresa Y");
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  const patch = sent.find(entry => entry.init.method === "PATCH");
+  expect(patch?.path).toBe("/api/financial/billings/b4");
+  expect(JSON.parse(String(patch?.init.body))).toEqual({ counterpartLabel: "Empresa Y", category: "other" });
+});
+
+/** `a` comes strictly before `b` in the rendered document. */
+function isBefore(a: Element, b: Element): boolean {
+  return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+it("orders the sections Direção, Valor, Título e categoria, Frequência, Divisão and Chave Pix", async () => {
+  api();
+  const { user } = renderForm();
+
+  await pickAna(user);
+
+  const direction = screen.getByRole("radiogroup", { name: "Direção" });
+  const amount = screen.getByLabelText("Valor total");
+  const title = screen.getByLabelText("Título");
+  const modality = screen.getByRole("radiogroup", { name: "Modalidade" });
+  const due = screen.getByLabelText("Vencimento");
+  const split = screen.getByText("Divisão da Conta");
+  const pix = screen.getByText("Receber via Pix");
+
+  expect(isBefore(direction, amount)).toBe(true);
+  expect(isBefore(amount, title)).toBe(true);
+  expect(isBefore(title, modality)).toBe(true);
+  expect(isBefore(modality, due)).toBe(true);
+  expect(isBefore(due, split)).toBe(true);
+  expect(isBefore(split, pix)).toBe(true);
+});
+
+it("places the restyled Adicionar action below the participant list, before Não notificar", async () => {
+  api();
+  const { user } = renderForm();
+
+  await pickAna(user);
+
+  const modeTabs = screen.getByRole("radiogroup", { name: "Divisão" });
+  const addButton = screen.getByRole("button", { name: "Adicionar" });
+  const quiet = screen.getByRole("switch", { name: "Não notificar Ana" });
+  const alsoParticipate = screen.getByRole("checkbox", { name: "Eu também participo" });
+
+  expect(isBefore(modeTabs, addButton)).toBe(true);
+  expect(isBefore(addButton, quiet)).toBe(true);
+  expect(isBefore(quiet, alsoParticipate)).toBe(true);
+  expect(addButton.querySelector(".border-dashed")).not.toBeNull();
+});
+
+it("shows the footer summary and total for a parcelado draft", async () => {
+  api();
+  const { user } = renderForm();
+
+  await pickAna(user);
+  await user.click(screen.getByRole("radio", { name: "Parcelado" }));
+  await user.clear(screen.getByLabelText("Parcelas"));
+  await user.type(screen.getByLabelText("Parcelas"), "3");
+  await user.type(screen.getByLabelText("Valor por parcela"), "100,00");
+
+  expect(await screen.findByText("Gera 3 cobranças · 1 pessoa × 3 meses")).toBeInTheDocument();
+  expect(screen.getByText("R$ 150,00")).toBeInTheDocument();
+});
+
+it("shows the footer summary with the per-month total for an indefinite draft", async () => {
+  api();
+  const { user } = renderForm();
+
+  await pickAna(user);
+  await user.click(screen.getByRole("radio", { name: "Recorrente" }));
+  await user.type(screen.getByLabelText("Valor por ocorrência"), "100,00");
+
+  expect(await screen.findByText("Gera 1 cobrança por mês · 1 pessoa")).toBeInTheDocument();
+  expect(screen.getByText("R$ 50,00/mês")).toBeInTheDocument();
+});
+
+it("hides the footer summary while the draft is not valid yet", async () => {
+  api();
+  renderForm();
+
+  await screen.findByRole("button", { name: "Criar conta" });
+  expect(screen.queryByText(/^Gera /)).not.toBeInTheDocument();
+});
+
+it("never shows the footer summary while editing", async () => {
+  api();
+  renderForm(onceBilling);
+
+  await screen.findByRole("button", { name: "Salvar conta" });
+  expect(screen.queryByText(/^Gera /)).not.toBeInTheDocument();
 });

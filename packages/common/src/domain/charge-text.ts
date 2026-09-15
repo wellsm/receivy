@@ -1,5 +1,14 @@
 import { BillingType } from './billing';
-import { type ChargeDetail, ChargePayer, type ChargeProof, ChargeState, type ChargeSummary, Direction, ProofState } from './contracts';
+import {
+  type ChargeDetail,
+  ChargePayer,
+  type ChargeProof,
+  ChargeState,
+  type ChargeSummary,
+  Direction,
+  ProofKind,
+  ProofState
+} from './contracts';
 import { formatMoney } from './money';
 
 export const enum ChargeTone {
@@ -106,9 +115,13 @@ export function proofNote(charge: ChargeDetail): string | null {
 
   if (proof.state === ProofState.Rejected) {
     const reason = proof.reason ? `: ${proof.reason}.` : '.';
-    const retry = charge.state === ChargeState.Pending && charge.direction === Direction.Payable ? ' Você pode enviar outro arquivo.' : '';
+    const payerCanRetry = charge.state === ChargeState.Pending && charge.direction === Direction.Payable;
 
-    return `Comprovante rejeitado${reason}${retry}`;
+    if (proof.kind === ProofKind.Declaration) {
+      return `Pagamento não identificado${reason}${payerCanRetry ? ' Você pode informar de novo ou enviar um comprovante.' : ''}`;
+    }
+
+    return `Comprovante rejeitado${reason}${payerCanRetry ? ' Você pode enviar outro arquivo.' : ''}`;
   }
 
   return null;
@@ -122,13 +135,33 @@ export function fileSizeText(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-/** A debtor may send a file only while nothing is under review; a rejected one can be replaced. */
-export function canUploadProof(charge: ChargeDetail): boolean {
-  if (charge.direction !== Direction.Payable || charge.state !== ChargeState.Pending) {
+/** Pending with something waiting for an answer, a file or a declared payment: reminders and notices stop here. */
+export function chargeInReview(charge: Pick<ChargeSummary, 'state' | 'proofState'>): boolean {
+  return charge.state === ChargeState.Pending && charge.proofState === ProofState.Pending;
+}
+
+/** The paying side says it already paid: the debtor, or the owner of a conta a pagar whose payee can confirm. */
+export function canDeclarePayment(charge: ChargeDetail): boolean {
+  if (charge.direction !== Direction.Payable || charge.state !== ChargeState.Pending || chargeInReview(charge)) {
     return false;
   }
 
-  return charge.proof?.state !== ProofState.Pending;
+  return charge.payer !== ChargePayer.Owner || charge.confirmationRequired === true;
+}
+
+/** A debtor may send a file only while nothing is under review; a rejected one can be replaced. */
+export function canUploadProof(charge: ChargeDetail): boolean {
+  // A registro has nothing to prove: it was settled by the owner.
+  if (charge.settled === true || charge.direction !== Direction.Payable || charge.state !== ChargeState.Pending) {
+    return false;
+  }
+
+  if (charge.proof?.state !== ProofState.Pending) {
+    return true;
+  }
+
+  // A declaration the viewer sent may still receive its file.
+  return charge.proof.kind === ProofKind.Declaration && charge.proof.sentByViewer;
 }
 
 /** The sender may take back a file nobody reviewed yet, so another one can go up. */
@@ -145,9 +178,13 @@ export function canAcceptProof(charge: ChargeDetail): boolean {
   return charge.direction === Direction.Receivable && charge.state === ChargeState.Pending && charge.proof?.state === ProofState.Pending;
 }
 
-/** Whoever collects, plus the owner of a conta a pagar settling their own bill. */
+/** Whoever collects, plus the owner of a conta a pagar settling a bill nobody else has to confirm. */
 export function canMarkPaid(charge: ChargeDetail): boolean {
-  return charge.state === ChargeState.Pending && (charge.direction === Direction.Receivable || charge.ownedByViewer === true);
+  if (charge.state !== ChargeState.Pending) {
+    return false;
+  }
+
+  return charge.direction === Direction.Receivable || (charge.ownedByViewer === true && charge.confirmationRequired !== true);
 }
 
 /** Whoever may settle a charge may also take the settlement back while it stands. */
@@ -155,9 +192,10 @@ export function canReopenCharge(charge: ChargeDetail): boolean {
   return charge.state === ChargeState.Paid && (charge.direction === Direction.Receivable || charge.ownedByViewer === true);
 }
 
-/** Reminders and public links belong to the creditor of a conta a receber only; a conta a pagar has neither. */
+/** Reminders and public links belong to the creditor of a conta a receber only; a conta a pagar and a registro have neither. */
 export function canRemind(charge: ChargeDetail): boolean {
   return (
+    charge.settled !== true &&
     charge.state === ChargeState.Pending &&
     charge.direction === Direction.Receivable &&
     charge.payer !== ChargePayer.Owner &&
@@ -175,13 +213,28 @@ export function chargeShareText(charge: Pick<ChargeSummary, 'description' | 'amo
 
 export function canShare(charge: ChargeDetail): boolean {
   return (
-    charge.state === ChargeState.Pending && charge.direction === Direction.Receivable && charge.payer !== ChargePayer.Owner && !!charge.pix
+    charge.settled !== true &&
+    charge.state === ChargeState.Pending &&
+    charge.direction === Direction.Receivable &&
+    charge.payer !== ChargePayer.Owner &&
+    !!charge.pix
   );
 }
 
 /** Only the owner cancels a single charge, and never on a conta a pagar: that one is ended as a whole. */
 export function canCancelCharge(charge: ChargeDetail): boolean {
   return (
+    charge.state === ChargeState.Pending &&
+    charge.ownedByViewer !== false &&
+    charge.direction === Direction.Receivable &&
+    charge.payer !== ChargePayer.Owner
+  );
+}
+
+/** Only the creditor of a conta a receber pauses the automatic notices of a pending charge; a registro has none to pause. */
+export function canSilenceCharge(charge: ChargeDetail): boolean {
+  return (
+    charge.settled !== true &&
     charge.state === ChargeState.Pending &&
     charge.ownedByViewer !== false &&
     charge.direction === Direction.Receivable &&

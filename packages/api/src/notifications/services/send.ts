@@ -63,6 +63,41 @@ export async function sendChargeNotice(
     return { channels: [] };
   }
 
+  // Somebody said it was paid, with a file or without: nothing chases them while the other side answers.
+  if (charge.proof_state === StoredProofState.Pending) {
+    await EventRepository.record(db, {
+      type: 'notice.skipped',
+      eventableType: EventableType.Charge,
+      eventableId: chargeId,
+      payload: { template, ...(options.offsetDays === undefined ? {} : { offsetDays: options.offsetDays }), reason: 'in_review' }
+    });
+    return { channels: [] };
+  }
+
+  // The creditor paused the automatic notices: only the manual reminder (channel 'both') still reaches the debtor.
+  if (charge.silenced && options.channel !== 'both') {
+    await EventRepository.record(db, {
+      type: 'notice.skipped',
+      eventableType: EventableType.Charge,
+      eventableId: chargeId,
+      payload: { template, ...(options.offsetDays === undefined ? {} : { offsetDays: options.offsetDays }), reason: 'silenced' }
+    });
+    return { channels: [] };
+  }
+
+  const billing = await db.billings.findOne({ select: { settled: true }, where: { id: charge.billing_id } });
+
+  // A registro was already received or paid: nobody hears about it, not even through the manual reminder.
+  if (billing?.settled) {
+    await EventRepository.record(db, {
+      type: 'notice.skipped',
+      eventableType: EventableType.Charge,
+      eventableId: chargeId,
+      payload: { template, ...(options.offsetDays === undefined ? {} : { offsetDays: options.offsetDays }), reason: 'settled' }
+    });
+    return { channels: [] };
+  }
+
   const ownerPays = ChargeRepository.payer(charge) === ChargePayer.Owner;
   const targetId = ownerPays ? charge.creditor_id : charge.debtor_user_id;
   const target = targetId
@@ -191,9 +226,23 @@ export async function followUpCharge(
   event: ChargeNotifyEvent,
   now = Date.now()
 ): Promise<SendResult> {
-  const charge = await db.charges.findOne({ select: { state: true, proof_state: true }, where: { id: event.chargeId } });
+  const charge = await db.charges.findOne({
+    select: { state: true, proof_state: true, silenced: true, billing_id: true },
+    where: { id: event.chargeId }
+  });
 
   if (!charge || charge.state !== ChargeState.Pending || charge.proof_state === StoredProofState.Pending) {
+    return { channels: [] };
+  }
+
+  // Silenced between the push and this e-mail: the creditor's latest word wins.
+  if (charge.silenced) {
+    return { channels: [] };
+  }
+
+  const billing = await db.billings.findOne({ select: { settled: true }, where: { id: charge.billing_id } });
+
+  if (billing?.settled) {
     return { channels: [] };
   }
 
@@ -214,16 +263,32 @@ export async function followUpCharge(
 /** Fired at charge creation (after the transaction): the first notice, with its follow-up rule. */
 export async function announceCharges(db: DbClient, context: NoticeContext, chargeIds: string[], now = Date.now()): Promise<void> {
   for (const chargeId of chargeIds) {
-    const charge = await db.charges.findOne({ select: { payer: true, due_date: true, billing_id: true }, where: { id: chargeId } });
+    const charge = await db.charges.findOne({
+      select: { payer: true, due_date: true, billing_id: true, silenced: true },
+      where: { id: chargeId }
+    });
 
     // The owner of a conta a pagar just typed it: only the scheduled reminders reach them.
     if (!charge || ChargeRepository.payer(charge) === ChargePayer.Owner) {
       continue;
     }
 
-    const billing = await db.billings.findOne({ select: { timezone: true, reminders: true }, where: { id: charge.billing_id } });
+    // A silenced charge gets no hello; the manual reminder is still there.
+    if (charge.silenced) {
+      continue;
+    }
+
+    const billing = await db.billings.findOne({
+      select: { timezone: true, reminders: true, settled: true },
+      where: { id: charge.billing_id }
+    });
 
     if (!billing) {
+      continue;
+    }
+
+    // A registro has nobody to greet.
+    if (billing.settled) {
       continue;
     }
 
@@ -252,18 +317,29 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
   const from = new Date(now - 100 * 86400_000).toISOString().slice(0, 10);
   const to = new Date(now + 100 * 86400_000).toISOString().slice(0, 10);
   const { records } = await db.charges.findMany({
-    select: { id: true, billing_id: true, due_date: true },
+    select: { id: true, billing_id: true, due_date: true, proof_state: true, silenced: true },
     where: { state: ChargeState.Pending, due_date: { gte: from, lte: to } }
   });
-  const billings = new Map<string, { timezone: string; reminders?: string }>();
+  const billings = new Map<string, { timezone: string; reminders?: string; settled?: boolean }>();
 
   let planned = 0;
 
   for (const charge of records) {
+    if (charge.proof_state === StoredProofState.Pending) {
+      continue;
+    }
+
+    if (charge.silenced) {
+      continue;
+    }
+
     let billing = billings.get(charge.billing_id);
 
     if (!billing) {
-      const row = await db.billings.findOne({ select: { timezone: true, reminders: true }, where: { id: charge.billing_id } });
+      const row = await db.billings.findOne({
+        select: { timezone: true, reminders: true, settled: true },
+        where: { id: charge.billing_id }
+      });
 
       if (!row) {
         continue;
@@ -271,6 +347,10 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
 
       billing = row;
       billings.set(charge.billing_id, row);
+    }
+
+    if (billing.settled) {
+      continue;
     }
 
     for (const reminder of effectiveReminders(billing)) {

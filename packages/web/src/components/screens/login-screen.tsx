@@ -87,7 +87,7 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-8 md:max-w-lg">
       <div className="flex flex-col items-center text-center">
-        <Image src="/brand-icon.png" alt="" width={96} height={96} priority className="h-24 w-24 rounded-3xl shadow-[0_8px_16px_rgba(0,56,40,0.25)]" />
+        <Image src="/brand-icon.png" alt="" width={96} height={96} priority className="h-24 w-24 rounded-3xl shadow-[0_8px_16px_rgba(46,36,151,0.25)]" />
         <h1 className="m-0 mt-5 text-4xl font-extrabold tracking-tight text-primary-strong md:text-5xl">Receivy</h1>
         <p className="m-0 mt-2 text-base text-muted md:text-lg">Controle o que tem a receber e a pagar</p>
       </div>

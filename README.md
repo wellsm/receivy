@@ -35,6 +35,21 @@ Se o banco local for anterior a um módulo novo, rode uma vez
 `node --env-file=local.env ./node_modules/@ez4/project/bin/cli.mjs serve -e local.env --local --reset`
 em `packages/api`; isso apaga apenas o banco descartável da porta 55434.
 
+Para testar à mão com dados variados, rode o seed com o seu e-mail (a API local
+precisa ter criado as tabelas antes):
+
+```bash
+pnpm --filter @receivy/api seed:local voce@example.com
+```
+
+Ele cria 8 contatos (com e sem app, sem e-mail, arquivado), chaves Pix de todos
+os tipos e 15 contas espalhadas por meses passados, atual e futuros: parceladas,
+assinaturas mensal/anual/fim de mês, pausada, encerrada, contas a pagar com e sem
+Pix, cobranças atrasadas, pagas, canceladas e com comprovante pendente, aceito ou
+recusado. Rodar de novo recria só o que o seed criou. `--dry-run` executa tudo e
+desfaz no fim. Para ver o lado de quem paga, entre como
+`rafa.duarte@seed.receivy.test` ou `marina.alves@seed.receivy.test`.
+
 Em outro terminal, inicie o app mobile:
 
 ```bash

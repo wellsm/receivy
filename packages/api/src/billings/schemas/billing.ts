@@ -35,6 +35,10 @@ export interface BillingSchema extends Database.Schema {
   pix_key_type?: PixKeyType;
   pix_key?: String.Max<254>;
   pix_label?: String.Max<120>;
+  /** Registro only: who the money came from or went to, typed by the owner. */
+  counterpart_label?: String.Max<120>;
+  /** True only on a registro: every charge settles on its due date and nobody is notified. Null reads as false. */
+  settled?: boolean;
   /** JSON array of { offsetDays, enabled }; null falls back to the owner's notification preferences. */
   reminders?: String.Max<2000>;
   state: BillingState;
@@ -57,5 +61,7 @@ export interface AllocationSchema extends Database.Schema {
   shares?: number;
   amount_cents: number;
   allocation_order: number;
+  /** "Não notificar" of a 'user' part: new charges of this participant copy it. Null (owner part, older rows) reads as false. */
+  silenced?: boolean;
   created_at: String.DateTime;
 }

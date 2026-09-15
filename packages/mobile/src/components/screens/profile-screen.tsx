@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -10,7 +10,7 @@ import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { LegalSheet, type LegalKind } from "@/components/app/legal-sheet";
-import { useThemeColors } from "@/theme/colors";
+import { useThemeColors, type ThemeColors } from "@/theme/colors";
 import { useThemePreference } from "@/theme/preference";
 
 type ProfileScreenProps = {
@@ -31,10 +31,18 @@ const ICONS = {
   group: require("../../../assets/images/auth/group.svg"),
   key: require("../../../assets/images/auth/key.svg"),
   logout: require("../../../assets/images/auth/logout.svg"),
-  mail: require("../../../assets/images/auth/mail.svg"),
   trash: require("../../../assets/images/auth/trash.svg"),
   warning: require("../../../assets/images/auth/warning.svg"),
 } as const;
+
+type Tone = "primary" | "success" | "neutral" | "danger";
+
+const TILES: Record<Tone, { box: string; tint: keyof ThemeColors }> = {
+  primary: { box: "bg-primary-soft", tint: "primaryStrong" },
+  success: { box: "bg-success-soft", tint: "success" },
+  neutral: { box: "bg-surface-muted", tint: "ink" },
+  danger: { box: "bg-danger-soft", tint: "danger" },
+};
 
 const FALLBACK_TIMEZONE = "America/Sao_Paulo";
 
@@ -48,16 +56,18 @@ function deviceTimezone(): string {
 
 type RowProps = {
   icon: keyof typeof ICONS;
+  tone: Tone;
   label: string;
   title: string;
-  subtitle: string;
-  danger?: boolean;
+  subtitle?: string;
+  chevron?: boolean;
   disabled?: boolean;
   onPress?: () => void;
 };
 
-function Row({ icon, label, title, subtitle, danger = false, disabled = false, onPress }: RowProps) {
+function Row({ icon, tone, label, title, subtitle, chevron = true, disabled = false, onPress }: RowProps) {
   const colors = useThemeColors();
+  const tile = TILES[tone];
 
   return (
     <Pressable
@@ -66,19 +76,28 @@ function Row({ icon, label, title, subtitle, danger = false, disabled = false, o
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      className="min-h-14 flex-row items-center gap-3 px-4 py-3"
+      className="min-h-14 flex-row items-center gap-3 px-4 py-3.5"
     >
-      <View className={`h-10 w-10 items-center justify-center rounded-xl ${danger ? "bg-danger-soft" : "bg-surface-muted"}`}>
-        <Image source={ICONS[icon]} tintColor={danger ? colors.danger : colors.primaryStrong} style={{ width: 20, height: 20 }} />
+      <View className={`h-[38px] w-[38px] items-center justify-center rounded-xl ${tile.box}`}>
+        <Image source={ICONS[icon]} tintColor={colors[tile.tint]} style={{ width: 18, height: 18 }} />
       </View>
 
-      <View className="flex-1 gap-0.5">
-        <Text className={`text-base font-bold ${danger ? "text-danger" : "text-ink"}`}>{title}</Text>
-        <Text className="text-xs leading-4 text-muted">{subtitle}</Text>
+      <View className="flex-1">
+        <Text className={`font-sans text-[14.5px] font-semibold ${tone === "danger" ? "text-danger" : "text-ink"}`}>{title}</Text>
+        {subtitle ? <Text className="font-sans text-[11.5px] text-muted">{subtitle}</Text> : null}
       </View>
 
-      <Image source={ICONS.chevron} tintColor={colors.muted} style={{ width: 18, height: 18 }} />
+      {chevron && <Image source={ICONS.chevron} tintColor={colors.muted} style={{ width: 16, height: 16 }} />}
     </Pressable>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <View className="gap-2">
+      <Text className="px-1 font-sans text-[11px] font-semibold tracking-[0.88px] text-muted">{title}</Text>
+      {children}
+    </View>
   );
 }
 
@@ -220,18 +239,18 @@ export function ProfileScreen({
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
-        <View className="gap-5 px-5 pt-2">
+        <View className="gap-[18px] px-5 pt-3">
           {notice ? (
-            <Text accessibilityLiveRegion="polite" className="rounded-2xl bg-surface-muted p-4 leading-5 text-ink">
+            <Text accessibilityLiveRegion="polite" className="rounded-2xl bg-surface-muted p-4 font-sans leading-5 text-ink">
               {notice}
             </Text>
           ) : null}
 
           {!ended && user ? (
             <>
-              <View className="items-center gap-3 rounded-3xl border border-outline/40 bg-surface p-6">
-                <View className="h-24 w-24 items-center justify-center">
-                  <InitialsAvatar name={user.name?.trim() || "R"} size={96} avatar={user.avatar} />
+              <View className="flex-row items-center gap-3.5 rounded-3xl bg-primary p-5">
+                <View className="h-16 w-16">
+                  <InitialsAvatar name={user.name?.trim() || "R"} size={64} avatar={user.avatar} />
 
                   <Pressable
                     accessibilityRole="button"
@@ -239,91 +258,93 @@ export function ProfileScreen({
                     accessibilityState={{ disabled: photoBusy, busy: photoBusy }}
                     disabled={photoBusy}
                     onPress={() => void changePhoto()}
-                    className="absolute h-10 w-10 items-center justify-center rounded-full bg-surface/90"
+                    className="absolute -bottom-1 -right-1 h-7 w-7 items-center justify-center rounded-full bg-surface"
                   >
                     {photoBusy ? (
-                      <ActivityIndicator color={colors.primaryStrong} />
+                      <ActivityIndicator size="small" color={colors.primaryStrong} />
                     ) : (
-                      <Image source={ICONS.edit} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
+                      <Image source={ICONS.edit} tintColor={colors.primaryStrong} style={{ width: 13, height: 13 }} />
                     )}
                   </Pressable>
                 </View>
 
-                {editing ? (
-                  <View className="w-full flex-row items-center gap-2">
-                    <TextInput
-                      accessibilityLabel="Nome"
-                      value={draft}
-                      maxLength={120}
-                      onChangeText={setDraft}
-                      className="min-h-12 flex-1 rounded-xl border border-outline bg-canvas px-3 text-ink"
-                    />
+                <View className="min-w-0 flex-1">
+                  {editing ? (
+                    <View className="flex-row items-center gap-2">
+                      <TextInput
+                        accessibilityLabel="Nome"
+                        value={draft}
+                        maxLength={120}
+                        onChangeText={setDraft}
+                        textAlignVertical="center"
+                        className="h-11 flex-1 rounded-xl bg-surface px-3 py-0 font-sans text-[16px] tracking-normal text-ink"
+                      />
 
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Salvar nome"
-                      accessibilityState={{ disabled: busy || !draft.trim() }}
-                      disabled={busy || !draft.trim()}
-                      onPress={() => void saveName()}
-                      className="h-12 w-12 items-center justify-center rounded-xl bg-primary"
-                    >
-                      <Image source={ICONS.check} tintColor={colors.onPrimary} style={{ width: 20, height: 20 }} />
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View className="flex-row items-center gap-2">
-                    <Text className="text-2xl font-extrabold text-ink">{user.name ?? "Sem nome"}</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Salvar nome"
+                        accessibilityState={{ disabled: busy || !draft.trim() }}
+                        disabled={busy || !draft.trim()}
+                        onPress={() => void saveName()}
+                        className="h-11 w-11 items-center justify-center rounded-xl bg-surface"
+                      >
+                        <Image source={ICONS.check} tintColor={colors.primaryStrong} style={{ width: 20, height: 20 }} />
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Text className="font-display text-xl font-bold text-on-primary" numberOfLines={1}>
+                      {user.name ?? "Sem nome"}
+                    </Text>
+                  )}
 
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Editar nome"
-                      accessibilityState={{ disabled: busy }}
-                      disabled={busy}
-                      onPress={() => {
-                        setDraft(user.name ?? "");
-                        setEditing(true);
-                      }}
-                      className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted"
-                    >
-                      <Image source={ICONS.edit} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
-                    </Pressable>
-                  </View>
-                )}
-
-                <View className="flex-row items-center gap-2">
-                  <Image source={ICONS.mail} tintColor={colors.muted} style={{ width: 16, height: 16 }} />
-                  <Text className="text-sm text-muted">{user.email}</Text>
+                  <Text className="mt-0.5 font-sans text-[12.5px] text-on-primary/80" numberOfLines={1}>
+                    {user.email}
+                  </Text>
                 </View>
+
+                {!editing && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Editar nome"
+                    accessibilityState={{ disabled: busy }}
+                    disabled={busy}
+                    onPress={() => {
+                      setDraft(user.name ?? "");
+                      setEditing(true);
+                    }}
+                    className="h-[34px] w-[34px] items-center justify-center rounded-xl bg-on-primary/20"
+                  >
+                    <Image source={ICONS.edit} tintColor={colors.onPrimary} style={{ width: 16, height: 16 }} />
+                  </Pressable>
+                )}
               </View>
 
-              <View className="gap-2">
-                <Text className="px-1 text-xs font-bold tracking-wider text-muted">GERENCIAMENTO</Text>
-
-                <View className="overflow-hidden rounded-3xl border border-outline/40 bg-surface">
+              <Section title="GERENCIAMENTO">
+                <View className="overflow-hidden rounded-[20px] border border-outline bg-surface">
                   <Row
                     icon="group"
+                    tone="primary"
                     label="Gerenciar contatos"
                     title="Meus Contatos"
                     subtitle="Gerenciar pessoas e dados salvos de cobrança"
                     onPress={onOpenContacts}
                   />
 
-                  <View className="mx-4 h-px bg-outline/40" />
+                  <View className="mx-4 h-px bg-outline/60" />
 
                   <Row
                     icon="key"
+                    tone="success"
                     label="Gerenciar chaves Pix"
                     title="Minhas Chaves Pix"
                     subtitle="Chaves cadastradas para receber pagamentos"
                     onPress={onOpenPix}
                   />
                 </View>
-              </View>
+              </Section>
 
-              <View className="gap-2">
-                <Text className="px-1 text-xs font-bold tracking-wider text-muted">APARÊNCIA</Text>
-
-                <View accessibilityRole="radiogroup" accessibilityLabel="Aparência" className="flex-row gap-2 rounded-3xl border border-outline/40 bg-surface p-2">
+              <Section title="APARÊNCIA">
+                <View accessibilityRole="radiogroup" accessibilityLabel="Aparência" className="flex-row gap-1.5 rounded-[18px] border border-outline bg-surface p-1.5">
                   {THEME_PREFERENCE_OPTIONS.map((option) => {
                     const selected = option.value === themePreference;
 
@@ -334,36 +355,27 @@ export function ProfileScreen({
                         accessibilityLabel={option.label}
                         accessibilityState={{ checked: selected }}
                         onPress={() => chooseTheme(option.value)}
-                        className={`min-h-11 flex-1 items-center justify-center rounded-2xl ${selected ? "bg-primary-soft/60" : ""}`}
+                        className={`h-10 flex-1 items-center justify-center rounded-[13px] ${selected ? "bg-primary-soft" : ""}`}
                       >
-                        <Text className={`text-sm font-semibold ${selected ? "text-primary-strong" : "text-muted"}`}>{option.label}</Text>
+                        <Text className={`font-sans text-[13px] ${selected ? "font-bold text-primary-strong" : "font-semibold text-muted"}`}>{option.label}</Text>
                       </Pressable>
                     );
                   })}
                 </View>
-              </View>
+              </Section>
 
-              <View className="gap-2">
-                <Text className="px-1 text-xs font-bold tracking-wider text-muted">SEGURANÇA E SESSÃO</Text>
+              <Section title="SESSÃO">
+                <View className="overflow-hidden rounded-[20px] border border-outline bg-surface">
+                  <Row icon="logout" tone="neutral" label="Sair da conta" title="Sair da conta" chevron={false} disabled={busy} onPress={() => setDialog("logout")} />
 
-                <View className="overflow-hidden rounded-3xl border border-outline/40 bg-surface">
-                  <Row
-                    icon="logout"
-                    label="Sair da conta"
-                    title="Sair da conta"
-                    subtitle="Encerrar sessão ativa neste dispositivo"
-                    disabled={busy}
-                    onPress={() => setDialog("logout")}
-                  />
-
-                  <View className="mx-4 h-px bg-outline/40" />
+                  <View className="mx-4 h-px bg-outline/60" />
 
                   <Row
                     icon="trash"
+                    tone="danger"
                     label="Excluir conta"
                     title="Excluir conta"
-                    subtitle="Remover histórico, vínculos e dados permanentemente"
-                    danger
+                    chevron={false}
                     disabled={busy}
                     onPress={() => {
                       setConfirmation("");
@@ -371,12 +383,11 @@ export function ProfileScreen({
                     }}
                   />
                 </View>
-              </View>
+              </Section>
             </>
           ) : null}
 
           <View className="items-center gap-1 pt-2">
-
             <View className="flex-row items-center gap-2">
               <Pressable
                 accessibilityRole="button"
@@ -384,10 +395,10 @@ export function ProfileScreen({
                 onPress={() => setLegal("terms")}
                 className="min-h-12 justify-center"
               >
-                <Text className="font-bold text-primary">Termos</Text>
+                <Text className="font-sans font-bold text-primary">Termos</Text>
               </Pressable>
 
-              <Text className="text-muted">·</Text>
+              <Text className="font-sans text-muted">·</Text>
 
               <Pressable
                 accessibilityRole="button"
@@ -395,7 +406,7 @@ export function ProfileScreen({
                 onPress={() => setLegal("privacy")}
                 className="min-h-12 justify-center"
               >
-                <Text className="font-bold text-primary">Privacidade</Text>
+                <Text className="font-sans font-bold text-primary">Privacidade</Text>
               </Pressable>
             </View>
           </View>
@@ -408,20 +419,20 @@ export function ProfileScreen({
         <Modal transparent animationType="fade" visible onRequestClose={closeDialog}>
           <View className="flex-1 items-center justify-center bg-scrim px-6">
             <View className="w-full gap-4 rounded-3xl bg-surface p-6">
-              <Text accessibilityRole="header" className="text-xl font-extrabold text-ink">
+              <Text accessibilityRole="header" className="font-display text-xl font-bold text-ink">
                 Deseja sair da sua conta?
               </Text>
 
-              <Text className="leading-5 text-muted">Encerrar sessão ativa neste dispositivo.</Text>
+              <Text className="font-sans leading-5 text-muted">Encerrar sessão ativa neste dispositivo.</Text>
 
               <View className="flex-row gap-3">
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Cancelar"
                   onPress={closeDialog}
-                  className="min-h-12 flex-1 items-center justify-center rounded-xl border border-outline"
+                  className="min-h-12 flex-1 items-center justify-center rounded-2xl border border-outline"
                 >
-                  <Text className="font-bold text-primary">Cancelar</Text>
+                  <Text className="font-sans font-bold text-muted">Cancelar</Text>
                 </Pressable>
 
                 <Pressable
@@ -430,9 +441,9 @@ export function ProfileScreen({
                   accessibilityState={{ disabled: busy }}
                   disabled={busy}
                   onPress={() => void logout()}
-                  className="min-h-12 flex-1 items-center justify-center rounded-xl bg-primary"
+                  className="min-h-12 flex-1 items-center justify-center rounded-2xl bg-primary"
                 >
-                  <Text className="font-bold text-on-primary">Sair</Text>
+                  <Text className="font-sans font-bold text-on-primary">Sair</Text>
                 </Pressable>
               </View>
             </View>
@@ -448,16 +459,16 @@ export function ProfileScreen({
                 <Image source={ICONS.warning} tintColor={colors.danger} style={{ width: 24, height: 24 }} />
               </View>
 
-              <Text accessibilityRole="header" className="text-xl font-extrabold text-ink">
+              <Text accessibilityRole="header" className="font-display text-xl font-bold text-ink">
                 Excluir conta?
               </Text>
 
-              <Text className="leading-5 text-muted">
+              <Text className="font-sans leading-5 text-muted">
                 Esta ação é irreversível. Suas cobranças, contatos e chaves Pix serão apagados. Registros compartilhados
                 podem ser preservados com referências anonimizadas.
               </Text>
 
-              <Text className="font-bold text-ink">Digite EXCLUIR para confirmar</Text>
+              <Text className="font-sans font-bold text-ink">Digite EXCLUIR para confirmar</Text>
 
               <TextInput
                 accessibilityLabel="Digite EXCLUIR para confirmar"
@@ -465,7 +476,7 @@ export function ProfileScreen({
                 autoCapitalize="characters"
                 autoCorrect={false}
                 onChangeText={setConfirmation}
-                className="min-h-12 rounded-xl border border-outline bg-canvas px-3 text-ink"
+                className="min-h-12 rounded-xl border border-outline bg-canvas px-3 font-sans text-ink"
               />
 
               <View className="flex-row gap-3">
@@ -473,9 +484,9 @@ export function ProfileScreen({
                   accessibilityRole="button"
                   accessibilityLabel="Cancelar"
                   onPress={closeDialog}
-                  className="min-h-12 flex-1 items-center justify-center rounded-xl border border-outline"
+                  className="min-h-12 flex-1 items-center justify-center rounded-2xl border border-outline"
                 >
-                  <Text className="font-bold text-primary">Cancelar</Text>
+                  <Text className="font-sans font-bold text-muted">Cancelar</Text>
                 </Pressable>
 
                 <Pressable
@@ -484,9 +495,9 @@ export function ProfileScreen({
                   accessibilityState={{ disabled: confirmation !== "EXCLUIR" || busy }}
                   disabled={confirmation !== "EXCLUIR" || busy}
                   onPress={() => void erase()}
-                  className="min-h-12 flex-1 items-center justify-center rounded-xl bg-danger-solid"
+                  className="min-h-12 flex-1 items-center justify-center rounded-2xl bg-danger-solid"
                 >
-                  <Text className="font-bold text-on-danger">Confirmar exclusão</Text>
+                  <Text className="font-sans font-bold text-on-danger">Confirmar exclusão</Text>
                 </Pressable>
               </View>
             </View>

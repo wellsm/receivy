@@ -32,13 +32,13 @@ export function CategorySelect({ value, onSelect, disabled }: CategorySelectProp
         accessibilityState={{ disabled: !!disabled, expanded: open }}
         disabled={disabled}
         onPress={() => setOpen(true)}
-        className={`h-12 flex-row items-center gap-3 rounded-xl border border-outline/50 bg-surface px-3 ${disabled ? "opacity-60" : ""}`}
+        className={`h-11 flex-row items-center gap-3 rounded-[14px] border border-outline bg-surface px-3 ${disabled ? "opacity-60" : ""}`}
       >
-        <View className="h-8 w-8 items-center justify-center rounded-full" style={{ backgroundColor: `${billingCategoryColor(value)}1F` }}>
-          <CategoryIcon category={value} size={18} />
+        <View className="h-7 w-7 items-center justify-center rounded-[9px]" style={{ backgroundColor: `${billingCategoryColor(value)}18` }}>
+          <CategoryIcon category={value} size={16} />
         </View>
 
-        <Text className="flex-1 text-sm font-semibold text-ink" numberOfLines={1}>
+        <Text className="flex-1 font-sans text-[14px] font-semibold text-ink" numberOfLines={1}>
           {billingCategoryLabel(value)}
         </Text>
 

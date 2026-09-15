@@ -5,6 +5,8 @@ import {
   amountDigitsToInput,
   amountInputToDigits,
   billingCategoryLabel,
+  billingDraftSummary,
+  billingDraftSummaryText,
   buildBillingInput,
   calendarDate,
   draftTotalCents,
@@ -83,6 +85,14 @@ const TYPES: { value: BillingType; label: string }[] = [
   { value: BillingType.Indefinite, label: "Recorrente" },
 ];
 
+/** "Já recebi" / "Já paguei" and the name field of a registro, by direction. */
+const SETTLED_LABELS: Record<Direction, { toggle: string; field: string }> = {
+  receivable: { toggle: "Já recebi", field: "De quem" },
+  payable: { toggle: "Já paguei", field: "Para quem" },
+};
+const SETTLED_HELP = "Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento.";
+const SETTLED_LOCKED = "Não dá para mudar depois de criada.";
+
 const AMOUNT_LABELS: Record<BillingType, string> = {
   once: "Valor total",
   until: "Valor por parcela",
@@ -97,7 +107,8 @@ const SPLIT_MODES: { value: SplitMode; label: string; name: string }[] = [
   { value: SplitMode.Fixed, label: "Fixo", name: "Valor fixo" },
 ];
 
-const INPUT_CLASS = "h-12 w-full rounded-xl border border-outline/50 bg-surface px-3.5 text-[14px] text-ink disabled:opacity-60";
+const INPUT_CLASS = "h-12 w-full rounded-[14px] border border-outline bg-surface px-3.5 text-[15px] font-medium text-ink disabled:opacity-60";
+const LABEL_CLASS = "ml-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await browserFetch(path, init);
@@ -160,6 +171,19 @@ function pixDraftFromBilling(billing: BillingDetail): PixDraft {
   return { type: billing.pix.keyType, key: billing.pix.key, label: billing.pix.label };
 }
 
+/** Each participant's current "Não notificar", so saving the edit sends back what the billing already has. */
+function silencedFromBilling(billing: BillingDetail): Record<string, boolean> {
+  const silenced: Record<string, boolean> = {};
+
+  for (const allocation of billing.allocations) {
+    if (allocation.kind === SplitPartKind.User && allocation.userId) {
+      silenced[allocation.userId] = allocation.silenced;
+    }
+  }
+
+  return silenced;
+}
+
 function draftFromBilling(billing: BillingDetail): BillingDraft {
   const parts = billing.split.parts;
 
@@ -183,6 +207,9 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     values: valuesFromBilling(billing),
     category: billing.category,
     reminders: billing.reminders.map(reminder => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
+    silenced: silencedFromBilling(billing),
+    settled: billing.settled === true,
+    counterpartLabel: billing.counterpartLabel ?? "",
   };
 }
 
@@ -197,14 +224,14 @@ function abbreviate(pixKey: string): string {
 
 function SectionLabel({ children, htmlFor }: { children: ReactNode; htmlFor?: string }) {
   return (
-    <label htmlFor={htmlFor} className="ml-0.5 text-[11px] font-semibold text-muted">
+    <label htmlFor={htmlFor} className={LABEL_CLASS}>
       {children}
     </label>
   );
 }
 
 function Card({ children }: { children: ReactNode }) {
-  return <div className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4">{children}</div>;
+  return <div className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface px-4 py-3.5">{children}</div>;
 }
 
 export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) {
@@ -232,8 +259,10 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   const locked = Boolean(attempt);
   const frozen = editing && billing?.type !== "indefinite";
   const payable = draft.direction === "payable";
-  // A conta a pagar is paid by the owner: it needs no wallet key, so the gate never applies to it.
-  const gate = gated && !payable;
+  // A registro has nobody to split with or pay through: participants, payee, split and Pix leave the form.
+  const settled = draft.settled === true;
+  // A conta a pagar is paid by the owner and a registro is already settled: neither needs a wallet key.
+  const gate = gated && !payable && !settled;
   // `BillingPatch` carries no type, frequency or dates, so the schedule is
   // read-only in every edit — otherwise Salvar would silently drop the change.
   const scheduled = editing;
@@ -305,6 +334,10 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     update({ selected: draft.selected.includes(userId) ? draft.selected.filter(id => id !== userId) : [...draft.selected, userId] });
   }
 
+  function switchSilenced(userId: string, silenced: boolean) {
+    update({ silenced: { ...draft.silenced, [userId]: silenced } });
+  }
+
   const remember = useCallback((contacts: Contact[]) => {
     setDirectory(current => [...current, ...contacts.filter(contact => !current.some(known => known.id === contact.id))]);
   }, []);
@@ -374,6 +407,17 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   }
 
   function patchBody(input: BillingInput): BillingPatch {
+    // A registro only renames its counterpart (and, while recorrente, moves its schedule and amount).
+    if (input.settled) {
+      const named = { counterpartLabel: input.counterpartLabel, category: input.category };
+
+      if (billing && billing.type !== "indefinite") {
+        return named;
+      }
+
+      return { description: input.description, totalCents: input.totalCents, startDate: input.startDate, dueRule: input.dueRule ?? BillingDueRule.Fixed, ...named };
+    }
+
     const editable =
       input.direction === "payable"
         ? {
@@ -419,7 +463,8 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     }
 
     try {
-      const next: Attempt = { input: buildBillingInput(draft), key: crypto.randomUUID(), uncertain: false };
+      // Only a creation checks that a recorrente registro starts today or later.
+      const next: Attempt = { input: buildBillingInput(draft, billing ? undefined : new Date()), key: crypto.randomUUID(), uncertain: false };
 
       // Only a recorrente edit that changes what its charges carry, with charges of this month still ahead, needs the answer.
       if (billing && shouldAskEditScope(billing, patchBody(next.input), todayIn(billing.timezone))) {
@@ -437,6 +482,8 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   // Month ends exist for a single due date and for monthly rules; a yearly billing keeps a fixed day.
   const monthEnds = draft.type === "once" || draft.frequency === "monthly";
   const monthEnd = monthEnds && draft.dueRule === "end_of_month";
+  // A recorrente registro starts today or later; a single one may be in the past.
+  const minimumDate = settled && draft.type !== "once" ? today : undefined;
 
   function toggleMonthEnd() {
     if (monthEnd) {
@@ -546,6 +593,8 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   const payee = draft.payee ? contactFor(draft.payee) : null;
   const pixSpec = pixKeyField(draft.pixInline.type);
   const action = editing ? "Salvar conta" : "Criar conta";
+  // Only meaningful on create: an edit patches a subset of fields, not the whole draft.
+  const draftSummary = editing ? null : billingDraftSummary(draft, new Date());
 
   function scopeExplanation(detail: BillingDetail): string {
     const today = todayIn(detail.timezone);
@@ -559,15 +608,15 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
       {/* Direção */}
       <fieldset className="m-0 min-w-0 border-0 p-0" disabled={locked || editing}>
-        <div className="flex gap-1 rounded-xl bg-surface-muted p-1" role="radiogroup" aria-label="Direção">
+        <div className="flex gap-2" role="radiogroup" aria-label="Direção">
           {DIRECTIONS.map(option => {
             const active = draft.direction === option.value;
 
             return (
               <label
                 key={option.value}
-                className={`flex min-h-10 flex-1 cursor-pointer items-center justify-center rounded-lg text-xs ${
-                  active ? "bg-surface font-extrabold text-primary-strong shadow-sm" : "font-medium text-muted"
+                className={`flex min-h-[38px] flex-1 cursor-pointer items-center justify-center rounded-xl border text-[13px] font-bold ${
+                  active ? "border-primary bg-primary text-on-primary" : "border-outline bg-surface text-muted"
                 }`}
               >
                 <input type="radio" className="sr-only" name="billing-direction" value={option.value} checked={active} onChange={() => update({ direction: option.value })} />
@@ -577,6 +626,28 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           })}
         </div>
       </fieldset>
+
+      {/* Registro: already received or paid. On edit it only shows on a registro, locked. */}
+      {(!editing || settled) && (
+        <div className="flex flex-col gap-2">
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface p-3">
+            <span className="flex min-w-0 flex-col">
+              <span className="text-xs font-semibold text-ink">{SETTLED_LABELS[draft.direction].toggle}</span>
+              {editing && <span className="text-[11px] text-muted">{SETTLED_LOCKED}</span>}
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label={SETTLED_LABELS[draft.direction].toggle}
+              className="h-5 w-5 accent-primary"
+              disabled={locked || editing}
+              checked={settled}
+              onChange={event => update({ settled: event.target.checked })}
+            />
+          </label>
+          {settled && <p className="m-0 text-[11px] text-muted">{SETTLED_HELP}</p>}
+        </div>
+      )}
 
       {/* Without a key there is nothing to send: the form waits behind a single call to action. */}
       {gate ? (
@@ -596,133 +667,15 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
       <div className="grid min-w-0 gap-4 md:grid-cols-2 md:items-start">
       <div className="flex min-w-0 flex-col gap-4">
-      {/* Para quem (conta a pagar) */}
-      {payable && (
-        <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked || frozen}>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-primary-strong">Para quem (opcional)</span>
-            <button type="button" ref={pickPayee} onClick={() => setPayeePicker(true)} className="flex min-h-10 items-center gap-1 bg-transparent px-1 text-xs font-semibold text-primary">
-              <Plus size={14} aria-hidden="true" />
-              {payee ? "Trocar" : "Escolher"}
-            </button>
-          </div>
-
-          {payee ? (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                aria-label={payee.displayName}
-                aria-pressed="true"
-                title="Remove o destinatário"
-                onClick={() => update({ payee: "" })}
-                className="flex items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
-              >
-                <InitialsAvatar name={payee.displayName} size={24} avatar={payee.avatar} />
-                <span className="text-xs font-semibold text-ink">{payee.displayName}</span>
-                <X size={12} aria-hidden="true" className="text-muted" />
-              </button>
-            </div>
-          ) : (
-            <p className="m-0 text-[11px] text-muted">Sem destinatário, a conta fica só com você.</p>
-          )}
-        </fieldset>
-      )}
-
-      {payeePicker && (
-        <ContactPickerSheet
-          selected={draft.payee ? [draft.payee] : []}
-          returnFocusTo={pickPayee}
-          onToggle={userId => update({ payee: draft.payee === userId ? "" : userId })}
-          onSeen={remember}
-          onClose={() => setPayeePicker(false)}
-          onNew={
-            editing
-              ? undefined
-              : () => {
-                  setPayeePicker(false);
-                  leaveTo(NEW_CONTACT);
-                }
-          }
-        />
-      )}
-
-      {/* Participantes */}
-      {!payable && (
-      <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked || frozen}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-semibold text-primary-strong">Participantes</span>
-            <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-muted">
-              {participants} pessoa{participants === 1 ? "" : "s"}
-            </span>
-          </div>
-          <button type="button" ref={addContact} onClick={() => setPicker(true)} className="flex min-h-10 items-center gap-1 bg-transparent px-1 text-xs font-semibold text-primary">
-            <Plus size={14} aria-hidden="true" />
-            Adicionar
-          </button>
-        </div>
-
-        {chosen.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {chosen.map(contact => (
-              <button
-                key={contact.userId}
-                type="button"
-                aria-label={contact.displayName}
-                aria-pressed="true"
-                title="Remove da cobrança"
-                onClick={() => toggle(contact.userId)}
-                className="flex items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
-              >
-                <InitialsAvatar name={contact.displayName} size={24} avatar={contact.avatar} />
-                <span className="text-xs font-semibold text-ink">{contact.displayName}</span>
-                <X size={12} aria-hidden="true" className="text-muted" />
-              </button>
-            ))}
-          </div>
-        )}
-
-        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface-muted/80 p-3">
-          <span className="flex min-w-0 flex-1 items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface">
-              <InitialsAvatar name="Eu" size={20} inverted />
-            </span>
-            <span className="flex min-w-0 flex-col">
-              <span className="text-xs font-semibold text-ink">Eu também participo da divisão</span>
-              <span className="text-[11px] text-muted">Você entra no cálculo como um dos pagadores</span>
-            </span>
-          </span>
-          <input type="checkbox" aria-label="Eu também participo" className="h-5 w-5 accent-primary" checked={draft.owner} onChange={event => update({ owner: event.target.checked })} />
-        </label>
-      </fieldset>
-      )}
-
-      {picker && (
-        <ContactPickerSheet
-          selected={draft.selected}
-          returnFocusTo={addContact}
-          onToggle={toggle}
-          onSeen={remember}
-          onClose={() => setPicker(false)}
-          onNew={
-            editing
-              ? undefined
-              : () => {
-                  setPicker(false);
-                  leaveTo(NEW_CONTACT);
-                }
-          }
-        />
-      )}
 
       {/* Valor */}
       <fieldset className="m-0 min-w-0 border-0 p-0" disabled={locked || frozen}>
         <Card>
-          <label htmlFor="billing-amount" className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted">
+          <label htmlFor="billing-amount" className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
             {AMOUNT_LABELS[draft.type]}
           </label>
-          <div className="flex items-end justify-center gap-1.5">
-            <span aria-hidden="true" className="pb-1 text-xl font-semibold text-muted">
+          <div className="flex items-baseline gap-1.5">
+            <span aria-hidden="true" className="font-display text-base font-medium text-muted">
               R$
             </span>
             <input
@@ -731,7 +684,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
               placeholder="0,00"
               value={formatAmountDigits(amountInputToDigits(draft.amount))}
               onChange={event => typeAmount(event.target.value)}
-              className="w-48 border-0 border-b-2 border-primary bg-transparent p-0 text-center text-[36px] font-extrabold tracking-tight text-primary outline-none disabled:opacity-60"
+              className="w-full min-w-0 border-0 bg-transparent p-0 font-display text-[30px] font-bold leading-none tracking-[-0.02em] text-ink tabular-nums outline-none disabled:opacity-60"
             />
           </div>
         </Card>
@@ -753,7 +706,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="ml-0.5 text-[11px] font-semibold text-muted">Categoria</span>
+          <span className={LABEL_CLASS}>Categoria</span>
           <CategorySelect
             value={draft.category}
             disabled={locked}
@@ -762,42 +715,9 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
         </div>
       </fieldset>
 
-      </div>
-
-      <div className="flex min-w-0 flex-col gap-4">
-      {/* Divisão */}
-      {!payable && (
-      <fieldset className="m-0 min-w-0 border-0 p-0" disabled={locked || frozen}>
-        <Card>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold text-primary-strong">Divisão da Conta</span>
-            <span className="truncate rounded-full bg-primary-soft/40 px-2 py-0.5 text-[11px] font-semibold text-primary">{splitTag()}</span>
-          </div>
-          <div className="flex gap-1 rounded-xl bg-surface-muted p-1" role="radiogroup" aria-label="Divisão">
-            {SPLIT_MODES.map(option => {
-              const active = draft.mode === option.value;
-
-              return (
-                <label
-                  key={option.value}
-                  className={`flex min-h-9 flex-1 cursor-pointer items-center justify-center rounded-lg text-[11px] ${
-                    active ? "bg-surface font-extrabold text-primary-strong shadow-sm" : "font-medium text-muted"
-                  }`}
-                >
-                  <input type="radio" className="sr-only" name="billing-split" value={option.value} aria-label={option.name} checked={active} onChange={() => update({ mode: option.value })} />
-                  <span aria-hidden="true">{option.label}</span>
-                </label>
-              );
-            })}
-          </div>
-          <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={changeSplitValue} />
-        </Card>
-      </fieldset>
-      )}
-
-      {/* Modalidade */}
+      {/* Frequência: modalidade de pagamento + vencimento */}
       <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0" disabled={locked || scheduled}>
-        <span className="ml-0.5 text-[11px] font-semibold text-muted">Modalidade de Pagamento</span>
+        <span className={LABEL_CLASS}>Modalidade de Pagamento</span>
         <div className="flex gap-2" role="radiogroup" aria-label="Modalidade">
           {TYPES.map(option => {
             const active = draft.type === option.value;
@@ -805,8 +725,8 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
             return (
               <label
                 key={option.value}
-                className={`flex min-h-12 flex-1 cursor-pointer items-center justify-center rounded-xl border px-2 text-xs font-semibold ${
-                  active ? "border-primary bg-primary text-on-primary" : "border-outline/40 bg-surface text-ink"
+                className={`flex min-h-10 flex-1 cursor-pointer items-center justify-center rounded-xl border px-2 text-[13px] ${
+                  active ? "border-primary bg-primary-soft font-bold text-primary-strong" : "border-outline bg-surface font-semibold text-muted"
                 }`}
               >
                 <input
@@ -861,6 +781,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
                 id="billing-start"
                 aria-label="Vencimento"
                 type="date"
+                min={minimumDate}
                 value={draft.start}
                 onChange={event => update({ start: event.target.value })}
                 className="h-11 w-full rounded-xl border border-outline/50 bg-surface px-3.5 text-[14px] font-semibold text-ink disabled:opacity-60"
@@ -892,10 +813,204 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
         </div>
       </fieldset>
 
+      </div>
+      <div className="flex min-w-0 flex-col gap-4">
+
+      {/* De quem / Para quem (registro) */}
+      {settled && (
+        <div className="flex flex-col gap-1">
+          <SectionLabel htmlFor="billing-counterpart">{SETTLED_LABELS[draft.direction].field}</SectionLabel>
+          <input
+            id="billing-counterpart"
+            maxLength={120}
+            placeholder="Ex.: Empresa X"
+            disabled={locked}
+            value={draft.counterpartLabel ?? ""}
+            onChange={event => update({ counterpartLabel: event.target.value })}
+            className={INPUT_CLASS}
+          />
+        </div>
+      )}
+
+      {/* Para quem (conta a pagar) */}
+      {payable && !settled && (
+        <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked || frozen}>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Para quem (opcional)</span>
+            <button type="button" ref={pickPayee} onClick={() => setPayeePicker(true)} className="flex min-h-10 items-center gap-1 bg-transparent px-1 text-xs font-semibold text-primary">
+              <Plus size={14} aria-hidden="true" />
+              {payee ? "Trocar" : "Escolher"}
+            </button>
+          </div>
+
+          {payee ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                aria-label={payee.displayName}
+                aria-pressed="true"
+                title="Remove o destinatário"
+                onClick={() => update({ payee: "" })}
+                className="flex items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
+              >
+                <InitialsAvatar name={payee.displayName} size={24} avatar={payee.avatar} />
+                <span className="text-xs font-semibold text-ink">{payee.displayName}</span>
+                <X size={12} aria-hidden="true" className="text-muted" />
+              </button>
+            </div>
+          ) : (
+            <p className="m-0 text-[11px] text-muted">Sem destinatário, a conta fica só com você.</p>
+          )}
+        </fieldset>
+      )}
+
+      {payeePicker && (
+        <ContactPickerSheet
+          selected={draft.payee ? [draft.payee] : []}
+          returnFocusTo={pickPayee}
+          onToggle={userId => update({ payee: draft.payee === userId ? "" : userId })}
+          onSeen={remember}
+          onClose={() => setPayeePicker(false)}
+          onNew={
+            editing
+              ? undefined
+              : () => {
+                  setPayeePicker(false);
+                  leaveTo(NEW_CONTACT);
+                }
+          }
+        />
+      )}
+
+      {/* Divisão: mode tabs, participant list, Adicionar below it, then Não notificar and Eu também participo */}
+      {!payable && !settled && (
+      <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked || frozen}>
+        <Card>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Divisão da Conta</span>
+              <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-muted">
+                {participants} pessoa{participants === 1 ? "" : "s"}
+              </span>
+            </div>
+            <span className="truncate text-[11.5px] font-semibold text-success">{splitTag()}</span>
+          </div>
+
+          {chosen.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {chosen.map(contact => (
+                <button
+                  key={contact.userId}
+                  type="button"
+                  aria-label={contact.displayName}
+                  aria-pressed="true"
+                  title="Remove da cobrança"
+                  onClick={() => toggle(contact.userId)}
+                  className="flex items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
+                >
+                  <InitialsAvatar name={contact.displayName} size={24} avatar={contact.avatar} />
+                  <span className="text-xs font-semibold text-ink">{contact.displayName}</span>
+                  <X size={12} aria-hidden="true" className="text-muted" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-1.5" role="radiogroup" aria-label="Divisão">
+            {SPLIT_MODES.map(option => {
+              const active = draft.mode === option.value;
+
+              return (
+                <label
+                  key={option.value}
+                  className={`flex min-h-[30px] cursor-pointer items-center justify-center rounded-[9px] px-3 text-xs ${
+                    active ? "bg-ink font-bold text-surface" : "bg-surface-muted font-semibold text-muted"
+                  }`}
+                >
+                  <input type="radio" className="sr-only" name="billing-split" value={option.value} aria-label={option.name} checked={active} onChange={() => update({ mode: option.value })} />
+                  <span aria-hidden="true">{option.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={changeSplitValue} />
+        </Card>
+
+        <button
+          type="button"
+          ref={addContact}
+          aria-label="Adicionar"
+          onClick={() => setPicker(true)}
+          className="flex min-h-10 items-center gap-2 self-start bg-transparent px-1 text-xs font-semibold text-primary"
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-dashed border-primary">
+            <Plus size={13} aria-hidden="true" />
+          </span>
+          Adicionar pessoa
+        </button>
+
+        {chosen.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {chosen.map(contact => (
+              <label key={contact.userId} className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-2.5">
+                <span className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <InitialsAvatar name={contact.displayName} size={24} avatar={contact.avatar} />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-xs font-semibold text-ink">{contact.displayName}</span>
+                    <span className="text-[11px] text-muted">Não notificar</span>
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label={`Não notificar ${contact.displayName}`}
+                  className="h-5 w-5 accent-primary"
+                  checked={draft.silenced?.[contact.userId] === true}
+                  onChange={event => switchSilenced(contact.userId, event.target.checked)}
+                />
+              </label>
+            ))}
+            <p className="m-0 text-[11px] text-muted">Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.</p>
+          </div>
+        )}
+
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface-muted/80 p-3">
+          <span className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface">
+              <InitialsAvatar name="Eu" size={20} inverted />
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-xs font-semibold text-ink">Eu também participo da divisão</span>
+              <span className="text-[11px] text-muted">Você entra no cálculo como um dos pagadores</span>
+            </span>
+          </span>
+          <input type="checkbox" aria-label="Eu também participo" className="h-5 w-5 accent-primary" checked={draft.owner} onChange={event => update({ owner: event.target.checked })} />
+        </label>
+      </fieldset>
+      )}
+
+      {picker && (
+        <ContactPickerSheet
+          selected={draft.selected}
+          returnFocusTo={addContact}
+          onToggle={toggle}
+          onSeen={remember}
+          onClose={() => setPicker(false)}
+          onNew={
+            editing
+              ? undefined
+              : () => {
+                  setPicker(false);
+                  leaveTo(NEW_CONTACT);
+                }
+          }
+        />
+      )}
+
       {/* Chave Pix (conta a pagar): typed inline, it belongs to whoever receives */}
-      {payable && (
+      {payable && !settled && (
         <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked}>
-          <span className="ml-0.5 text-[11px] font-semibold text-muted">Chave Pix (opcional)</span>
+          <span className={LABEL_CLASS}>Chave Pix (opcional)</span>
           <PixKeyFields type={draft.pixInline.type} value={pixSpec.format(draft.pixInline.key)} inputId="billing-pix-key" onPickType={pickPixType} onChange={typePixKey} />
           <div className="flex flex-col gap-1">
             <SectionLabel htmlFor="billing-pix-label">Apelido da chave (opcional)</SectionLabel>
@@ -912,10 +1027,10 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       )}
 
       {/* Pix */}
-      {!payable && (
+      {!payable && !settled && (
       <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0" disabled={locked}>
         <div className="flex items-center justify-between">
-          <span className="ml-0.5 text-[11px] font-semibold text-muted">Receber via Pix</span>
+          <span className={LABEL_CLASS}>Receber via Pix</span>
           {!editing && !gate && (
             <button type="button" aria-label="Cadastrar chave" onClick={() => leaveTo(PIX_SETUP)} className="min-h-8 bg-transparent text-[11px] font-medium text-primary">
               + Cadastrar nova chave
@@ -989,13 +1104,22 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
       <ScreenFooter className="-mx-1 border-t border-outline/30 bg-surface/95 px-1 pb-2 pt-4 backdrop-blur">
         {busy && <p className="m-0 mb-2 text-sm text-muted" role="status">Salvando…</p>}
+        {/* Only on create: an edit patches a subset of fields, so the full draft summary would not match what is actually sent. */}
+        {!editing && draftSummary && (
+          <div className="mb-2.5 flex items-center justify-between gap-2">
+            <span className="text-[13px] text-muted">{billingDraftSummaryText(draftSummary)}</span>
+            <strong className="font-display text-[13px] font-bold text-ink tabular-nums">
+              {draftSummary.occurrences === null ? `${money(draftSummary.perOccurrenceCents)}/mês` : money(draftSummary.totalCents)}
+            </strong>
+          </div>
+        )}
         {attempt?.uncertain ? (
           <button type="submit" className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-outline bg-transparent text-sm font-bold text-primary" disabled={busy}>
             {busy && <Loader2 aria-hidden="true" size={18} className="animate-spin" />}
             Tentar novamente
           </button>
         ) : (
-          <button type="submit" className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary disabled:opacity-50" disabled={busy || !totalCents}>
+          <button type="submit" className="flex h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-ink text-[15px] font-bold text-surface disabled:opacity-50" disabled={busy || !totalCents}>
             {busy && <Loader2 aria-hidden="true" size={18} className="animate-spin" />}
             {action}
           </button>

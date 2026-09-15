@@ -25,12 +25,14 @@ API (`packages/api/dev.env.example` → `dev.env`, git-ignored; `prd.env` análo
 
 - `PUBLIC_WEB_ORIGIN`: origem do web do stage. Alimenta links públicos e deep links.
 - `OAUTH_REDIRECT_ALLOW_LIST`: `<web>/auth/oauth/callback,receivy://auth/callback`.
-- `OAUTH_PROVIDERS_CONFIG_B64`: `callbackUri` dos provedores é `<web>/api/auth/<provedor>/callback`
-  (ver `docs/oauth-setup.md`).
-- `OAUTH_GOOGLE_ENABLED` / `OAUTH_APPLE_ENABLED`: `true` liga o login social correspondente;
+- `GOOGLE_SIGNIN_ENABLED` / `APPLE_SIGNIN_ENABLED`: `true` liga o login social correspondente;
   qualquer outro valor (padrão `false`) o mantém desligado mesmo com credenciais configuradas.
   Desligado, a API não anuncia nem aceita o provedor e web/mobile escondem o botão; com os dois
   desligados o login mostra só o e-mail.
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; `APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`,
+  `APPLE_PRIVATE_KEY_B64` e o opcional `APPLE_NATIVE_CLIENT_ID`. Chave faltando (ou `disabled`)
+  mantém o provedor desligado. Os callbacks saem de `PUBLIC_WEB_ORIGIN` como
+  `<web>/api/auth/<provedor>/callback` (ver `docs/oauth-setup.md`).
 - `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`. O mesmo
   `EMAIL_TRANSPORT` vale para código de login e para notificações.
 - CORS da API e do bucket são declarações estáticas do EZ4 (`src/api.ts`,
@@ -82,8 +84,8 @@ O passo a passo completo, com a origem de cada variável, está em
 3. Google Cloud → cliente OAuth web → redirect URI
    `https://receivy.wellsm.dev/api/auth/google/callback`; Apple → Services ID →
    domínio `receivy.wellsm.dev` e Return URL
-   `https://receivy.wellsm.dev/api/auth/apple/callback`. Gerar
-   `OAUTH_PROVIDERS_CONFIG_B64` e redeploy da API.
+   `https://receivy.wellsm.dev/api/auth/apple/callback`. Preencher as variáveis
+   `GOOGLE_*` / `APPLE_*`, ligar a flag de cada provedor e redeploy da API.
 4. Resend conforme a seção anterior; `EMAIL_TRANSPORT=resend` e redeploy.
 5. Development build apontando `EXPO_PUBLIC_EZ4_API_URL` para a API dev e
    `EXPO_PUBLIC_WEB_URL=https://receivy.wellsm.dev`; rodar os fluxos de

@@ -16,6 +16,7 @@ The API answers every failure with the stock EZ4 envelope:
 |---|---|---|
 | 400 | Schema validation (`@ez4/gateway`) or `HttpBadRequestError` | "Confira os dados informados." |
 | 401 / 403 / 404 | `HttpUnauthorizedError`, `HttpForbiddenError`, `HttpNotFoundError` | the screen's own fallback |
+| 403 | `ForbiddenError` subclasses | the screen's own fallback (`apiErrorMessage` shows `message` only on 409/422/429) |
 | 409 | `ConflictError` subclasses | `message` (generic conflict copy if absent) |
 | 422 | `UnprocessableEntityError` subclasses | `message` ("Confira os dados informados." if absent) |
 | 429 | `TooManyRequestsError`, `ReminderQuotaError` | `message` (generic quota copy if absent) |
@@ -62,3 +63,23 @@ through the Next BFF anyway. Buckets are keyed by what the API verified:
 | `POST /charges/{id}/reminders` | charge | 1 per 24 h |
 
 A guessed token costs one indexed read and a 404; it never creates a throttle row.
+
+## Payment review errors
+
+| Code | Status | When |
+|---|---|---|
+| `CHARGE_IN_REVIEW` | 409 | declaring a payment, or `POST /charges/{id}/reminders`, while a file or a declaration waits for an answer |
+| `PROOF_DECLARATION_FORBIDDEN` | 403 | declaring from the collecting side; declaring by the owner of a conta a pagar when the payee cannot confirm (no active payee — settle by hand instead); `pay` by the owner of a conta a pagar when the payee can confirm (the payee must confirm — declare instead) |
+
+## Silence errors
+
+| Code | Status | When |
+|---|---|---|
+| `SILENCE_UNAVAILABLE` | 409 | `PUT /billings/{id}/participants/{userId}/silenced` or `PUT /charges/{id}/silenced` on a conta a pagar |
+
+## Registro errors
+
+| Code | Status | When |
+|---|---|---|
+| `SETTLED_LOCKED` | 409 | `PATCH /billings/{id}` sends `settled` different from the stored value, `counterpartLabel` on a conta that is not a registro, `split`, `paymentMethodId`, `pix`, `payeeUserId`, `reminders`, `clearPaymentMethod`, `clearPix` or `clearPayee` on a registro; or `POST /billings/{id}/invite` / `POST /invites/{token}/accept` on a registro (criar ou aceitar convite numa conta registro) |
+| `SETTLED_NO_REMINDERS` | 409 | `POST /charges/{id}/reminders` on a charge of a registro |

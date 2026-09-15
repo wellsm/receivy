@@ -196,3 +196,16 @@ describe('billingBadges on a conta a pagar', () => {
     expect(billingBadges({ ...base, direction: Direction.Payable, payeeName: null }).map((badge) => badge.label)).toContain('Só comigo');
   });
 });
+
+describe('billingBadges on a registro', () => {
+  it('names the counterpart instead of the people or the payee and marks it as a registro', () => {
+    expect(
+      billingBadges({ ...base, settled: true, counterpartLabel: 'Empresa X', participantCount: 0 }).map((badge) => badge.label)
+    ).toEqual(['Única', 'Registro', 'Empresa X']);
+    expect(
+      billingBadges({ ...base, direction: Direction.Payable, settled: true, counterpartLabel: 'Clínica Sorriso' }).map(
+        (badge) => badge.label
+      )
+    ).toEqual(['Única', 'Registro', 'A pagar', 'Clínica Sorriso']);
+  });
+});

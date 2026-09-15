@@ -29,6 +29,7 @@ import {
   materializationDate,
   materializationHorizon,
   normalizeBillingInput,
+  normalizeCounterpartLabel,
   PendingChargesAction,
   type PixKeyType,
   type PixSnapshot,
@@ -36,8 +37,10 @@ import {
   resolveBillingSplit,
   SplitMode,
   SplitPartKind,
+  type SplitParty,
   UserStatus
 } from '@receivy/common';
+import { SilenceUnavailableError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { StoredProofState } from '../../charges/schemas/charge';
 import {
@@ -62,7 +65,8 @@ import {
   IdempotencyMismatchError,
   PayableHasNoSplitError,
   PendingChargesWithoutStateError,
-  ReceivableHasNoPayeeError
+  ReceivableHasNoPayeeError,
+  SettledLockedError
 } from '../errors';
 import { BillingGuestState } from '../schemas/billing-guest';
 import { type MonthCharge, monthChanges } from '../services/month-scope';
@@ -131,9 +135,9 @@ async function previewsFor(db: DbClient, row: BillingRepository.Row, reminders: 
     await db.charges.findMany({ select: { due_date: true }, where: { billing_id: row.id, due_date: { gte: today } } })
   ).records.map((charge) => charge.due_date);
   const direction = BillingRepository.direction(row);
-  // A conta a pagar is owed in full by the owner; a conta a receber only projects what contacts owe.
+  // A conta a pagar and a registro are owed in full; a conta a receber only projects what contacts owe.
   const projected =
-    direction === Direction.Payable
+    direction === Direction.Payable || row.settled === true
       ? row.total_cents
       : resolveBillingSplit(row.total_cents, (await BillingRepository.splitFor(db, row.id)).split)
           .filter((allocation) => allocation.kind === SplitPartKind.User)
@@ -178,6 +182,8 @@ function summary(
     id: row.id,
     direction: BillingRepository.direction(row),
     payeeName: payee?.name ?? null,
+    settled: row.settled === true,
+    counterpartLabel: row.counterpart_label ?? null,
     type: row.type,
     frequency: row.frequency,
     description: row.description,
@@ -335,6 +341,8 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
     id: row.id,
     direction: BillingRepository.direction(row),
     payee: await payeeOf(db, row),
+    settled: row.settled === true,
+    counterpartLabel: row.counterpart_label ?? null,
     pix: billingPix(row),
     type: row.type,
     frequency: row.frequency,
@@ -365,6 +373,87 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
 
 function userIds(split: BillingSplit): string[] {
   return split.parts.flatMap((part) => (part.kind === SplitPartKind.User ? [part.userId] : []));
+}
+
+/** The stored "Não notificar" of each participant of a billing, by user id. */
+async function silencedParticipants(db: DbClient, billingId: string): Promise<Map<string, boolean>> {
+  const { records } = await db.allocations.findMany({
+    select: { user_id: true, silenced: true },
+    where: { billing_id: billingId, kind: SplitPartKind.User }
+  });
+  const silenced = new Map<string, boolean>();
+
+  for (const row of records) {
+    if (row.user_id) {
+      silenced.set(row.user_id, row.silenced === true);
+    }
+  }
+
+  return silenced;
+}
+
+/** The part's own value wins; a participant who stays without one keeps theirs; the owner part is never silenced. */
+function silencedFor(part: SplitParty, before: Map<string, boolean>): boolean {
+  if (part.kind !== SplitPartKind.User) {
+    return false;
+  }
+
+  if (part.silenced !== undefined) {
+    return part.silenced;
+  }
+
+  return before.get(part.userId) ?? false;
+}
+
+/** A participant's switch lands on their pending charges of the billing; paid and cancelled ones keep theirs. */
+async function silencePendingCharges(db: DbClient, billingId: string, userId: string, silenced: boolean, now: string): Promise<void> {
+  await db.charges.updateMany({
+    where: { billing_id: billingId, debtor_user_id: userId, state: ChargeState.Pending },
+    data: { silenced, updated_at: now }
+  });
+}
+
+function participantSilenceEvent(silenced: boolean): string {
+  return silenced ? 'billing.participant_silenced' : 'billing.participant_unsilenced';
+}
+
+/**
+ * Whoever stayed follows their allocation. Whoever enters sending a value also moves the pending charges a
+ * next-month edit left behind when they were removed, as long as those charges carry a different value.
+ */
+async function silenceChange(
+  db: DbClient,
+  billingId: string,
+  part: SplitParty,
+  before: Map<string, boolean>,
+  silenced: boolean
+): Promise<{ userId: string; silenced: boolean } | undefined> {
+  if (part.kind !== SplitPartKind.User) {
+    return undefined;
+  }
+
+  if (before.has(part.userId)) {
+    if (before.get(part.userId) === silenced) {
+      return undefined;
+    }
+
+    return { userId: part.userId, silenced };
+  }
+
+  if (part.silenced === undefined) {
+    return undefined;
+  }
+
+  const { records } = await db.charges.findMany({
+    select: { silenced: true },
+    where: { billing_id: billingId, debtor_user_id: part.userId, state: ChargeState.Pending }
+  });
+
+  if (!records.some((row) => (row.silenced === true) !== silenced)) {
+    return undefined;
+  }
+
+  return { userId: part.userId, silenced };
 }
 
 function decodeCursor(cursor?: string): { createdAt: string; id: string } | undefined {
@@ -535,7 +624,8 @@ async function rewriteMonthCharges(
     dueDates: [dueDate],
     numbered: false,
     payer,
-    payeeUserId: row.payee_user_id ?? null
+    payeeUserId: row.payee_user_id ?? null,
+    settled: row.settled === true
   });
   const existing: MonthCharge[] = editable.map((charge) => ({
     id: charge.id,
@@ -636,6 +726,32 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
     throw new BillingEndedError();
   }
 
+  const settled = row.settled === true;
+
+  // A registro stays a registro, and only a registro has a free-text counterpart.
+  if (patch.settled !== undefined && patch.settled !== settled) {
+    throw new SettledLockedError();
+  }
+
+  if (patch.counterpartLabel !== undefined && !settled) {
+    throw new SettledLockedError();
+  }
+
+  // What creation refused stays out: nobody to split with, pay through or remind.
+  const crowded =
+    patch.split !== undefined ||
+    patch.paymentMethodId !== undefined ||
+    patch.pix !== undefined ||
+    patch.payeeUserId !== undefined ||
+    patch.reminders !== undefined ||
+    patch.clearPaymentMethod !== undefined ||
+    patch.clearPix !== undefined ||
+    patch.clearPayee !== undefined;
+
+  if (settled && crowded) {
+    throw new SettledLockedError();
+  }
+
   const settles = patch.state === BillingState.Paused || patch.state === BillingState.Ended;
 
   if (patch.pendingCharges !== undefined && !settles) {
@@ -718,7 +834,9 @@ function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): Bill
     category: row.category,
     direction,
     payeeUserId: row.payee_user_id,
-    pix: pix ? { keyType: pix.keyType, key: pix.key, label: pix.label } : undefined
+    pix: pix ? { keyType: pix.keyType, key: pix.key, label: pix.label } : undefined,
+    settled: row.settled === true,
+    counterpartLabel: row.counterpart_label
   };
 }
 
@@ -733,6 +851,35 @@ function dueOccurrences(row: BillingRepository.Row, now: Date, limit: number): s
   const cursor = row.processed_through ?? addCalendarDays(row.start_date, -1);
 
   return billingDates(calendarRule(row), addCalendarDays(cursor, 1), latest, limit);
+}
+
+/** Settles one pending charge of a registro unless somebody reopened it; false when there was nothing to do. */
+async function settleDueCharge(
+  db: DbClient,
+  billing: { owner_id: string; timezone: string },
+  chargeId: string,
+  now: string
+): Promise<boolean> {
+  // Whoever reopened it decided the money did not come in: only "Marcar como pago" settles it again.
+  const reopened = await EventRepository.list(db, chargeId, 'charge.reopened', 1);
+
+  if (reopened.length) {
+    return false;
+  }
+
+  return db.transaction(async (tx) => {
+    await lockOwner(tx, billing.owner_id);
+
+    const row = await tx.charges.findOne({ select: ChargeRepository.SELECT, where: { id: chargeId }, lock: true });
+
+    if (!row || row.state !== ChargeState.Pending) {
+      return false;
+    }
+
+    await ChargeRepository.markRegistered(tx, row, billing.timezone, now);
+
+    return true;
+  });
 }
 
 /** Fresh result per call: `noticeChargeIds` is handed to callers that may append to it. */
@@ -758,6 +905,8 @@ export namespace BillingRepository {
     pix_key_type: true,
     pix_key: true,
     pix_label: true,
+    counterpart_label: true,
+    settled: true,
     reminders: true,
     state: true,
     processed_through: true,
@@ -788,6 +937,10 @@ export namespace BillingRepository {
     pix_key_type?: PixKeyType;
     pix_key?: string;
     pix_label?: string;
+    /** Registro only: the counterpart typed by the owner. */
+    counterpart_label?: string;
+    /** True only on a registro; null reads as false. */
+    settled?: boolean;
     reminders?: string;
     state: BillingState;
     processed_through?: string;
@@ -820,7 +973,8 @@ export namespace BillingRepository {
           amount_cents: true,
           basis_points: true,
           shares: true,
-          allocation_order: true
+          allocation_order: true,
+          silenced: true
         },
         where: { billing_id: id },
         order: { allocation_order: Order.Asc }
@@ -853,6 +1007,7 @@ export namespace BillingRepository {
       splitMode: row.split_mode,
       amount: { amountCents: row.amount_cents, currency: 'BRL' as const },
       order: row.allocation_order,
+      silenced: row.silenced === true,
       ...(row.shares === undefined || row.shares === null ? {} : { shares: row.shares })
     }));
 
@@ -902,20 +1057,42 @@ export namespace BillingRepository {
     await EventRepository.record(db, { type, eventableType: EventableType.Billing, eventableId: id, actorId: ownerId, payload, at: now });
   }
 
-  export async function saveAllocations(db: DbClient, id: string, totalCents: number, split: BillingSplit, now: string) {
+  /** A participant whose "Não notificar" the saved split changed, for them or for their leftover pending charges. */
+  export type SilenceChange = { userId: string; silenced: boolean };
+
+  /**
+   * Rewrites the allocations of a billing. Whoever stays keeps their `silenced` unless the part sends one; whoever
+   * enters takes the part's value (absent is false). Returns the changes of those who stayed, and of whoever came
+   * back sending a value their leftover pending charges lack, so those charges can follow.
+   */
+  export async function saveAllocations(
+    db: DbClient,
+    id: string,
+    totalCents: number,
+    split: BillingSplit,
+    now: string
+  ): Promise<SilenceChange[]> {
     const resolved = resolveBillingSplit(totalCents, split);
+    const before = await silencedParticipants(db, id);
+    const changes: SilenceChange[] = [];
 
     await db.allocations.deleteMany({ where: { billing_id: id } });
 
     for (const [index, part] of resolved.entries()) {
       const original = split.parts[index];
+      const silenced = silencedFor(part, before);
+      const change = await silenceChange(db, id, part, before, silenced);
+
+      if (change) {
+        changes.push(change);
+      }
 
       await db.allocations.insertOne({
         data: {
           id: crypto.randomUUID(),
           billing: { id },
           kind: part.kind,
-          ...(part.kind === SplitPartKind.User ? { user: { id: part.userId } } : {}),
+          ...(part.kind === SplitPartKind.User ? { user: { id: part.userId }, silenced } : {}),
           split_mode: split.mode,
           amount_cents: part.amountCents,
           allocation_order: index,
@@ -926,6 +1103,8 @@ export namespace BillingRepository {
         }
       });
     }
+
+    return changes;
   }
 
   export async function create(
@@ -941,6 +1120,7 @@ export namespace BillingRepository {
       throw new RangeError('Idempotency-Key inválida.');
     }
 
+    // No clock yet: a replay after midnight must still find the billing it created.
     const input = normalizeBillingInput(raw);
     const hash = billingRequestFingerprint(input);
     const noticeChargeIds: string[] = [];
@@ -959,6 +1139,9 @@ export namespace BillingRepository {
       }
 
       const today = calendarDate(now, input.timezone);
+
+      // Only a new creation obeys the clock: a recorrente registro starts today or later.
+      normalizeBillingInput(raw, now);
 
       if (input.type === BillingType.Indefinite && input.startDate < today) {
         throw new RangeError('O início não pode estar no passado.');
@@ -991,6 +1174,7 @@ export namespace BillingRepository {
           pix_key_type: input.pix?.keyType ?? sqlNull,
           pix_key: input.pix?.key ?? sqlNull,
           pix_label: input.pix?.label ?? sqlNull,
+          ...(input.settled ? { settled: true, counterpart_label: input.counterpartLabel } : {}),
           reminders: input.reminders ? JSON.stringify(input.reminders) : sqlNull,
           state: BillingState.Active,
           processed_through: input.type === BillingType.Indefinite ? addCalendarDays(today, -1) : sqlNull,
@@ -1011,7 +1195,8 @@ export namespace BillingRepository {
           dueDates: billingDueDates(input),
           numbered: true,
           payer: context.payer,
-          payeeUserId: input.payeeUserId ?? null
+          payeeUserId: input.payeeUserId ?? null,
+          settled: input.settled === true
         });
 
         const persisted = await persistChargePlan(tx, ownerId, plan, { id, type: input.type }, context, instant);
@@ -1097,6 +1282,48 @@ export namespace BillingRepository {
     return { previews: await previewsFor(db, row, effectiveReminders(row), now) };
   }
 
+  /**
+   * The owner of a conta a receber switches one participant's automatic notices: the allocation and every pending
+   * charge of theirs in the billing follow, paid and cancelled ones stay. Sending the value already stored writes nothing.
+   */
+  export async function silenceParticipant(
+    db: DbClient,
+    ownerId: string,
+    id: string,
+    userId: string,
+    silenced: boolean,
+    now = new Date(),
+    link?: InviteLinkContext
+  ): Promise<BillingDetail> {
+    return db.transaction(async (tx) => {
+      await lockOwner(tx, ownerId);
+
+      const row = await billingRow(tx, ownerId, id, true);
+
+      if (direction(row) === Direction.Payable) {
+        throw new SilenceUnavailableError();
+      }
+
+      const current = (await silencedParticipants(tx, id)).get(userId);
+
+      if (current === undefined) {
+        throw new HttpNotFoundError();
+      }
+
+      if (current === silenced) {
+        return dto(tx, row, now, link);
+      }
+
+      const instant = now.toISOString();
+
+      await tx.allocations.updateMany({ where: { billing_id: id, kind: SplitPartKind.User, user_id: userId }, data: { silenced } });
+      await silencePendingCharges(tx, id, userId, silenced, instant);
+      await audit(tx, ownerId, id, participantSilenceEvent(silenced), instant, { userId });
+
+      return dto(tx, row, now, link);
+    });
+  }
+
   export async function patch(
     db: DbClient,
     ownerId: string,
@@ -1121,6 +1348,8 @@ export namespace BillingRepository {
       const paymentMethodId = patch.clearPaymentMethod ? undefined : (patch.paymentMethodId ?? row.payment_method_id);
       const payeeUserId = patch.clearPayee ? undefined : (patch.payeeUserId ?? row.payee_user_id);
       const description = patch.description === undefined ? row.description : patch.description.normalize('NFC').trim() || 'Conta';
+      const counterpartLabel =
+        patch.counterpartLabel === undefined ? undefined : normalizeCounterpartLabel(patch.counterpartLabel, direction(row));
       const pixPatched = patch.pix !== undefined || patch.clearPix;
       const normalized =
         patch.reminders !== undefined || patch.pix !== undefined
@@ -1144,7 +1373,13 @@ export namespace BillingRepository {
       }
 
       if (patch.split !== undefined || patch.totalCents !== undefined) {
-        await saveAllocations(tx, id, totalCents, split, instant);
+        const changes = await saveAllocations(tx, id, totalCents, split, instant);
+
+        // Same rule as PUT /billings/{id}/participants/{userId}/silenced for whoever stayed and changed.
+        for (const change of changes) {
+          await silencePendingCharges(tx, id, change.userId, change.silenced, instant);
+          await audit(tx, ownerId, id, participantSilenceEvent(change.silenced), instant, { userId: change.userId });
+        }
       }
 
       const resumed = patch.state === BillingState.Active && row.state === BillingState.Paused;
@@ -1172,6 +1407,7 @@ export namespace BillingRepository {
           pix_key_type: pix?.keyType ?? sqlNull,
           pix_key: pix?.key ?? sqlNull,
           pix_label: pix?.label ?? sqlNull,
+          ...(counterpartLabel === undefined ? {} : { counterpart_label: counterpartLabel }),
           ...(patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
           ...(patch.state ? { state: patch.state } : {}),
           ...(resumed ? { processed_through: (row.processed_through ?? boundary) > boundary ? row.processed_through : boundary } : {}),
@@ -1242,6 +1478,42 @@ export namespace BillingRepository {
     return materialized;
   }
 
+  /**
+   * The daily settlement of registros: every pending charge of a settled billing due by today, in its timezone, is
+   * paid on its due date. Runs after `materializeDueBillings`; idempotent. Returns how many charges it settled.
+   */
+  export async function settleRegistered(db: DbClient, now = new Date()): Promise<number> {
+    const { records } = await db.billings.findMany({
+      select: { id: true, owner_id: true, timezone: true },
+      where: { settled: true },
+      order: { id: Order.Asc }
+    });
+    const instant = now.toISOString();
+
+    let settled = 0;
+
+    for (const billing of records) {
+      const { records: due } = await db.charges.findMany({
+        select: { id: true },
+        where: { billing_id: billing.id, state: ChargeState.Pending, due_date: { lte: calendarDate(now, billing.timezone) } },
+        order: { due_date: Order.Asc }
+      });
+
+      for (const charge of due) {
+        try {
+          if (await settleDueCharge(db, billing, charge.id, instant)) {
+            settled++;
+          }
+        } catch (error) {
+          // One broken charge must not stop the others; tomorrow's run tries again.
+          console.error('Registro settlement failed', { chargeId: charge.id, error: error instanceof Error ? error.message : 'unknown' });
+        }
+      }
+    }
+
+    return settled;
+  }
+
   export type MaterializeDueResult = { materialized: boolean; skipped?: string };
 
   /** Materializes every occurrence already due and announces the charges; `skipped` names an owner-side blocker. */
@@ -1306,7 +1578,8 @@ export namespace BillingRepository {
             dueDates: [dueDate],
             numbered: false,
             payer: context.payer,
-            payeeUserId: row.payee_user_id ?? null
+            payeeUserId: row.payee_user_id ?? null,
+            settled: row.settled === true
           });
 
           const persisted = await persistChargePlan(tx, row.owner_id, plan, { id: row.id, type: BillingType.Indefinite }, context, instant);

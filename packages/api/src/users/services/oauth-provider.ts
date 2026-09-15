@@ -29,40 +29,6 @@ function isRecord(value: unknown): value is JsonObject {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function hasStrings<T extends readonly string[]>(value: unknown, keys: T): value is JsonObject & Record<T[number], string> {
-  return isRecord(value) && keys.every((key) => typeof value[key] === 'string' && value[key] !== '');
-}
-
-export function decodeOauthProviderConfig(encoded: string): OauthProviderConfig {
-  if (!encoded || encoded === 'disabled') {
-    return {};
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
-    if (!isRecord(parsed)) {
-      return {};
-    }
-
-    return {
-      ...(hasStrings(parsed.google, ['callbackUri', 'clientId', 'clientSecret'] as const) ? { google: parsed.google } : {}),
-      ...(hasStrings(parsed.apple, ['callbackUri', 'clientId', 'keyId', 'privateKeyBase64', 'teamId'] as const)
-        ? {
-            apple: {
-              ...parsed.apple,
-              nativeClientId:
-                typeof parsed.apple.nativeClientId === 'string' && parsed.apple.nativeClientId.length <= 320
-                  ? parsed.apple.nativeClientId
-                  : undefined
-            }
-          }
-        : {})
-    };
-  } catch {
-    return {};
-  }
-}
-
 export function appleConfigurationAvailable(config: AppleConfig | undefined): boolean {
   if (!config) return false;
   try {
@@ -201,28 +167,74 @@ export function createOauthProviderClient(
   };
 }
 
-export type OauthProviderToggles = { google: boolean; apple: boolean };
+export type OauthProviderVariables = {
+  PUBLIC_WEB_ORIGIN: string;
+  GOOGLE_SIGNIN_ENABLED: string;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  APPLE_SIGNIN_ENABLED: string;
+  APPLE_CLIENT_ID: string;
+  APPLE_NATIVE_CLIENT_ID: string;
+  APPLE_TEAM_ID: string;
+  APPLE_KEY_ID: string;
+  APPLE_PRIVATE_KEY_B64: string;
+};
 
-/** Reads an `OAUTH_<PROVIDER>_ENABLED` flag; anything but `true` keeps the provider off. */
+/** Reads a `<PROVIDER>_SIGNIN_ENABLED` flag; anything but `true` keeps the provider off. */
 export function oauthProviderEnabled(value: string | undefined): boolean {
   return value?.trim().toLowerCase() === 'true';
 }
 
-/** Drops providers that are configured but switched off, so every caller sees them as unavailable. */
-export function enabledOauthProviders(config: OauthProviderConfig, toggles: OauthProviderToggles): OauthProviderConfig {
+/** An unset key arrives as `disabled` (its EZ4 default); only a real value counts as configured. */
+function credential(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+
+  return trimmed && trimmed !== 'disabled' ? trimmed : undefined;
+}
+
+/** Providers never call the API directly: their callback lands on the web, which bridges it (docs/oauth-setup.md). */
+function callbackUri(webOrigin: string, provider: OauthProvider): string {
+  return `${webOrigin.trim().replace(/\/+$/, '')}/api/auth/${provider}/callback`;
+}
+
+function googleConfig(variables: OauthProviderVariables): GoogleConfig | undefined {
+  const clientId = credential(variables.GOOGLE_CLIENT_ID);
+  const clientSecret = credential(variables.GOOGLE_CLIENT_SECRET);
+
+  if (!oauthProviderEnabled(variables.GOOGLE_SIGNIN_ENABLED) || !clientId || !clientSecret) {
+    return undefined;
+  }
+
+  return { clientId, clientSecret, callbackUri: callbackUri(variables.PUBLIC_WEB_ORIGIN, OauthProvider.Google) };
+}
+
+function appleConfig(variables: OauthProviderVariables): AppleConfig | undefined {
+  const clientId = credential(variables.APPLE_CLIENT_ID);
+  const teamId = credential(variables.APPLE_TEAM_ID);
+  const keyId = credential(variables.APPLE_KEY_ID);
+  const privateKeyBase64 = credential(variables.APPLE_PRIVATE_KEY_B64);
+
+  if (!oauthProviderEnabled(variables.APPLE_SIGNIN_ENABLED) || !clientId || !teamId || !keyId || !privateKeyBase64) {
+    return undefined;
+  }
+
   return {
-    ...(toggles.google && config.google ? { google: config.google } : {}),
-    ...(toggles.apple && config.apple ? { apple: config.apple } : {})
+    clientId,
+    teamId,
+    keyId,
+    privateKeyBase64,
+    callbackUri: callbackUri(variables.PUBLIC_WEB_ORIGIN, OauthProvider.Apple),
+    nativeClientId: credential(variables.APPLE_NATIVE_CLIENT_ID)
   };
 }
 
-export function oauthProviderConfigFrom(variables: {
-  OAUTH_PROVIDERS_CONFIG_B64: string;
-  OAUTH_GOOGLE_ENABLED: string;
-  OAUTH_APPLE_ENABLED: string;
-}): OauthProviderConfig {
-  return enabledOauthProviders(decodeOauthProviderConfig(variables.OAUTH_PROVIDERS_CONFIG_B64), {
-    google: oauthProviderEnabled(variables.OAUTH_GOOGLE_ENABLED),
-    apple: oauthProviderEnabled(variables.OAUTH_APPLE_ENABLED)
-  });
+/** Each provider is on only when its flag is `true` and every required key is set; otherwise its button stays hidden. */
+export function oauthProviderConfigFrom(variables: OauthProviderVariables): OauthProviderConfig {
+  const google = googleConfig(variables);
+  const apple = appleConfig(variables);
+
+  return {
+    ...(google ? { google } : {}),
+    ...(apple ? { apple } : {})
+  };
 }

@@ -12,6 +12,7 @@ const CATEGORY_ICONS = {
   health: require("../../../assets/images/categories/health.svg"),
   education: require("../../../assets/images/categories/education.svg"),
   leisure: require("../../../assets/images/categories/leisure.svg"),
+  income: require("../../../assets/images/categories/income.svg"),
   other: require("../../../assets/images/categories/other.svg"),
 } satisfies Record<BillingCategory, unknown>;
 

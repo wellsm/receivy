@@ -47,7 +47,7 @@ ambiente local ignorado ou no gerenciador de segredos do ambiente de execução.
 | --- | --- | --- |
 | Xcode | 26.6 instalado em 2026-09-07 (SDK 56 exige 26.4+); runtimes iOS 26.3/26.5 | Build e smoke iOS executados no simulador; dispositivo físico pendente |
 | Android | SDK 34/36, NDK 27, JDK 17, emulador arm64 (AVD clonado `Receivy_QA` com 12G) | Build Gradle e smoke executados no emulador; dispositivo físico pendente |
-| Google/Apple | Providers desativados; callbacks agora entram pelo web (`/api/auth/{google,apple}/callback`) e são repassados à API | Cadastrar `https://receivy.wellsm.dev/api/auth/<provedor>/callback` nos consoles e gerar `OAUTH_PROVIDERS_CONFIG_B64` |
+| Google/Apple | Providers desativados; callbacks agora entram pelo web (`/api/auth/{google,apple}/callback`) e são repassados à API | Cadastrar `https://receivy.wellsm.dev/api/auth/<provedor>/callback` nos consoles e preencher `GOOGLE_*` / `APPLE_*` com as flags ligadas |
 | Domínio HTTPS | Dev definido em 2026-09-07: `receivy.wellsm.dev` (DNS na Cloudflare); produção no domínio real | Web dev ainda não publicado; `docs/environments.md` lista a ordem de ativação |
 | S3/Neon/AWS | Nenhum ambiente de produção provisionado por esta tarefa | Não executar deploy como parte da implementação |
 | IP do cliente | O gateway EZ4 de fábrica não expõe IP; nenhuma cota depende dele (`docs/api-errors.md`) | Cotas por e-mail, código e `public_id` do link verificado; sem patch de gateway |

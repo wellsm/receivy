@@ -142,3 +142,21 @@ describe('conta a pagar plan', () => {
     ]);
   });
 });
+
+describe('registro plan', () => {
+  it('charges the whole total on every due date with nobody on the other side', () => {
+    const plan = planBillingCharges({
+      description: 'Salário',
+      totalCents: 500_000,
+      split: { mode: SplitMode.Equal, parts: [owner] },
+      dueDates: ['2026-10-05', '2026-11-05'],
+      numbered: false,
+      settled: true
+    });
+
+    expect(plan.charges.map((charge) => [charge.userId, charge.amountCents, charge.dueDate])).toEqual([
+      [null, 500_000, '2026-10-05'],
+      [null, 500_000, '2026-11-05']
+    ]);
+  });
+});

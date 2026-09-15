@@ -47,6 +47,7 @@ const DIRECTION_FILTERS: { value: Direction | ""; label: string }[] = [
 ];
 
 const plusMark = require("../../../assets/images/auth/plus.svg");
+const searchMark = require("../../../assets/images/auth/search.svg");
 
 /** No state filter for now: active, paused and ended billings all show on the list. */
 function listQuery(search: string, direction: Direction | "", cursor?: string): string {
@@ -67,16 +68,16 @@ function listQuery(search: string, direction: Direction | "", cursor?: string): 
   return parts.join("&");
 }
 
-function Button({ label, onPress, disabled = false, primary = false }: { label: string; onPress: () => void; disabled?: boolean; primary?: boolean }) {
+function Pill({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole="radio"
       accessibilityLabel={label}
-      disabled={disabled}
+      accessibilityState={{ checked: selected }}
       onPress={onPress}
-      className={`min-h-12 items-center justify-center rounded-xl border border-primary px-4 py-3 ${primary ? "bg-primary" : "bg-surface"} ${disabled ? "opacity-40" : ""}`}
+      className={`h-[34px] justify-center rounded-full px-3.5 ${selected ? "bg-ink" : "border border-outline bg-surface"}`}
     >
-      <Text className={`font-bold ${primary ? "text-on-primary" : "text-primary"}`}>{label}</Text>
+      <Text className={`font-sans text-[12.5px] ${selected ? "font-bold text-surface" : "font-semibold text-muted"}`}>{label}</Text>
     </Pressable>
   );
 }
@@ -163,51 +164,35 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
-      <View className="gap-3 px-5 pb-2 pt-3">
-        <TextInput
-          accessibilityLabel="Buscar por título ou descrição"
-          placeholder="Buscar por título ou descrição…"
-          placeholderTextColor={colors.muted}
-          value={term}
-          onChangeText={setTerm}
-          className="min-h-12 rounded-xl border border-outline bg-surface px-4 text-ink"
-        />
-        <View accessibilityRole="radiogroup" accessibilityLabel="Estado" className="flex-row gap-2">
-          {STATE_FILTERS.map((option) => {
-            const selected = option.value === stateFilter;
-
-            return (
-              <Pressable
-                key={option.value}
-                accessibilityRole="radio"
-                accessibilityLabel={option.label}
-                accessibilityState={{ checked: selected }}
-                onPress={() => setStateFilter(option.value)}
-                className={`min-h-9 items-center justify-center rounded-full border px-4 ${selected ? "border-primary bg-primary-soft/60" : "border-outline/40 bg-surface"}`}
-              >
-                <Text className={`text-xs font-semibold ${selected ? "text-primary-strong" : "text-muted"}`}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
+      <View className="gap-3 pb-2 pt-3">
+        <View className="mx-5 h-11 flex-row items-center gap-2 rounded-xl border border-outline bg-surface px-3">
+          <Image source={searchMark} tintColor={colors.muted} style={{ width: 16, height: 16 }} />
+          <TextInput
+            accessibilityLabel="Buscar por título ou descrição"
+            placeholder="Buscar por título ou descrição…"
+            placeholderTextColor={colors.muted}
+            value={term}
+            onChangeText={setTerm}
+            textAlignVertical="center"
+            className="h-full flex-1 py-0 font-sans text-[16px] tracking-normal text-ink"
+          />
         </View>
-        <View accessibilityRole="radiogroup" accessibilityLabel="Direção" className="flex-row gap-2">
-          {DIRECTION_FILTERS.map((option) => {
-            const selected = option.value === direction;
 
-            return (
-              <Pressable
-                key={option.label}
-                accessibilityRole="radio"
-                accessibilityLabel={option.label}
-                accessibilityState={{ checked: selected }}
-                onPress={() => setDirection(option.value)}
-                className={`min-h-9 items-center justify-center rounded-full border px-4 ${selected ? "border-primary bg-primary-soft/60" : "border-outline/40 bg-surface"}`}
-              >
-                <Text className={`text-xs font-semibold ${selected ? "text-primary-strong" : "text-muted"}`}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="items-center gap-2 px-5">
+          <View accessibilityRole="radiogroup" accessibilityLabel="Estado" className="flex-row gap-2">
+            {STATE_FILTERS.map((option) => (
+              <Pill key={option.value} label={option.label} selected={option.value === stateFilter} onPress={() => setStateFilter(option.value)} />
+            ))}
+          </View>
+
+          <View className="mx-1 h-6 w-px bg-outline" />
+
+          <View accessibilityRole="radiogroup" accessibilityLabel="Direção" className="flex-row gap-2">
+            {DIRECTION_FILTERS.map((option) => (
+              <Pill key={option.label} label={option.label} selected={option.value === direction} onPress={() => setDirection(option.value)} />
+            ))}
+          </View>
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -222,24 +207,31 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
 
           {error ? (
             <View className="gap-2 rounded-xl bg-danger-soft p-4">
-              <Text accessibilityRole="alert" className="text-danger">
+              <Text accessibilityRole="alert" className="font-sans text-danger">
                 {error}
               </Text>
               <Pressable accessibilityRole="button" accessibilityLabel="Tentar novamente" onPress={() => void load()} className="min-h-12 justify-center">
-                <Text className="font-bold text-danger">Tentar novamente</Text>
+                <Text className="font-sans font-bold text-danger">Tentar novamente</Text>
               </Pressable>
             </View>
           ) : null}
 
           {page && !page.billings.length && (
-            <View className="gap-3 rounded-2xl border border-outline/40 bg-surface p-5">
-              <Text className="text-2xl font-extrabold text-primary-strong">Nenhuma conta ainda</Text>
-              <Text className="text-sm leading-6 text-muted">Crie a primeira para acompanhar os vencimentos.</Text>
-              <Button label="Nova conta" primary onPress={() => onCreate?.()} />
+            <View className="gap-3 rounded-[20px] border border-outline bg-surface p-5">
+              <Text className="font-display text-2xl font-bold text-ink">Nenhuma conta ainda</Text>
+              <Text className="font-sans text-sm leading-6 text-muted">Crie a primeira para acompanhar os vencimentos.</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Nova conta"
+                onPress={() => onCreate?.()}
+                className="h-12 items-center justify-center rounded-2xl bg-primary"
+              >
+                <Text className="font-sans font-bold text-on-primary">Nova conta</Text>
+              </Pressable>
             </View>
           )}
 
-          {page && page.billings.length > 0 && !visible.length && <Text className="py-6 text-center text-sm text-muted">{filter.empty}</Text>}
+          {page && page.billings.length > 0 && !visible.length && <Text className="py-6 text-center font-sans text-sm text-muted">{filter.empty}</Text>}
 
           {visible.map((billing) => (
             <BillingCard
@@ -258,22 +250,22 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
               onPress={() => void load(page.nextCursor ?? undefined)}
               className="min-h-12 items-center justify-center rounded-xl border border-outline"
             >
-              <Text className="font-bold text-primary">Carregar mais</Text>
+              <Text className="font-sans font-bold text-primary">Carregar mais</Text>
             </Pressable>
           )}
         </View>
       </ScrollView>
 
       {/* Sits in the flow, not absolute: the safe-area bottom edge keeps it above the tab bar on both platforms. */}
-      <View className="border-t border-outline/20 bg-canvas px-5 pb-2 pt-3">
+      <View className="bg-canvas px-5 pb-2.5 pt-3.5">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Nova conta"
           onPress={() => onCreate?.()}
-          className="h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary-strong"
+          className="h-[54px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary"
         >
           <Image source={plusMark} tintColor={colors.onPrimary} style={{ width: 20, height: 20 }} />
-          <Text className="text-base font-bold text-on-primary">Cadastrar Nova Conta</Text>
+          <Text className="font-sans text-[15.5px] font-bold text-on-primary">Nova conta</Text>
         </Pressable>
       </View>
     </SafeAreaView>

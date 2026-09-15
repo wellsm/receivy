@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import { Alert, Share } from "react-native";
-import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofMime, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, SplitMode, SplitPartKind, type BillingAllocation, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
 
 jest.mock("expo-router", () => {
@@ -93,6 +93,7 @@ function makeClient(detail = billing(), overrides: Record<string, unknown> = {})
     invite: jest.fn().mockResolvedValue({ url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" }),
     revokeInvite: jest.fn().mockResolvedValue(undefined),
     resolveGuest: jest.fn().mockResolvedValue(detail),
+    silenceParticipant: jest.fn().mockResolvedValue(detail),
     publicLink: jest.fn().mockResolvedValue({ token: "tk" }),
     publicChargeUrl: (token: string) => `http://localhost:3000/pay/${token}`,
     paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }),
@@ -158,7 +159,7 @@ describe("BillingDetailScreen", () => {
 
   it("accepts the proof under review when the owner marks the participant as paid", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
-    const pending = { state: ProofState.Pending, file: { name: "pix.png", mime: ProofMime.Png, size: 10 }, sentAt: "2026-11-12T10:00:00Z", reviewedAt: null, reason: null, sentByViewer: false };
+    const pending = { state: ProofState.Pending, kind: ProofKind.File, file: { name: "pix.png", mime: ProofMime.Png, size: 10 }, sentAt: "2026-11-12T10:00:00Z", reviewedAt: null, reason: null, sentByViewer: false };
     const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: ChargeState.Paid }), charge({ id: "c6", name: "Carlos", proofState: ProofState.Pending, proof: pending })] });
     const { client } = await open(makeClient(detail));
 
@@ -416,5 +417,88 @@ describe("BillingDetailScreen", () => {
     expect(screen.getByRole("button", { name: "Abrir cobrança de Só comigo" })).toBeOnTheScreen();
     expect(screen.getByText("Sem chave Pix vinculada")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Copiar chave Pix" })).toBeNull();
+  });
+
+  it("badges each silenced charge on its own row and shows the participant action once", async () => {
+    const allocation: BillingAllocation = { kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, silenced: false };
+    const detail = billing({
+      charges: [charge({ id: "c6", name: "Carlos", silenced: true }), charge({ id: "c7", name: "Carlos", state: ChargeState.Cancelled, cancelledAt: "2026-11-01T00:00:00Z" })],
+      allocations: [allocation],
+    });
+
+    await open(makeClient(detail));
+
+    expect(screen.getAllByRole("button", { name: "Abrir cobrança de Carlos" })).toHaveLength(2);
+    expect(screen.getAllByText("Sem avisos")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Não notificar Carlos" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Voltar a notificar Carlos" })).toBeNull();
+  });
+
+  it("silences a participant after confirmation and turns the notices back on without asking", async () => {
+    const allocation: BillingAllocation = { kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, silenced: false };
+    const loud = billing({ charges: [charge({ id: "c6", name: "Carlos", silenced: false })], allocations: [allocation] });
+    const quiet = billing({ charges: [charge({ id: "c6", name: "Carlos", silenced: true })], allocations: [{ ...allocation, silenced: true }] });
+    const silenceParticipant = jest.fn(async (_billingId: string, _userId: string, silenced: boolean) => (silenced ? quiet : loud));
+
+    jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Não notificar")?.onPress?.());
+
+    await open(makeClient(loud, { silenceParticipant }));
+    await fireEvent.press(screen.getByRole("button", { name: "Não notificar Carlos" }));
+
+    expect(Alert.alert).toHaveBeenCalledWith("Não notificar Carlos?", "Os lembretes automáticos das cobranças pendentes e futuras de Carlos nesta conta param.", expect.any(Array));
+    await waitFor(() => expect(silenceParticipant).toHaveBeenCalledWith("b1", "u1", true));
+    expect(await screen.findByText("Sem avisos")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Voltar a notificar Carlos" }));
+
+    await waitFor(() => expect(silenceParticipant).toHaveBeenLastCalledWith("b1", "u1", false));
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Avisos reativados para Carlos.")).toBeOnTheScreen();
+    expect(screen.queryByText("Sem avisos")).toBeNull();
+  });
+
+  it("heads a registro with its counterpart and hides the invite and the payment links", async () => {
+    const salary = charge({
+      id: "c8",
+      name: "Empresa X",
+      recipient: { userId: null, name: "Empresa X", email: null },
+      debtorUserId: null,
+      pix: null,
+      sharingState: SharingState.Closed,
+      settled: true,
+      counterpartLabel: "Empresa X",
+    });
+    const detail = billing({ settled: true, counterpartLabel: "Empresa X", paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] }, charges: [salary] });
+
+    await open(makeClient(detail));
+
+    expect(screen.getByText("De Empresa X")).toBeOnTheScreen();
+    expect(screen.getByText("Registro")).toBeOnTheScreen();
+    expect(screen.getByText("Cobranças")).toBeOnTheScreen();
+    expect(screen.queryByText("Participantes")).toBeNull();
+    expect(screen.getByRole("button", { name: "Marcar Empresa X como pago" })).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Convidar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compartilhar link de Empresa X" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compartilhar link de pagamento" })).toBeNull();
+  });
+
+  it("heads a registro a pagar with Para and names its rows after the counterpart", async () => {
+    const rent = charge({
+      id: "c9",
+      name: "Imobiliária",
+      direction: Direction.Payable,
+      payer: ChargePayer.Owner,
+      ownedByViewer: true,
+      recipient: { userId: null, name: "Imobiliária", email: null },
+      debtorUserId: null,
+      pix: null,
+      settled: true,
+      counterpartLabel: "Imobiliária",
+    });
+
+    await open(makeClient(billing({ direction: Direction.Payable, settled: true, counterpartLabel: "Imobiliária", paymentMethodId: undefined, charges: [rent] })));
+
+    expect(screen.getByText("Para Imobiliária")).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeOnTheScreen();
   });
 });

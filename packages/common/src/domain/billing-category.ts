@@ -9,6 +9,7 @@ export const enum BillingCategory {
   Health = 'health',
   Education = 'education',
   Leisure = 'leisure',
+  Income = 'income',
   Other = 'other'
 }
 
@@ -23,6 +24,7 @@ export const BILLING_CATEGORIES: { value: BillingCategory; label: string }[] = [
   { value: BillingCategory.Health, label: 'Saúde' },
   { value: BillingCategory.Education, label: 'Educação' },
   { value: BillingCategory.Leisure, label: 'Lazer' },
+  { value: BillingCategory.Income, label: 'Salário e renda' },
   { value: BillingCategory.Other, label: 'Outro' }
 ];
 
@@ -55,6 +57,7 @@ export const BILLING_CATEGORY_COLORS: Record<BillingCategory, string> = {
   health: '#D94F70',
   education: '#5B6BD6',
   leisure: '#C9971C',
+  income: '#6E9A1F',
   other: '#64748B'
 };
 

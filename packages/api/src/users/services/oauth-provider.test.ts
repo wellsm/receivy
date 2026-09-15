@@ -2,13 +2,7 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { OauthProvider } from './oauth';
 
-import {
-  createOauthProviderClient,
-  decodeOauthProviderConfig,
-  enabledOauthProviders,
-  oauthProviderConfigFrom,
-  oauthProviderEnabled
-} from './oauth-provider';
+import { createOauthProviderClient, type OauthProviderVariables, oauthProviderConfigFrom, oauthProviderEnabled } from './oauth-provider';
 
 describe('OAuth provider configuration', () => {
   it.each(['google', 'apple', 'nativeApple'] as const)('exchanges and verifies a signed %s fixture', async (mode) => {
@@ -87,44 +81,64 @@ describe('OAuth provider configuration', () => {
     expect(createOauthProviderClient(OauthProvider.Apple, { apple: { ...apple, privateKeyBase64: 'not-a-key' } }, request)).toBeNull();
     expect(request).not.toHaveBeenCalled();
   });
-  it('keeps all providers disabled when credentials are absent', () => {
-    expect(decodeOauthProviderConfig('disabled')).toEqual({});
-    expect(decodeOauthProviderConfig('')).toEqual({});
-  });
-
-  it('accepts a base64url configuration only when required fields are present', () => {
-    const encoded = Buffer.from(
-      JSON.stringify({
-        google: {
-          callbackUri: 'https://api.receivy.example/auth/google/callback',
-          clientId: 'google-client',
-          clientSecret: 'google-secret'
-        }
-      })
-    ).toString('base64url');
-
-    expect(decodeOauthProviderConfig(encoded)).toEqual({
-      google: {
-        callbackUri: 'https://api.receivy.example/auth/google/callback',
-        clientId: 'google-client',
-        clientSecret: 'google-secret'
-      }
-    });
-    expect(decodeOauthProviderConfig(Buffer.from('{}').toString('base64url'))).toEqual({});
-    expect(decodeOauthProviderConfig('not-base64-json')).toEqual({});
-  });
 });
 
-describe('enabledOauthProviders', () => {
-  const google = {
-    callbackUri: 'https://api.receivy.example/auth/google/callback',
-    clientId: 'google-client',
-    clientSecret: 'google-secret'
+describe('oauthProviderConfigFrom', () => {
+  const unset: OauthProviderVariables = {
+    PUBLIC_WEB_ORIGIN: 'https://receivy.example/',
+    GOOGLE_SIGNIN_ENABLED: 'false',
+    GOOGLE_CLIENT_ID: 'disabled',
+    GOOGLE_CLIENT_SECRET: 'disabled',
+    APPLE_SIGNIN_ENABLED: 'false',
+    APPLE_CLIENT_ID: 'disabled',
+    APPLE_NATIVE_CLIENT_ID: 'disabled',
+    APPLE_TEAM_ID: 'disabled',
+    APPLE_KEY_ID: 'disabled',
+    APPLE_PRIVATE_KEY_B64: 'disabled'
   };
+  const googleKeys = { GOOGLE_CLIENT_ID: 'google-client', GOOGLE_CLIENT_SECRET: 'google-secret' };
+  const appleKeys = { APPLE_CLIENT_ID: 'services-id', APPLE_TEAM_ID: 'team', APPLE_KEY_ID: 'key', APPLE_PRIVATE_KEY_B64: 'p8-base64' };
 
-  it('keeps only the providers switched on, independently of each other', () => {
-    expect(enabledOauthProviders({ google }, { google: true, apple: true })).toEqual({ google });
-    expect(enabledOauthProviders({ google }, { google: false, apple: true })).toEqual({});
+  it('keeps every provider off by default', () => {
+    expect(oauthProviderConfigFrom(unset)).toEqual({});
+  });
+
+  it('builds Google from its own keys with the callback on the web origin', () => {
+    expect(oauthProviderConfigFrom({ ...unset, ...googleKeys, GOOGLE_SIGNIN_ENABLED: 'true' })).toEqual({
+      google: { clientId: 'google-client', clientSecret: 'google-secret', callbackUri: 'https://receivy.example/api/auth/google/callback' }
+    });
+  });
+
+  it('leaves a provider off when its flag is not true or any required key is missing', () => {
+    expect(oauthProviderConfigFrom({ ...unset, ...googleKeys })).toEqual({});
+    expect(oauthProviderConfigFrom({ ...unset, ...googleKeys, GOOGLE_SIGNIN_ENABLED: 'true', GOOGLE_CLIENT_SECRET: 'disabled' })).toEqual(
+      {}
+    );
+    expect(oauthProviderConfigFrom({ ...unset, ...appleKeys, APPLE_SIGNIN_ENABLED: 'true', APPLE_KEY_ID: '' })).toEqual({});
+  });
+
+  it('switches Google and Apple independently, the native client id being optional', () => {
+    const both = oauthProviderConfigFrom({
+      ...unset,
+      ...googleKeys,
+      ...appleKeys,
+      GOOGLE_SIGNIN_ENABLED: 'false',
+      APPLE_SIGNIN_ENABLED: 'true'
+    });
+
+    expect(both.google).toBeUndefined();
+    expect(both.apple).toEqual({
+      clientId: 'services-id',
+      teamId: 'team',
+      keyId: 'key',
+      privateKeyBase64: 'p8-base64',
+      callbackUri: 'https://receivy.example/api/auth/apple/callback',
+      nativeClientId: undefined
+    });
+    expect(
+      oauthProviderConfigFrom({ ...unset, ...appleKeys, APPLE_SIGNIN_ENABLED: 'true', APPLE_NATIVE_CLIENT_ID: 'bundle' }).apple
+        ?.nativeClientId
+    ).toBe('bundle');
   });
 
   it('reads the flags as strict booleans with everything off by default', () => {
@@ -133,16 +147,5 @@ describe('enabledOauthProviders', () => {
     expect(oauthProviderEnabled('false')).toBe(false);
     expect(oauthProviderEnabled('1')).toBe(false);
     expect(oauthProviderEnabled(undefined)).toBe(false);
-  });
-
-  it('builds the effective configuration from the environment', () => {
-    const encoded = Buffer.from(JSON.stringify({ google })).toString('base64url');
-
-    expect(
-      oauthProviderConfigFrom({ OAUTH_PROVIDERS_CONFIG_B64: encoded, OAUTH_GOOGLE_ENABLED: 'true', OAUTH_APPLE_ENABLED: 'false' })
-    ).toEqual({ google });
-    expect(
-      oauthProviderConfigFrom({ OAUTH_PROVIDERS_CONFIG_B64: encoded, OAUTH_GOOGLE_ENABLED: 'false', OAUTH_APPLE_ENABLED: 'false' })
-    ).toEqual({});
   });
 });

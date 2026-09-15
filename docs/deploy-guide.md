@@ -78,7 +78,7 @@ cp dev.env.example dev.env
 Preencha agora só o que já existe: AWS (passo 1), `EZ4_RAW_PG_DB_URL` (passo 2),
 os três segredos (passo 3), `PUBLIC_WEB_ORIGIN=https://receivy.wellsm.dev` e
 `OAUTH_REDIRECT_ALLOW_LIST=https://receivy.wellsm.dev/auth/oauth/callback,receivy://auth/callback`.
-Deixe `OAUTH_PROVIDERS_CONFIG_B64=disabled`, `EMAIL_TRANSPORT=disabled`,
+Deixe as chaves `GOOGLE_*` e `APPLE_*` em `disabled`, `EMAIL_TRANSPORT=disabled`,
 e `NOTIFICATION_PUSH_TRANSPORT=disabled` neste primeiro deploy: são ativados nos
 passos seguintes, quando os valores existirem.
 
@@ -162,38 +162,38 @@ conta paga):
    with Apple → Primary App ID = o App ID acima; Domains and Subdomains =
    `receivy.wellsm.dev`; Return URLs =
    `https://receivy.wellsm.dev/api/auth/apple/callback`. Esse identificador é
-   `apple.clientId`; o bundle do app é `apple.nativeClientId`.
-3. Keys → Create key → Sign in with Apple → baixe o `.p8` (uma vez). `keyId`
-   está na tela; `teamId` no canto superior direito da conta.
-4. `privateKeyBase64`: `base64 -i AuthKey_XXXX.p8 | tr -d '\n'`.
+   `APPLE_CLIENT_ID`; o bundle do app é `APPLE_NATIVE_CLIENT_ID`.
+3. Keys → Create key → Sign in with Apple → baixe o `.p8` (uma vez). O Key ID
+   (`APPLE_KEY_ID`) está na tela; o Team ID (`APPLE_TEAM_ID`) no canto superior
+   direito da conta.
+4. `APPLE_PRIVATE_KEY_B64`: `base64 -i AuthKey_XXXX.p8 | tr -d '\n'`.
 5. Se for usar Private Email Relay, More → Configure Sign in with Apple → Email
    Sources → domínio e remetente do Resend.
 
-Monte o JSON e codifique em base64url (sem `=`):
+Preencha no `dev.env` só o provedor que já existe:
 
 ```bash
-cat > /tmp/oauth.json <<'EOF'
-{
-  "google": { "clientId": "...", "clientSecret": "...",
-              "callbackUri": "https://receivy.wellsm.dev/api/auth/google/callback" },
-  "apple":  { "clientId": "dev.wellsm.receivy.web", "nativeClientId": "<bundle id>",
-              "callbackUri": "https://receivy.wellsm.dev/api/auth/apple/callback",
-              "keyId": "...", "teamId": "...", "privateKeyBase64": "..." }
-}
-EOF
-node -e 'process.stdout.write(Buffer.from(require("fs").readFileSync("/tmp/oauth.json","utf8")).toString("base64url"))'
-rm /tmp/oauth.json
+GOOGLE_SIGNIN_ENABLED=true
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+
+APPLE_SIGNIN_ENABLED=true
+APPLE_CLIENT_ID=dev.wellsm.receivy.web
+APPLE_NATIVE_CLIENT_ID=<bundle id>
+APPLE_TEAM_ID=...
+APPLE_KEY_ID=...
+APPLE_PRIVATE_KEY_B64=...
 ```
 
-O resultado é `OAUTH_PROVIDERS_CONFIG_B64`. Omita o provedor que ainda não
-existe em vez de deixar campos vazios; o botão correspondente fica indisponível.
+Provedor ainda sem credenciais fica com a flag `false` e as chaves em `disabled`;
+o botão correspondente some. Os callbacks saem de `PUBLIC_WEB_ORIGIN`.
 
 ## 9. Redeploy da API com provedores
 
 `pnpm deploy:dev`. Teste no navegador em `https://receivy.wellsm.dev/login`:
 Google e Apple devem voltar para a timeline. Erro `invalid_redirect_uri` ou
-`redirect_uri_mismatch` significa URL diferente byte a byte entre console e
-`callbackUri`.
+`redirect_uri_mismatch` significa URL diferente byte a byte entre o console e
+`<PUBLIC_WEB_ORIGIN>/api/auth/<provedor>/callback`.
 
 ## 10. Mobile e EAS
 

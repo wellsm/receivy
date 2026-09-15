@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BillingType } from './billing';
-import { ChargePayer, ChargeState, type ChargeSummary, Direction, ProofState } from './contracts';
-import { chargeAction, chargeBadges, chargeStateLabel, feedDayLabel } from './feed';
+import { ChargePayer, ChargeState, type ChargeSummary, Direction, ProofKind, ProofState } from './contracts';
+import { ChargeActionKind, chargeAction, chargeBadges, chargeStateLabel, feedDayLabel } from './feed';
 
 const base: ChargeSummary = {
   id: 'c1',
@@ -63,15 +63,12 @@ describe('chargeStateLabel and chargeAction', () => {
     expect(chargeStateLabel({ ...base, state: ChargeState.Cancelled }, Direction.Payable)).toBe('Cancelado');
   });
 
-  it('picks one action per situation and none for settled charges', () => {
+  it('offers only in-place actions and leaves every other card to open the charge', () => {
     expect(chargeAction(base, Direction.Receivable)).toEqual({ kind: 'remind', label: 'Lembrar' });
-    expect(chargeAction({ ...base, counterpartReachable: false }, Direction.Receivable)).toEqual({ kind: 'open', label: 'Ver cobrança' });
-    expect(chargeAction({ ...base, proofState: ProofState.Pending }, Direction.Receivable)).toEqual({
-      kind: 'open',
-      label: 'Ver comprovante'
-    });
-    expect(chargeAction(base, Direction.Payable)).toEqual({ kind: 'open', label: 'Pagar' });
-    expect(chargeAction({ ...base, proofState: ProofState.Pending }, Direction.Payable)).toEqual({ kind: 'open', label: 'Ver cobrança' });
+    expect(chargeAction({ ...base, counterpartReachable: false }, Direction.Receivable)).toBeNull();
+    expect(chargeAction({ ...base, proofState: ProofState.Pending }, Direction.Receivable)).toBeNull();
+    expect(chargeAction(base, Direction.Payable)).toBeNull();
+    expect(chargeAction({ ...base, proofState: ProofState.Pending }, Direction.Payable)).toBeNull();
     expect(chargeAction({ ...base, state: ChargeState.Paid }, Direction.Payable)).toBeNull();
   });
 });
@@ -79,21 +76,55 @@ describe('chargeStateLabel and chargeAction', () => {
 describe('conta a pagar in the feed', () => {
   const own: ChargeSummary = { ...base, payer: ChargePayer.Owner, ownedByViewer: true, hasPix: true };
 
-  it("badges the owner's own bill and offers Pix or a plain settle", () => {
+  it("badges the owner's own bill and settles it in place only without Pix", () => {
     expect(chargeBadges(own, '2026-01-01').map((badge) => badge.label)).toContain('Minha conta');
-    expect(chargeAction(own, Direction.Payable)).toEqual({ kind: 'open', label: 'Pagar' });
-    expect(chargeAction({ ...own, hasPix: false }, Direction.Payable)).toEqual({ kind: 'open', label: 'Marcar pago' });
-    expect(chargeAction({ ...own, proofState: ProofState.Pending }, Direction.Payable)).toEqual({ kind: 'open', label: 'Ver cobrança' });
+    expect(chargeAction(own, Direction.Payable)).toBeNull();
+    expect(chargeAction({ ...own, hasPix: false }, Direction.Payable)).toEqual({ kind: 'mark_paid', label: 'Marcar pago' });
+    expect(chargeAction({ ...own, hasPix: false, proofState: ProofState.Pending }, Direction.Payable)).toBeNull();
   });
 
-  it('never lets the payee remind: they only open or review', () => {
+  it('never lets the payee remind: they only open the charge', () => {
     const payee: ChargeSummary = { ...base, payer: ChargePayer.Owner, ownedByViewer: false, hasPix: true };
 
     expect(chargeBadges(payee, '2026-01-01').map((badge) => badge.label)).not.toContain('Minha conta');
-    expect(chargeAction(payee, Direction.Receivable)).toEqual({ kind: 'open', label: 'Ver cobrança' });
-    expect(chargeAction({ ...payee, proofState: ProofState.Pending }, Direction.Receivable)).toEqual({
-      kind: 'open',
-      label: 'Ver comprovante'
+    expect(chargeAction(payee, Direction.Receivable)).toBeNull();
+    expect(chargeAction({ ...payee, proofState: ProofState.Pending }, Direction.Receivable)).toBeNull();
+  });
+});
+
+describe('charges under review', () => {
+  it('reads Em análise and names what is waiting', () => {
+    const declared = { ...base, proofState: ProofState.Pending, proofKind: ProofKind.Declaration, dueDate: '2026-09-20' };
+
+    expect(chargeStateLabel(declared, Direction.Receivable)).toBe('Em análise');
+    expect(chargeBadges(declared, '2026-09-08')).toEqual([{ label: 'Pagamento informado', tone: 'info' }]);
+    expect(chargeBadges({ ...declared, proofKind: ProofKind.File }, '2026-09-08')).toEqual([
+      { label: 'Comprovante enviado', tone: 'info' }
+    ]);
+    expect(chargeAction(declared, Direction.Payable)).toBeNull();
+  });
+
+  it('turns the own-bill action into a declaration when the payee can confirm', () => {
+    const own = { ...base, payer: ChargePayer.Owner, ownedByViewer: true, hasPix: false };
+
+    expect(chargeAction({ ...own, confirmationRequired: true }, Direction.Payable)).toEqual({
+      kind: ChargeActionKind.DeclarePayment,
+      label: 'Marcar pago'
     });
+    expect(chargeAction({ ...own, confirmationRequired: false }, Direction.Payable)).toEqual({ kind: 'mark_paid', label: 'Marcar pago' });
+  });
+});
+
+describe('registros in the feed', () => {
+  const registro: ChargeSummary = { ...base, counterpartName: 'Empresa X', settled: true, counterpartLabel: 'Empresa X' };
+
+  it('badges a registro beside its status and never offers a reminder', () => {
+    expect(chargeBadges(registro, '2026-09-01')).toEqual([{ label: 'Registro', tone: 'neutral' }]);
+    expect(chargeBadges({ ...registro, state: ChargeState.Paid }, '2026-09-10')).toEqual([
+      { label: 'Pago', tone: 'success' },
+      { label: 'Registro', tone: 'neutral' }
+    ]);
+    expect(chargeAction(registro, Direction.Receivable)).toBeNull();
+    expect(chargeAction({ ...registro, settled: false }, Direction.Receivable)).toEqual({ kind: 'remind', label: 'Lembrar' });
   });
 });

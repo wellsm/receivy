@@ -4,10 +4,12 @@ import {
   calendarDate,
   canAcceptProof,
   canCancelCharge,
+  canDeclarePayment,
   canMarkPaid,
   canRemind,
   canReopenCharge,
   canShare,
+  canSilenceCharge,
   canUploadProof,
   chargeDateText,
   chargeShareText,
@@ -16,11 +18,12 @@ import {
   chargeTypeLabel,
   counterpartRoleLabel,
   formatMoney,
+  ProofKind,
   type ChargeDetail,
   type PublicLink,
   REMINDER_QUOTA_MESSAGE,
 } from "@receivy/common";
-import { Bell, CalendarDays, Check, CircleStop, CloudUpload, Copy, Eye, Loader2, RotateCcw, Share2 } from "lucide-react";
+import { Bell, BellOff, CalendarDays, Check, CircleStop, CloudUpload, Copy, Eye, Loader2, RotateCcw, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
@@ -97,6 +100,9 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   const [confirmRemind, setConfirmRemind] = useState(false);
   // How the payment lands: accepting the file under review or by hand; `null` keeps the dialog closed.
   const [confirmPaid, setConfirmPaid] = useState<"review" | "pay" | null>(null);
+  const [confirmDeclare, setConfirmDeclare] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
 
   const base = `/api/financial/charges/${id}`;
 
@@ -152,6 +158,38 @@ export function ChargeDetailScreen({ id }: { id: string }) {
     }, "Não foi possível atualizar a cobrança.");
   }
 
+  async function declare() {
+    await run(async () => {
+      setCharge(await request<ChargeDetail>(`${base}/proof/declaration`, { method: "POST" }, "Não foi possível informar o pagamento."));
+      setConfirmDeclare(false);
+      setNotice("Pagamento informado. Aguarde a confirmação.");
+    }, "Não foi possível informar o pagamento.");
+  }
+
+  async function withdraw() {
+    await run(async () => {
+      await request<void>(`${base}/proof`, { method: "DELETE" }, "Não foi possível desfazer.");
+      setCharge(await request<ChargeDetail>(base));
+      setNotice("Pagamento informado desfeito.");
+    }, "Não foi possível desfazer.");
+  }
+
+  function cancelReject() {
+    setRejecting(false);
+    setReason("");
+  }
+
+  async function reject() {
+    await run(async () => {
+      const body = { decision: "rejected", ...(reason.trim() ? { reason: reason.trim() } : {}) };
+
+      setCharge(await request<ChargeDetail>(`${base}/proof/review`, jsonInit("POST", body), "Não foi possível responder."));
+      setRejecting(false);
+      setReason("");
+      setNotice("Resposta enviada.");
+    }, "Não foi possível responder.");
+  }
+
   async function reopen() {
     await run(async () => {
       setCharge(await request<ChargeDetail>(`${base}/reopen`, { method: "POST" }, "Não foi possível reabrir a cobrança."));
@@ -165,6 +203,13 @@ export function ChargeDetailScreen({ id }: { id: string }) {
       setConfirmCancel(false);
       setNotice("Cobrança cancelada e mantida no histórico.");
     }, "Não foi possível atualizar a cobrança.");
+  }
+
+  async function silence(silenced: boolean) {
+    await run(async () => {
+      setCharge(await request<ChargeDetail>(`${base}/silenced`, jsonInit("PUT", { silenced }), "Não foi possível atualizar os avisos."));
+      setNotice(silenced ? "Avisos desta cobrança pausados." : "Avisos reativados.");
+    }, "Não foi possível atualizar os avisos.");
   }
 
   async function shareLink(rotate = false, paymentMethodId?: string) {
@@ -278,17 +323,19 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   const status = chargeStatusLine(charge, calendarDate());
   const guidance = payableGuidance(charge);
   const ownBill = charge.payer === "owner";
-  // The creditor of a conta a receber: the only viewer who publishes links and sends reminders.
-  const creditor = receivable && !ownBill;
+  // The creditor of a conta a receber with contacts: a registro publishes no link.
+  const creditor = receivable && !ownBill && !charge.settled;
   const markable = canMarkPaid(charge);
   const reopenable = canReopenCharge(charge);
   const shareable = canShare(charge);
   const remindable = canRemind(charge);
   const cancellable = canCancelCharge(charge);
+  const silenceable = canSilenceCharge(charge);
   const acceptProof = canAcceptProof(charge);
   const uploadAllowed = canUploadProof(charge);
+  const declaration = proof?.kind === ProofKind.Declaration;
   // The card picks the file; this button only sends it, so it stays disabled until there is one.
-  const footerLabel = uploadAllowed ? (proof ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado";
+  const footerLabel = uploadAllowed ? (proof && !declaration ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado";
 
   return (
     <section className="flex flex-col gap-4 pb-4">
@@ -311,7 +358,11 @@ export function ChargeDetailScreen({ id }: { id: string }) {
                 <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">{chargeTypeLabel(charge)}</span>
                 {ownBill && charge.ownedByViewer && <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">Minha conta</span>}
               </div>
-              <StatusTag label={state.label} tone={state.tone} compact />
+              <div className="flex items-center gap-1.5">
+                {charge.settled && <StatusTag label="Registro" tone="neutral" compact />}
+                {charge.silenced && <StatusTag label="Sem avisos" tone="neutral" compact />}
+                <StatusTag label={state.label} tone={state.tone} compact />
+              </div>
             </div>
 
             <h2 className="m-0 text-[22px] font-bold tracking-tight text-primary-strong">{charge.description}</h2>
@@ -346,19 +397,28 @@ export function ChargeDetailScreen({ id }: { id: string }) {
             <div className="flex flex-col gap-2.5">
               <div className="flex gap-2">
                 {!receivable && charge.pix && <ActionTile label="Copiar Chave Pix" icon={Copy} hint="Copia a chave Pix do credor" disabled={busy} onClick={() => void copyPix(charge.pix!.key)} />}
-                {(!receivable || ownBill) && proof && (
+                {(!receivable || ownBill) && proof && !declaration && (
                   <ActionTile label="Comprovante" icon={Eye} tone="primary" hint="Abre o comprovante enviado" disabled={busy} onClick={() => router.push(`/charges/${id}/proof`)} />
                 )}
                 {reopenable && <ActionTile label="Reabrir" icon={RotateCcw} hint="Desfaz o pagamento e volta a cobrança para pendente" disabled={busy} onClick={() => setConfirmReopen(true)} />}
+                {charge.settled && markable && <ActionTile label="Marcar como pago" icon={Check} tone="primary" disabled={busy} onClick={() => setConfirmPaid("pay")} />}
                 {shareable && <ActionTile label="Compartilhar" icon={Share2} hint="Envia o link público de pagamento" disabled={busy} onClick={() => void shareLink()} />}
                 {remindable && <ActionTile label="Lembrar" icon={Bell} hint="Envia um lembrete de pagamento" disabled={busy} onClick={() => setConfirmRemind(true)} />}
                 {cancellable && <ActionTile label="Cancelar" icon={CircleStop} tone="danger" hint="Encerra a cobrança sem pagamento" disabled={busy} onClick={() => setConfirmCancel(true)} />}
               </div>
-              {shareable && (
-                <div className="flex justify-end px-1">
-                  <button type="button" disabled={busy} onClick={() => void shareLink(true)} className="min-h-8 text-[11px] font-semibold text-primary disabled:opacity-50">
-                    Trocar e compartilhar link
-                  </button>
+              {(shareable || silenceable) && (
+                <div className="flex justify-end gap-4 px-1">
+                  {silenceable && (
+                    <button type="button" disabled={busy} onClick={() => void silence(!charge.silenced)} className="inline-flex min-h-8 items-center gap-1 text-[11px] font-semibold text-muted disabled:opacity-50">
+                      {charge.silenced ? <Bell size={12} aria-hidden="true" /> : <BellOff size={12} aria-hidden="true" />}
+                      {charge.silenced ? "Voltar a notificar" : "Não notificar esta cobrança"}
+                    </button>
+                  )}
+                  {shareable && (
+                    <button type="button" disabled={busy} onClick={() => void shareLink(true)} className="min-h-8 text-[11px] font-semibold text-primary disabled:opacity-50">
+                      Trocar e compartilhar link
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -368,16 +428,22 @@ export function ChargeDetailScreen({ id }: { id: string }) {
         </div>
 
         <div className="flex min-w-0 flex-col gap-4">
-          <ProofCard
-            charge={charge}
-            busy={busy}
-            sending={sending}
-            picked={picked}
-            onView={() => router.push(`/charges/${id}/proof`)}
-            onPick={setPicked}
-            onSend={markable ? sendPicked : undefined}
-            onAccept={() => setConfirmPaid(acceptProof ? "review" : "pay")}
-          />
+          {/* A registro has no proof: "Marcar como pago" moved to the quick actions. */}
+          {!charge.settled && (
+            <ProofCard
+              charge={charge}
+              busy={busy}
+              sending={sending}
+              picked={picked}
+              onView={() => router.push(`/charges/${id}/proof`)}
+              onPick={setPicked}
+              onSend={markable ? sendPicked : undefined}
+              onAccept={() => setConfirmPaid(acceptProof ? "review" : "pay")}
+              onDeclare={canDeclarePayment(charge) ? () => setConfirmDeclare(true) : undefined}
+              onWithdraw={() => void withdraw()}
+              onReject={() => setRejecting(true)}
+            />
+          )}
 
           {creditor && pending && charge.sharingState === "pix_required" && <FirstSharePix busy={busy} publish={(methodId) => shareLink(false, methodId)} />}
 
@@ -389,7 +455,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
         </div>
       </div>
 
-      {pending && !markable && (uploadAllowed || proof) && (
+      {pending && !markable && (uploadAllowed || (proof && !declaration)) && (
         <ScreenFooter className="-mx-1 mt-2 border-t border-outline/20 bg-canvas/95 px-1 py-3 backdrop-blur-md">
           <button
             type="button"
@@ -427,6 +493,43 @@ export function ChargeDetailScreen({ id }: { id: string }) {
           busy={busy}
           onConfirm={() => void markPaid(confirmPaid)}
           onCancel={() => setConfirmPaid(null)}
+        />
+      )}
+
+      {confirmDeclare && (
+        <ConfirmDialog
+          title="Informar pagamento?"
+          icon={Check}
+          tone="primary"
+          explanation={`${charge.counterpartName} vai receber um aviso para confirmar o recebimento.`}
+          confirmLabel="Já paguei"
+          busy={busy}
+          onConfirm={() => void declare()}
+          onCancel={() => setConfirmDeclare(false)}
+        />
+      )}
+
+      {rejecting && (
+        <ConfirmDialog
+          title="Não recebeu o pagamento?"
+          icon={CircleStop}
+          explanation="A cobrança volta a ficar pendente e a pessoa recebe o motivo."
+          detail={
+            <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink">
+              Motivo (opcional)
+              <textarea
+                value={reason}
+                maxLength={500}
+                rows={3}
+                onChange={(event) => setReason(event.target.value)}
+                className="rounded-xl border border-outline bg-surface p-3 text-sm font-normal text-ink"
+              />
+            </label>
+          }
+          confirmLabel="Não recebi"
+          busy={busy}
+          onConfirm={() => void reject()}
+          onCancel={cancelReject}
         />
       )}
 

@@ -19,7 +19,14 @@ export declare class SplitBody {
   mode: SplitMode;
   parts: (
     | { kind: SplitPartKind.Owner; basisPoints?: number; shares?: Integer.Range<1, 1000> }
-    | { kind: SplitPartKind.User; userId: String.UUID; amountCents?: number; basisPoints?: number; shares?: Integer.Range<1, 1000> }
+    | {
+        kind: SplitPartKind.User;
+        userId: String.UUID;
+        silenced?: boolean;
+        amountCents?: number;
+        basisPoints?: number;
+        shares?: Integer.Range<1, 1000>;
+      }
   )[];
 }
 
@@ -51,6 +58,10 @@ export declare class BillingBody implements Http.JsonBody {
   payeeUserId?: String.UUID;
   pix?: PixBody;
   category?: BillingCategory;
+  /** Registro: already received or paid; the owner alone, no participants, Pix or reminders. */
+  settled?: boolean;
+  /** Registro only; trimmed to 1–120 characters by the domain, which answers the pt-BR message. */
+  counterpartLabel?: String.Max<200>;
 }
 
 export declare class PatchBody implements Http.JsonBody {
@@ -70,4 +81,6 @@ export declare class PatchBody implements Http.JsonBody {
   pendingCharges?: PendingChargesAction;
   applyTo?: EditScope;
   category?: BillingCategory;
+  settled?: boolean;
+  counterpartLabel?: String.Max<200>;
 }

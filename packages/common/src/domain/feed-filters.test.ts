@@ -41,6 +41,11 @@ describe('feed filters', () => {
     );
   });
 
+  it('serializes an optional month alongside the other filters', () => {
+    expect(feedFilterQuery(base, '2026-09-11', '2026-08').toString()).toBe('status=pending%2Coverdue%2Cpaid&month=2026-08');
+    expect(feedFilterQuery(base, '2026-09-11').toString()).toBe('status=pending%2Coverdue%2Cpaid');
+  });
+
   it('toggles a value in and out of its group', () => {
     expect(toggleFeedValue(['receivable'], 'payable')).toEqual(['receivable', 'payable']);
     expect(toggleFeedValue(['receivable', 'payable'], 'receivable')).toEqual(['payable']);

@@ -35,6 +35,7 @@ const DEDICATED_BFF = [
   // The invite landing page (/join/[token]) is a server component and reads it with authApiFetch, like /pay.
   "GET public/invites/{p}",
   "GET public/charges/{p}", "POST public/charges/{p}/proof", "GET public/charges/{p}/proof", "DELETE public/charges/{p}/proof", "POST public/charges/{p}/proof/complete",
+  "POST public/charges/{p}/proof/declaration",
   // Provider callbacks land on the web domain and are bridged to the API (lib/auth/provider-callback.ts).
   "GET auth/google/callback", "POST auth/apple/callback",
 ];

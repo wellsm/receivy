@@ -8,6 +8,7 @@ import {
   BillingType,
   Direction,
   PixKeyType,
+  ProofState,
   SplitMode,
   SplitPartKind
 } from '@receivy/common';
@@ -16,6 +17,9 @@ import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { ApiError } from '../../src/common/errors';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { createInvite } from '../../src/invites/services/links';
+import { ProofDeclarationForbiddenError } from '../../src/proofs/errors';
+import { ProofRepository } from '../../src/proofs/repositories/proof';
+import type { ProofStorage } from '../../src/proofs/services/storage';
 import { PublicLinkRepository } from '../../src/public/repositories/public-link';
 import { TimelineRepository } from '../../src/timeline/repositories/timeline';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
@@ -106,7 +110,8 @@ describe('contas a pagar on native PostgreSQL', () => {
   });
 
   it('shows the payee the same charge as receivable, with settle powers only', async () => {
-    const created = await BillingRepository.create(db, OWNER, 'payable-payee', payable({ payeeUserId: PAYEE }));
+    // Due this month at the latest: the feed never lists charges past the end of the current month.
+    const created = await BillingRepository.create(db, OWNER, 'payable-payee', payable({ payeeUserId: PAYEE, startDate: '2026-09-05' }));
     const chargeId = created.charges[0]!.id;
 
     equal(created.payee?.userId, PAYEE);
@@ -153,6 +158,68 @@ describe('contas a pagar on native PostgreSQL', () => {
 
     equal(settled.state, 'paid');
     equal(settled.direction, 'receivable');
+  });
+
+  it('tells whether a declared payment needs someone to confirm it', async () => {
+    // Due this month at the latest, so the feed (capped at the month end) lists them.
+    const due = { startDate: '2026-09-05' };
+    const withPayee = await BillingRepository.create(
+      db,
+      OWNER,
+      'payable-confirm-active',
+      payable({ ...due, payeeUserId: PAYEE, description: 'Confirma' })
+    );
+    const placeholder = await ContactRepository.save(db, OWNER, { name: 'Sem app', email: 'payable-placeholder@example.com' });
+    const withPlaceholder = await BillingRepository.create(
+      db,
+      OWNER,
+      'payable-confirm-pending',
+      payable({ ...due, payeeUserId: placeholder.userId, description: 'Sem app' })
+    );
+    const alone = await BillingRepository.create(
+      db,
+      OWNER,
+      'payable-confirm-alone',
+      payable({ ...due, description: 'Só minha', pix: undefined })
+    );
+
+    equal((await ChargeRepository.get(db, OWNER, withPayee.charges[0]!.id)).confirmationRequired, true);
+    equal((await ChargeRepository.get(db, OWNER, withPlaceholder.charges[0]!.id)).confirmationRequired, false);
+    equal((await ChargeRepository.get(db, OWNER, alone.charges[0]!.id)).confirmationRequired, false);
+    equal((await ChargeRepository.get(db, OWNER, alone.charges[0]!.id)).proofKind, null);
+
+    const feed = await TimelineRepository.get(db, OWNER, { direction: [Direction.Payable] });
+
+    equal(feed.items.find((item) => item.charge.id === withPayee.charges[0]!.id)?.charge.confirmationRequired, true);
+    equal(feed.items.find((item) => item.charge.id === alone.charges[0]!.id)?.charge.confirmationRequired, false);
+  });
+
+  it('lets the owner declare a bill only to a payee who can confirm, and the payee answer it', async () => {
+    const due = { startDate: '2026-09-05' };
+    const confirmable = await BillingRepository.create(
+      db,
+      OWNER,
+      'payable-declare-active',
+      payable({ ...due, payeeUserId: PAYEE, description: 'Declara' })
+    );
+    const alone = await BillingRepository.create(
+      db,
+      OWNER,
+      'payable-declare-alone',
+      payable({ ...due, description: 'Sozinha', pix: undefined })
+    );
+    // A declaration never touches the bucket unless an upload slot was open.
+    const storage = { delete: async () => undefined } as unknown as ProofStorage;
+    const chargeId = confirmable.charges[0]!.id;
+
+    await rejects(() => ProofRepository.declare(db, storage, alone.charges[0]!.id, { userId: OWNER }), ProofDeclarationForbiddenError);
+    await rejects(() => ProofRepository.declare(db, storage, chargeId, { userId: PAYEE }), ProofDeclarationForbiddenError);
+    await rejects(() => ChargeRepository.pay(db, OWNER, chargeId), ProofDeclarationForbiddenError);
+    equal((await ChargeRepository.pay(db, OWNER, alone.charges[0]!.id)).state, 'paid', 'a bill nobody confirms settles at once');
+    await ProofRepository.declare(db, storage, chargeId, { userId: OWNER });
+
+    equal((await ChargeRepository.get(db, PAYEE, chargeId)).proofKind, 'declaration');
+    equal((await ProofRepository.review(db, chargeId, PAYEE, { decision: ProofState.Accepted })).state, 'paid');
   });
 
   it('lets the owner settle their own bill and swap the typed key', async () => {

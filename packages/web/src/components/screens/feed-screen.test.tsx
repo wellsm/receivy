@@ -1,11 +1,13 @@
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { currentMonth, monthLabel, shiftMonth } from "@receivy/common";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { FeedScreen } from "@/components/screens/feed-screen";
 
-/** The feed opens on the default filters: every status but cancelled. */
-const BASE = "/api/financial/timeline?status=pending%2Coverdue%2Cpaid";
+/** The feed opens on the current month, with every status but cancelled. */
+const MONTH = currentMonth(new Date());
+const BASE = `/api/financial/timeline?status=pending%2Coverdue%2Cpaid&month=${MONTH}`;
 
 async function pick(user: ReturnType<typeof userEvent.setup>, group: string, option: string) {
   await user.click(screen.getByRole("combobox", { name: group }));
@@ -27,6 +29,8 @@ const summary = {
   proofsToReview: 0,
   receivableCount: 0,
   payableCount: 0,
+  receivedTotal: { amountCents: 0, currency: "BRL" },
+  paidTotal: { amountCents: 0, currency: "BRL" },
 } as const;
 
 type ChargeOverrides = {
@@ -37,6 +41,11 @@ type ChargeOverrides = {
   state?: "pending" | "paid" | "cancelled";
   proofState?: "pending" | "accepted" | "rejected" | null;
   counterpartReachable?: boolean;
+  payer?: "person" | "owner";
+  ownedByViewer?: boolean;
+  hasPix?: boolean;
+  confirmationRequired?: boolean;
+  proofKind?: "file" | "declaration" | null;
 };
 
 function charge(overrides: ChargeOverrides = {}, direction: "receivable" | "payable" = "payable") {
@@ -60,6 +69,10 @@ function charge(overrides: ChargeOverrides = {}, direction: "receivable" | "paya
   };
 }
 
+function monthLabelOf(delta: number): string {
+  return monthLabel(shiftMonth(MONTH, delta));
+}
+
 const deferred = () => {
   let resolve!: (response: Response) => void;
   const promise = new Promise<Response>((done) => {
@@ -69,7 +82,7 @@ const deferred = () => {
 };
 
 describe("FeedScreen", () => {
-  it("renders persisted totals and pending counts", async () => {
+  it("renders persisted totals, what was settled and the month Previsto/Realizado", async () => {
     vi.mocked(browserFetch).mockResolvedValue(
       Response.json({
         summary: {
@@ -80,6 +93,8 @@ describe("FeedScreen", () => {
           proofsToReview: 0,
           receivableCount: 3,
           payableCount: 1,
+          receivedTotal: { amountCents: 1000, currency: "BRL" },
+          paidTotal: { amountCents: 500, currency: "BRL" },
         },
         items: [],
         nextCursor: null,
@@ -88,8 +103,12 @@ describe("FeedScreen", () => {
     render(<FeedScreen />);
     expect(await screen.findByText("R$ 90.071.992.547.409,91")).toBeInTheDocument();
     expect(screen.getByText("R$ 25,00")).toBeInTheDocument();
-    expect(screen.getByText("3 pendências")).toBeInTheDocument();
-    expect(screen.getByText("1 pendência")).toBeInTheDocument();
+    expect(screen.getByText("R$ 10,00 já recebido")).toBeInTheDocument();
+    expect(screen.getByText("R$ 5,00 já pago")).toBeInTheDocument();
+    expect(screen.getByText("3 cobranças")).toBeInTheDocument();
+    // Previsto: receivable − payable + received − paid; Realizado: received − paid.
+    expect(screen.getByText("+ R$ 90.071.992.547.389,91")).toBeInTheDocument();
+    expect(screen.getByText("+ R$ 5,00")).toBeInTheDocument();
   });
 
   it("shows the domain copy of a 422 and never gateway text", async () => {
@@ -105,7 +124,7 @@ describe("FeedScreen", () => {
     const payable = deferred();
     vi.mocked(browserFetch).mockImplementation(async (path) => {
       if (path === BASE) return Response.json({ summary, items: [], nextCursor: null });
-      if (path === "/api/financial/timeline?direction=receivable&status=pending%2Coverdue%2Cpaid") return receivable.promise;
+      if (path === `/api/financial/timeline?direction=receivable&status=pending%2Coverdue%2Cpaid&month=${MONTH}`) return receivable.promise;
       return payable.promise;
     });
     render(<FeedScreen />);
@@ -149,7 +168,7 @@ describe("FeedScreen", () => {
     vi.mocked(browserFetch).mockImplementation(async (path) => {
       if (path === BASE)
         return Response.json({ summary, items: [charge({ id: "a", description: "Item do filtro A" })], nextCursor: "cursor-a" });
-      if (path === "/api/financial/timeline?direction=payable&status=pending%2Coverdue%2Cpaid")
+      if (path === `/api/financial/timeline?direction=payable&status=pending%2Coverdue%2Cpaid&month=${MONTH}`)
         return Response.json({ type: "error", message: "Internal server error" }, { status: 503 });
       return Response.json({ summary, items: [charge({ id: "mixed", description: "Item misturado" })], nextCursor: null });
     });
@@ -162,7 +181,8 @@ describe("FeedScreen", () => {
     expect(screen.queryByText(/Item do filtro A/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Item misturado/)).not.toBeInTheDocument();
     expect(screen.queryByText("Sua timeline começa aqui")).not.toBeInTheDocument();
-    expect(screen.getAllByText("—")).toHaveLength(2);
+    // A receber, a pagar, Previsto and Realizado all fall back to the placeholder.
+    expect(screen.getAllByText("—")).toHaveLength(4);
     expect(browserFetch).toHaveBeenCalledTimes(2);
   });
 
@@ -210,30 +230,124 @@ describe("FeedScreen", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("offers Ver cobrança instead of Lembrar when the debtor cannot be reached", async () => {
+  it("leaves cards without an in-place action to the card link alone", async () => {
     vi.mocked(browserFetch).mockResolvedValue(
       Response.json({
         summary,
-        items: [charge({ id: "charge-2", description: "Aluguel", counterpartReachable: false }, "receivable")],
+        items: [
+          charge({ id: "charge-2", description: "Aluguel", counterpartReachable: false }, "receivable"),
+          charge({ id: "charge-9", description: "Conta de luz" }),
+        ],
         nextCursor: null,
       }),
     );
     render(<FeedScreen />);
-    const link = await screen.findByRole("link", { name: "Ver cobrança" });
-    expect(link).toHaveAttribute("href", "/charges/charge-2");
+    expect(await screen.findByRole("link", { name: "Abrir cobrança Conta de luz" })).toHaveAttribute("href", "/charges/charge-9");
+    expect(screen.getByRole("link", { name: "Abrir cobrança Aluguel" })).toHaveAttribute("href", "/charges/charge-2");
     expect(screen.queryByRole("button", { name: "Lembrar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pagar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ver cobrança" })).not.toBeInTheDocument();
   });
 
-  it("links a payable charge with no proof to Pagar", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(
-      Response.json({
-        summary,
-        items: [charge({ id: "charge-9", description: "Conta de luz" })],
-        nextCursor: null,
-      }),
-    );
+  it("marks the owner's own bill without Pix as paid after confirming and reloads the feed", async () => {
+    let paid = false;
+    vi.mocked(browserFetch).mockImplementation(async (path, init) => {
+      if (path === BASE) {
+        return Response.json({
+          summary,
+          items: [charge({ id: "charge-5", description: "Aluguel", payer: "owner", ownedByViewer: true, hasPix: false, state: paid ? "paid" : "pending" })],
+          nextCursor: null,
+        });
+      }
+      if (path === "/api/financial/charges/charge-5/pay" && (init as RequestInit | undefined)?.method === "POST") {
+        paid = true;
+        return Response.json({});
+      }
+      throw new Error(`unexpected ${String(path)}`);
+    });
     render(<FeedScreen />);
-    const link = await screen.findByRole("link", { name: "Pagar" });
-    expect(link).toHaveAttribute("href", "/charges/charge-9");
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Marcar pago" }));
+    const dialog = await screen.findByRole("dialog", { name: "Marcar como paga?" });
+    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/charges/charge-5/pay", expect.anything());
+    await user.click(within(dialog).getByRole("button", { name: "Marcar paga" }));
+    expect(await screen.findByText("Liquidado")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Marcar pago" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("declares the owner's own bill to a payee who confirms instead of settling it", async () => {
+    let declared = false;
+    vi.mocked(browserFetch).mockImplementation(async (path, init) => {
+      if (path === BASE) {
+        return Response.json({
+          summary,
+          items: [
+            charge({
+              id: "charge-6",
+              description: "Aluguel",
+              payer: "owner",
+              ownedByViewer: true,
+              hasPix: false,
+              confirmationRequired: true,
+              ...(declared ? { proofState: "pending", proofKind: "declaration" } : {}),
+            }),
+          ],
+          nextCursor: null,
+        });
+      }
+      if (path === "/api/financial/charges/charge-6/proof/declaration" && (init as RequestInit | undefined)?.method === "POST") {
+        declared = true;
+        return Response.json({});
+      }
+      throw new Error(`unexpected ${String(path)}`);
+    });
+    render(<FeedScreen />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Marcar pago" }));
+    const dialog = await screen.findByRole("dialog", { name: "Marcar como pago?" });
+    expect(within(dialog).getByText("Maria vai receber um aviso para confirmar o recebimento.")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Marcar pago" }));
+    await waitFor(() => expect(browserFetch).toHaveBeenCalledWith("/api/financial/charges/charge-6/proof/declaration", { method: "POST" }));
+    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/charges/charge-6/pay", expect.anything());
+    expect(await screen.findByText("Em análise")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Marcar pago" })).not.toBeInTheDocument();
+  });
+
+  it("renders the previous, current and next month as tabs, the current one selected", async () => {
+    vi.mocked(browserFetch).mockResolvedValue(Response.json({ summary, items: [], nextCursor: null }));
+    render(<FeedScreen />);
+    await screen.findByText("Sua timeline começa aqui");
+
+    const previous = screen.getByRole("button", { name: monthLabelOf(-1) });
+    const current = screen.getByRole("button", { name: monthLabelOf(0) });
+    const next = screen.getByRole("button", { name: monthLabelOf(1) });
+
+    expect(current).toHaveAttribute("aria-pressed", "true");
+    expect(current).toHaveAttribute("aria-current", "true");
+    expect(previous).toHaveAttribute("aria-pressed", "false");
+    expect(next).toHaveAttribute("aria-pressed", "false");
+    expect(previous).not.toHaveAttribute("aria-current");
+    expect(next).not.toHaveAttribute("aria-current");
+  });
+
+  it("selects a side tab, fetches that month and re-centers the carousel", async () => {
+    vi.mocked(browserFetch).mockImplementation(async (path) => {
+      if (path === BASE) return Response.json({ summary, items: [], nextCursor: null });
+      if (path === `/api/financial/timeline?status=pending%2Coverdue%2Cpaid&month=${shiftMonth(MONTH, 1)}`) {
+        return Response.json({ summary, items: [charge({ id: "next-month", description: "Mês seguinte" })], nextCursor: null });
+      }
+      throw new Error(`unexpected ${String(path)}`);
+    });
+    render(<FeedScreen />);
+    const user = userEvent.setup();
+    await screen.findByText("Sua timeline começa aqui");
+
+    await user.click(screen.getByRole("button", { name: monthLabelOf(1) }));
+
+    expect(await screen.findByText(/Mês seguinte/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: monthLabelOf(1) })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: monthLabelOf(0) })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: monthLabelOf(2) })).toHaveAttribute("aria-pressed", "false");
   });
 });

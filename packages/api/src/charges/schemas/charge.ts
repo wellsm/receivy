@@ -1,6 +1,6 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
-import type { BillingType, ChargePayer, ChargeState, PixKeyType, ProofMime } from '@receivy/common';
+import type { BillingType, ChargePayer, ChargeState, PixKeyType, ProofKind, ProofMime } from '@receivy/common';
 
 export const enum StoredProofState {
   Uploading = 'uploading',
@@ -44,6 +44,8 @@ export interface ChargeSchema extends Database.Schema {
    * event; the earlier files' history lives in `events`.
    */
   proof_state?: StoredProofState;
+  /** File or declaration; null on rows written before declarations existed reads as a file. */
+  proof_kind?: ProofKind;
   proof_file?: ProofFileSchema;
   /** Who sent it: a signed-in debtor, or nobody when it came through the public link. */
   proof_sender_user_id?: String.UUID;
@@ -59,6 +61,8 @@ export interface ChargeSchema extends Database.Schema {
   link_version?: number;
   link_expires_at?: String.DateTime;
   link_revoked_at?: String.DateTime;
+  /** "Não notificar": the only value the notice gate reads. Null on older rows reads as false. */
+  silenced?: boolean;
   created_at: String.DateTime;
   updated_at: String.DateTime;
 }

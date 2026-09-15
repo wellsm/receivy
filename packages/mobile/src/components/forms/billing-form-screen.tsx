@@ -3,6 +3,8 @@ import {
   amountDigitsToInput,
   amountInputToDigits,
   billingCategoryLabel,
+  billingDraftSummary,
+  billingDraftSummaryText,
   BillingDueRule,
   BillingFrequency,
   buildBillingInput,
@@ -116,6 +118,14 @@ const DIRECTIONS: { value: Direction; label: string }[] = [
   { value: Direction.Payable, label: "Vou pagar" },
 ];
 
+/** "Já recebi" / "Já paguei" and the name field of a registro, by direction. */
+const SETTLED_LABELS: Record<Direction, { toggle: string; field: string }> = {
+  receivable: { toggle: "Já recebi", field: "De quem" },
+  payable: { toggle: "Já paguei", field: "Para quem" },
+};
+const SETTLED_HELP = "Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento.";
+const SETTLED_LOCKED = "Não dá para mudar depois de criada.";
+
 /** The segmented control shows the short label; the accessible name keeps the full one. */
 const SPLIT_MODES: { value: SplitMode; label: string; name: string }[] = [
   { value: SplitMode.Equal, label: "Igual", name: "Igual" },
@@ -208,6 +218,19 @@ function pixDraftFromBilling(billing: BillingDetail): PixDraft {
   return { type: billing.pix.keyType, key: pixKeyField(billing.pix.keyType).format(billing.pix.key), label: billing.pix.label };
 }
 
+/** Each participant's current "Não notificar", so saving the edit sends back what the billing already has. */
+function silencedFromBilling(billing: BillingDetail): Record<string, boolean> {
+  const silenced: Record<string, boolean> = {};
+
+  for (const allocation of billing.allocations) {
+    if (allocation.kind === SplitPartKind.User && allocation.userId) {
+      silenced[allocation.userId] = allocation.silenced;
+    }
+  }
+
+  return silenced;
+}
+
 function draftFromBilling(billing: BillingDetail): BillingDraft {
   const parts = billing.split.parts;
 
@@ -231,6 +254,9 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     values: valuesFromBilling(billing),
     category: billing.category,
     reminders: billing.reminders.map((reminder) => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
+    silenced: silencedFromBilling(billing),
+    settled: billing.settled === true,
+    counterpartLabel: billing.counterpartLabel ?? "",
   };
 }
 
@@ -266,11 +292,11 @@ function abbreviate(pixKey: string): string {
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
-  return <Text className="ml-0.5 text-[11px] font-semibold text-muted">{children}</Text>;
+  return <Text className="ml-0.5 font-sans text-[11px] font-semibold uppercase tracking-[0.88px] text-muted">{children}</Text>;
 }
 
 function Card({ children }: { children: ReactNode }) {
-  return <View className="gap-3 rounded-2xl border border-outline/30 bg-surface p-4">{children}</View>;
+  return <View className="gap-3 rounded-[20px] border border-outline bg-surface p-4">{children}</View>;
 }
 
 function Chip({ label, active, disabled, icon, onPress }: { label: string; active: boolean; disabled: boolean; icon?: ReactNode; onPress: () => void }) {
@@ -281,16 +307,37 @@ function Chip({ label, active, disabled, icon, onPress }: { label: string; activ
       accessibilityState={{ selected: active, disabled }}
       disabled={disabled}
       onPress={onPress}
-      className={`min-h-10 flex-row items-center gap-1.5 rounded-lg border px-3 ${active ? "border-primary/30 bg-primary-soft/60" : "border-outline/40 bg-surface"} ${disabled ? "opacity-50" : ""}`}
+      className={`h-[38px] flex-row items-center gap-1.5 rounded-xl border px-3.5 ${active ? "border-primary bg-primary-soft" : "border-outline bg-surface"} ${disabled ? "opacity-50" : ""}`}
     >
       {icon}
-      <Text className={`text-xs font-semibold ${active ? "text-primary-strong" : "text-muted"}`}>{label}</Text>
+      <Text className={`font-sans text-[12.5px] ${active ? "font-bold text-primary-strong" : "font-semibold text-muted"}`}>{label}</Text>
     </Pressable>
   );
 }
 
-function Segment({ label, name, active, disabled, onPress }: { label: string; name: string; active: boolean; disabled: boolean; onPress: () => void }) {
-  const colors = useThemeColors();
+const SEGMENT_STYLES = {
+  /** Direction: two wide buttons, the chosen one filled with the brand. */
+  primary: {
+    box: "h-[38px] flex-1 rounded-xl",
+    on: "bg-primary",
+    off: "border border-outline bg-surface",
+    text: "text-[13px] font-bold",
+    textOn: "text-on-primary",
+  },
+  /** Split mode: compact chips, the chosen one in ink. */
+  ink: {
+    box: "h-7 rounded-[9px] px-2.5",
+    on: "bg-ink",
+    off: "bg-surface-muted",
+    text: "text-[11.5px] font-semibold",
+    textOn: "font-bold text-surface",
+  },
+} as const;
+
+type SegmentProps = { label: string; name: string; active: boolean; disabled: boolean; variant?: keyof typeof SEGMENT_STYLES; onPress: () => void };
+
+function Segment({ label, name, active, disabled, variant = "primary", onPress }: SegmentProps) {
+  const styles = SEGMENT_STYLES[variant];
 
   return (
     <Pressable
@@ -299,10 +346,9 @@ function Segment({ label, name, active, disabled, onPress }: { label: string; na
       accessibilityState={{ selected: active, disabled }}
       disabled={disabled}
       onPress={onPress}
-      className={`min-h-9 flex-1 items-center justify-center rounded-lg ${active ? "bg-surface" : ""}`}
-      style={active ? { shadowColor: colors.primaryStrong, shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 } : undefined}
+      className={`items-center justify-center ${styles.box} ${active ? styles.on : styles.off} ${disabled && !active ? "opacity-50" : ""}`}
     >
-      <Text className={`text-[11px] ${active ? "font-extrabold text-primary-strong" : "font-medium text-muted"}`}>{label}</Text>
+      <Text className={`font-sans ${styles.text} ${active ? styles.textOn : "text-muted"}`}>{label}</Text>
     </Pressable>
   );
 }
@@ -315,9 +361,9 @@ function TypeButton({ label, active, disabled, onPress }: { label: string; activ
       accessibilityState={{ selected: active, disabled }}
       disabled={disabled}
       onPress={onPress}
-      className={`min-h-12 flex-1 items-center justify-center rounded-xl border px-2 ${active ? "border-primary bg-primary" : "border-outline/40 bg-surface"} ${disabled ? "opacity-50" : ""}`}
+      className={`h-[38px] flex-1 items-center justify-center rounded-xl border px-2 ${active ? "border-primary bg-primary-soft" : "border-outline bg-surface"} ${disabled ? "opacity-50" : ""}`}
     >
-      <Text className={`text-xs font-semibold ${active ? "text-on-primary" : "text-ink"}`}>{label}</Text>
+      <Text className={`font-sans text-[12.5px] ${active ? "font-bold text-primary-strong" : "font-semibold text-muted"}`}>{label}</Text>
     </Pressable>
   );
 }
@@ -347,8 +393,10 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   const locked = Boolean(attempt);
   const frozen = editing && billing?.type !== "indefinite";
   const payable = draft.direction === "payable";
-  // A conta a pagar is paid elsewhere, so the wallet gate only holds a conta a receber.
-  const blocked = gated && !payable;
+  // A registro has nobody to split with or pay through: participants, payee, split and Pix leave the form.
+  const settled = draft.settled === true;
+  // A conta a pagar is paid elsewhere and a registro is already settled, so the wallet gate only holds a conta a receber.
+  const blocked = gated && !payable && !settled;
   // `BillingPatch` carries no type, frequency or dates, so the schedule is
   // read-only in every edit — otherwise Salvar would silently drop the change.
   const scheduled = editing;
@@ -440,6 +488,10 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     update({ selected: draft.selected.includes(userId) ? draft.selected.filter((id) => id !== userId) : [...draft.selected, userId] });
   }
 
+  function switchSilenced(userId: string, silenced: boolean) {
+    update({ silenced: { ...draft.silenced, [userId]: silenced } });
+  }
+
   /** The payee seat holds one contact: picking closes the sheet, picking again clears it. */
   function pickPayee(userId: string) {
     update({ payee: draft.payee === userId ? "" : userId });
@@ -493,6 +545,17 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   }
 
   function patchBody(input: BillingInput): BillingPatch {
+    // A registro only renames its counterpart (and, while recorrente, moves its schedule and amount).
+    if (input.settled) {
+      const named = { counterpartLabel: input.counterpartLabel, category: input.category };
+
+      if (billing && billing.type !== "indefinite") {
+        return named;
+      }
+
+      return { description: input.description, totalCents: input.totalCents, startDate: input.startDate, dueRule: input.dueRule ?? BillingDueRule.Fixed, ...named };
+    }
+
     const editable = {
       reminders: input.reminders,
       category: input.category,
@@ -562,7 +625,8 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     }
 
     try {
-      const next: Attempt = { input: buildBillingInput(draftToBuild(draft)), key: Crypto.randomUUID(), uncertain: false };
+      // Only a creation checks that a recorrente registro starts today or later.
+      const next: Attempt = { input: buildBillingInput(draftToBuild(draft), billing ? undefined : new Date()), key: Crypto.randomUUID(), uncertain: false };
 
       // Only a recorrente edit that changes what its charges carry, with charges of this month still ahead, needs the answer.
       if (billing && shouldAskEditScope(billing, patchBody(next.input), todayIn(billing.timezone))) {
@@ -580,6 +644,8 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   // Month ends exist for a single due date and for monthly rules; a yearly billing keeps a fixed day.
   const monthEnds = draft.type === "once" || draft.frequency === "monthly";
   const monthEnd = monthEnds && draft.dueRule === "end_of_month";
+  // A recorrente registro starts today or later; a single one may be in the past.
+  const minimumDate = settled && draft.type !== "once" ? dateFromCalendar(today, today) : undefined;
 
   function toggleMonthEnd() {
     if (monthEnd) {
@@ -689,6 +755,9 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   const switchable = methods.length > 1 || (methods.length === 1 && !selectedPix);
   const action = editing ? "Salvar conta" : "Criar conta";
   const retry = editing ? "Tentar salvar novamente" : "Tentar criar novamente";
+  // Create-only, for parity with web: an edit's registro/recorrente past-dated draft can make the
+  // summary's own date rule throw, silently hiding the row instead of describing what Salvar does.
+  const footerSummary = editing ? null : billingDraftSummary(draft, new Date());
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={onBack ? ["top"] : []}>
@@ -713,7 +782,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 px-5 pb-36 pt-4" showsVerticalScrollIndicator={false}>
         {/* Direção */}
-        <View className="flex-row gap-1 rounded-xl bg-surface-muted p-1">
+        <View className="flex-row gap-2">
           {DIRECTIONS.map((option) => (
             <Segment
               key={option.value}
@@ -725,6 +794,27 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
             />
           ))}
         </View>
+
+        {/* Registro: already received or paid. On edit it only shows on a registro, locked. */}
+        {(!editing || settled) && (
+          <View className="gap-2">
+            <View className="flex-row items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface p-3">
+              <View className="flex-1">
+                <Text className="text-xs font-semibold text-ink">{SETTLED_LABELS[draft.direction].toggle}</Text>
+                {editing && <Text className="text-[11px] text-muted">{SETTLED_LOCKED}</Text>}
+              </View>
+              <Switch
+                accessibilityLabel={SETTLED_LABELS[draft.direction].toggle}
+                accessibilityState={{ disabled: locked || editing }}
+                disabled={locked || editing}
+                value={settled}
+                onValueChange={(value) => update({ settled: value })}
+                trackColor={{ true: colors.primary }}
+              />
+            </View>
+            {settled && <Text className="text-[11px] text-muted">{SETTLED_HELP}</Text>}
+          </View>
+        )}
 
         {frozen && <Text className="rounded-2xl bg-primary-soft/50 p-4 text-sm text-primary-strong">{FROZEN_NOTE}</Text>}
         {/* Without a key there is nothing to send: the form waits behind a single call to action. */}
@@ -752,116 +842,11 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
           <>
         {!ready && !error && <ActivityIndicator accessibilityLabel="Carregando dados" color={colors.primaryStrong} />}
 
-        {/* Para quem: the single contact a conta a pagar is owed to */}
-        {payable && (
-          <View className="gap-3">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-sm font-semibold text-primary-strong">Para quem (opcional)</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Escolher contato"
-                accessibilityState={{ disabled: locked || frozen }}
-                disabled={locked || frozen}
-                onPress={() => setPicker(true)}
-                className="min-h-10 flex-row items-center gap-1 px-1"
-              >
-                <Image source={closeMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
-                <Text className="text-xs font-semibold text-primary">{payee ? "Trocar" : "Escolher"}</Text>
-              </Pressable>
-            </View>
-
-            {payee ? (
-              <View className="flex-row flex-wrap gap-2">
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={payee.displayName}
-                  accessibilityHint="Remove da conta"
-                  accessibilityState={{ selected: true, disabled: locked || frozen }}
-                  disabled={locked || frozen}
-                  onPress={() => update({ payee: "" })}
-                  className="flex-row items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
-                >
-                  <InitialsAvatar name={payee.displayName} size={24} avatar={payee.avatar} />
-                  <Text className="text-xs font-semibold text-ink">{payee.displayName}</Text>
-                  <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
-                </Pressable>
-              </View>
-            ) : (
-              <Text className="text-[11px] text-muted">Sem contato, a conta fica só com você.</Text>
-            )}
-          </View>
-        )}
-
-        {/* Participantes */}
-        {!payable && (
-          <View className="gap-3">
-            <View className="flex-row items-center justify-between">
-              <View className="flex-row items-center gap-1.5">
-                <Text className="text-sm font-semibold text-primary-strong">Participantes</Text>
-                <Text className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-muted">
-                  {participants} pessoa{participants === 1 ? "" : "s"}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Adicionar"
-                accessibilityState={{ disabled: locked || frozen }}
-                disabled={locked || frozen}
-                onPress={() => setPicker(true)}
-                className="min-h-10 flex-row items-center gap-1 px-1"
-              >
-                <Image source={closeMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
-                <Text className="text-xs font-semibold text-primary">Adicionar</Text>
-              </Pressable>
-            </View>
-
-            {chosen.length > 0 && (
-              <View className="flex-row flex-wrap gap-2">
-                {chosen.map((contact) => (
-                  <Pressable
-                    key={contact.userId}
-                    accessibilityRole="button"
-                    accessibilityLabel={contact.displayName}
-                    accessibilityHint="Remove da cobrança"
-                    accessibilityState={{ selected: true, disabled: locked || frozen }}
-                    disabled={locked || frozen}
-                    onPress={() => toggle(contact.userId)}
-                    className="flex-row items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
-                  >
-                    <InitialsAvatar name={contact.displayName} size={24} avatar={contact.avatar} />
-                    <Text className="text-xs font-semibold text-ink">{contact.displayName}</Text>
-                    <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
-                  </Pressable>
-                ))}
-              </View>
-            )}
-
-            <View className="flex-row items-center justify-between rounded-xl border border-outline/30 bg-surface-muted/80 p-3">
-              <View className="flex-1 flex-row items-center gap-2.5">
-                <View className="h-8 w-8 items-center justify-center rounded-lg bg-surface">
-                  <InitialsAvatar name="Eu" size={20} inverted />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-xs font-semibold text-ink">Eu também participo da divisão</Text>
-                  <Text className="text-[11px] text-muted">Você entra no cálculo como um dos pagadores</Text>
-                </View>
-              </View>
-              <Switch
-                accessibilityLabel="Eu também participo"
-                disabled={locked || frozen}
-                value={draft.owner}
-                onValueChange={(value) => update({ owner: value })}
-                trackColor={{ true: colors.primary }}
-              />
-            </View>
-          </View>
-        )}
-
         {/* Valor */}
         <Card>
-          <Text className="text-center text-[11px] font-semibold uppercase tracking-wider text-muted">{(payable ? PAYABLE_AMOUNT_LABELS : AMOUNT_LABELS)[draft.type]}</Text>
-          <View className="flex-row items-end justify-center gap-1.5">
-            <Text className="pb-1 text-xl font-semibold text-muted">R$</Text>
+          <SectionLabel>{(payable ? PAYABLE_AMOUNT_LABELS : AMOUNT_LABELS)[draft.type]}</SectionLabel>
+          <View className="flex-row items-center gap-1.5">
+            <Text className="font-display text-base font-medium text-muted">R$</Text>
             <TextInput
               accessibilityLabel="Valor"
               editable={!locked && !frozen}
@@ -869,8 +854,8 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
               placeholderTextColor={colors.muted}
               value={formatAmountDigits(amountInputToDigits(draft.amount))}
               onChangeText={typeAmount}
-              textAlign="center"
-              className="min-w-48 border-b-2 border-primary py-0 text-center text-[36px] font-extrabold tracking-tight text-primary"
+              textAlignVertical="center"
+              className="h-10 flex-1 py-0 font-display text-[30px] font-bold tracking-tight text-ink"
             />
           </View>
         </Card>
@@ -887,7 +872,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
               placeholderTextColor={colors.muted}
               value={draft.description}
               onChangeText={(value) => update({ description: value })}
-              className="h-12 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] text-ink"
+              className="h-11 rounded-[14px] border border-outline bg-surface px-3.5 py-0 font-sans text-[15px] tracking-normal text-ink"
             />
           </View>
           <View className="gap-1.5">
@@ -900,32 +885,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
           </View>
         </View>
 
-        {/* Divisão */}
-        {!payable && (
-          <Card>
-            <View className="flex-row items-center justify-between gap-2">
-              <Text className="text-sm font-semibold text-primary-strong">Divisão da Conta</Text>
-              <Text className="rounded-full bg-primary-soft/40 px-2 py-0.5 text-[11px] font-semibold text-primary" numberOfLines={1}>
-                {splitTag()}
-              </Text>
-            </View>
-            <View className="flex-row gap-1 rounded-xl bg-surface-muted p-1">
-              {SPLIT_MODES.map((option) => (
-                <Segment
-                  key={option.value}
-                  label={option.label}
-                  name={option.name}
-                  active={draft.mode === option.value}
-                  disabled={locked || frozen}
-                  onPress={() => update({ mode: option.value })}
-                />
-              ))}
-            </View>
-            <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={changeSplitValue} />
-          </Card>
-        )}
-
-        {/* Modalidade */}
+        {/* Frequência: Modalidade */}
         <View className="gap-2">
           <SectionLabel>Modalidade de Pagamento</SectionLabel>
           <View className="flex-row gap-2">
@@ -950,7 +910,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 placeholderTextColor={colors.muted}
                 value={draft.occurrences}
                 onChangeText={(value) => update({ occurrences: value })}
-                className="h-11 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] text-ink"
+                className="h-11 rounded-[14px] border border-outline bg-surface px-3.5 py-0 font-sans text-[15px] tracking-normal text-ink"
               />
             </View>
           )}
@@ -962,7 +922,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
           )}
         </View>
 
-        {/* Vencimento */}
+        {/* Frequência: Vencimento */}
         <View className="gap-2">
           <SectionLabel>{scheduled ? "Próximo vencimento" : "Data de Vencimento"}</SectionLabel>
           <View className="flex-row items-center gap-2">
@@ -1028,6 +988,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
               accessibilityLabel="Calendário"
               value={dateFromCalendar(draft.start, today)}
               mode="date"
+              minimumDate={minimumDate}
               display="default"
               themeVariant={scheme === "dark" ? "dark" : "light"}
               onValueChange={pickDate}
@@ -1045,6 +1006,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                     accessibilityLabel="Calendário"
                     value={dateFromCalendar(draft.start, today)}
                     mode="date"
+                    minimumDate={minimumDate}
                     display="inline"
                     locale="pt-BR"
                     accentColor={colors.primary}
@@ -1065,8 +1027,64 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
           )}
         </View>
 
-        {/* Chave Pix inline: where the owner pays a conta a pagar */}
-        {payable && (
+        {/* Divisão slot: De quem / Para quem, the counterpart of a registro, typed by hand */}
+        {settled && (
+          <View className="gap-1">
+            <SectionLabel>{SETTLED_LABELS[draft.direction].field}</SectionLabel>
+            <TextInput
+              accessibilityLabel={SETTLED_LABELS[draft.direction].field}
+              editable={!locked}
+              maxLength={120}
+              placeholder="Ex.: Empresa X"
+              placeholderTextColor={colors.muted}
+              value={draft.counterpartLabel ?? ""}
+              onChangeText={(value) => update({ counterpartLabel: value })}
+              className="h-11 rounded-[14px] border border-outline bg-surface px-3.5 py-0 font-sans text-[15px] tracking-normal text-ink"
+            />
+          </View>
+        )}
+
+        {/* Divisão slot, conta a pagar: Para quem (the single contact a conta a pagar is owed to) and its inline Pix key */}
+        {payable && !settled && (
+          <View className="gap-3">
+            <View className="flex-row items-center justify-between">
+              <Text className="font-sans text-[11px] font-semibold uppercase tracking-[0.88px] text-muted">Para quem (opcional)</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Escolher contato"
+                accessibilityState={{ disabled: locked || frozen }}
+                disabled={locked || frozen}
+                onPress={() => setPicker(true)}
+                className="min-h-10 flex-row items-center gap-1 px-1"
+              >
+                <Image source={closeMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
+                <Text className="text-xs font-semibold text-primary">{payee ? "Trocar" : "Escolher"}</Text>
+              </Pressable>
+            </View>
+
+            {payee ? (
+              <View className="flex-row flex-wrap gap-2">
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={payee.displayName}
+                  accessibilityHint="Remove da conta"
+                  accessibilityState={{ selected: true, disabled: locked || frozen }}
+                  disabled={locked || frozen}
+                  onPress={() => update({ payee: "" })}
+                  className="flex-row items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
+                >
+                  <InitialsAvatar name={payee.displayName} size={24} avatar={payee.avatar} />
+                  <Text className="text-xs font-semibold text-ink">{payee.displayName}</Text>
+                  <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
+                </Pressable>
+              </View>
+            ) : (
+              <Text className="text-[11px] text-muted">Sem contato, a conta fica só com você.</Text>
+            )}
+          </View>
+        )}
+
+        {payable && !settled && (
           <View className="gap-4">
             <SectionLabel>Chave Pix (opcional)</SectionLabel>
             <PixKeyFields type={draft.pixInline.type} value={draft.pixInline.key} disabled={locked} onPickType={pickPixType} onChangeKey={changePixKey} onClear={() => updatePix({ key: "" })} />
@@ -1080,14 +1098,132 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                 placeholderTextColor={colors.muted}
                 value={draft.pixInline.label}
                 onChangeText={(label) => updatePix({ label })}
-                className="h-11 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[14px] text-ink"
+                className="h-11 rounded-[14px] border border-outline bg-surface px-3.5 py-0 font-sans text-[15px] tracking-normal text-ink"
               />
             </View>
           </View>
         )}
 
-        {/* Pix */}
-        {!payable && (
+        {/* Divisão slot, conta a receber: split-mode tabs + participant list */}
+        {!payable && !settled && (
+          <Card>
+            <View className="flex-row items-center justify-between gap-2">
+              <Text className="font-sans text-[11px] font-semibold uppercase tracking-[0.88px] text-muted">Divisão da Conta</Text>
+              <Text className="rounded-full bg-primary-soft/40 px-2 py-0.5 text-[11px] font-semibold text-primary" numberOfLines={1}>
+                {splitTag()}
+              </Text>
+            </View>
+            <View className="flex-row flex-wrap gap-1.5">
+              {SPLIT_MODES.map((option) => (
+                <Segment
+                  key={option.value}
+                  variant="ink"
+                  label={option.label}
+                  name={option.name}
+                  active={draft.mode === option.value}
+                  disabled={locked || frozen}
+                  onPress={() => update({ mode: option.value })}
+                />
+              ))}
+            </View>
+            <SplitEditor mode={draft.mode} rows={rows} hint={hint ?? ""} disabled={locked || frozen} onChange={changeSplitValue} />
+          </Card>
+        )}
+
+        {/* Divisão slot, conta a receber: Adicionar pessoa below the list, then the Não notificar switches and Eu também participo */}
+        {!payable && !settled && (
+          <View className="gap-3">
+            <View className="flex-row items-center gap-1.5">
+              <Text className="font-sans text-[11px] font-semibold uppercase tracking-[0.88px] text-muted">Participantes</Text>
+              <Text className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-medium text-muted">
+                {participants} pessoa{participants === 1 ? "" : "s"}
+              </Text>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Adicionar"
+              accessibilityState={{ disabled: locked || frozen }}
+              disabled={locked || frozen}
+              onPress={() => setPicker(true)}
+              className="min-h-10 flex-row items-center gap-2 px-1"
+            >
+              <View className="h-7 w-7 items-center justify-center rounded-full border border-dashed border-primary">
+                <Image source={closeMark} tintColor={colors.primary} style={{ width: 13, height: 13 }} />
+              </View>
+              <Text className="font-sans text-[12.5px] font-semibold text-primary">Adicionar pessoa</Text>
+            </Pressable>
+
+            {chosen.length > 0 && (
+              <View className="flex-row flex-wrap gap-2">
+                {chosen.map((contact) => (
+                  <Pressable
+                    key={contact.userId}
+                    accessibilityRole="button"
+                    accessibilityLabel={contact.displayName}
+                    accessibilityHint="Remove da cobrança"
+                    accessibilityState={{ selected: true, disabled: locked || frozen }}
+                    disabled={locked || frozen}
+                    onPress={() => toggle(contact.userId)}
+                    className="flex-row items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
+                  >
+                    <InitialsAvatar name={contact.displayName} size={24} avatar={contact.avatar} />
+                    <Text className="text-xs font-semibold text-ink">{contact.displayName}</Text>
+                    <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {chosen.length > 0 && (
+              <View className="gap-2">
+                {chosen.map((contact) => (
+                  <View key={contact.userId} className="flex-row items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-2.5">
+                    <View className="flex-1 flex-row items-center gap-2.5">
+                      <InitialsAvatar name={contact.displayName} size={24} avatar={contact.avatar} />
+                      <View className="flex-1">
+                        <Text className="text-xs font-semibold text-ink" numberOfLines={1}>
+                          {contact.displayName}
+                        </Text>
+                        <Text className="text-[11px] text-muted">Não notificar</Text>
+                      </View>
+                    </View>
+                    <Switch
+                      accessibilityLabel={`Não notificar ${contact.displayName}`}
+                      disabled={locked || frozen}
+                      value={draft.silenced?.[contact.userId] === true}
+                      onValueChange={(value) => switchSilenced(contact.userId, value)}
+                      trackColor={{ true: colors.primary }}
+                    />
+                  </View>
+                ))}
+                <Text className="text-[11px] text-muted">Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.</Text>
+              </View>
+            )}
+
+            <View className="flex-row items-center justify-between rounded-xl border border-outline/30 bg-surface-muted/80 p-3">
+              <View className="flex-1 flex-row items-center gap-2.5">
+                <View className="h-8 w-8 items-center justify-center rounded-lg bg-surface">
+                  <InitialsAvatar name="Eu" size={20} inverted />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs font-semibold text-ink">Eu também participo da divisão</Text>
+                  <Text className="text-[11px] text-muted">Você entra no cálculo como um dos pagadores</Text>
+                </View>
+              </View>
+              <Switch
+                accessibilityLabel="Eu também participo"
+                disabled={locked || frozen}
+                value={draft.owner}
+                onValueChange={(value) => update({ owner: value })}
+                trackColor={{ true: colors.primary }}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Chave Pix: conta a receber, selecting an existing method */}
+        {!payable && !settled && (
           <View className="gap-2">
             <View className="flex-row items-center justify-between">
               <SectionLabel>Receber via Pix</SectionLabel>
@@ -1103,14 +1239,14 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
               accessibilityState={{ disabled: locked || !switchable }}
               disabled={locked || !switchable}
               onPress={() => setPixOpen(true)}
-              className="flex-row items-center justify-between rounded-xl border border-outline/40 bg-surface p-3"
+              className="flex-row items-center justify-between rounded-2xl border border-outline bg-surface px-3.5 py-3"
             >
               <View className="flex-1 flex-row items-center gap-3">
                 <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
                   <Image source={selectedPix ? PIX_ICONS[selectedPix.pixKeyType] : keyMark} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-xs font-semibold text-ink" numberOfLines={1}>
+                  <Text className="font-sans text-[13.5px] font-semibold text-ink" numberOfLines={1}>
                     {selectedPix ? `${PIX_TYPE_LABELS[selectedPix.pixKeyType]}: ${abbreviate(selectedPix.pixKey)}` : "Selecionar chave Pix"}
                   </Text>
                   <Text className="text-[11px] text-muted" numberOfLines={1}>
@@ -1191,15 +1327,23 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
       </ScrollView>
 
       {!blocked && (
-      <View className="absolute bottom-0 left-0 right-0 border-t border-outline/30 bg-surface/95 px-4 pb-8 pt-4">
+      <View className="absolute bottom-0 left-0 right-0 border-t border-outline/60 bg-canvas px-5 pb-8 pt-3.5">
+        {footerSummary && (
+          <View className="mb-2.5 flex-row items-center justify-between gap-2">
+            <Text className="font-sans text-xs text-muted">{billingDraftSummaryText(footerSummary)}</Text>
+            <Text className="font-display text-sm font-bold text-ink">
+              {footerSummary.occurrences === null ? `${money(footerSummary.perOccurrenceCents)}/mês` : money(footerSummary.totalCents)}
+            </Text>
+          </View>
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={action}
           disabled={busy}
           onPress={submit}
-          className={`h-[52px] items-center justify-center rounded-xl bg-primary ${busy ? "opacity-50" : ""}`}
+          className={`h-[54px] items-center justify-center rounded-2xl bg-ink ${busy ? "opacity-50" : ""}`}
         >
-          {busy ? <ActivityIndicator color={colors.onPrimary} /> : <Text className="text-sm font-bold text-on-primary">{action}</Text>}
+          {busy ? <ActivityIndicator color={colors.surface} /> : <Text className="font-sans text-[15.5px] font-bold text-surface">{action}</Text>}
         </Pressable>
       </View>
       )}

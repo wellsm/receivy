@@ -11,6 +11,7 @@ import {
   SplitMode,
   SplitPartKind
 } from '@receivy/common';
+import { SettledLockedError } from '../../billings/errors';
 import { BillingRepository } from '../../billings/repositories/billing';
 import { BillingGuestState } from '../../billings/schemas/billing-guest';
 import { ChargeRepository } from '../../charges/repositories/charge';
@@ -231,6 +232,11 @@ export namespace InviteRepository {
 
       if (billing?.state !== BillingState.Active) {
         throw new HttpNotFoundError();
+      }
+
+      // An invite made before registros refused them still cannot put anyone into one.
+      if (billing.settled) {
+        throw new SettledLockedError();
       }
 
       const user = await tx.users.findOne({

@@ -1,19 +1,25 @@
 import { SplitPartKind } from './billing';
 import { SplitMode } from './contracts';
 
-export type SplitParty = { kind: SplitPartKind.Owner } | { kind: SplitPartKind.User; userId: string };
+export type SplitParty = { kind: SplitPartKind.Owner } | { kind: SplitPartKind.User; userId: string; silenced?: boolean };
 
 export type BillingSplit =
   | { mode: SplitMode.Equal; parts: SplitParty[] }
   // Keep schema-visible unions explicit: EZ4 cannot extract object/union intersections.
   | {
       mode: SplitMode.Percentage;
-      parts: ({ kind: SplitPartKind.Owner; basisPoints: number } | { kind: SplitPartKind.User; userId: string; basisPoints: number })[];
+      parts: (
+        | { kind: SplitPartKind.Owner; basisPoints: number }
+        | { kind: SplitPartKind.User; userId: string; silenced?: boolean; basisPoints: number }
+      )[];
     }
-  | { mode: SplitMode.Fixed; parts: { kind: SplitPartKind.User; userId: string; amountCents: number }[] }
+  | { mode: SplitMode.Fixed; parts: { kind: SplitPartKind.User; userId: string; silenced?: boolean; amountCents: number }[] }
   | {
       mode: SplitMode.Shares;
-      parts: ({ kind: SplitPartKind.Owner; shares: number } | { kind: SplitPartKind.User; userId: string; shares: number })[];
+      parts: (
+        | { kind: SplitPartKind.Owner; shares: number }
+        | { kind: SplitPartKind.User; userId: string; silenced?: boolean; shares: number }
+      )[];
     };
 
 export type ResolvedAllocation = SplitParty & { amountCents: number };
@@ -39,6 +45,10 @@ export function resolveBillingSplit(totalCents: number, split: BillingSplit): Re
       throw new RangeError('Contato inválido.');
     }
 
+    if (part.kind === SplitPartKind.User && part.silenced !== undefined && typeof part.silenced !== 'boolean') {
+      throw new RangeError('Participante inválido.');
+    }
+
     const key = part.kind === SplitPartKind.Owner ? 'owner' : `user:${part.userId}`;
 
     if (keys.has(key)) {
@@ -48,13 +58,24 @@ export function resolveBillingSplit(totalCents: number, split: BillingSplit): Re
     keys.add(key);
   }
 
-  const parties: SplitParty[] = split.parts.map((part) =>
-    part.kind === SplitPartKind.Owner ? { kind: SplitPartKind.Owner } : { kind: SplitPartKind.User, userId: part.userId }
-  );
+  const parties: SplitParty[] = split.parts.map((part) => partyOf(part));
 
   const amounts = resolveAmounts(totalCents, split, parties);
 
   return parties.map((party, index) => ({ ...party, amountCents: amounts[index]! }));
+}
+
+/** The party without its mode weight; `silenced` rides along only when the part carries it. */
+function partyOf(part: BillingSplit['parts'][number]): SplitParty {
+  if (part.kind === SplitPartKind.Owner) {
+    return { kind: SplitPartKind.Owner };
+  }
+
+  if (part.silenced === undefined) {
+    return { kind: SplitPartKind.User, userId: part.userId };
+  }
+
+  return { kind: SplitPartKind.User, userId: part.userId, silenced: part.silenced };
 }
 
 function resolveAmounts(totalCents: number, split: BillingSplit, parties: SplitParty[]): number[] {

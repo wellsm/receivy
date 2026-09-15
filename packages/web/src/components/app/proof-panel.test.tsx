@@ -127,6 +127,20 @@ it("forgets a started upload that never became a proof instead of waiting for it
   expect(screen.getByRole("alert").textContent).toBe("O envio anterior não foi concluído. Selecione o arquivo e envie novamente.");
   expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeEnabled();
 });
+it("declares a payment without a file and lets the payer take it back", async () => {
+  const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+    if (init?.method === "POST" && url === `${STATUS}/declaration`) return Response.json({ state: "pending", kind: "declaration", reason: null, file: null });
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    return empty();
+  });
+  render(<ProofPanel base={BASE} state={ChargeState.Pending} creditor="Ana" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Já paguei e não tenho comprovante" }));
+  expect(await screen.findByText("Pagamento informado · aguardando confirmação de Ana.")).toBeTruthy();
+  expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Desfazer" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Já paguei e não tenho comprovante" })).toBeTruthy());
+  expect(fetcher.mock.calls.at(-1)?.[1]?.method).toBe("DELETE");
+});
 it("does not remember an upload whose bytes never reached the storage", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
     if (init?.method === "PUT") throw new Error("storage down");

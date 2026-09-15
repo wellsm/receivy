@@ -12,7 +12,8 @@
     "test:watch": "vitest --pool=forks"
   },
   "dependencies": {
-    "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
+    "@fontsource-variable/public-sans": "^5.3.0",
+    "@fontsource-variable/space-grotesk": "^5.3.0",
     "@receivy/common": "workspace:*",
     "clsx": "catalog:",
     "lucide-react": "catalog:",

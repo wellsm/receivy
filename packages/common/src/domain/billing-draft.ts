@@ -51,6 +51,12 @@ export type BillingDraft = {
   values: SplitValues;
   category: BillingCategory;
   reminders: ReminderDraft[];
+  /** "Não notificar" per participant user id. A participant without a key sends nothing, so the API keeps what it stores. */
+  silenced?: Record<string, boolean>;
+  /** "Já recebi" / "Já paguei": the draft is a registro. Absent on drafts stored before registros existed. */
+  settled?: boolean;
+  /** Registro only: the name typed in "De quem" / "Para quem". */
+  counterpartLabel?: string;
 };
 
 /** Fresh draft for a new billing form. Returns a new object on every call. */
@@ -124,6 +130,17 @@ function endDateFor(draft: BillingDraft): string | undefined {
   return dates.at(-1);
 }
 
+/** The switch travels only when the draft holds it for that participant. */
+function silencedOf(draft: BillingDraft, userId: string): { silenced?: boolean } {
+  const value = draft.silenced?.[userId];
+
+  if (value === undefined) {
+    return {};
+  }
+
+  return { silenced: value };
+}
+
 function buildSplit(draft: BillingDraft, parties: SplitParty[]): BillingInput['split'] {
   if (draft.mode === SplitMode.Equal) {
     return { mode: draft.mode, parts: parties };
@@ -137,6 +154,7 @@ function buildSplit(draft: BillingDraft, parties: SplitParty[]): BillingInput['s
       parts: draft.selected.map((userId) => ({
         kind: SplitPartKind.User,
         userId,
+        ...silencedOf(draft, userId),
         amountCents: parseBRLCents(values[userId] ?? '')
       }))
     };
@@ -165,9 +183,9 @@ function buildSplit(draft: BillingDraft, parties: SplitParty[]): BillingInput['s
   };
 }
 
-/** Shared pure review boundary; raw text stays in each platform's local UI. */
-export function buildBillingInput(draft: BillingDraft): BillingInput {
-  const base = {
+/** Shared pure review boundary; raw text stays in each platform's local UI. `now` is passed only on creation. */
+export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput {
+  const schedule = {
     type: draft.type,
     frequency: draft.type === BillingType.Once ? undefined : draft.frequency,
     description: draft.description,
@@ -176,7 +194,19 @@ export function buildBillingInput(draft: BillingDraft): BillingInput {
     endDate: endDateFor(draft),
     dueRule: dueRuleFor(draft),
     category: draft.category,
-    timezone: draft.timezone,
+    timezone: draft.timezone
+  };
+
+  // A registro names who is on the other side and has nobody to split with, pay through or remind.
+  if (draft.settled) {
+    return normalizeBillingInput(
+      { ...schedule, direction: draft.direction, settled: true, counterpartLabel: draft.counterpartLabel ?? '' },
+      now
+    );
+  }
+
+  const base = {
+    ...schedule,
     reminders: draft.reminders.map((reminder) => ({
       enabled: reminder.enabled,
       offsetDays: integer(reminder.offsetDays, 'Informe dias inteiros, como -3, 0 ou 2.')
@@ -187,12 +217,15 @@ export function buildBillingInput(draft: BillingDraft): BillingInput {
     // The key is kept as typed (masked); the field spec turns it into the canonical form before validation.
     const key = pixKeyField(draft.pixInline.type).unformat(draft.pixInline.key).trim();
 
-    return normalizeBillingInput({
-      ...base,
-      direction: Direction.Payable,
-      payeeUserId: draft.payee || undefined,
-      pix: key ? { keyType: draft.pixInline.type, key, label: draft.pixInline.label.trim() || undefined } : undefined
-    });
+    return normalizeBillingInput(
+      {
+        ...base,
+        direction: Direction.Payable,
+        payeeUserId: draft.payee || undefined,
+        pix: key ? { keyType: draft.pixInline.type, key, label: draft.pixInline.label.trim() || undefined } : undefined
+      },
+      now
+    );
   }
 
   if (!draft.selected.length) {
@@ -200,14 +233,17 @@ export function buildBillingInput(draft: BillingDraft): BillingInput {
   }
 
   const parties = [
-    ...draft.selected.map((userId) => ({ kind: SplitPartKind.User, userId }) satisfies SplitParty),
+    ...draft.selected.map((userId) => ({ kind: SplitPartKind.User, userId, ...silencedOf(draft, userId) }) satisfies SplitParty),
     ...(draft.owner ? [{ kind: SplitPartKind.Owner } satisfies SplitParty] : [])
   ];
 
-  return normalizeBillingInput({
-    ...base,
-    direction: Direction.Receivable,
-    paymentMethodId: draft.pix || undefined,
-    split: buildSplit(draft, parties)
-  });
+  return normalizeBillingInput(
+    {
+      ...base,
+      direction: Direction.Receivable,
+      paymentMethodId: draft.pix || undefined,
+      split: buildSplit(draft, parties)
+    },
+    now
+  );
 }

@@ -69,6 +69,7 @@ export async function eraseAccount(
             ? {
                 proof_state: sqlNull,
                 proof_file: sqlNull,
+                proof_kind: sqlNull,
                 ...{ proof_sender_user_id: sqlNull },
                 proof_actor_hash: sqlNull,
                 proof_expires_at: sqlNull,

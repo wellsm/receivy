@@ -18,6 +18,10 @@ export abstract class ConflictError extends ApiError {
   readonly status = 409;
 }
 
+export abstract class ForbiddenError extends ApiError {
+  readonly status = 403;
+}
+
 export abstract class UnprocessableEntityError extends ApiError {
   readonly status = 422;
 }

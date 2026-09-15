@@ -10,6 +10,7 @@ import {
   type PublicInviteView,
   SplitPartKind
 } from '@receivy/common';
+import { SettledLockedError } from '../../billings/errors';
 import { lockOwner } from '../../charges/services/materialize';
 import type { DbClient } from '../../database';
 import {
@@ -46,9 +47,9 @@ export type InviteRow = {
 };
 
 /** The narrowest billing shape createInvite/revokeInvite need, so this module never depends on billings/repository. */
-const OWNED_BILLING_SELECT = { id: true, state: true, direction: true } as const;
+const OWNED_BILLING_SELECT = { id: true, state: true, direction: true, settled: true } as const;
 
-type OwnedBillingRow = { id: string; state: BillingState; direction?: Direction };
+type OwnedBillingRow = { id: string; state: BillingState; direction?: Direction; settled?: boolean };
 
 /** The narrowest billing shape a public invite preview needs. */
 const PUBLIC_BILLING_SELECT = {
@@ -132,6 +133,11 @@ export async function createInvite(
     // A conta a pagar has no participants to invite.
     if (billing.direction === Direction.Payable) {
       throw new PayableHasNoInviteError();
+    }
+
+    // A registro belongs to the owner alone: nobody joins it.
+    if (billing.settled) {
+      throw new SettledLockedError();
     }
 
     const instant = now.toISOString();

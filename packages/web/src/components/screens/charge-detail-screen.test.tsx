@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PixKeyType, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import { BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ChargeDetailScreen } from "@/components/screens/charge-detail-screen";
 
@@ -39,6 +39,7 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
 function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
   return {
     state: ProofState.Pending,
+    kind: ProofKind.File,
     file: { name: "comprovante.pdf", mime: ProofMime.Pdf, size: 184 * 1024 },
     sentAt: "2026-09-05T14:32:00Z",
     reviewedAt: null,
@@ -330,5 +331,165 @@ describe("ChargeDetailScreen", () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(text));
     expect(await screen.findByRole("status")).toHaveTextContent("Link copiado.");
+  });
+
+  it("lets the debtor declare a payment and take it back", async () => {
+    const declared = charge({
+      proofState: ProofState.Pending,
+      proofKind: ProofKind.Declaration,
+      proof: proof({ kind: ProofKind.Declaration, file: null, sentByViewer: true }),
+    });
+    serve(charge({ confirmationRequired: true }), {
+      "POST /api/financial/charges/charge/proof/declaration": () => Response.json(declared),
+    });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Já paguei" }));
+    const dialog = await screen.findByRole("dialog", { name: "Informar pagamento?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Já paguei" }));
+
+    expect(await screen.findByText(/aguardando confirmação de Ana/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Desfazer" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Anexar comprovante" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ver comprovante" })).not.toBeInTheDocument();
+  });
+
+  it("lets the creditor confirm or refuse a declared payment with a reason", async () => {
+    const declared = charge({
+      direction: Direction.Receivable,
+      ownedByViewer: true,
+      proofState: ProofState.Pending,
+      proofKind: ProofKind.Declaration,
+      proof: proof({ kind: ProofKind.Declaration, file: null }),
+    });
+    const refused = { ...declared, proofState: ProofState.Rejected, proof: proof({ kind: ProofKind.Declaration, file: null, state: ProofState.Rejected, reason: "Não caiu" }) };
+    serve(declared, { "POST /api/financial/charges/charge/proof/review": () => Response.json(refused) });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    expect(await screen.findByText(/Ana informou que pagou/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmar recebimento" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Não recebi" }));
+    const dialog = await screen.findByRole("dialog", { name: "Não recebeu o pagamento?" });
+    fireEvent.change(within(dialog).getByLabelText("Motivo (opcional)"), { target: { value: "Não caiu" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Não recebi" }));
+
+    await waitFor(() =>
+      expect(browserFetch).toHaveBeenCalledWith(
+        "/api/financial/charges/charge/proof/review",
+        expect.objectContaining({ body: JSON.stringify({ decision: "rejected", reason: "Não caiu" }) }),
+      ),
+    );
+  });
+
+  it("lets the creditor mark as paid by hand after refusing a declared payment", async () => {
+    const refused = charge({
+      direction: Direction.Receivable,
+      ownedByViewer: true,
+      proofState: ProofState.Rejected,
+      proofKind: ProofKind.Declaration,
+      proof: proof({ kind: ProofKind.Declaration, file: null, state: ProofState.Rejected, reason: "Não caiu", reviewedAt: "2026-09-06T10:00:00Z" }),
+    });
+    const pay = vi.fn(() => Response.json({ ...refused, state: "paid", paidAt: "2026-09-08T12:00:00Z" }));
+
+    serve(refused, { "POST /api/financial/charges/charge/pay": pay });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    expect(await screen.findByText(/Ana informou que pagou/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirmar recebimento" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Marcar como pago" }));
+    await confirmMarkPaid();
+
+    await waitFor(() => expect(pay).toHaveBeenCalled());
+  });
+
+  it("clears the rejection reason when the dialog is cancelled and reopened", async () => {
+    serve(
+      charge({
+        direction: Direction.Receivable,
+        ownedByViewer: true,
+        proofState: ProofState.Pending,
+        proofKind: ProofKind.Declaration,
+        proof: proof({ kind: ProofKind.Declaration, file: null }),
+      }),
+    );
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Não recebi" }));
+    const dialog = await screen.findByRole("dialog", { name: "Não recebeu o pagamento?" });
+
+    fireEvent.change(within(dialog).getByLabelText("Motivo (opcional)"), { target: { value: "Não caiu" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Não recebi" }));
+    const reopened = await screen.findByRole("dialog", { name: "Não recebeu o pagamento?" });
+
+    expect(within(reopened).getByLabelText("Motivo (opcional)")).toHaveValue("");
+  });
+
+  it("pauses and resumes the notices of one charge, keeping Lembrar", async () => {
+    const put = vi.fn((silenced: boolean) => Response.json(charge({ direction: Direction.Receivable, silenced })));
+
+    vi.mocked(browserFetch).mockImplementation(async (path, init) => {
+      if (init?.method === "PUT" && path === "/api/financial/charges/charge/silenced") {
+        return put(JSON.parse(String(init.body)).silenced);
+      }
+
+      return Response.json(charge({ direction: Direction.Receivable }));
+    });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Não notificar esta cobrança" }));
+
+    expect(await screen.findByText("Avisos desta cobrança pausados.")).toBeInTheDocument();
+    expect(put).toHaveBeenCalledWith(true);
+    expect(screen.getByText("Sem avisos")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lembrar" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Voltar a notificar" }));
+
+    expect(await screen.findByText("Avisos reativados.")).toBeInTheDocument();
+    expect(put).toHaveBeenLastCalledWith(false);
+    expect(screen.queryByText("Sem avisos")).not.toBeInTheDocument();
+  });
+
+  it("offers no notice switch to whoever owes", async () => {
+    serve(charge());
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    expect(await screen.findByText("Valor a pagar")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Não notificar esta cobrança" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Sem avisos")).not.toBeInTheDocument();
+  });
+
+  it("badges a registro and hides Lembrar, the link, the proof and Não notificar", async () => {
+    serve(
+      charge({
+        direction: Direction.Receivable,
+        ownedByViewer: true,
+        counterpartName: "Empresa X",
+        recipient: { userId: null, name: "Empresa X", email: null },
+        debtorUserId: null,
+        sharingState: SharingState.Closed,
+        settled: true,
+        counterpartLabel: "Empresa X",
+      }),
+    );
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    expect(await screen.findByText("Registro")).toBeInTheDocument();
+    expect(screen.getByText("Empresa X")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Marcar como pago" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Lembrar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Compartilhar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Não notificar esta cobrança" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Comprovante")).not.toBeInTheDocument();
   });
 });

@@ -4,14 +4,16 @@ import { after, before, describe, it } from 'node:test';
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
 import { PixKeyType, ProofMime, ProofState } from '@receivy/common';
+import { ChargeInReviewError } from '../../src/charges/errors';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { ApiError, TooManyRequestsError } from '../../src/common/errors';
 import { EventRepository } from '../../src/common/repositories/events';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
+import { NotificationRepository } from '../../src/notifications/repositories/notification';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { publicStartProofUploadHandler } from '../../src/proofs/endpoints/public-start-upload';
 import { publicWithdrawProofHandler } from '../../src/proofs/endpoints/public-withdraw';
-import { ProofInvalidFileError, UploadMissingError } from '../../src/proofs/errors';
+import { ProofDeclarationForbiddenError, ProofInvalidFileError, UploadMissingError } from '../../src/proofs/errors';
 import { ProofRepository } from '../../src/proofs/repositories/proof';
 
 import type { UploadExpirySchedule } from '../../src/proofs/schedulers/upload-expiry';
@@ -22,7 +24,7 @@ import { uploadExpiryIdentifier } from '../../src/proofs/utils/expiry';
 import { PublicLinkRepository } from '../../src/public/repositories/public-link';
 import { TimelineRepository } from '../../src/timeline/repositories/timeline';
 import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
-import { fakeScheduler } from '../fixtures/scheduling';
+import { fakeNotice, fakeScheduler } from '../fixtures/scheduling';
 
 const OWNER = 'a1111111-1111-4111-8111-111111111111';
 const DEBTOR = 'a2222222-2222-4222-8222-222222222222';
@@ -41,12 +43,12 @@ const PDF = Buffer.from('%PDF-1.7\nproof');
 let counter = 0;
 let debtorId: string;
 
-async function charge() {
+async function charge(dueDate = '2027-01-01') {
   if (!debtorId) {
     debtorId = (await ContactRepository.save(db, OWNER, { name: 'Proof Debtor', email: 'proof-debtor@example.com' })).userId;
   }
 
-  return (await createOnceCharge(db, OWNER, `proof-${++counter}`, { userId: debtorId, amountCents: 1234, dueDate: '2027-01-01' })).chargeId;
+  return (await createOnceCharge(db, OWNER, `proof-${++counter}`, { userId: debtorId, amountCents: 1234, dueDate })).chargeId;
 }
 
 async function row(id: string) {
@@ -55,6 +57,7 @@ async function row(id: string) {
       state: true,
       paid_at: true,
       proof_state: true,
+      proof_kind: true,
       proof_file: true,
       proof_sender_user_id: true,
       proof_actor_hash: true,
@@ -177,7 +180,8 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
   });
 
   it('turns the landed bytes into a pending proof with its hash and history', async () => {
-    const id = await charge();
+    // Due this month at the latest, so the feed assertion below can see it.
+    const id = await charge('2026-09-01');
     const key = await upload(id);
     const stored = await row(id);
 
@@ -369,7 +373,7 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
 
     await ProofRepository.withdraw(db, storage, id, token);
 
-    deepEqual(await ProofRepository.publicState(db, token.token, SECRET), { state: null, reason: null, file: null });
+    deepEqual(await ProofRepository.publicState(db, token.token, SECRET), { state: null, kind: null, reason: null, file: null });
     equal((await row(id)).proof_state ?? null, null);
     equal((await EventRepository.list(db, id, 'proof.withdrawn'))[0]?.actor_user_id ?? null, null);
     ok(await ProofRepository.startUpload(db, storage, expiry, id, token, input));
@@ -429,6 +433,205 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
     equal((await ProofRepository.review(db, rejectedId, OWNER, { decision: ProofState.Accepted })).state, 'paid');
   });
 
+  it('lets the paying side declare a payment without a file and the creditor answer it', async () => {
+    const id = await charge();
+
+    await rejects(() => ProofRepository.declare(db, storage, id, { userId: OWNER }), ProofDeclarationForbiddenError);
+    await rejects(() => ProofRepository.declare(db, storage, id, { userId: OTHER }), HttpForbiddenError);
+
+    const declared = await ProofRepository.declare(db, storage, id, actor);
+
+    equal(declared.proof_state, 'pending');
+    equal(declared.proof_kind, 'declaration');
+    equal(declared.proof_file ?? null, null);
+    equal(declared.proof_sender_user_id, DEBTOR);
+    ok((await eventTypes(id)).includes('proof.declared'));
+    await rejects(() => ProofRepository.declare(db, storage, id, actor), ChargeInReviewError);
+
+    const seen = await ChargeRepository.get(db, OWNER, id);
+
+    equal(seen.proofState, 'pending');
+    equal(seen.proofKind, 'declaration');
+    equal(seen.proof?.file, null);
+    equal(seen.confirmationRequired, true);
+    await rejects(() => ProofRepository.downloadUrl(db, storage, id, OWNER), HttpNotFoundError);
+
+    equal((await ProofRepository.review(db, id, OWNER, { decision: ProofState.Accepted })).state, 'paid');
+    deepEqual((await EventRepository.list(db, id, 'charge.paid'))[0]?.payload, { via: 'declaration' });
+
+    const refusedId = await charge();
+
+    await ProofRepository.declare(db, storage, refusedId, actor);
+    await ProofRepository.review(db, refusedId, OWNER, { decision: ProofState.Rejected, reason: 'Não caiu' });
+
+    const refused = await ChargeRepository.get(db, DEBTOR, refusedId);
+
+    equal(refused.state, 'pending');
+    equal(refused.proof?.kind, 'declaration');
+    equal(refused.proof?.reason, 'Não caiu');
+    ok(await ProofRepository.declare(db, storage, refusedId, actor), 'a refused declaration may be sent again');
+  });
+
+  it('lets the sender take back or attach a file over their own declaration, and nobody else', async () => {
+    const id = await charge();
+    const token = await publicActor(id);
+
+    await ProofRepository.declare(db, storage, id, token);
+    await rejects(() => ProofRepository.startUpload(db, storage, expiry, id, actor, input), ApiError);
+    await rejects(() => ProofRepository.withdraw(db, storage, id, actor), HttpNotFoundError);
+    deepEqual(await ProofRepository.publicState(db, token.token, SECRET), {
+      state: 'pending',
+      kind: 'declaration',
+      reason: null,
+      file: null
+    });
+
+    await upload(id, token);
+
+    equal((await row(id)).proof_kind, 'file');
+    equal((await ChargeRepository.get(db, OWNER, id)).proofKind, 'file');
+
+    const withdrawnId = await charge();
+
+    await ProofRepository.declare(db, storage, withdrawnId, actor);
+    await ProofRepository.withdraw(db, storage, withdrawnId, actor);
+    equal((await row(withdrawnId)).proof_state ?? null, null);
+  });
+
+  it("drops the sender's own live upload when they declare and refuses over someone else's", async () => {
+    const id = await charge();
+    const { key } = await reserve(id);
+
+    await ProofRepository.declare(db, storage, id, actor);
+    equal(await bucket.exists(key), false);
+
+    const busyId = await charge();
+
+    await reserve(busyId, await publicActor(busyId));
+    await rejects(() => ProofRepository.declare(db, storage, busyId, actor), ApiError);
+  });
+
+  it('keeps a declaration under review while its file is on the way and restores it when the upload fails', async () => {
+    const id = await charge();
+    const declared = await ProofRepository.declare(db, storage, id, actor);
+    const { context } = fakeNotice();
+
+    // The slot rides on the declaration: it stays pending, with its sent time, for both sides.
+    const expired = await reserve(id);
+    const during = await row(id);
+
+    equal(during.proof_state, 'pending');
+    equal(during.proof_kind, 'declaration');
+    equal(during.proof_sent_at, declared.proof_sent_at);
+    equal(during.proof_file?.key, expired.key);
+
+    const seen = await ChargeRepository.get(db, OWNER, id);
+
+    equal(seen.proofState, 'pending');
+    equal(seen.proofKind, 'declaration');
+    equal(seen.proof?.file, null, 'the file on its way is nobody’s business yet');
+    await rejects(() => ProofRepository.downloadUrl(db, storage, id, OWNER), HttpNotFoundError);
+    await rejects(() => NotificationRepository.manualReminder(db, OWNER, id, context), ChargeInReviewError);
+
+    // The slot expires: the declaration is back as it was, still in review.
+    await bucket.write(expired.key, Buffer.from('half'));
+
+    equal(await ProofRepository.expireUpload(db, storage, id, expired.key), true);
+    equal(await bucket.exists(expired.key), false);
+
+    const restored = await row(id);
+
+    equal(restored.proof_state, 'pending');
+    equal(restored.proof_kind, 'declaration');
+    equal(restored.proof_sent_at, declared.proof_sent_at);
+    equal(restored.proof_sender_user_id, DEBTOR);
+    equal(restored.proof_file ?? null, null);
+    equal(restored.proof_expires_at ?? null, null);
+    await rejects(() => NotificationRepository.manualReminder(db, OWNER, id, context), ChargeInReviewError);
+
+    // Bytes that fail validation leave the declaration standing too.
+    const invalid = await reserve(id);
+
+    await bucket.write(invalid.key, Buffer.from('not a proof file'));
+    await rejects(() => ProofRepository.completeUpload(db, storage, id, actor), ProofInvalidFileError);
+
+    const kept = await row(id);
+
+    equal(kept.proof_state, 'pending');
+    equal(kept.proof_kind, 'declaration');
+    equal(kept.proof_sent_at, declared.proof_sent_at);
+    equal(kept.proof_file ?? null, null);
+    ok((await eventTypes(id)).includes('proof.invalid'));
+
+    // Once the file lands it replaces the declaration.
+    const landed = await reserve(id);
+
+    await bucket.write(landed.key, PDF);
+
+    const attached = await ProofRepository.completeUpload(db, storage, id, actor);
+
+    equal(attached.proof_state, 'pending');
+    equal(attached.proof_kind, 'file');
+    equal(attached.proof_file?.sha256, createHash('sha256').update(PDF).digest('hex'));
+    equal(attached.proof_expires_at ?? null, null);
+    notEqual(attached.proof_sent_at, declared.proof_sent_at);
+    deepEqual((await ChargeRepository.get(db, OWNER, id)).proof?.file, { name: 'proof.pdf', mime: 'application/pdf', size: 14 });
+  });
+
+  it('lets the creditor answer a declaration while its file is on the way and drops the late file', async () => {
+    const id = await charge();
+
+    await ProofRepository.declare(db, storage, id, actor);
+
+    const { key } = await reserve(id);
+
+    equal((await ProofRepository.review(db, id, OWNER, { decision: ProofState.Accepted })).state, 'paid');
+    deepEqual((await EventRepository.list(db, id, 'charge.paid'))[0]?.payload, { via: 'declaration' });
+
+    // The bytes land after the answer: there is nothing left to attach them to, so they go and the answer stands.
+    await bucket.write(key, PDF);
+    await rejects(() => ProofRepository.completeUpload(db, storage, id, actor), UploadMissingError);
+    equal(await ProofRepository.receiveObject(db, storage, key), 'ignored');
+    equal(await bucket.exists(key), false);
+    equal(await ProofRepository.expireUpload(db, storage, id, key), false);
+
+    const settled = await row(id);
+
+    equal(settled.state, 'paid');
+    equal(settled.proof_state, 'accepted');
+    equal(settled.proof_kind, 'declaration');
+    equal(settled.proof_file ?? null, null);
+
+    // "Não recebi" while the file is on the way answers the declaration the same way.
+    const refusedId = await charge();
+
+    await ProofRepository.declare(db, storage, refusedId, actor);
+
+    const refusedSlot = await reserve(refusedId);
+
+    await ProofRepository.review(db, refusedId, OWNER, { decision: ProofState.Rejected, reason: 'Não caiu' });
+    await bucket.write(refusedSlot.key, PDF);
+    equal(await ProofRepository.receiveObject(db, storage, refusedSlot.key), 'ignored');
+
+    const refused = await row(refusedId);
+
+    equal(refused.proof_state, 'rejected');
+    equal(refused.proof_kind, 'declaration');
+    equal(refused.proof_file ?? null, null);
+
+    // Settling by hand answers it too.
+    const paidId = await charge();
+
+    await ProofRepository.declare(db, storage, paidId, actor);
+
+    const paidSlot = await reserve(paidId);
+
+    await ChargeRepository.pay(db, OWNER, paidId);
+    deepEqual((await EventRepository.list(db, paidId, 'charge.paid'))[0]?.payload, { via: 'declaration' });
+    equal((await row(paidId)).proof_file ?? null, null);
+    equal(await ProofRepository.expireUpload(db, storage, paidId, paidSlot.key), false);
+  });
+
   it('hands a download URL to the creditor for any file and to the debtor only for their own', async () => {
     const id = await charge();
 
@@ -458,7 +661,7 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
 
     await upload(id);
 
-    deepEqual(await ProofRepository.publicState(db, token.token, SECRET), { state: null, reason: null, file: null });
+    deepEqual(await ProofRepository.publicState(db, token.token, SECRET), { state: null, kind: null, reason: null, file: null });
     equal((await PublicLinkRepository.getCharge(db, token.token, SECRET)).uploadsEnabled, false);
 
     const ownId = await charge();
@@ -471,6 +674,7 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
 
     deepEqual(await ProofRepository.publicState(db, own.token, SECRET), {
       state: 'pending',
+      kind: 'file',
       reason: null,
       file: { name: 'proof.pdf', mime: 'application/pdf', size: 14 }
     });
@@ -479,14 +683,15 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
     await rejects(() => ProofRepository.publicState(db, 'forged.token', SECRET), HttpNotFoundError);
   });
 
-  it('leaves a pending proof alone on manual settlement or cancellation and reopens an accepted one', async () => {
+  it('answers what waits in review on manual settlement, leaves it alone on cancellation and reopens an accepted one', async () => {
     const id = await charge();
 
     await upload(id);
     await ChargeRepository.pay(db, OWNER, id);
 
-    equal((await row(id)).proof_state, 'pending', 'a manual settlement does not answer the file');
-    equal((await ChargeRepository.get(db, OWNER, id)).proof?.state, 'pending');
+    equal((await row(id)).proof_state, 'accepted', 'settling by hand accepts the file under review');
+    ok((await eventTypes(id)).includes('proof.accepted'));
+    deepEqual((await EventRepository.list(db, id, 'charge.paid'))[0]?.payload, { via: 'proof' });
     await rejects(() => ProofRepository.review(db, id, OWNER, { decision: ProofState.Accepted }), ApiError);
     await rejects(() => ProofRepository.startUpload(db, storage, expiry, id, actor, input), ApiError);
     ok(await ProofRepository.downloadUrl(db, storage, id, OWNER));
@@ -495,16 +700,17 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
 
     equal(reopened.state, 'pending');
     equal(reopened.paidAt, null);
-    equal(reopened.proof?.state, 'pending');
-    await ProofRepository.review(db, id, OWNER, { decision: ProofState.Accepted });
-
-    const again = await ChargeRepository.reopen(db, OWNER, id);
-
-    equal(again.proofState, 'pending', 'an accepted file goes back under review');
+    equal(reopened.proof?.state, 'pending', 'an accepted file goes back under review');
     equal((await row(id)).proof_reviewed_at ?? null, null);
     ok((await eventTypes(id)).includes('charge.reopened'));
     await rejects(() => ChargeRepository.reopen(db, OWNER, id), ApiError);
     equal((await ProofRepository.review(db, id, OWNER, { decision: ProofState.Accepted })).state, 'paid');
+
+    const declaredId = await charge();
+
+    await ProofRepository.declare(db, storage, declaredId, actor);
+    await ChargeRepository.pay(db, OWNER, declaredId);
+    deepEqual((await EventRepository.list(db, declaredId, 'charge.paid'))[0]?.payload, { via: 'declaration' });
 
     const cancelledId = await charge();
 

@@ -1,25 +1,31 @@
-import { useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import {
   type BadgeTone,
+  ChargeActionKind,
+  ChargeState,
+  currentMonth,
   DEFAULT_FEED_FILTERS,
+  Direction,
   activeFeedFilterCount,
   calendarDate,
   chargeAction,
   chargeBadges,
   chargeStateLabel,
   type ChargeSummary,
-  type Direction,
   feedDayLabel,
   feedFilterQuery,
   formatMoney,
   type FeedFilters,
+  monthTabs,
   type TimelineItem,
   type TimelinePage,
+  type TimelineSummary,
 } from "@receivy/common";
 import { FeedFiltersSheet } from "@/components/app/feed-filters-sheet";
-import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { RemindSheet } from "@/components/app/remind-sheet";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { useTabHeader } from "@/navigation/tab-header";
 import { financialClient, type FinancialClient } from "@/financial/client";
@@ -27,20 +33,23 @@ import { notificationClient } from "@/notifications/client";
 import { useThemeColors } from "@/theme/colors";
 
 type FeedScreenProps = {
-  client?: Pick<FinancialClient, "timeline">;
+  client?: Pick<FinancialClient, "timeline"> & Partial<Pick<FinancialClient, "pay" | "declarePayment">>;
   notifications?: Pick<typeof notificationClient, "remind">;
   onOpenCharge?: (id: string) => void;
 };
 
+const slidersMark = require("../../../assets/images/auth/sliders.svg");
 
-const BADGE_CLASS: Record<BadgeTone, string> = {
-  danger: "bg-danger-soft text-danger",
-  info: "bg-info-soft text-info",
-  warning: "bg-warning-soft text-warning",
-  success: "bg-primary-soft/50 text-primary-strong",
-  neutral: "bg-surface-muted text-muted",
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** In the dense row a badge is only tinted text beside the state label. */
+const TONE_CLASS: Record<BadgeTone, string> = {
+  danger: "text-payable",
+  info: "text-primary",
+  warning: "text-warning",
+  success: "text-success",
+  neutral: "text-muted",
 };
-
 
 function groupByDay(items: TimelineItem[]): [string, TimelineItem[]][] {
   const groups = new Map<string, TimelineItem[]>();
@@ -53,106 +62,218 @@ function groupByDay(items: TimelineItem[]): [string, TimelineItem[]][] {
   return [...groups];
 }
 
-function pluralize(count: number): string {
-  return count === 1 ? "1 pendência" : `${count} pendências`;
+/** `2026-09-14` → `14 set`, appended to the relative day names on the day bar. */
+function shortDay(date: string): string {
+  return `${Number(date.slice(8, 10))} ${MONTHS[Number(date.slice(5, 7)) - 1] ?? ""}`;
 }
 
-function TotalCard({ label, amount, count, tone }: { label: string; amount: string; count: number; tone: "receivable" | "payable" }) {
-  const receivable = tone === "receivable";
+/** The day bar and the totals already say it is money: rows show only the figure. */
+function withoutCurrency(text: string): string {
+  return text.replace(/^R\$\s*/, "");
+}
+
+const TABULAR = { fontVariant: ["tabular-nums" as const] };
+
+/** `+ R$ 1.620,10` / `− R$ 40,00`: the Previsto and Realizado figures carry their own sign. */
+function signedMoney(amountCents: number): string {
+  const sign = amountCents > 0 ? "+ " : amountCents < 0 ? "− " : "";
+
+  return `${sign}${formatMoney({ amountCents: Math.abs(amountCents), currency: "BRL" })}`;
+}
+
+/** Design 3b: previous, selected and next month; the carousel re-centers on whichever one is tapped. */
+function MonthTabsBar({ month, onSelect }: { month: string; onSelect: (value: string) => void }) {
+  const tabs = monthTabs(month);
 
   return (
-    <View className="flex-1 overflow-hidden rounded-2xl border border-outline/40 bg-surface p-4">
-      <View className={`absolute left-0 right-0 top-0 h-1 ${receivable ? "bg-primary" : "bg-danger-solid"}`} />
-      <View className="flex-row items-center justify-between">
-        <Text className="text-[11px] font-bold tracking-widest text-muted">{label}</Text>
-        <Text className={`text-base font-extrabold ${receivable ? "text-primary" : "text-danger"}`}>{receivable ? "↙" : "↗"}</Text>
+    <View className="mx-[18px] flex-row border-b border-outline">
+      {tabs.map((tab) => (
+        <Pressable
+          key={tab.value}
+          accessibilityRole="tab"
+          accessibilityLabel={tab.label}
+          accessibilityState={{ selected: tab.selected }}
+          onPress={() => onSelect(tab.value)}
+          className={`flex-1 items-center pb-[9px] pt-[7px] ${tab.selected ? "border-b-[2.5px] border-primary" : ""}`}
+        >
+          <Text className={`font-sans ${tab.selected ? "text-[13.5px] font-extrabold text-ink" : "text-xs font-bold text-muted"}`}>{tab.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/**
+ * Design 1b: both open totals with what was already settled this month, a bar split by their weight,
+ * and the month's Previsto (everything due, open or settled) beside its Realizado (only what was settled).
+ */
+function SummaryBox({ summary }: { summary?: TimelineSummary }) {
+  const receivable = summary?.receivable.amountCents ?? 0;
+  const payable = summary?.payable.amountCents ?? 0;
+  const received = summary?.receivedTotal.amountCents ?? 0;
+  const paid = summary?.paidTotal.amountCents ?? 0;
+  const realized = received - paid;
+
+  return (
+    <View className="mx-[18px] overflow-hidden rounded-[18px] border border-outline bg-surface">
+      <View className="flex-row">
+        <View className="flex-1 border-r border-outline px-3.5 py-[11px]">
+          <View className="flex-row items-baseline justify-between gap-1.5">
+            <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A RECEBER</Text>
+            {summary && (
+              <Text numberOfLines={1} className="shrink font-sans text-[10.5px] font-semibold text-success" style={TABULAR}>
+                {withoutCurrency(formatMoney(summary.receivedTotal))} recebido
+              </Text>
+            )}
+          </View>
+          <Text className="mt-1 font-display text-[20px] font-bold text-primary" style={TABULAR}>
+            {summary ? formatMoney(summary.receivable) : "—"}
+          </Text>
+        </View>
+
+        <View className="flex-1 px-3.5 py-[11px]">
+          <View className="flex-row items-baseline justify-between gap-1.5">
+            <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A PAGAR</Text>
+            {summary && (
+              <Text numberOfLines={1} className="shrink font-sans text-[10.5px] font-semibold text-success" style={TABULAR}>
+                {withoutCurrency(formatMoney(summary.paidTotal))} pago
+              </Text>
+            )}
+          </View>
+          <Text className="mt-1 font-display text-[20px] font-bold text-payable" style={TABULAR}>
+            {summary ? formatMoney(summary.payable) : "—"}
+          </Text>
+        </View>
       </View>
-      <Text className={`mt-2 text-xl font-extrabold tracking-tight ${receivable ? "text-primary" : "text-danger"}`}>{amount}</Text>
-      <View className="mt-3 flex-row items-center gap-1.5 border-t border-outline/30 pt-2">
-        <View className={`h-1.5 w-1.5 rounded-full ${receivable ? "bg-primary" : "bg-danger-solid"}`} />
-        <Text className="text-[11px] font-semibold text-muted">{pluralize(count)}</Text>
+
+      {receivable + payable > 0 ? (
+        <View className="h-[5px] flex-row">
+          <View className="bg-primary" style={{ flex: receivable }} />
+          <View className="bg-payable" style={{ flex: payable }} />
+        </View>
+      ) : (
+        <View className="h-[5px] bg-outline" />
+      )}
+
+      <View className="flex-row items-center justify-between gap-2.5 bg-surface-muted/60 px-3.5 py-2">
+        <Text className="font-sans text-[11px] font-semibold text-muted">
+          Previsto{" "}
+          <Text className="font-bold text-ink" style={TABULAR}>
+            {summary ? signedMoney(receivable - payable + received - paid) : "—"}
+          </Text>
+        </Text>
+        <Text className="font-sans text-[11px] font-semibold text-muted">
+          Realizado{" "}
+          <Text className={`font-bold ${realized < 0 ? "text-payable" : "text-success"}`} style={TABULAR}>
+            {summary ? signedMoney(realized) : "—"}
+          </Text>
+        </Text>
       </View>
     </View>
   );
 }
 
-function ChargeCard({
-  charge,
-  direction,
-  today,
-  onOpen,
-  onRemind,
-  reminded,
-}: {
+function DayBar({ date, today, items }: { date: string; today: string; items: TimelineItem[] }) {
+  const isToday = date === today;
+  const label = feedDayLabel(date, today);
+  const relative = !/\d/.test(label);
+  const open = items.filter((item) => item.charge.state === ChargeState.Pending);
+  const settled = items.every((item) => item.charge.state === ChargeState.Paid);
+  const total = open.reduce((sum, item) => sum + item.charge.amount.amountCents, 0);
+  const textClass = isToday ? "text-on-primary" : "text-muted";
+
+  return (
+    <View className={`flex-row items-center justify-between px-[18px] py-2 ${isToday ? "bg-primary" : "bg-surface-muted"}`}>
+      <View className="flex-row items-center">
+        <Text className={`font-sans text-xs font-extrabold uppercase ${textClass}`}>{label}</Text>
+        {relative && <Text className={`font-sans text-xs font-extrabold uppercase ${textClass}`}> · {shortDay(date)}</Text>}
+      </View>
+
+      {open.length > 0 && (
+        <Text className={`font-display text-xs font-bold ${textClass}`}>{formatMoney({ amountCents: total, currency: open[0]!.charge.amount.currency })}</Text>
+      )}
+      {settled && <Text className={`font-sans text-xs font-bold ${isToday ? "text-on-primary" : "text-success"}`}>liquidado</Text>}
+    </View>
+  );
+}
+
+type ChargeRowProps = {
   charge: ChargeSummary;
   direction: Direction;
   today: string;
+  reminded: string | null;
   onOpen: () => void;
   onRemind: () => void;
-  reminded: string | null;
-}) {
+  onMarkPaid: () => void;
+  onDeclare: () => void;
+};
+
+function ChargeRow({ charge, direction, today, reminded, onOpen, onRemind, onMarkPaid, onDeclare }: ChargeRowProps) {
   const badges = chargeBadges(charge, today);
   const action = chargeAction(charge, direction);
-  const settled = charge.state !== "pending";
-  const amountClass = settled ? "text-muted" : direction === "receivable" ? "text-primary" : "text-danger";
+  const settled = charge.state !== ChargeState.Pending;
+  const payable = direction === Direction.Payable;
+  const amountClass = settled ? "text-muted" : payable ? "text-payable" : "text-ink";
+  const stateClass = settled ? "text-success" : payable ? "text-payable" : "text-muted";
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Abrir cobrança ${charge.description}`}
       onPress={onOpen}
-      className="gap-3 rounded-2xl border border-outline/40 bg-surface p-4"
+      className={`flex-row items-center gap-3 border-b border-outline/60 bg-surface px-[18px] py-3 ${settled ? "opacity-60" : ""}`}
     >
-      <View className="flex-row items-center gap-3">
-        {charge.counterpartAvatar ? (
-          <InitialsAvatar name={charge.counterpartName} size={44} avatar={charge.counterpartAvatar} />
-        ) : (
-          <View className="h-11 w-11 items-center justify-center rounded-full bg-primary-soft/50">
-            <Text className="text-base font-extrabold text-primary-strong">{charge.counterpartName.slice(0, 1).toUpperCase()}</Text>
-          </View>
-        )}
-        <View className="flex-1 gap-1">
-          <Text className="text-sm text-muted" numberOfLines={1}>
-            <Text className="font-bold text-ink">{charge.counterpartName}</Text> · {charge.description}
-          </Text>
-          {badges.length > 0 && (
-            <View className="flex-row flex-wrap gap-1.5">
-              {badges.map((badge) => (
-                <Text key={badge.label} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${BADGE_CLASS[badge.tone]}`}>
-                  {badge.label}
-                </Text>
-              ))}
-            </View>
-          )}
+      <View className="min-w-0 flex-1 gap-0.5">
+        <Text className="font-sans text-[13.5px] font-bold text-ink" numberOfLines={1}>
+          {charge.description} · {charge.counterpartName}
+        </Text>
+
+        <View className="flex-row flex-wrap items-center">
+          <Text className={`font-sans text-[11.5px] font-medium ${stateClass}`}>{chargeStateLabel(charge, direction)}</Text>
+          {badges.map((badge) => (
+            <Fragment key={badge.label}>
+              <Text className="font-sans text-[11.5px] text-muted"> · </Text>
+              <Text className={`font-sans text-[11.5px] font-medium ${TONE_CLASS[badge.tone]}`}>{badge.label}</Text>
+            </Fragment>
+          ))}
         </View>
       </View>
-      <View className="flex-row items-center justify-between border-t border-outline/30 pt-3">
-        <View>
-          <Text className={`text-lg font-extrabold tracking-tight ${amountClass}`}>{formatMoney(charge.amount)}</Text>
-          <Text className="text-[11px] text-muted">{chargeStateLabel(charge, direction)}</Text>
-        </View>
-        {action && action.kind === "remind" && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={reminded ?? action.label}
-            disabled={reminded !== null}
-            onPress={onRemind}
-            className="min-h-10 justify-center rounded-lg bg-primary-soft/40 px-3"
-          >
-            <Text className="text-xs font-bold text-primary-strong">{reminded ?? action.label}</Text>
-          </Pressable>
-        )}
-        {action && action.kind === "open" && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-            onPress={onOpen}
-            className={`min-h-10 justify-center rounded-lg px-3 ${action.label === "Pagar" ? "bg-primary" : "bg-surface-muted"}`}
-          >
-            <Text className={`text-xs font-bold ${action.label === "Pagar" ? "text-on-primary" : "text-primary-strong"}`}>{action.label}</Text>
-          </Pressable>
-        )}
-      </View>
+
+      <Text className={`font-display text-sm font-bold ${amountClass}`}>{withoutCurrency(formatMoney(charge.amount))}</Text>
+
+      {action?.kind === ChargeActionKind.Remind && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={reminded ?? action.label}
+          disabled={reminded !== null}
+          onPress={onRemind}
+          className="h-[30px] justify-center rounded-[9px] bg-primary-soft px-2.5"
+        >
+          <Text className="font-sans text-[11.5px] font-extrabold text-primary-strong">{reminded ?? action.label}</Text>
+        </Pressable>
+      )}
+
+      {action?.kind === ChargeActionKind.MarkPaid && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          onPress={onMarkPaid}
+          className="h-[30px] justify-center rounded-[9px] bg-success-soft px-2.5"
+        >
+          <Text className="font-sans text-[11.5px] font-extrabold text-success">{action.label}</Text>
+        </Pressable>
+      )}
+
+      {action?.kind === ChargeActionKind.DeclarePayment && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          onPress={onDeclare}
+          className="h-[30px] justify-center rounded-[9px] bg-success-soft px-2.5"
+        >
+          <Text className="font-sans text-[11.5px] font-extrabold text-success">{action.label}</Text>
+        </Pressable>
+      )}
     </Pressable>
   );
 }
@@ -169,14 +290,18 @@ export function FeedScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [remindTarget, setRemindTarget] = useState<ChargeSummary | null>(null);
   // Read by `load` so the focus callback stays stable across filter changes and never double-fetches.
   const filtersRef = useRef<FeedFilters>(DEFAULT_FEED_FILTERS);
+  // The selected month persists across refocus/refresh; only picking another tab resets and reloads.
+  const [month, setMonth] = useState(() => currentMonth(new Date()));
+  const monthRef = useRef(month);
   const [reminded, setReminded] = useState<Record<string, string>>({});
   const generation = useRef(0);
   const today = calendarDate();
 
   const load = useCallback(
-    async (nextFilters = filtersRef.current, cursor?: string, quiet = false) => {
+    async (nextFilters = filtersRef.current, nextMonth = monthRef.current, cursor?: string, quiet = false) => {
       const requestGeneration = cursor ? generation.current : ++generation.current;
 
       setError("");
@@ -190,7 +315,7 @@ export function FeedScreen({
         setData(null);
       }
 
-      const params = feedFilterQuery(nextFilters);
+      const params = feedFilterQuery(nextFilters, today, nextMonth);
 
       if (cursor) {
         params.set("cursor", cursor);
@@ -214,31 +339,30 @@ export function FeedScreen({
         }
       }
     },
-    [client],
+    [client, today],
   );
 
   // The charge routes sit on top of the tabs: paid or cancelled items must be current when the feed comes back.
   useFocusEffect(
     useCallback(() => {
-      void load(undefined, undefined, true);
+      void load(undefined, undefined, undefined, true);
     }, [load]),
   );
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    await load(undefined, undefined, true);
+    await load(undefined, undefined, undefined, true);
     setRefreshing(false);
   }, [load]);
 
-  function confirmRemind(charge: ChargeSummary) {
-    Alert.alert(
-      "Enviar lembrete?",
-      `Avisa ${charge.counterpartName} por notificação no app ou por e-mail, com o link de pagamento e a chave Pix. Só um lembrete a cada 24 horas.`,
-      [
-        { text: "Voltar", style: "cancel" },
-        { text: "Enviar lembrete", onPress: () => void remind(charge.id) },
-      ],
-    );
+  function selectMonth(value: string) {
+    if (value === monthRef.current) {
+      return;
+    }
+
+    setMonth(value);
+    monthRef.current = value;
+    void load(filtersRef.current, value);
   }
 
   async function remind(chargeId: string) {
@@ -250,10 +374,74 @@ export function FeedScreen({
     }
   }
 
+  function confirmMarkPaid(charge: ChargeSummary) {
+    Alert.alert("Marcar como paga?", "Isso registra um pagamento integral e encerra a cobrança. Dá para reabrir depois.", [
+      { text: "Voltar", style: "cancel" },
+      { text: "Marcar paga", onPress: () => void markPaid(charge.id) },
+    ]);
+  }
+
+  async function markPaid(chargeId: string) {
+    if (!client.pay) {
+      return;
+    }
+
+    try {
+      await client.pay(chargeId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível atualizar a cobrança.");
+      return;
+    }
+
+    // Totals and the card state both change: a quiet reload keeps the list on screen meanwhile.
+    await load(undefined, undefined, undefined, true);
+  }
+
+  function confirmDeclare(charge: ChargeSummary) {
+    Alert.alert("Marcar como pago?", `${charge.counterpartName} vai receber um aviso para confirmar o recebimento.`, [
+      { text: "Voltar", style: "cancel" },
+      { text: "Marcar pago", onPress: () => void declare(charge.id) },
+    ]);
+  }
+
+  async function declare(chargeId: string) {
+    if (!client.declarePayment) {
+      return;
+    }
+
+    try {
+      await client.declarePayment(chargeId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível informar o pagamento.");
+      return;
+    }
+
+    // The row turns Em análise: a quiet reload keeps the list on screen meanwhile.
+    await load(undefined, undefined, undefined, true);
+  }
+
   const summary = data?.summary;
   const changedFilters = activeFeedFilterCount(filters);
 
-  useTabHeader({ title: "Feed" });
+  // Memoized so the shared native header is only updated when the badge changes.
+  const filtersButton = useMemo(
+    () => (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Filtros"
+        onPress={() => setFiltersOpen(true)}
+        className={`h-[34px] w-[34px] items-center justify-center rounded-xl ${changedFilters ? "bg-primary-soft" : "bg-surface-muted"}`}
+      >
+        <Image source={slidersMark} tintColor={changedFilters ? colors.primaryStrong : colors.ink} style={{ width: 17, height: 17 }} />
+        {changedFilters > 0 && (
+          <Text className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-center font-sans text-[10px] font-bold text-on-primary">{changedFilters}</Text>
+        )}
+      </Pressable>
+    ),
+    [changedFilters, colors.ink, colors.primaryStrong],
+  );
+
+  useTabHeader({ title: "Feed", right: filtersButton });
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
@@ -264,72 +452,60 @@ export function FeedScreen({
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={colors.primaryStrong} />}
       >
-        <View className="gap-5 px-5 pt-2">
-          <View className="flex-row gap-3">
-            <TotalCard label="A RECEBER" amount={summary ? formatMoney(summary.receivable) : "—"} count={summary?.receivableCount ?? 0} tone="receivable" />
-            <TotalCard label="A PAGAR" amount={summary ? formatMoney(summary.payable) : "—"} count={summary?.payableCount ?? 0} tone="payable" />
-          </View>
+        <View className="gap-3 pt-3">
+          <MonthTabsBar month={month} onSelect={selectMonth} />
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Filtros"
-            onPress={() => setFiltersOpen(true)}
-            className={`min-h-11 flex-row items-center justify-center gap-2 rounded-full border px-4 ${changedFilters ? "border-primary bg-primary-soft/50" : "border-outline bg-surface"}`}
-          >
-            <Text className={`text-sm font-bold ${changedFilters ? "text-primary-strong" : "text-ink"}`}>Filtros</Text>
-            {changedFilters > 0 && (
-              <Text className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-on-primary">{changedFilters}</Text>
-            )}
-          </Pressable>
+          <SummaryBox summary={summary} />
 
           {loading && <ActivityIndicator accessibilityLabel="Carregando feed" className="my-6" color={colors.primary} />}
           {error ? (
-            <View className="gap-2 rounded-xl bg-danger-soft p-4">
-              <Text accessibilityRole="alert" className="text-danger">
+            <View className="mx-[18px] gap-2 rounded-xl bg-danger-soft p-4">
+              <Text accessibilityRole="alert" className="font-sans text-danger">
                 {error}
               </Text>
               <Pressable accessibilityRole="button" onPress={() => void load()} className="min-h-12 justify-center">
-                <Text className="font-bold text-danger">Tentar novamente</Text>
+                <Text className="font-sans font-bold text-danger">Tentar novamente</Text>
               </Pressable>
             </View>
           ) : null}
 
           {!loading && !error && data?.items.length === 0 && (
-            <View className="gap-2 rounded-2xl border border-outline/40 bg-surface p-5">
-              <Text className="text-2xl font-extrabold text-primary-strong">Sua timeline começa aqui</Text>
-              <Text className="text-sm leading-6 text-muted">Crie uma conta na aba Contas ou entre com o e-mail em que recebeu uma.</Text>
+            <View className="mx-[18px] gap-2 rounded-[18px] border border-outline bg-surface p-5">
+              <Text className="font-display text-2xl font-bold text-ink">Sua timeline começa aqui</Text>
+              <Text className="font-sans text-sm leading-6 text-muted">Crie uma conta na aba Contas ou entre com o e-mail em que recebeu uma.</Text>
             </View>
           )}
 
-          {groupByDay(data?.items ?? []).map(([date, items]) => (
-            <View key={date} className="gap-3">
-              <View className="flex-row items-center gap-2 px-1">
-                <View className={`h-2 w-2 rounded-full ${date === today ? "bg-primary" : "bg-outline"}`} />
-                <Text className={`text-sm font-bold tracking-wide ${date === today ? "text-primary" : "text-muted"}`}>{feedDayLabel(date, today)}</Text>
+          <View>
+            {groupByDay(data?.items ?? []).map(([date, items]) => (
+              <View key={date}>
+                <DayBar date={date} today={today} items={items} />
+                {items.map((item) => (
+                  <ChargeRow
+                    key={item.charge.id}
+                    charge={item.charge}
+                    direction={item.direction}
+                    today={today}
+                    reminded={reminded[item.charge.id] ?? null}
+                    onOpen={() => onOpenCharge?.(item.charge.id)}
+                    onRemind={() => setRemindTarget(item.charge)}
+                    onMarkPaid={() => confirmMarkPaid(item.charge)}
+                    onDeclare={() => confirmDeclare(item.charge)}
+                  />
+                ))}
               </View>
-              {items.map((item) => (
-                <ChargeCard
-                  key={item.charge.id}
-                  charge={item.charge}
-                  direction={item.direction}
-                  today={today}
-                  reminded={reminded[item.charge.id] ?? null}
-                  onOpen={() => onOpenCharge?.(item.charge.id)}
-                  onRemind={() => confirmRemind(item.charge)}
-                />
-              ))}
-            </View>
-          ))}
+            ))}
+          </View>
 
           {data?.nextCursor && (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Carregar mais"
               disabled={loading}
-              onPress={() => void load(filters, data.nextCursor ?? undefined)}
-              className="min-h-12 items-center justify-center rounded-xl border border-outline"
+              onPress={() => void load(filters, undefined, data.nextCursor ?? undefined)}
+              className="mx-[18px] min-h-12 items-center justify-center rounded-xl border border-outline"
             >
-              <Text className="font-bold text-primary">Carregar mais</Text>
+              <Text className="font-sans font-bold text-primary">Carregar mais</Text>
             </Pressable>
           )}
         </View>
@@ -344,6 +520,18 @@ export function FeedScreen({
             setFilters(next);
             filtersRef.current = next;
             void load(next);
+          }}
+        />
+      )}
+
+      {remindTarget && (
+        <RemindSheet
+          charge={remindTarget}
+          today={today}
+          onClose={() => setRemindTarget(null)}
+          onSend={() => {
+            setRemindTarget(null);
+            void remind(remindTarget.id);
           }}
         />
       )}

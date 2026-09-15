@@ -31,6 +31,9 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     resolveGuest(billingId: string, guestId: string, action: BillingGuestAction) {
       return request<BillingDetail>(`billings/${billingId}/guests/${guestId}`, { method: "POST", body: JSON.stringify(action) }, "Não foi possível resolver o convidado.");
     },
+    silenceParticipant(billingId: string, userId: string, silenced: boolean) {
+      return request<BillingDetail>(`billings/${billingId}/participants/${userId}/silenced`, { method: "PUT", body: JSON.stringify({ silenced }) }, "Não foi possível atualizar os avisos.");
+    },
     timeline(query = "") { return request<TimelinePage>(`timeline${query ? `?${query}` : ""}`); },
     paymentMethods() { return request<PaymentMethodsPage>("payment-methods"); },
     savePaymentMethod(input: PaymentMethodInput, id?: string) { return request<PaymentMethod>(id ? `payment-methods/${id}` : "payment-methods", { method: id ? "PATCH" : "POST", body: JSON.stringify(input) }); },
@@ -41,6 +44,10 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     completeProofUpload(id: string) { return request<ChargeDetail>(`charges/${id}/proof/complete`, { method: "POST" }, "Não foi possível confirmar o envio."); },
     reviewProof(id: string, decision: "accepted" | "rejected", reason?: string) { return request<ChargeDetail>(`charges/${id}/proof/review`, { method: "POST", body: JSON.stringify({ decision, reason }) }); },
     withdrawProof(id: string) { return request<void>(`charges/${id}/proof`, { method: "DELETE" }, "Não foi possível apagar o comprovante."); },
+    declarePayment(id: string) { return request<ChargeDetail>(`charges/${id}/proof/declaration`, { method: "POST" }, "Não foi possível informar o pagamento."); },
+    silenceCharge(id: string, silenced: boolean) {
+      return request<ChargeDetail>(`charges/${id}/silenced`, { method: "PUT", body: JSON.stringify({ silenced }) }, "Não foi possível atualizar os avisos.");
+    },
     downloadProof(id: string) { return request<{ url: string; expiresIn: number }>(`charges/${id}/proof/download`); },
     cancel(id: string) { return request<ChargeDetail>(`charges/${id}/cancel`, { method: "POST" }); },
     reopen(id: string) { return request<ChargeDetail>(`charges/${id}/reopen`, { method: "POST" }, "Não foi possível reabrir a cobrança."); },

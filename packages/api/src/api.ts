@@ -11,10 +11,17 @@ import type {
   IdempotencyMismatchError,
   PayableHasNoSplitError,
   PendingChargesWithoutStateError,
-  ReceivableHasNoPayeeError
+  ReceivableHasNoPayeeError,
+  SettledLockedError
 } from './billings/errors';
 import type { BillingRoutes } from './billings/routes';
-import type { ChargeClosedError, ChargeNotPaidError } from './charges/errors';
+import type {
+  ChargeClosedError,
+  ChargeInReviewError,
+  ChargeNotPaidError,
+  SettledNoRemindersError,
+  SilenceUnavailableError
+} from './charges/errors';
 import type { ChargeRoutes } from './charges/routes';
 import type { TooManyRequestsError } from './common/errors';
 import type { requestListener } from './common/services/listener';
@@ -34,6 +41,7 @@ import type { NotificationRoutes } from './notifications/routes';
 import type { PixKeyTakenError } from './payment-methods/errors';
 import type { PaymentMethodRoutes } from './payment-methods/routes';
 import type {
+  ProofDeclarationForbiddenError,
   ProofInvalidFileError,
   ProofMissingError,
   ProofPendingError,
@@ -63,6 +71,7 @@ export declare class Api extends Http.Service {
       namingStyle: NamingStyle.CamelCase;
     };
     httpErrors: {
+      403: [ProofDeclarationForbiddenError];
       409: [
         IdempotencyMismatchError,
         BillingPreviewUnavailableError,
@@ -73,8 +82,12 @@ export declare class Api extends Http.Service {
         BillingSnapshotLockedError,
         GuestAlreadyResolvedError,
         BillingInactiveError,
+        SettledLockedError,
         ChargeClosedError,
         ChargeNotPaidError,
+        ChargeInReviewError,
+        SettledNoRemindersError,
+        SilenceUnavailableError,
         LinkedContactError,
         DuplicateContactError,
         EmailTakenError,
@@ -128,7 +141,7 @@ export declare class Api extends Http.Service {
   // must include the web origin of each published stage (see docs/environments.md).
   cors: Http.UseCors<{
     allowOrigins: ['http://localhost:3000', 'https://receivy.wellsm.dev'];
-    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE'];
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
     allowHeaders: ['content-type', 'authorization', 'idempotency-key'];
     allowCredentials: true;
   }>;

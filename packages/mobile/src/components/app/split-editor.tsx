@@ -50,7 +50,7 @@ export function SplitEditor({ mode, rows, hint, disabled, onChange }: SplitEdito
         return (
           <View key={row.key} className="min-h-12 flex-row items-center gap-2 rounded-xl border border-outline/20 bg-surface-muted/60 px-2.5 py-2">
             <InitialsAvatar name={row.name} avatar={row.avatar} />
-            <Text className="flex-1 text-sm font-semibold text-ink" numberOfLines={1}>
+            <Text className="flex-1 font-sans text-[13.5px] font-semibold text-ink" numberOfLines={1}>
               {row.name}
             </Text>
             {mode !== "equal" && (
@@ -68,7 +68,7 @@ export function SplitEditor({ mode, rows, hint, disabled, onChange }: SplitEdito
                 {FIELD_SUFFIX[mode] ? <Text className="text-xs text-muted">{FIELD_SUFFIX[mode]}</Text> : null}
               </View>
             )}
-            {row.amountText ? <Text className="text-sm font-bold text-primary">{row.amountText}</Text> : null}
+            {row.amountText ? <Text className="font-display text-[13.5px] font-bold text-ink">{row.amountText}</Text> : null}
           </View>
         );
       })}

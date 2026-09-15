@@ -1,13 +1,13 @@
 "use client";
 
 import { BillingState, billingShareAction, calendarDate, Direction, type BillingSummary, type BillingsPage } from "@receivy/common";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
-import { BillingCard } from "@/components/ui/billing-card";
+import { BILLING_ROW_COLUMNS, BillingCard } from "@/components/ui/billing-card";
 
 const LIST_ERROR = "Não foi possível carregar suas cobranças.";
 
@@ -24,6 +24,10 @@ const DIRECTION_FILTERS: { value: Direction | ""; label: string }[] = [
   { value: Direction.Receivable, label: "A receber" },
   { value: Direction.Payable, label: "A pagar" },
 ];
+
+function pillClass(selected: boolean): string {
+  return `h-[34px] rounded-full border px-3.5 text-[12.5px] transition ${selected ? "border-ink bg-ink font-bold text-surface" : "border-outline bg-surface font-semibold text-muted hover:text-ink"}`;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await browserFetch(path, init);
@@ -138,70 +142,58 @@ export function BillingsScreen() {
   const filter = STATE_FILTERS.find((option) => option.value === stateFilter) ?? STATE_FILTERS[0]!;
 
   return (
-    <section className="flex min-h-full flex-col gap-3 pb-24 md:pb-0">
-      <div className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <input
-            className="min-h-12 w-full min-w-0 flex-1 rounded-xl border border-outline bg-surface px-4 text-[14px] text-ink placeholder:text-muted"
-            type="search"
-            aria-label="Buscar por título ou descrição"
-            placeholder="Buscar por título ou descrição…"
-            value={term}
-            onChange={(event) => setTerm(event.target.value)}
-          />
+    <section className="flex min-h-full flex-col gap-3.5 pb-24 md:gap-[18px] md:pb-0">
+      <div className="flex flex-col gap-3.5">
+        <div className="flex gap-3">
+          <label className="flex min-h-[42px] min-w-0 flex-1 items-center gap-[9px] rounded-xl border border-outline bg-surface px-[13px] focus-within:border-primary md:max-w-[280px]">
+            <Search size={16} aria-hidden="true" className="shrink-0 text-muted" />
+            <input
+              className="min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none placeholder:text-muted"
+              type="search"
+              aria-label="Buscar por título ou descrição"
+              placeholder="Buscar por título ou descrição…"
+              value={term}
+              onChange={(event) => setTerm(event.target.value)}
+            />
+          </label>
           <Link
-            className="hidden min-h-12 shrink-0 items-center gap-2 rounded-xl bg-primary-strong px-4 text-sm font-bold text-on-primary md:inline-flex"
+            className="hidden h-[42px] shrink-0 items-center gap-2 rounded-xl bg-primary px-4 text-[13.5px] font-bold text-on-primary md:ml-auto md:inline-flex"
             href="/billings/new"
             aria-label="Nova conta"
           >
-            <Plus size={18} aria-hidden="true" className="text-on-primary" />
+            <Plus size={17} aria-hidden="true" className="text-on-primary" />
             Nova conta
           </Link>
         </div>
-        <div role="radiogroup" aria-label="Estado" className="flex gap-2">
-          {STATE_FILTERS.map((option) => {
-            const selected = option.value === stateFilter;
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="radiogroup" aria-label="Estado" className="flex gap-2">
+            {STATE_FILTERS.map((option) => {
+              const selected = option.value === stateFilter;
 
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => setStateFilter(option.value)}
-                className={`min-h-9 rounded-full border px-4 text-xs font-semibold transition ${
-                  selected ? "border-primary bg-primary-soft/60 text-primary-strong" : "border-outline/40 bg-surface text-muted hover:border-outline"
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-        <div role="radiogroup" aria-label="Direção" className="flex gap-2">
-          {DIRECTION_FILTERS.map((option) => {
-            const selected = option.value === direction;
+              return (
+                <button key={option.value} type="button" role="radio" aria-checked={selected} onClick={() => setStateFilter(option.value)} className={pillClass(selected)}>
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <span aria-hidden="true" className="mx-1.5 hidden h-6 w-px bg-outline md:block" />
+          <div role="radiogroup" aria-label="Direção" className="flex gap-2">
+            {DIRECTION_FILTERS.map((option) => {
+              const selected = option.value === direction;
 
-            return (
-              <button
-                key={option.value || "all"}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => setDirection(option.value)}
-                className={`min-h-9 rounded-full border px-4 text-xs font-semibold transition ${
-                  selected ? "border-primary bg-primary-soft/60 text-primary-strong" : "border-outline/40 bg-surface text-muted hover:border-outline"
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
+              return (
+                <button key={option.value || "all"} type="button" role="radio" aria-checked={selected} onClick={() => setDirection(option.value)} className={pillClass(selected)}>
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {notice && (
-        <p className="m-0 rounded-xl bg-primary-soft/40 p-3 text-sm text-primary-strong" role="status">
+        <p className="m-0 rounded-xl bg-primary-soft p-3 text-sm text-primary-strong" role="status">
           {notice}
         </p>
       )}
@@ -224,8 +216,8 @@ export function BillingsScreen() {
       )}
 
       {page && !page.billings.length && (
-        <section className="flex flex-col gap-3 rounded-2xl border border-outline/40 bg-surface p-5">
-          <h2 className="m-0 text-2xl font-extrabold text-primary-strong">Nenhuma conta ainda</h2>
+        <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">
+          <h2 className="m-0 font-display text-2xl font-bold text-ink">Nenhuma conta ainda</h2>
           <p className="m-0 text-sm leading-6 text-muted">Crie a primeira para acompanhar os vencimentos.</p>
           <Link className="inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 font-bold text-on-primary" href="/billings/new">
             Nova conta
@@ -235,17 +227,26 @@ export function BillingsScreen() {
 
       {page && page.billings.length > 0 && !visible.length && <p className="m-0 py-6 text-center text-sm text-muted">{filter.empty}</p>}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {visible.map((billing) => (
-          <BillingCard
-            key={billing.id}
-            billing={billing}
-            today={today}
-            onShare={(target) => void share(target)}
-            onOpen={(target) => router.push(`/billings/${target.id}`)}
-          />
-        ))}
-      </div>
+      {visible.length > 0 && (
+        <div className="grid gap-3 md:gap-0 md:overflow-hidden md:rounded-[20px] md:border md:border-outline md:bg-surface">
+          <div aria-hidden="true" className={`hidden gap-5 border-b border-outline/60 bg-surface-muted/60 px-[22px] py-3 text-[10.5px] font-semibold tracking-[0.1em] text-muted md:grid ${BILLING_ROW_COLUMNS}`}>
+            <span>CONTA</span>
+            <span>DETALHES</span>
+            <span>PRÓX. VENC.</span>
+            <span className="text-right">VALOR</span>
+            <span />
+          </div>
+          {visible.map((billing) => (
+            <BillingCard
+              key={billing.id}
+              billing={billing}
+              today={today}
+              onShare={(target) => void share(target)}
+              onOpen={(target) => router.push(`/billings/${target.id}`)}
+            />
+          ))}
+        </div>
+      )}
 
       {page?.nextCursor && (
         <button type="button" className="min-h-12 rounded-xl border border-outline font-bold text-primary" onClick={() => void load(page.nextCursor ?? undefined)}>
@@ -254,14 +255,10 @@ export function BillingsScreen() {
       )}
 
       {/* Narrow viewports keep the CTA pinned above the tab bar; wide ones show it beside the search. */}
-      <div className="fixed inset-x-0 bottom-[72px] z-[5] border-t border-outline/20 bg-canvas/95 px-5 pb-2 pt-3 backdrop-blur-md md:hidden">
-        <Link
-          className="flex h-13 items-center justify-center gap-2 rounded-xl bg-primary-strong text-base font-bold text-on-primary"
-          href="/billings/new"
-          aria-label="Nova conta"
-        >
+      <div className="fixed inset-x-0 bottom-[72px] z-[5] bg-canvas/95 px-5 pb-2.5 pt-3.5 backdrop-blur-md md:hidden">
+        <Link className="flex h-[54px] items-center justify-center gap-[9px] rounded-2xl bg-primary text-base font-bold text-on-primary" href="/billings/new" aria-label="Nova conta">
           <Plus size={20} aria-hidden="true" className="text-on-primary" />
-          <span className="text-base font-bold text-on-primary">Cadastrar Nova Conta</span>
+          <span className="text-[15.5px] font-bold text-on-primary">Cadastrar Nova Conta</span>
         </Link>
       </div>
     </section>

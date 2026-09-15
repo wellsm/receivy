@@ -1,4 +1,5 @@
-import "@fontsource-variable/plus-jakarta-sans";
+import "@fontsource-variable/public-sans";
+import "@fontsource-variable/space-grotesk";
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import type { ReactNode } from "react";
@@ -12,8 +13,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#faf8ff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d1320" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f6fb" },
+    { media: "(prefers-color-scheme: dark)", color: "#121122" },
   ],
 };
 

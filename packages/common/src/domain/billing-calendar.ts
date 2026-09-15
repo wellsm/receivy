@@ -10,6 +10,7 @@ import {
   SplitPartKind
 } from './billing';
 import { Direction, SplitMode } from './contracts';
+import { calendarDate } from './financial-form';
 import { normalizePixKey } from './pix-key';
 import { type BillingSplit, resolveBillingSplit } from './split';
 
@@ -154,7 +155,23 @@ function validateReminders(reminders: BillingReminder[]): BillingReminder[] {
     .sort((a, b) => a.offsetDays - b.offsetDays);
 }
 
-export function normalizeBillingInput(input: BillingInput): NormalizedBillingInput {
+/** The free-text counterpart of a registro: 1 to 120 characters once trimmed. */
+export function normalizeCounterpartLabel(label: string | undefined, direction: Direction): string {
+  const value = label?.normalize('NFC').trim() ?? '';
+
+  if (value.length >= 1 && value.length <= 120) {
+    return value;
+  }
+
+  if (direction === Direction.Payable) {
+    throw new RangeError('Informe para quem é o valor.');
+  }
+
+  throw new RangeError('Informe de quem é o valor.');
+}
+
+/** `now` turns on the rule only a creation obeys: a recorrente registro starts today or later. */
+export function normalizeBillingInput(input: BillingInput, now?: Date): NormalizedBillingInput {
   if (!TYPES.includes(input.type)) {
     throw new RangeError('Tipo de cobrança inválido.');
   }
@@ -212,7 +229,10 @@ export function normalizeBillingInput(input: BillingInput): NormalizedBillingInp
     throw new RangeError('Direção inválida.');
   }
 
-  const split = direction === Direction.Payable ? payableSplit(input) : receivableSplit(input);
+  const settled = input.settled === true;
+  // Checked before the split, so a registro reads its own message instead of the direction's.
+  const counterpartLabel = settled ? registroLabel(input, direction, now) : undefined;
+  const split = splitOf(input, direction, settled);
 
   resolveBillingSplit(input.totalCents, split);
 
@@ -236,17 +256,53 @@ export function normalizeBillingInput(input: BillingInput): NormalizedBillingInp
     category: input.category,
     direction,
     payeeUserId: direction === Direction.Payable ? input.payeeUserId?.trim() || undefined : undefined,
-    pix: direction === Direction.Payable && input.pix ? normalizeBillingPix(input.pix) : undefined
+    pix: direction === Direction.Payable && input.pix ? normalizeBillingPix(input.pix) : undefined,
+    settled: settled ? true : undefined,
+    counterpartLabel
   };
 }
 
-/** A conta a receber always names who pays. */
+/** A conta a receber always names who pays: at least one contact beside the owner. */
 function receivableSplit(input: BillingInput): BillingSplit {
-  if (!input.split) {
+  const split = input.split;
+
+  if (!split || !split.parts.some((part) => part.kind === SplitPartKind.User)) {
     throw new RangeError('Selecione ao menos um contato.');
   }
 
-  return input.split;
+  return split;
+}
+
+/** The allocation behind a billing: the owner alone on a registro or a conta a pagar, the contacts on a conta a receber. */
+function splitOf(input: BillingInput, direction: Direction, settled: boolean): BillingSplit {
+  if (settled) {
+    return { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] };
+  }
+
+  if (direction === Direction.Payable) {
+    return payableSplit(input);
+  }
+
+  return receivableSplit(input);
+}
+
+/**
+ * A registro is the owner's alone: it names the counterpart in free text and refuses anyone to split with, pay
+ * through or remind. With a clock (creation), a recorrente registro may not start before today.
+ */
+function registroLabel(input: BillingInput, direction: Direction, now: Date | undefined): string {
+  const label = normalizeCounterpartLabel(input.counterpartLabel, direction);
+  const participants = input.split?.parts.some((part) => part.kind === SplitPartKind.User) === true;
+
+  if (participants || input.payeeUserId || input.paymentMethodId || input.pix || input.reminders) {
+    throw new RangeError('Registro não tem participantes nem avisos.');
+  }
+
+  if (now && input.type !== BillingType.Once && input.startDate < calendarDate(now, input.timezone)) {
+    throw new RangeError('Registro recorrente começa hoje ou depois.');
+  }
+
+  return label;
 }
 
 /** A conta a pagar has a single payer, the owner: the allocation is the owner alone and no wallet key applies. */

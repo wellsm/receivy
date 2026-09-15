@@ -1,6 +1,19 @@
 import { Image } from "expo-image";
 import { Pressable, Text, View } from "react-native";
-import { canMarkPaid, canUploadProof, canWithdrawProof, fileSizeText, momentText, proofNote, proofStateLabel, type ChargeDetail } from "@receivy/common";
+import {
+  canAcceptProof,
+  canDeclarePayment,
+  canMarkPaid,
+  canUploadProof,
+  canWithdrawProof,
+  fileSizeText,
+  momentText,
+  proofNote,
+  proofStateLabel,
+  ProofKind,
+  ProofState,
+  type ChargeDetail,
+} from "@receivy/common";
 import { StatusTag } from "@/components/ui/status-tag";
 import { useThemeColors } from "@/theme/colors";
 
@@ -22,6 +35,10 @@ type ProofCardProps = {
   onAccept: () => void;
   /** Debtor only: drops the pending file so another one can be sent. */
   onWithdraw?: () => void;
+  /** The paying side says it already paid, without a file. */
+  onDeclare?: () => void;
+  /** Whoever collects says the declared payment did not arrive. */
+  onReject?: () => void;
 };
 
 function UploadButton({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) {
@@ -42,14 +59,30 @@ function UploadButton({ label, disabled, onPress }: { label: string; disabled: b
   );
 }
 
+function CardButton({ label, primary = false, disabled, onPress }: { label: string; primary?: boolean; disabled: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      className={`min-h-11 flex-1 items-center justify-center rounded-xl px-3 ${primary ? "bg-primary" : "border border-outline/50"} ${disabled ? "opacity-50" : ""}`}
+    >
+      <Text className={`text-xs font-semibold ${primary ? "text-on-primary" : "text-ink"}`}>{label}</Text>
+    </Pressable>
+  );
+}
+
 /** The proof section of a charge: the latest file with "Ver", plus accept/reject (creditor) or replace (debtor) when allowed. */
-export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw }: ProofCardProps) {
+export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw, onDeclare, onReject }: ProofCardProps) {
   const colors = useThemeColors();
   const proof = charge.proof;
   const upload = canUploadProof(charge);
   // Whoever collects settles from here: accepting the file under review, or by hand when there is none to accept.
   const settle = canMarkPaid(charge);
   const withdraw = canWithdrawProof(charge) && !!onWithdraw;
+  const declare = canDeclarePayment(charge) && !!onDeclare;
 
   if (!proof) {
     return (
@@ -70,6 +103,8 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
           <Text className="text-sm text-muted">Nenhum comprovante enviado.</Text>
         )}
 
+        {declare && <CardButton label="Já paguei" disabled={busy} onPress={onDeclare!} />}
+
         {settle && (
           <Pressable
             accessibilityRole="button"
@@ -85,6 +120,47 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
         )}
       </View>
     );
+  }
+
+  if (proof.kind === ProofKind.Declaration) {
+    const declaredState = proofStateLabel(proof);
+    const declaredNote = proofNote(charge);
+    const answer = canAcceptProof(charge);
+    const sent = momentText(proof.sentAt);
+    const line = proof.sentByViewer
+      ? `Informado em ${sent}${proof.state === ProofState.Pending ? ` · aguardando confirmação de ${charge.counterpartName}` : ""}`
+      : `${charge.counterpartName} informou que pagou em ${sent}, sem comprovante`;
+
+    return (
+      <View className="gap-3 rounded-2xl border border-outline/30 bg-surface p-4">
+        <View className="flex-row items-center justify-between gap-2">
+          <View className="flex-row items-center gap-2">
+            <Image source={ICONS.receipt} tintColor={colors.primaryStrong} style={{ width: 20, height: 20 }} />
+            <Text accessibilityRole="header" className="text-base font-bold text-ink">
+              Pagamento informado
+            </Text>
+          </View>
+          <StatusTag label={declaredState.label} tone={declaredState.tone} />
+        </View>
+
+        <Text className="text-sm leading-5 text-ink">{line}</Text>
+        {declaredNote && <Text className="text-xs leading-4 text-muted">{declaredNote}</Text>}
+
+        <View className="flex-row flex-wrap gap-2">
+          {withdraw && <CardButton label="Desfazer" disabled={busy} onPress={onWithdraw!} />}
+          {declare && <CardButton label="Informar de novo" disabled={busy} onPress={onDeclare!} />}
+          {upload && <CardButton label="Anexar comprovante" primary disabled={busy} onPress={onUpload} />}
+          {answer && onReject && <CardButton label="Não recebi" disabled={busy} onPress={onReject} />}
+          {answer && <CardButton label="Confirmar recebimento" primary disabled={busy} onPress={onAccept} />}
+          {settle && !answer && <CardButton label="Marcar como pago" primary disabled={busy} onPress={onAccept} />}
+        </View>
+      </View>
+    );
+  }
+
+  if (!proof.file) {
+    // Neither a file nor a declaration is under review; nothing more to show here.
+    return null;
   }
 
   const state = proofStateLabel(proof);
@@ -145,6 +221,8 @@ export function ProofCard({ charge, busy, onView, onUpload, onAccept, onWithdraw
             <Text className="text-xs font-semibold text-danger">Apagar e enviar outro</Text>
           </Pressable>
         )}
+
+        {declare && <CardButton label="Já paguei" disabled={busy} onPress={onDeclare!} />}
 
         {secondary && (
           <Pressable

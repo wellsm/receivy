@@ -18,7 +18,7 @@ describe('avatars on people', () => {
     await createUser(db, { id: debtor, email: 'debtor-avatar@example.test', name: 'Devedor' });
     await db.users.updateOne({ where: { id: debtor }, data: { avatar_updated_at: version } });
     await ContactRepository.save(db, owner, { name: 'Devedor', email: 'debtor-avatar@example.test' });
-    chargeId = (await createOnceCharge(db, owner, 'avatar-people', { userId: debtor, amountCents: 1234, dueDate: '2026-10-01' })).chargeId;
+    chargeId = (await createOnceCharge(db, owner, 'avatar-people', { userId: debtor, amountCents: 1234, dueDate: '2026-09-01' })).chargeId;
   });
 
   after(async () => {

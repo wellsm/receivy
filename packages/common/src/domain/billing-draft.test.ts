@@ -251,3 +251,59 @@ describe('typed phone key', () => {
     expect(input.pix).toEqual({ keyType: 'phone', key: '+5511987654321', label: undefined });
   });
 });
+
+describe('silenced participants', () => {
+  it('sends the switch only for the participants the draft holds it for', () => {
+    expect(buildBillingInput(base).split).toEqual({ mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }, { kind: 'owner' }] });
+    expect(buildBillingInput({ ...base, silenced: { p1: true } }).split).toEqual({
+      mode: 'equal',
+      parts: [{ kind: 'user', userId: 'p1', silenced: true }, { kind: 'owner' }]
+    });
+    expect(
+      buildBillingInput({
+        ...base,
+        mode: SplitMode.Fixed,
+        values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,01' } },
+        silenced: { p1: false }
+      }).split
+    ).toEqual({ mode: 'fixed', parts: [{ kind: 'user', userId: 'p1', amountCents: 4001, silenced: false }] });
+    expect(buildBillingInput({ ...base, mode: SplitMode.Shares, silenced: { p1: true } }).split).toEqual({
+      mode: 'shares',
+      parts: [
+        { kind: 'user', userId: 'p1', silenced: true, shares: 1 },
+        { kind: 'owner', shares: 1 }
+      ]
+    });
+  });
+});
+
+describe('registro draft', () => {
+  it('sends the name and the owner alone, without participants, payee, Pix or reminders', () => {
+    const input = buildBillingInput({
+      ...base,
+      settled: true,
+      counterpartLabel: ' Empresa X ',
+      payee: 'p9',
+      pix: 'pix-1',
+      pixInline: { type: PixKeyType.Cpf, key: '529.982.247-25', label: '' }
+    });
+
+    expect(input).toMatchObject({
+      direction: 'receivable',
+      settled: true,
+      counterpartLabel: 'Empresa X',
+      split: { mode: 'equal', parts: [{ kind: 'owner' }] }
+    });
+    expect(input.reminders).toBeUndefined();
+    expect(input.paymentMethodId).toBeUndefined();
+    expect(input.payeeUserId).toBeUndefined();
+    expect(input.pix).toBeUndefined();
+  });
+
+  it('checks the start of a recorrente registro only with a clock', () => {
+    const monthly: BillingDraft = { ...base, settled: true, counterpartLabel: 'Empresa X', type: BillingType.Indefinite };
+
+    expect(() => buildBillingInput(monthly, new Date('2026-09-15T12:00:00Z'))).toThrow('Registro recorrente começa hoje ou depois.');
+    expect(buildBillingInput(monthly).startDate).toBe('2026-01-31');
+  });
+});

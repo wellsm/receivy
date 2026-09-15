@@ -9,8 +9,9 @@ import { BillingRepository } from '../repositories/billing';
 
 /**
  * Daily at 05:00 UTC, past midnight in every Brazilian timezone: every active assinatura gets the
- * occurrences that came due, and their initial notices go out. Creation and patches materialize
- * inline, so this only covers "the day turned". Idempotent: a second run finds nothing to do.
+ * occurrences that came due, and their initial notices go out; then every registro pays what came due.
+ * Creation and patches materialize inline, so this only covers "the day turned". Idempotent: a second
+ * run finds nothing to do.
  */
 export declare class BillingCron extends Cron.Service {
   expression: 'cron(0 5 * * ? *)';
@@ -55,7 +56,9 @@ export async function handler(
   };
 
   const materialized = await BillingRepository.materializeDueBillings(db, notice, now);
+  // After the sweep: the occurrence it just created is already paid, and this pays what came due since yesterday.
+  const settled = await BillingRepository.settleRegistered(db, now);
 
   // Counts only; never owner or recipient data.
-  console.info('Billing cron', { materialized });
+  console.info('Billing cron', { materialized, settled });
 }

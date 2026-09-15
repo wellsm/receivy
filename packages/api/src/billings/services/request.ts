@@ -20,7 +20,9 @@ export function billingRequestFingerprint(input: NormalizedBillingInput): string
       split: input.split,
       direction: input.direction,
       payeeUserId: input.payeeUserId ?? null,
-      pix: input.pix ?? null
+      pix: input.pix ?? null,
+      // Only a registro adds its fields, so replays of older requests keep their fingerprint.
+      ...(input.settled ? { settled: true, counterpartLabel: input.counterpartLabel } : {})
     },
     (_key, value: unknown) =>
       value && typeof value === 'object' && !Array.isArray(value)

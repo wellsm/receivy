@@ -1,5 +1,5 @@
 import { Order } from '@ez4/database';
-import { HttpNotFoundError } from '@ez4/gateway';
+import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import {
   type BillingType,
   ChargePayer,
@@ -7,6 +7,7 @@ import {
   type ChargeSummary,
   type ContactLedger,
   Direction,
+  endOfMonth,
   FeedStatus,
   type TimelineItem,
   type TimelinePage
@@ -18,6 +19,7 @@ import type { DbClient } from '../../database';
 import { TimelineOverflowError } from '../errors';
 
 const MAX_SAFE_CENTS = BigInt(Number.MAX_SAFE_INTEGER);
+const MONTH_FORMAT = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 function money(amountCents: bigint | number) {
   const exact =
@@ -76,7 +78,35 @@ function statusWhere(status: TimelineRepository.Status, today: string) {
   return { state: status };
 }
 
-function visibleWhere(userId: string, filters: TimelineRepository.Filters, withCursor: boolean, today: string) {
+/** `filters.month` if given and well-formed, else the current month (same "today" the feed already uses). */
+function resolveMonth(month: string | undefined, today: string): string {
+  if (!month) {
+    return today.slice(0, 7);
+  }
+
+  if (!MONTH_FORMAT.test(month)) {
+    throw new HttpBadRequestError(`Mês inválido: ${month}.`);
+  }
+
+  return month;
+}
+
+/**
+ * The selected month's due dates, plus — only when that month is the current one — pending charges
+ * still overdue from an earlier month. Every other filter narrows inside this set.
+ */
+function itemSetWhere(month: string, today: string) {
+  const start = `${month}-01`;
+  const inMonth = { due_date: { gte: start, lte: endOfMonth(start) } };
+
+  if (month !== today.slice(0, 7)) {
+    return inMonth;
+  }
+
+  return { OR: [inMonth, { AND: [{ state: ChargeState.Pending }, { due_date: { lt: start } }] }] };
+}
+
+function visibleWhere(userId: string, filters: TimelineRepository.Filters, withCursor: boolean, today: string, month: string) {
   const directions = filters.direction ?? [];
   const statuses = filters.status ?? [];
   const types = filters.type ?? [];
@@ -89,7 +119,8 @@ function visibleWhere(userId: string, filters: TimelineRepository.Filters, withC
       ...(types.length ? [{ billing_type: { isIn: types } }] : []),
       ...(filters.from ? [{ due_date: { gte: filters.from } }] : []),
       ...(filters.to ? [{ due_date: { lte: filters.to } }] : []),
-      ...(cursor ? [{ OR: [{ due_date: { gt: cursor.dueDate } }, { due_date: cursor.dueDate, id: { gt: cursor.id } }] }] : [])
+      itemSetWhere(month, today),
+      ...(cursor ? [{ OR: [{ due_date: { lt: cursor.dueDate } }, { due_date: cursor.dueDate, id: { gt: cursor.id } }] }] : [])
     ]
   };
 }
@@ -118,26 +149,32 @@ export namespace TimelineRepository {
     type?: BillingType[];
     from?: string;
     to?: string;
+    /** `YYYY-MM`; defaults to the current month. */
+    month?: string;
   };
 
   export async function get(db: DbClient, userId: string, filters: Filters): Promise<TimelinePage> {
     const user = await actor(db, userId);
     const today = localDate(user.timezone);
+    const month = resolveMonth(filters.month, today);
     const allQuery = await db.charges.findMany({
       select: ChargeRepository.SELECT,
-      where: visibleWhere(userId, filters, false, today)
+      where: visibleWhere(userId, filters, false, today, month)
     });
     const all = allQuery.records;
     const active = all.filter((row) => row.state === ChargeState.Pending);
     const cursor = cursorDate(filters.cursor);
+    // Latest due date first; within a day the id keeps the order stable, and the cursor follows the same order.
     const remaining = all
-      .filter((row) => !cursor || row.due_date > cursor.dueDate || (row.due_date === cursor.dueDate && row.id > cursor.id))
-      .sort((a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      .filter((row) => !cursor || row.due_date < cursor.dueDate || (row.due_date === cursor.dueDate && row.id > cursor.id))
+      .sort((a, b) => (a.due_date > b.due_date ? -1 : a.due_date < b.due_date ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const page = remaining.slice(0, 50);
     const next = remaining.length > 50 ? page.at(-1) : undefined;
     const items: TimelineItem[] = [];
 
     for (const row of page) {
+      const record = await ChargeRepository.settledBilling(db, row);
+
       items.push({
         kind: 'charge',
         direction: directionFor(row, userId),
@@ -156,7 +193,12 @@ export namespace TimelineRepository {
           proofState: visibleProofState(row),
           payer: ChargeRepository.payer(row),
           ownedByViewer: ChargeRepository.owns(row, userId),
-          hasPix: !!row.pix_key_snapshot && !!row.pix_key_type_snapshot
+          hasPix: !!row.pix_key_snapshot && !!row.pix_key_type_snapshot,
+          proofKind: ChargeRepository.proofKind(row),
+          confirmationRequired: await ChargeRepository.confirmationRequired(db, row),
+          silenced: ChargeRepository.owns(row, userId) && row.silenced === true,
+          settled: record.settled,
+          counterpartLabel: record.counterpartLabel
         }
       });
     }
@@ -164,8 +206,11 @@ export namespace TimelineRepository {
     const proofsToReview = active.filter(
       (row) => directionFor(row, userId) === Direction.Receivable && row.proof_state === StoredProofState.Pending
     ).length;
+    // Paid rows never carry over from an earlier month, so `all` already bounds these to the selected month.
+    const settled = all.filter((row) => row.state === ChargeState.Paid);
     return {
       items,
+      month,
       summary: {
         receivable: money(sum(active.filter((row) => directionFor(row, userId) === Direction.Receivable))),
         payable: money(sum(active.filter((row) => directionFor(row, userId) === Direction.Payable))),
@@ -173,7 +218,9 @@ export namespace TimelineRepository {
         pending: money(sum(active.filter((row) => row.state === ChargeState.Pending))),
         proofsToReview,
         receivableCount: active.filter((row) => directionFor(row, userId) === Direction.Receivable).length,
-        payableCount: active.filter((row) => directionFor(row, userId) === Direction.Payable).length
+        payableCount: active.filter((row) => directionFor(row, userId) === Direction.Payable).length,
+        receivedTotal: money(sum(settled.filter((row) => directionFor(row, userId) === Direction.Receivable))),
+        paidTotal: money(sum(settled.filter((row) => directionFor(row, userId) === Direction.Payable)))
       },
       nextCursor: next ? Buffer.from(JSON.stringify({ dueDate: next.due_date, id: next.id })).toString('base64url') : null
     };

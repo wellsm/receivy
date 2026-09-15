@@ -56,7 +56,7 @@ function FilterDropdown<T extends string>({ group, summary, options, selected, c
         aria-controls={open ? listId : undefined}
         onClick={() => setOpen(current => !current)}
         className={`flex min-h-10 w-full items-center gap-2 rounded-full border px-4 text-sm ${
-          changed ? "border-primary bg-primary-soft/50 text-primary-strong" : "border-outline bg-surface text-ink"
+          changed ? "border-primary bg-primary-soft text-primary-strong" : "border-outline bg-surface text-ink"
         }`}
       >
         <span aria-hidden="true" className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-muted">
@@ -147,7 +147,7 @@ function ChipGroup<T extends string>({ group, options, selected, everyLabel, onP
             aria-pressed={every}
             onClick={onClear}
             className={`min-h-10 rounded-full border px-4 text-sm font-semibold ${
-              every ? "border-primary bg-primary text-on-primary" : "border-outline bg-surface text-ink"
+              every ? "border-ink bg-ink text-surface" : "border-outline bg-surface text-muted"
             }`}
           >
             {everyLabel}
@@ -165,7 +165,7 @@ function ChipGroup<T extends string>({ group, options, selected, everyLabel, onP
               aria-pressed={active}
               onClick={() => onPick(option.value)}
               className={`min-h-10 rounded-full border px-4 text-sm font-semibold ${
-                active ? "border-primary bg-primary text-on-primary" : "border-outline bg-surface text-ink"
+                active ? "border-ink bg-ink text-surface" : "border-outline bg-surface text-muted"
               }`}
             >
               {option.label}
@@ -285,7 +285,7 @@ export function FeedFiltersBar({ value, onChange, counts }: FeedFiltersBarProps)
         )}
       </button>
 
-      <div className="hidden gap-2 sm:grid sm:grid-cols-2">
+      <div className="hidden gap-2 sm:grid sm:grid-cols-2 md:grid-cols-1">
         <FilterDropdown
           group="Direção"
           summary={feedDirectionLabel(value)}
@@ -324,7 +324,7 @@ export function FeedFiltersBar({ value, onChange, counts }: FeedFiltersBarProps)
           <button
             type="button"
             onClick={() => onChange(DEFAULT_FEED_FILTERS)}
-            className="col-span-2 min-h-10 justify-self-start rounded-full border border-outline bg-transparent px-4 text-sm font-semibold text-muted"
+            className="col-span-2 min-h-10 justify-self-start md:col-span-1 rounded-full border border-outline bg-transparent px-4 text-sm font-semibold text-muted"
           >
             Limpar
           </button>

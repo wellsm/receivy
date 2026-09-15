@@ -10,6 +10,8 @@ import {
   formatMoney,
   pendingChargesOf,
   PendingChargesAction,
+  SplitPartKind,
+  type BillingAllocation,
   type BillingDetail,
   type BillingGuest,
   type BillingGuestAction,
@@ -32,7 +34,18 @@ import { useThemeColors } from "@/theme/colors";
 
 type Client = Pick<
   FinancialClient,
-  "billing" | "patchBilling" | "invite" | "revokeInvite" | "resolveGuest" | "publicLink" | "publicChargeUrl" | "paymentMethods" | "pay" | "reopen" | "reviewProof"
+  | "billing"
+  | "patchBilling"
+  | "invite"
+  | "revokeInvite"
+  | "resolveGuest"
+  | "publicLink"
+  | "publicChargeUrl"
+  | "paymentMethods"
+  | "pay"
+  | "reopen"
+  | "reviewProof"
+  | "silenceParticipant"
 >;
 
 type BillingDetailScreenProps = {
@@ -124,6 +137,23 @@ function currentCycle(cycles: Cycle[]): Cycle | null {
   return [...cycles].reverse().find((cycle) => cycle.charges.some((charge) => charge.state === "pending")) ?? cycles.at(-1) ?? null;
 }
 
+/** The first row of each debtor in the list: the participant action shows there, once per person. */
+function firstRowIds(charges: ChargeDetail[]): Set<string> {
+  const seen = new Set<string>();
+  const ids = new Set<string>();
+
+  for (const charge of charges) {
+    if (!charge.debtorUserId || seen.has(charge.debtorUserId)) {
+      continue;
+    }
+
+    seen.add(charge.debtorUserId);
+    ids.add(charge.id);
+  }
+
+  return ids;
+}
+
 function cycleTotals(cycle: Cycle): { paid: number; goal: number; paidCount: number; open: number } {
   const open = cycle.charges.filter((charge) => charge.state !== "cancelled");
   const paidCharges = open.filter((charge) => charge.state === "paid");
@@ -175,6 +205,17 @@ function typeTag(billing: BillingDetail, current: Cycle | null): string {
   }
 
   return "À vista";
+}
+
+/** "De Empresa X" on a registro a receber, "Para Empresa X" on one a pagar. */
+function counterpartHeadline(billing: BillingDetail): string {
+  const name = billing.counterpartLabel ?? "";
+
+  if (billing.direction === "payable") {
+    return `Para ${name}`;
+  }
+
+  return `De ${name}`;
 }
 
 function Tag({ label, tone }: { label: string; tone: "success" | "warning" | "info" | "neutral" | "danger" }) {
@@ -374,6 +415,38 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
     ]);
   }
 
+  /** "Não notificar" / "Voltar a notificar" for one participant; the answer is the billing with its pending charges updated. */
+  async function silenceParticipant(detail: BillingDetail, userId: string, name: string, silenced: boolean) {
+    await run(async () => {
+      setBilling(await client.silenceParticipant(detail.id, userId, silenced));
+
+      if (silenced) {
+        return;
+      }
+
+      setNotice(`Avisos reativados para ${name}.`);
+    }, "Não foi possível atualizar os avisos.");
+  }
+
+  /** Silencing asks first; turning the notices back on does not. */
+  function toggleSilence(detail: BillingDetail, participant: BillingAllocation, name: string) {
+    const userId = participant.userId;
+
+    if (!userId) {
+      return;
+    }
+
+    if (participant.silenced) {
+      void silenceParticipant(detail, userId, name, false);
+      return;
+    }
+
+    Alert.alert(`Não notificar ${name}?`, `Os lembretes automáticos das cobranças pendentes e futuras de ${name} nesta conta param.`, [
+      { text: "Voltar", style: "cancel" },
+      { text: "Não notificar", onPress: () => void silenceParticipant(detail, userId, name, true) },
+    ]);
+  }
+
   if (!billing) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-canvas" edges={["bottom"]}>
@@ -396,11 +469,14 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   const today = calendarDate(new Date(), billing.timezone);
   const cycles = cyclesOf(billing);
   const current = currentCycle(cycles);
+  const firstRows = firstRowIds(current?.charges ?? []);
   const totals = current ? cycleTotals(current) : { paid: 0, goal: billing.total.amountCents, paidCount: 0, open: 0 };
   const goal = totals.goal || billing.total.amountCents;
   const progress = goal ? Math.min(100, Math.floor((totals.paid / goal) * 100)) : 0;
   const pending = current?.charges.filter((charge) => charge.state === "pending") ?? [];
   const payable = billing.direction === "payable";
+  // A registro: the owner alone, already settled, with the counterpart typed as free text.
+  const settled = billing.settled === true;
   // A conta a pagar carries its own key; a conta a receber points at one of the wallet.
   const pix = payable ? billing.pix : (billing.charges.find((charge) => charge.pix)?.pix ?? pixFromWallet(methods, billing.paymentMethodId));
   const ended = billing.state === "ended";
@@ -427,6 +503,15 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
     return { text: late === 0 ? "Vence hoje" : `Vence em ${dayMonth(charge.dueDate)}`, tone: "warning" };
   }
 
+  /** The participant behind a row while the billing still splits with them; a conta a pagar has none. */
+  function participantOf(detail: BillingDetail, charge: ChargeDetail): BillingAllocation | undefined {
+    if (detail.direction === "payable") {
+      return undefined;
+    }
+
+    return detail.allocations.find((allocation) => allocation.kind === SplitPartKind.User && allocation.userId === charge.debtorUserId);
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView contentContainerClassName="gap-5 px-5 pb-10 pt-4" showsVerticalScrollIndicator={false}>
@@ -446,6 +531,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
               </View>
               <Text className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">{typeTag(billing, current)}</Text>
               {payable && <Text className="rounded-full bg-danger-soft px-2.5 py-1 text-[11px] font-semibold text-danger">A pagar</Text>}
+              {settled && <Text className="rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-semibold text-muted">Registro</Text>}
             </View>
             <Tag label={STATE_LABELS[billing.state]} tone={stateTone} />
           </View>
@@ -453,6 +539,8 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
           <Text accessibilityRole="header" className="text-[22px] font-bold tracking-tight text-primary-strong">
             {billing.description}
           </Text>
+
+          {settled && <Text className="text-sm font-semibold text-ink">{counterpartHeadline(billing)}</Text>}
 
           <Text className="text-xs text-muted">
             {ended ? "Sem próximos vencimentos" : "Próx. vencimento: "}
@@ -508,7 +596,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                 disabled={busy}
                 onPress={() => onEdit?.(billing)}
               />
-              {!payable && billing.state === "active" && (
+              {!payable && !settled && billing.state === "active" && (
                 <ActionTile label="Convidar" icon={ICONS.group} hint="Compartilha um convite para entrar na conta" disabled={busy} onPress={() => void inviteSomeone(billing)} />
               )}
               {billing.type === "indefinite" && (
@@ -522,7 +610,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
               )}
               <ActionTile label="Encerrar" icon={ICONS.stop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onPress={() => end(billing)} />
             </View>
-            {!payable && invite && billing.state === "active" && (
+            {!payable && !settled && invite && billing.state === "active" && (
               <View className="flex-row items-center justify-between px-1">
                 <Text className="text-[11px] text-muted">Convite ativo até {dayMonth(invite.expiresAt.slice(0, 10))}</Text>
                 <Pressable accessibilityRole="button" accessibilityLabel="Revogar convite" disabled={busy} onPress={() => void revokeInvite(billing)} className="min-h-8 justify-center">
@@ -604,7 +692,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
         <View className="gap-3">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-2">
-              <Text className="text-lg font-semibold text-primary-strong">{payable ? "Cobranças" : "Participantes"}</Text>
+              <Text className="text-lg font-semibold text-primary-strong">{payable || settled ? "Cobranças" : "Participantes"}</Text>
               <Text className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-primary-strong">{current?.charges.length ?? 0}</Text>
             </View>
             {current && billing.type !== "once" && (
@@ -622,8 +710,13 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             // A file under review changes what the row asks of the owner: review it, never nag.
             const reviewing = isPending && charge.proofState === "pending";
             const statusColor = { success: "text-primary", warning: "text-warning", danger: "text-danger", neutral: "text-muted" }[status.tone];
-            const name = payable ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
-            const avatar = payable ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
+            // A registro's rows carry its counterpart; a conta a pagar names the payee.
+            const name = payable && !settled ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
+            const avatar = payable && !settled ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
+            const participant = participantOf(billing, charge);
+            // The badge is this charge's own switch; the participant's switch drives their action.
+            const quiet = charge.silenced === true;
+            const participantQuiet = participant?.silenced === true;
 
             return (
               <View
@@ -639,9 +732,12 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                   <View className="flex-1 flex-row items-center gap-3">
                     <InitialsAvatar name={name} size={40} avatar={avatar} />
                     <View className="flex-1">
-                      <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
-                        {name}
-                      </Text>
+                      <View className="flex-row items-center gap-1.5">
+                        <Text className="shrink text-sm font-semibold text-ink" numberOfLines={1}>
+                          {name}
+                        </Text>
+                        {quiet && <Tag label="Sem avisos" tone="neutral" />}
+                      </View>
                       <Text className={`text-[11px] font-medium ${statusColor}`}>{status.text}</Text>
                     </View>
                   </View>
@@ -700,16 +796,18 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                       >
                         <Text className="text-[11px] font-semibold text-ink">Marcar pago</Text>
                       </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Compartilhar link de ${name}`}
-                        accessibilityState={{ disabled: busy }}
-                        disabled={busy}
-                        onPress={() => void shareCharge(charge)}
-                        className={`h-8 w-8 items-center justify-center rounded-lg bg-primary ${busy ? "opacity-50" : ""}`}
-                      >
-                        <Image source={ICONS.share} tintColor={colors.onPrimary} style={{ width: 14, height: 14 }} />
-                      </Pressable>
+                      {!settled && (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Compartilhar link de ${name}`}
+                          accessibilityState={{ disabled: busy }}
+                          disabled={busy}
+                          onPress={() => void shareCharge(charge)}
+                          className={`h-8 w-8 items-center justify-center rounded-lg bg-primary ${busy ? "opacity-50" : ""}`}
+                        >
+                          <Image source={ICONS.share} tintColor={colors.onPrimary} style={{ width: 14, height: 14 }} />
+                        </Pressable>
+                      )}
                     </View>
                   </View>
                 )}
@@ -725,6 +823,21 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                       className={`min-h-8 justify-center px-1 ${busy ? "opacity-50" : ""}`}
                     >
                       <Text className="text-[11px] font-semibold text-primary">Reabrir</Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {participant && !ended && firstRows.has(charge.id) && (
+                  <View className="flex-row items-center justify-end border-t border-outline/20 pt-2.5">
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={participantQuiet ? `Voltar a notificar ${name}` : `Não notificar ${name}`}
+                      accessibilityState={{ disabled: busy }}
+                      disabled={busy}
+                      onPress={() => toggleSilence(billing, participant, name)}
+                      className={`min-h-8 justify-center px-1 ${busy ? "opacity-50" : ""}`}
+                    >
+                      <Text className="text-[11px] font-semibold text-muted">{participantQuiet ? "Voltar a notificar" : "Não notificar"}</Text>
                     </Pressable>
                   </View>
                 )}
@@ -806,7 +919,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
           })}
         </View>
 
-        {pending.length > 0 && collecting && (
+        {pending.length > 0 && collecting && !settled && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Compartilhar link de pagamento"

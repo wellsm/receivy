@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, KeyRound, Loader2, LogOut, Mail, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
+import { Check, ChevronRight, KeyRound, Loader2, LogOut, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -16,8 +16,15 @@ const FALLBACK_TIMEZONE = "America/Sao_Paulo";
 
 const OUTLINE_BUTTON = "flex min-h-12 items-center justify-center rounded-xl border border-outline font-bold text-primary disabled:opacity-50";
 const DIALOG_ACTION = "flex min-h-12 flex-1 items-center justify-center rounded-xl font-bold";
-const LIST = "overflow-hidden rounded-3xl border border-outline/40 bg-surface";
-const SECTION_TITLE = "m-0 px-1 text-xs font-bold tracking-wider text-muted";
+const CARD = "overflow-hidden rounded-[20px] border border-outline bg-surface";
+const SECTION_TITLE = "m-0 text-[10.5px] font-semibold tracking-[0.09em] text-muted";
+const HERO_BUTTON = "flex h-[38px] items-center gap-[7px] rounded-xl bg-on-primary/20 px-3.5 text-[12.5px] font-bold text-on-primary transition hover:bg-on-primary/30 disabled:opacity-50";
+const ROW_ACTION = "hidden h-9 shrink-0 items-center rounded-[11px] border px-3.5 text-[12.5px] font-bold md:inline-flex";
+
+const ROW_TONES = {
+  primary: "bg-primary-soft text-primary-strong",
+  success: "bg-success-soft text-success",
+} as const;
 
 function deviceTimezone(): string {
   try {
@@ -32,48 +39,29 @@ type RowProps = {
   label: string;
   title: string;
   subtitle: string;
-  danger?: boolean;
-  disabled?: boolean;
-  href?: string;
-  onClick?: () => void;
+  tone: keyof typeof ROW_TONES;
+  href: string;
 };
 
-/** A list row: a link when it navigates, a button when it opens a dialog. */
-function Row({ icon: Icon, label, title, subtitle, danger = false, disabled = false, href, onClick }: RowProps) {
-  const className = "flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-surface-muted/60 disabled:opacity-50";
-
-  const content = (
-    <>
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${danger ? "bg-danger-soft text-danger" : "bg-surface-muted text-primary-strong"}`}>
-        <Icon aria-hidden="true" size={20} strokeWidth={1.8} />
+/** A management row: a chevron on narrow screens, a "Gerenciar" button on wide ones. */
+function Row({ icon: Icon, label, title, subtitle, tone, href }: RowProps) {
+  return (
+    <Link className="flex min-h-14 w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-surface-muted/60 md:gap-3.5 md:px-[22px] md:py-[18px]" href={href} aria-label={label}>
+      <span className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl md:h-[42px] md:w-[42px] md:rounded-[13px] ${ROW_TONES[tone]}`}>
+        <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
       </span>
 
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className={`text-base font-bold ${danger ? "text-danger" : "text-ink"}`}>{title}</span>
+        <span className="text-[14.5px] font-semibold text-ink md:text-[15px]">{title}</span>
         <span className="text-xs leading-4 text-muted">{subtitle}</span>
       </span>
 
-      <ChevronRight aria-hidden="true" size={18} strokeWidth={1.8} className="shrink-0 text-muted" />
-    </>
+      <ChevronRight aria-hidden="true" size={16} strokeWidth={1.8} className="shrink-0 text-muted md:hidden" />
+      <span aria-hidden="true" className={`${ROW_ACTION} border-outline text-ink`}>
+        Gerenciar
+      </span>
+    </Link>
   );
-
-  if (href) {
-    return (
-      <Link className={className} href={href} aria-label={label}>
-        {content}
-      </Link>
-    );
-  }
-
-  return (
-    <button type="button" className={className} aria-label={label} disabled={disabled} onClick={onClick}>
-      {content}
-    </button>
-  );
-}
-
-function Divider() {
-  return <div className="mx-4 h-px bg-outline/40" />;
 }
 
 type DialogShellProps = { titleId: string; onClose: () => void; children: ReactNode };
@@ -309,31 +297,84 @@ export function ProfileScreen() {
       )}
 
       {!ended && user && (
-        <div className="grid gap-5 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:items-start md:gap-6">
-          <section className="flex flex-col items-center gap-3 rounded-3xl border border-outline/40 bg-surface p-6">
-            <div className="relative h-24 w-24">
-              <InitialsAvatar name={initial} size={96} avatar={user.avatar} />
+        <div className="grid gap-[18px] md:grid-cols-[minmax(0,380px)_minmax(0,1fr)] md:items-start md:gap-7">
+          <div className="flex flex-col gap-4">
+            <section className="flex flex-col gap-[18px] rounded-3xl bg-primary p-5 text-on-primary md:rounded-[22px] md:p-[26px]">
+              <div className="flex items-center gap-4">
+                <div className="relative h-[72px] w-[72px] shrink-0">
+                  <InitialsAvatar name={initial} size={72} avatar={user.avatar} />
 
-              <label
-                className={`absolute inset-0 m-auto flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-surface/90 text-primary-strong shadow-md transition hover:bg-surface has-disabled:cursor-not-allowed has-focus-visible:ring-2 has-focus-visible:ring-primary ${photoBusy ? "opacity-90" : ""}`}
-              >
-                {photoBusy ? <Loader2 size={18} aria-hidden="true" className="animate-spin" /> : <Pencil size={18} aria-hidden="true" />}
-                <span className="sr-only">{photoBusy ? "Enviando foto…" : "Trocar foto"}</span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/heic"
-                  aria-label="Trocar foto"
-                  disabled={photoBusy}
-                  className="sr-only"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
+                  <label
+                    className={`absolute -right-1 -bottom-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-primary bg-surface text-primary-strong shadow-md transition has-disabled:cursor-not-allowed has-focus-visible:ring-2 has-focus-visible:ring-on-primary ${photoBusy ? "opacity-90" : ""}`}
+                  >
+                    {photoBusy ? <Loader2 size={15} aria-hidden="true" className="animate-spin" /> : <Pencil size={15} aria-hidden="true" />}
+                    <span className="sr-only">{photoBusy ? "Enviando foto…" : "Trocar foto"}</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/heic"
+                      aria-label="Trocar foto"
+                      disabled={photoBusy}
+                      className="sr-only"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
 
-                    event.target.value = "";
-                    void changePhoto(file);
-                  }}
-                />
-              </label>
-            </div>
+                        event.target.value = "";
+                        void changePhoto(file);
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  {editing ? (
+                    <div className="flex w-full items-center gap-2">
+                      <input
+                        className="min-h-11 min-w-0 flex-1 rounded-xl border-0 bg-surface px-3 text-ink"
+                        aria-label="Nome"
+                        maxLength={120}
+                        autoComplete="name"
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-on-primary/20 text-on-primary disabled:opacity-50"
+                        aria-label="Salvar nome"
+                        disabled={busy || !draft.trim()}
+                        onClick={() => void saveName()}
+                      >
+                        <Check aria-hidden="true" size={20} strokeWidth={2} />
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="m-0 truncate font-display text-xl font-bold md:text-[22px]">{user.name ?? "Sem nome"}</p>
+                  )}
+                  <p className="m-0 truncate text-[12.5px] text-on-primary/80">{user.email}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2.5">
+                {!editing && (
+                  <button
+                    type="button"
+                    className={HERO_BUTTON}
+                    aria-label="Editar nome"
+                    disabled={busy}
+                    onClick={() => {
+                      setDraft(user.name ?? "");
+                      setEditing(true);
+                    }}
+                  >
+                    <Pencil aria-hidden="true" size={15} strokeWidth={2} />
+                    Editar nome
+                  </button>
+                )}
+                <button type="button" className={HERO_BUTTON} aria-label="Sair da conta" disabled={busy} onClick={() => setDialog("logout")}>
+                  <LogOut aria-hidden="true" size={15} strokeWidth={2} />
+                  Sair
+                </button>
+              </div>
+            </section>
 
             {photoError && (
               <p role="alert" className="m-0 rounded-xl bg-danger-soft px-3 py-2 text-center text-sm text-danger">
@@ -341,73 +382,12 @@ export function ProfileScreen() {
               </p>
             )}
 
-            {editing ? (
-              <div className="flex w-full items-center gap-2">
-                <input
-                  className="min-h-12 flex-1 rounded-xl border border-outline bg-canvas px-3 text-ink"
-                  aria-label="Nome"
-                  maxLength={120}
-                  autoComplete="name"
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-on-primary disabled:opacity-50"
-                  aria-label="Salvar nome"
-                  disabled={busy || !draft.trim()}
-                  onClick={() => void saveName()}
-                >
-                  <Check aria-hidden="true" size={20} strokeWidth={2} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <p className="m-0 text-2xl font-extrabold text-ink">{user.name ?? "Sem nome"}</p>
-                <button
-                  type="button"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-muted text-primary-strong disabled:opacity-50"
-                  aria-label="Editar nome"
-                  disabled={busy}
-                  onClick={() => {
-                    setDraft(user.name ?? "");
-                    setEditing(true);
-                  }}
-                >
-                  <Pencil aria-hidden="true" size={18} strokeWidth={2} />
-                </button>
-              </div>
-            )}
-
-            <p className="m-0 flex items-center gap-2 text-sm text-muted">
-              <Mail aria-hidden="true" size={16} strokeWidth={1.8} />
-              <span>{user.email}</span>
-            </p>
-          </section>
-
-          <div className="flex flex-col gap-5">
-            <section className="flex flex-col gap-2" aria-labelledby="profile-management-title">
-              <h2 className={SECTION_TITLE} id="profile-management-title">
-                GERENCIAMENTO
-              </h2>
-
-              <div className={LIST}>
-                <Row icon={Users} label="Gerenciar contatos" title="Meus Contatos" subtitle="Gerenciar pessoas e dados salvos de cobrança" href="/contacts" />
-                <Divider />
-                <Row icon={KeyRound} label="Gerenciar chaves Pix" title="Minhas Chaves Pix" subtitle="Chaves cadastradas para receber pagamentos" href="/settings/pix" />
-              </div>
-            </section>
-
-            <section className="flex flex-col gap-2" aria-labelledby="profile-appearance-title">
+            <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-[18px]" aria-labelledby="profile-appearance-title">
               <h2 className={SECTION_TITLE} id="profile-appearance-title">
                 APARÊNCIA
               </h2>
 
-              <div
-                role="radiogroup"
-                aria-labelledby="profile-appearance-title"
-                className="flex gap-2 rounded-3xl border border-outline/40 bg-surface p-2"
-              >
+              <div role="radiogroup" aria-labelledby="profile-appearance-title" className="flex gap-[7px]">
                 {THEME_PREFERENCE_OPTIONS.map(option => {
                   const selected = option.value === themePreference;
 
@@ -418,11 +398,7 @@ export function ProfileScreen() {
                       role="radio"
                       aria-checked={selected}
                       onClick={() => chooseTheme(option.value)}
-                      className={`min-h-11 flex-1 rounded-2xl text-sm font-semibold transition ${
-                        selected
-                          ? "bg-primary-soft/60 text-primary-strong"
-                          : "text-muted hover:bg-surface-muted"
-                      }`}
+                      className={`min-h-10 flex-1 rounded-xl text-[13px] transition ${selected ? "bg-primary-soft font-bold text-primary-strong" : "bg-surface-muted font-semibold text-muted hover:text-ink"}`}
                     >
                       {option.label}
                     </button>
@@ -430,29 +406,40 @@ export function ProfileScreen() {
                 })}
               </div>
             </section>
+          </div>
 
-            <section className="flex flex-col gap-2" aria-labelledby="profile-security-title">
-              <h2 className={SECTION_TITLE} id="profile-security-title">
-                SEGURANÇA E SESSÃO
+          <div className="flex flex-col gap-4">
+            <section className={CARD} aria-labelledby="profile-management-title">
+              <h2 className={`${SECTION_TITLE} border-b border-outline/60 px-4 py-3.5 md:px-[22px]`} id="profile-management-title">
+                GERENCIAMENTO
               </h2>
 
-              <div className={LIST}>
-                <Row icon={LogOut} label="Sair da conta" title="Sair da conta" subtitle="Encerrar sessão ativa neste dispositivo" disabled={busy} onClick={() => setDialog("logout")} />
-                <Divider />
-                <Row
-                  icon={Trash2}
-                  label="Excluir conta"
-                  title="Excluir conta"
-                  subtitle="Remover histórico, vínculos e dados permanentemente"
-                  danger
-                  disabled={busy}
-                  onClick={() => {
-                    setConfirmation("");
-                    setDialog("delete");
-                  }}
-                />
-              </div>
+              <Row icon={Users} tone="primary" label="Gerenciar contatos" title="Meus Contatos" subtitle="Gerenciar pessoas e dados salvos de cobrança" href="/contacts" />
+              <div className="mx-4 h-px bg-outline/60 md:mx-0" />
+              <Row icon={KeyRound} tone="success" label="Gerenciar chaves Pix" title="Minhas Chaves Pix" subtitle="Chaves cadastradas para receber pagamentos" href="/settings/pix" />
             </section>
+
+            <button
+              type="button"
+              aria-label="Excluir conta"
+              disabled={busy}
+              onClick={() => {
+                setConfirmation("");
+                setDialog("delete");
+              }}
+              className="flex w-full items-center gap-3 rounded-[20px] border border-danger/30 bg-surface px-4 py-3.5 text-left transition hover:bg-danger-soft/40 disabled:opacity-50 md:gap-3.5 md:px-[22px] md:py-[18px]"
+            >
+              <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-danger-soft text-danger md:h-[42px] md:w-[42px] md:rounded-[13px]">
+                <Trash2 aria-hidden="true" size={19} strokeWidth={1.8} />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-[14.5px] font-semibold text-danger md:text-[15px]">Excluir conta</span>
+                <span className="text-xs leading-4 text-muted">Remove histórico, vínculos e dados permanentemente</span>
+              </span>
+              <span aria-hidden="true" className={`${ROW_ACTION} border-danger/30 text-danger`}>
+                Excluir
+              </span>
+            </button>
           </div>
         </div>
       )}
@@ -473,14 +460,14 @@ export function ProfileScreen() {
 
       {dialog === "logout" && (
         <DialogShell titleId="profile-logout-title" onClose={closeDialog}>
-          <h2 id="profile-logout-title" className="m-0 text-xl font-extrabold text-ink">
+          <h2 id="profile-logout-title" className="m-0 font-display text-xl font-bold text-ink">
             Deseja sair da sua conta?
           </h2>
 
           <p className="m-0 leading-5 text-muted">Encerrar sessão ativa neste dispositivo.</p>
 
           <div className="flex gap-3">
-            <button ref={cancel} type="button" className={`${DIALOG_ACTION} border border-outline text-primary`} onClick={closeDialog}>
+            <button ref={cancel} type="button" className={`${DIALOG_ACTION} border border-outline text-muted`} onClick={closeDialog}>
               Cancelar
             </button>
             <button type="button" className={`${DIALOG_ACTION} bg-primary text-on-primary disabled:opacity-50`} disabled={busy} onClick={() => void logout()}>
@@ -496,7 +483,7 @@ export function ProfileScreen() {
             <TriangleAlert size={24} strokeWidth={1.8} />
           </span>
 
-          <h2 id="profile-delete-title" className="m-0 text-xl font-extrabold text-ink">
+          <h2 id="profile-delete-title" className="m-0 font-display text-xl font-bold text-ink">
             Excluir conta?
           </h2>
 
@@ -517,7 +504,7 @@ export function ProfileScreen() {
           />
 
           <div className="flex gap-3">
-            <button ref={cancel} type="button" className={`${DIALOG_ACTION} border border-outline text-primary`} onClick={closeDialog}>
+            <button ref={cancel} type="button" className={`${DIALOG_ACTION} border border-outline text-muted`} onClick={closeDialog}>
               Cancelar
             </button>
             <button type="button" className={`${DIALOG_ACTION} bg-danger-solid text-on-danger disabled:opacity-50`} disabled={busy || confirmation !== "EXCLUIR"} onClick={() => void erase()}>

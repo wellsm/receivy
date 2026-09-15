@@ -18,7 +18,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#2D5A45",
+        "backgroundColor": "#4B3FD6",
         "foregroundImage": "./assets/icons/adaptative-icon.png",
         "monochromeImage": "./assets/icons/adaptative-icon.png"
       },
@@ -37,10 +37,49 @@
           "image": "./assets/icons/splash-icon-light.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#faf8ff",
+          "backgroundColor": "#F7F6FB",
           "dark": {
             "image": "./assets/icons/splash-icon-dark.png",
-            "backgroundColor": "#0B513D"
+            "backgroundColor": "#241F5C"
+          }
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "ios": {
+            "fonts": [
+              "./node_modules/@expo-google-fonts/public-sans/400Regular/PublicSans_400Regular.ttf",
+              "./node_modules/@expo-google-fonts/public-sans/500Medium/PublicSans_500Medium.ttf",
+              "./node_modules/@expo-google-fonts/public-sans/600SemiBold/PublicSans_600SemiBold.ttf",
+              "./node_modules/@expo-google-fonts/public-sans/700Bold/PublicSans_700Bold.ttf",
+              "./node_modules/@expo-google-fonts/public-sans/800ExtraBold/PublicSans_800ExtraBold.ttf",
+              "./node_modules/@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf",
+              "./node_modules/@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf",
+              "./node_modules/@expo-google-fonts/space-grotesk/700Bold/SpaceGrotesk_700Bold.ttf"
+            ]
+          },
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "PublicSans",
+                "fontDefinitions": [
+                  { "path": "./node_modules/@expo-google-fonts/public-sans/400Regular/PublicSans_400Regular.ttf", "weight": 400 },
+                  { "path": "./node_modules/@expo-google-fonts/public-sans/500Medium/PublicSans_500Medium.ttf", "weight": 500 },
+                  { "path": "./node_modules/@expo-google-fonts/public-sans/600SemiBold/PublicSans_600SemiBold.ttf", "weight": 600 },
+                  { "path": "./node_modules/@expo-google-fonts/public-sans/700Bold/PublicSans_700Bold.ttf", "weight": 700 },
+                  { "path": "./node_modules/@expo-google-fonts/public-sans/800ExtraBold/PublicSans_800ExtraBold.ttf", "weight": 800 }
+                ]
+              },
+              {
+                "fontFamily": "SpaceGrotesk",
+                "fontDefinitions": [
+                  { "path": "./node_modules/@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf", "weight": 500 },
+                  { "path": "./node_modules/@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf", "weight": 600 },
+                  { "path": "./node_modules/@expo-google-fonts/space-grotesk/700Bold/SpaceGrotesk_700Bold.ttf", "weight": 700 }
+                ]
+              }
+            ]
           }
         }
       ],

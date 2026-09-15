@@ -248,7 +248,9 @@ describe("BillingFormScreen", () => {
     await fillQuickBilling();
     await fireEvent.press(screen.getByRole("button", { name: "Cotas" }));
     await fireEvent.changeText(screen.getByLabelText("Cotas de Ana"), "3");
-    expect(screen.getByText("R$ 75,00")).toBeOnTheScreen();
+    // The single-occurrence footer summary shares the same total as Ana's row on this draft:
+    // exactly the split row's amount and the footer total, no more, no less.
+    expect(screen.getAllByText("R$ 75,00")).toHaveLength(2);
     expect(screen.getByText("4 cotas no total")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
@@ -289,6 +291,116 @@ describe("BillingFormScreen", () => {
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
 
     expect(client.createBilling.mock.calls[0][0].split.parts).toEqual([{ kind: "user", userId: "u1" }]);
+  });
+
+  it("sends Não notificar on the participant it was switched for", async () => {
+    const { client } = await quickForm();
+
+    await fillQuickBilling();
+
+    expect(screen.getByText("Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Não notificar Ana")).toHaveProp("value", false);
+
+    await fireEvent(screen.getByLabelText("Não notificar Ana"), "valueChange", true);
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", silenced: true }, { kind: "owner" }] });
+  });
+
+  it("seeds Não notificar from the allocations and sends the new value on edit", async () => {
+    const silencedBilling: BillingDetail = {
+      ...onceBilling,
+      id: "b3",
+      type: BillingType.Indefinite,
+      frequency: BillingFrequency.Monthly,
+      allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, silenced: true }],
+    };
+    const patchBilling = jest.fn().mockResolvedValue(silencedBilling);
+
+    await render(<BillingFormScreen client={financialApi({ patchBilling }) as never} contacts={contactsApi()} billing={silencedBilling} onSaved={jest.fn()} onBack={jest.fn()} />);
+
+    const quiet = await screen.findByLabelText("Não notificar Ana");
+
+    expect(quiet).toHaveProp("value", true);
+
+    await fireEvent(quiet, "valueChange", false);
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
+    expect(patchBilling.mock.calls[0][1].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", silenced: false }] });
+  });
+
+  it("records a registro with the name typed in De quem and nobody to split with or pay through", async () => {
+    const { client } = await quickForm();
+
+    await fireEvent(screen.getByLabelText("Já recebi"), "valueChange", true);
+
+    expect(screen.getByText("Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento.")).toBeOnTheScreen();
+    expect(screen.queryByText("Participantes")).toBeNull();
+    expect(screen.queryByText("Divisão da Conta")).toBeNull();
+    expect(screen.queryByText("Receber via Pix")).toBeNull();
+    expect(screen.getByLabelText("De quem")).toHaveProp("placeholder", "Ex.: Empresa X");
+
+    await fireEvent.changeText(screen.getByLabelText("De quem"), "Empresa X");
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "500000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Salário");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    const input = client.createBilling.mock.calls[0][0];
+
+    expect(input).toMatchObject({
+      direction: "receivable",
+      settled: true,
+      counterpartLabel: "Empresa X",
+      totalCents: 500_000,
+      split: { mode: "equal", parts: [{ kind: "owner" }] },
+    });
+    expect(input.reminders).toBeUndefined();
+    expect(input.paymentMethodId).toBeUndefined();
+  });
+
+  it("keeps a recorrente registro from starting before today", async () => {
+    const { client } = await quickForm();
+
+    await fireEvent(screen.getByLabelText("Já recebi"), "valueChange", true);
+    await fireEvent.changeText(screen.getByLabelText("De quem"), "Empresa X");
+    await fireEvent.press(screen.getByRole("button", { name: "Recorrente" }));
+    await fireEvent.changeText(screen.getByLabelText("Vencimento"), yesterday());
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "500000");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+
+    expect(await screen.findByText("Registro recorrente começa hoje ou depois.")).toBeOnTheScreen();
+    expect(client.createBilling).not.toHaveBeenCalled();
+  });
+
+  it("keeps the registro switch locked on edit and patches only the new name", async () => {
+    const registroBilling: BillingDetail = {
+      ...onceBilling,
+      id: "b4",
+      settled: true,
+      counterpartLabel: "Empresa X",
+      paymentMethodId: undefined,
+      reminders: [],
+      split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] },
+    };
+    const patchBilling = jest.fn().mockResolvedValue(registroBilling);
+
+    await render(<BillingFormScreen client={financialApi({ patchBilling }) as never} contacts={contactsApi()} billing={registroBilling} onSaved={jest.fn()} onBack={jest.fn()} />);
+
+    const toggle = await screen.findByLabelText("Já recebi");
+
+    expect(toggle).toHaveProp("value", true);
+    expect(toggle).toBeDisabled();
+    expect(screen.getByText("Não dá para mudar depois de criada.")).toBeOnTheScreen();
+    expect(screen.getByLabelText("De quem")).toHaveProp("value", "Empresa X");
+
+    await fireEvent.changeText(screen.getByLabelText("De quem"), "Empresa Y");
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
+    expect(patchBilling.mock.calls[0][1]).toEqual({ counterpartLabel: "Empresa Y", category: "food" });
   });
 
   it("turns the parcel count into an end date", async () => {
@@ -920,5 +1032,79 @@ describe("BillingFormScreen", () => {
 
     expect(screen.getByLabelText("Vencimento")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Parcelado" })).toBeDisabled();
+  });
+
+  it("orders the new-billing sections as Direção, Valor, Título, Frequência, Divisão and Chave Pix, with Adicionar pessoa below the participant list", async () => {
+    await quickForm();
+    await pickAna();
+
+    const json = JSON.stringify(screen.toJSON());
+    const markers = [
+      "Valor total",
+      "Título da conta",
+      "Modalidade de Pagamento",
+      "Divisão da Conta",
+      "Adicionar pessoa",
+      "Não notificar",
+      "Eu também participo da divisão",
+      "Receber via Pix",
+      "Criar conta",
+    ];
+    const order = markers.map((marker) => json.indexOf(`"${marker}"`));
+
+    expect(order.every((value) => value >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("moves the Para quem payee block and its inline Pix key to the Divisão slot for a conta a pagar", async () => {
+    await quickForm();
+    await chooseToPay();
+
+    const json = JSON.stringify(screen.toJSON());
+    const order = ["Modalidade de Pagamento", "Para quem (opcional)", "Chave Pix (opcional)", "Criar conta"].map((marker) => json.indexOf(`"${marker}"`));
+
+    expect(order.every((value) => value >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("hides the summary row above the submit button until the draft is valid", async () => {
+    await quickForm();
+
+    expect(screen.queryByText(/^Gera /)).toBeNull();
+  });
+
+  it("hides the summary row on every edit, even with an otherwise valid draft", async () => {
+    const patchBilling = jest.fn().mockResolvedValue(onceBilling);
+
+    await render(<BillingFormScreen client={financialApi({ patchBilling }) as never} contacts={contactsApi()} billing={onceBilling} onSaved={jest.fn()} onBack={jest.fn()} />);
+    await screen.findByText("Editar conta");
+
+    expect(screen.queryByText(/^Gera /)).toBeNull();
+  });
+
+  it("shows the draft summary text and total above the submit button for an installment", async () => {
+    await quickForm();
+    await pickAna();
+    await fireEvent(screen.getByLabelText("Eu também participo"), "valueChange", false);
+    await fireEvent.press(screen.getByRole("button", { name: "Parcelado" }));
+    await fireEvent.changeText(screen.getByLabelText("Vencimento"), "2026-01-31");
+    await fireEvent.changeText(screen.getByLabelText("Parcelas"), "3");
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Mercado QA");
+
+    expect(screen.getByText("Gera 3 cobranças · 1 pessoa × 3 meses")).toBeOnTheScreen();
+    expect(screen.getByText("R$ 300,00")).toBeOnTheScreen();
+  });
+
+  it("shows the per-month total with /mês above the submit button for an indefinite draft", async () => {
+    await quickForm();
+    await pickAna();
+    await fireEvent(screen.getByLabelText("Eu também participo"), "valueChange", false);
+    await fireEvent.press(screen.getByRole("button", { name: "Recorrente" }));
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Assinatura QA");
+
+    expect(screen.getByText("Gera 1 cobrança por mês · 1 pessoa")).toBeOnTheScreen();
+    expect(screen.getByText("R$ 100,00/mês")).toBeOnTheScreen();
   });
 });

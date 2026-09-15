@@ -1,6 +1,6 @@
 "use client";
 
-import { canMarkPaid, canUploadProof, fileSizeText, momentText, proofNote, proofStateLabel, type ChargeDetail } from "@receivy/common";
+import { canAcceptProof, canDeclarePayment, canMarkPaid, canUploadProof, canWithdrawProof, fileSizeText, momentText, proofNote, proofStateLabel, ProofKind, ProofState, type ChargeDetail } from "@receivy/common";
 import { Check, CloudUpload, Eye, FileText, Image as ImageIcon, Loader2, Receipt } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PROOF_ACCEPT } from "@/lib/proof-upload";
@@ -8,6 +8,10 @@ import { StatusTag } from "@/components/ui/status-tag";
 
 const DROPZONE =
   "flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-outline/60 bg-surface-muted/50 px-4 text-sm font-semibold text-ink transition hover:border-primary disabled:opacity-50";
+const OUTLINE_BUTTON =
+  "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-outline/50 text-xs font-semibold text-ink transition hover:bg-surface-muted disabled:opacity-50";
+const PRIMARY_BUTTON =
+  "flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-on-primary transition hover:bg-primary-strong disabled:opacity-50";
 
 type ProofCardProps = {
   charge: ChargeDetail;
@@ -22,6 +26,12 @@ type ProofCardProps = {
   /** Only when the screen has no footer to send from (the owner who also settles). */
   onSend?: () => void;
   onAccept: () => void;
+  /** The paying side says it already paid, without a file. */
+  onDeclare?: () => void;
+  /** The sender takes back what nobody answered yet. */
+  onWithdraw?: () => void;
+  /** Whoever collects says the declared payment did not arrive. */
+  onReject?: () => void;
 };
 
 function FilePicker({ label, disabled, onPick, className = DROPZONE }: { label: string; disabled: boolean; onPick: (file: File) => void; className?: string }) {
@@ -105,11 +115,12 @@ function PickedPreview({ file, url, busy, sending, onPick, onSend }: { file: Fil
 }
 
 /** The proof section of a charge: the file with "Ver", plus accept (creditor) or replace (debtor) when allowed. */
-export function ProofCard({ charge, busy, sending, picked, onView, onPick, onSend, onAccept }: ProofCardProps) {
+export function ProofCard({ charge, busy, sending, picked, onView, onPick, onSend, onAccept, onDeclare, onWithdraw, onReject }: ProofCardProps) {
   const proof = charge.proof;
   const upload = canUploadProof(charge);
   // Whoever collects settles from here: accepting the file under review, or by hand when there is none to accept.
   const settle = canMarkPaid(charge);
+  const declare = canDeclarePayment(charge) && !!onDeclare;
   const replace = useRef<HTMLInputElement>(null);
   // Created when the file is picked, released when the next one replaces it or the card goes away.
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -158,13 +169,81 @@ export function ProofCard({ charge, busy, sending, picked, onView, onPick, onSen
             Marcar como pago
           </button>
         )}
+
+        {declare && (
+          <button type="button" disabled={busy} onClick={onDeclare} className={OUTLINE_BUTTON}>
+            <Check size={16} aria-hidden="true" />
+            Já paguei
+          </button>
+        )}
+      </section>
+    );
+  }
+
+  if (proof.kind === ProofKind.Declaration) {
+    const state = proofStateLabel(proof);
+    const note = proofNote(charge);
+    const answer = canAcceptProof(charge);
+    const withdraw = canWithdrawProof(charge) && !!onWithdraw;
+    const sent = momentText(proof.sentAt);
+    const waiting = proof.state === ProofState.Pending;
+    const line = proof.sentByViewer
+      ? `Informado em ${sent}${waiting ? ` · aguardando confirmação de ${charge.counterpartName}` : ""}`
+      : `${charge.counterpartName} informou que pagou em ${sent}, sem comprovante`;
+
+    return (
+      <section className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Receipt size={20} aria-hidden="true" className="text-primary-strong" />
+            <h2 className="m-0 text-base font-bold text-ink">Pagamento informado</h2>
+          </div>
+          <StatusTag label={state.label} tone={state.tone} />
+        </div>
+
+        <p className="m-0 text-sm leading-5 text-ink">{line}</p>
+
+        {note && <p className="m-0 text-xs leading-4 text-muted">{note}</p>}
+
+        {upload && picked && <PickedPreview file={picked} url={previewUrl} busy={busy} sending={sending} onPick={pick} onSend={onSend} />}
+
+        <div className="flex flex-wrap gap-2">
+          {withdraw && (
+            <button type="button" disabled={busy} onClick={onWithdraw} className={OUTLINE_BUTTON}>
+              Desfazer
+            </button>
+          )}
+          {declare && (
+            <button type="button" disabled={busy} onClick={onDeclare} className={OUTLINE_BUTTON}>
+              Informar de novo
+            </button>
+          )}
+          {upload && !picked && <FilePicker label="Anexar comprovante" disabled={busy} onPick={pick} className={PRIMARY_BUTTON} />}
+          {answer && onReject && (
+            <button type="button" disabled={busy} onClick={onReject} className={OUTLINE_BUTTON}>
+              Não recebi
+            </button>
+          )}
+          {answer && (
+            <button type="button" disabled={busy} onClick={onAccept} className={PRIMARY_BUTTON}>
+              <Check size={16} aria-hidden="true" />
+              Confirmar recebimento
+            </button>
+          )}
+          {settle && !answer && (
+            <button type="button" aria-label="Marcar como pago" disabled={busy} onClick={onAccept} className={PRIMARY_BUTTON}>
+              <Check size={16} aria-hidden="true" />
+              Marcar como pago
+            </button>
+          )}
+        </div>
       </section>
     );
   }
 
   const state = proofStateLabel(proof);
   const note = proofNote(charge);
-  const FileIcon = proof.file.mime === "application/pdf" ? FileText : ImageIcon;
+  const FileIcon = proof.file!.mime === "application/pdf" ? FileText : ImageIcon;
 
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4">
@@ -181,9 +260,9 @@ export function ProofCard({ charge, busy, sending, picked, onView, onPick, onSen
           <FileIcon size={20} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="m-0 truncate text-sm font-semibold text-ink">{proof.file.name}</p>
+          <p className="m-0 truncate text-sm font-semibold text-ink">{proof.file!.name}</p>
           <p className="m-0 text-[11px] text-muted">
-            {fileSizeText(proof.file.size)} • Enviado em {momentText(proof.sentAt)}
+            {fileSizeText(proof.file!.size)} • Enviado em {momentText(proof.sentAt)}
           </p>
         </div>
       </div>
@@ -203,6 +282,12 @@ export function ProofCard({ charge, busy, sending, picked, onView, onPick, onSen
           <Eye size={16} aria-hidden="true" className="text-primary-strong" />
           Ver comprovante
         </button>
+
+        {declare && (
+          <button type="button" disabled={busy} onClick={onDeclare} className={OUTLINE_BUTTON}>
+            Já paguei
+          </button>
+        )}
 
         {settle && (
           <button

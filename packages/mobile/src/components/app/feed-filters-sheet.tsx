@@ -25,7 +25,7 @@ function ChipGroup<T extends string>({ group, options, selected, everyLabel, onP
 
   return (
     <View className="gap-2">
-      <Text className="text-[11px] font-bold tracking-widest text-muted">{group.toUpperCase()}</Text>
+      <Text className="font-sans text-[11px] font-semibold tracking-[0.88px] text-muted">{group.toUpperCase()}</Text>
 
       <View className="flex-row flex-wrap gap-2">
         {onClear && (
@@ -34,9 +34,9 @@ function ChipGroup<T extends string>({ group, options, selected, everyLabel, onP
             accessibilityLabel={`${group} ${everyLabel}`}
             accessibilityState={{ selected: every }}
             onPress={onClear}
-            className={`min-h-10 justify-center rounded-full border px-4 ${every ? "border-primary bg-primary" : "border-outline bg-surface"}`}
+            className={`h-[34px] justify-center rounded-full border px-3.5 ${every ? "border-ink bg-ink" : "border-outline bg-surface"}`}
           >
-            <Text className={`text-sm font-semibold ${every ? "text-on-primary" : "text-ink"}`}>{everyLabel}</Text>
+            <Text className={`font-sans text-[12.5px] ${every ? "font-bold text-surface" : "font-semibold text-muted"}`}>{everyLabel}</Text>
           </Pressable>
         )}
 
@@ -50,9 +50,9 @@ function ChipGroup<T extends string>({ group, options, selected, everyLabel, onP
               accessibilityLabel={`${group} ${option.label}`}
               accessibilityState={{ selected: active }}
               onPress={() => onPick(option.value)}
-              className={`min-h-10 justify-center rounded-full border px-4 ${active ? "border-primary bg-primary" : "border-outline bg-surface"}`}
+              className={`h-[34px] justify-center rounded-full border px-3.5 ${active ? "border-ink bg-ink" : "border-outline bg-surface"}`}
             >
-              <Text className={`text-sm font-semibold ${active ? "text-on-primary" : "text-ink"}`}>{option.label}</Text>
+              <Text className={`font-sans text-[12.5px] ${active ? "font-bold text-surface" : "font-semibold text-muted"}`}>{option.label}</Text>
             </Pressable>
           );
         })}
@@ -75,9 +75,11 @@ export function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetPr
     <Modal transparent animationType="slide" visible onRequestClose={onClose}>
       <Pressable accessibilityRole="button" accessibilityLabel="Fechar filtros" onPress={onClose} className="flex-1 bg-scrim" />
 
-      <View className="gap-5 rounded-t-3xl bg-surface px-5 pb-10 pt-5">
+      <View className="gap-5 rounded-t-[28px] bg-surface px-5 pb-10 pt-5">
+        <View className="h-1 w-11 self-center rounded-full bg-outline" />
+
         <View className="flex-row items-center justify-between gap-2">
-          <Text accessibilityRole="header" className="text-xl font-extrabold text-ink">
+          <Text accessibilityRole="header" className="font-display text-[21px] font-bold text-ink">
             Filtros
           </Text>
 
@@ -87,7 +89,7 @@ export function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetPr
             onPress={() => setDraft(DEFAULT_FEED_FILTERS)}
             className="min-h-10 justify-center px-2"
           >
-            <Text className="text-sm font-bold text-primary">Limpar</Text>
+            <Text className="font-sans text-sm font-bold text-primary">Limpar</Text>
           </Pressable>
         </View>
 
@@ -123,9 +125,9 @@ export function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetPr
           accessibilityRole="button"
           accessibilityLabel="Aplicar"
           onPress={() => onApply(draft)}
-          className="min-h-14 items-center justify-center rounded-2xl bg-primary"
+          className="h-[54px] items-center justify-center rounded-2xl bg-primary"
         >
-          <Text className="font-bold text-on-primary">Aplicar</Text>
+          <Text className="font-sans text-[15.5px] font-bold text-on-primary">Aplicar</Text>
         </Pressable>
       </View>
     </Modal>

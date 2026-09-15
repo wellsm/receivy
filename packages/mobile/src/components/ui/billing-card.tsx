@@ -3,8 +3,10 @@ import { Pressable, Text, View } from "react-native";
 import {
   type BadgeTone,
   type BillingSummary,
+  Direction,
   billingBadges,
   billingCategoryColor,
+  billingCategoryLabel,
   billingDueLabel,
   billingShareAction,
   formatMoney,
@@ -14,12 +16,12 @@ import { useThemeColors } from "@/theme/colors";
 
 const shareMark = require("../../../assets/images/auth/share.svg");
 
-const BADGE_CLASS: Record<BadgeTone, string> = {
-  danger: "bg-danger-soft text-danger",
-  info: "bg-info-soft text-info",
-  warning: "bg-warning-soft text-warning",
-  success: "bg-primary-soft/50 text-primary-strong",
-  neutral: "bg-surface-muted text-muted",
+const BADGE_CLASS: Record<BadgeTone, { box: string; text: string }> = {
+  danger: { box: "bg-danger-soft", text: "text-danger" },
+  info: { box: "bg-primary-soft", text: "text-primary-strong" },
+  warning: { box: "bg-warning-soft", text: "text-warning" },
+  success: { box: "bg-success-soft", text: "text-success" },
+  neutral: { box: "bg-surface-muted", text: "text-muted" },
 };
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
@@ -52,7 +54,7 @@ type BillingCardProps = {
   onOpen: (billing: BillingSummary) => void;
 };
 
-/** One billing on the list: category, description, due label, badges, amount and the share action. */
+/** One billing on the list: category tile, title, amount and due label, badges, and the share action in the footer. */
 export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProps) {
   const colors = useThemeColors();
   const dueLabel = billingDueLabel(billing, today);
@@ -60,57 +62,62 @@ export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProp
   const badges = billingBadges(billing);
   const occurrence = occurrenceLine(billing);
   const canShare = billingShareAction(billing) !== null;
+  const payable = billing.direction === Direction.Payable;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Cobrança ${billing.description}`}
       onPress={() => onOpen(billing)}
-      className="gap-3 rounded-2xl border border-outline/40 bg-surface p-4"
+      className="overflow-hidden rounded-[20px] border border-outline bg-surface"
     >
-      <View className="flex-row items-center gap-3">
-        <View className="h-11 w-11 items-center justify-center rounded-full" style={{ backgroundColor: `${billingCategoryColor(billing.category)}1F` }}>
+      <View className="flex-row items-center gap-3 p-4">
+        <View className="h-10 w-10 items-center justify-center rounded-[14px]" style={{ backgroundColor: `${billingCategoryColor(billing.category)}18` }}>
           <CategoryIcon category={billing.category} />
         </View>
 
-        <View className="flex-1 gap-1">
-          <View className="flex-row items-center gap-2">
-            <Text className="flex-1 text-sm font-bold text-ink" numberOfLines={1}>
-              {billing.description}
-            </Text>
-            <Text className={`text-xs font-semibold ${overdue ? "text-danger" : "text-muted"}`}>{dueLabel}</Text>
-          </View>
+        <View className="min-w-0 flex-1">
+          <Text className="font-sans text-[15px] font-semibold text-ink" numberOfLines={1}>
+            {billing.description}
+          </Text>
+          <Text className="mt-0.5 font-sans text-xs text-muted" numberOfLines={1}>
+            {billingCategoryLabel(billing.category)} · {payable ? "a pagar" : "a receber"}
+          </Text>
+        </View>
 
-          {badges.length > 0 && (
-            <View className="flex-row flex-wrap gap-1.5">
-              {badges.map((badge) => (
-                <Text key={badge.label} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${BADGE_CLASS[badge.tone]}`}>
-                  {badge.label}
-                </Text>
-              ))}
+        <View className="items-end">
+          <Text className={`font-display text-[17px] font-bold ${payable ? "text-payable" : "text-ink"}`}>{formatMoney(billing.total)}</Text>
+          <Text className={`mt-0.5 font-sans text-[11px] font-medium ${overdue ? "text-payable" : "text-muted"}`}>{dueLabel}</Text>
+        </View>
+      </View>
+
+      {badges.length > 0 && (
+        <View className="flex-row flex-wrap gap-1.5 px-4 pb-3.5">
+          {badges.map((badge) => (
+            <View key={badge.label} className={`h-6 justify-center rounded-lg px-2.5 ${BADGE_CLASS[badge.tone].box}`}>
+              <Text className={`font-sans text-[11px] font-semibold ${BADGE_CLASS[badge.tone].text}`}>{badge.label}</Text>
             </View>
+          ))}
+        </View>
+      )}
+
+      {(occurrence || canShare) && (
+        <View className="flex-row items-center justify-between border-t border-outline/60 px-4 py-3">
+          <Text className="font-sans text-[11.5px] text-muted">{occurrence ?? ""}</Text>
+
+          {canShare && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Compartilhar"
+              onPress={() => onShare(billing)}
+              className="h-8 flex-row items-center gap-1.5 rounded-[10px] border border-outline px-3"
+            >
+              <Image source={shareMark} tintColor={colors.muted} style={{ width: 13, height: 13 }} />
+              <Text className="font-sans text-xs font-bold text-ink">Compartilhar</Text>
+            </Pressable>
           )}
         </View>
-      </View>
-
-      <View className="flex-row items-center justify-between border-t border-outline/30 pt-3">
-        <View>
-          <Text className="text-lg font-extrabold tracking-tight text-primary">{formatMoney(billing.total)}</Text>
-          {occurrence && <Text className="text-[11px] text-muted">{occurrence}</Text>}
-        </View>
-
-        {canShare && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Compartilhar"
-            onPress={() => onShare(billing)}
-            className="min-h-10 flex-row items-center gap-1.5 rounded-lg bg-primary-soft/40 px-3"
-          >
-            <Image source={shareMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
-            <Text className="text-xs font-bold text-primary-strong">Compartilhar</Text>
-          </Pressable>
-        )}
-      </View>
+      )}
     </Pressable>
   );
 }

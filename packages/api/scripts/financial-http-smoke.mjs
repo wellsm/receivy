@@ -58,7 +58,8 @@ try {
       EMAIL_TRANSPORT: 'disabled',
       RESEND_API_KEY: 'disabled',
       RESEND_FROM_EMAIL: 'disabled@example.invalid',
-      OAUTH_PROVIDERS_CONFIG_B64: 'disabled',
+      GOOGLE_SIGNIN_ENABLED: 'false',
+      APPLE_SIGNIN_ENABLED: 'false',
       OAUTH_REDIRECT_ALLOW_LIST: 'http://localhost:3000/auth/oauth/callback'
     },
     stdio: ['ignore', 'pipe', 'pipe']

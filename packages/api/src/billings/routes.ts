@@ -6,6 +6,7 @@ import type { listBillingsHandler } from './endpoints/list';
 import type { patchBillingHandler } from './endpoints/patch';
 import type { previewBillingHandler } from './endpoints/preview';
 import type { resolveGuestHandler } from './endpoints/resolve-guest';
+import type { silenceParticipantHandler } from './endpoints/silence-participant';
 
 export type BillingRoutes = [
   Http.UseRoute<{
@@ -38,5 +39,11 @@ export type BillingRoutes = [
     path: 'POST /billings/{id}/guests/{guestId}';
     authorizer: typeof sessionAuthorizer;
     handler: typeof resolveGuestHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'silenceBillingParticipant';
+    path: 'PUT /billings/{id}/participants/{userId}/silenced';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof silenceParticipantHandler;
   }>
 ];

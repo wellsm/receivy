@@ -3,28 +3,33 @@
 /* Design tokens shared with the mobile app (packages/mobile/src/global.css): the same utility names on both.
    Dark values live below, keyed off :root[data-theme="dark"] and the prefers-color-scheme fallback. */
 @theme {
-  --color-canvas: #faf8ff;
+  --font-sans: "Public Sans Variable", system-ui, sans-serif;
+  --font-display: "Space Grotesk Variable", "Public Sans Variable", system-ui, sans-serif;
+
+  --color-canvas: #f7f6fb;
   --color-surface: #ffffff;
-  --color-surface-muted: #f2f3ff;
-  --color-primary: #0b513d;
-  --color-primary-strong: #003828;
-  --color-primary-soft: #b0f0d6;
-  --color-accent: #4edea3;
-  --color-ink: #131b2e;
-  --color-muted: #566070;
-  --color-outline: #bfc9c3;
+  --color-surface-muted: #f2f1f8;
+  --color-primary: #4b3fd6;
+  --color-primary-strong: #2e2497;
+  --color-primary-soft: #eae7ff;
+  --color-accent: #9b8dff;
+  --color-ink: #17162b;
+  --color-muted: #5b5a72;
+  --color-outline: #dcdae8;
   --color-on-primary: #ffffff;
   --color-on-danger: #ffffff;
-  --color-danger: #b91c1c;
-  --color-danger-soft: #fef2f2;
-  --color-danger-solid: #dc2626;
+  --color-danger: #b03a26;
+  --color-danger-soft: #fde8e4;
+  --color-danger-solid: #c4321c;
   --color-warning: #78350f;
   --color-warning-soft: #fffbeb;
-  --color-info: #1e40af;
-  --color-info-soft: #eff6ff;
-  --color-success: #065f46;
-  --color-success-soft: #ecfdf5;
-  --color-scrim: rgba(0, 0, 0, 0.4);
+  --color-info: #2e2497;
+  --color-info-soft: #eae7ff;
+  --color-success: #0e7a50;
+  --color-success-soft: #e9f6f0;
+  --color-payable: #e0533e;
+  --color-payable-soft: #fde8e4;
+  --color-scrim: rgba(23, 22, 43, 0.55);
 }
 
 /* Rare dark-only tweaks; colors themselves always come from the tokens below. */
@@ -33,26 +38,29 @@
 /* Dark values of the same tokens. The inline script in layout.tsx stamps data-theme before first paint. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --color-canvas: #0d1320;
-  --color-surface: #151c2b;
-  --color-surface-muted: #1c2536;
-  --color-primary: #5bd3a2;
-  --color-primary-strong: #a6efcf;
-  --color-primary-soft: #133b2e;
-  --color-ink: #e5e9f2;
-  --color-muted: #98a2b3;
-  --color-outline: #2c374a;
-  --color-on-primary: #052b1e;
+  --color-canvas: #121212;
+  --color-surface: #222222;
+  --color-surface-muted: #343434;
+  --color-primary: #9b8dff;
+  --color-primary-strong: #c9bfff;
+  --color-primary-soft: #2a2550;
+  --color-accent: #9b8dff;
+  --color-ink: #eceaf7;
+  --color-muted: #9a97b8;
+  --color-outline: #2e2c48;
+  --color-on-primary: #121122;
   --color-on-danger: #ffffff;
-  --color-danger: #f4a6a3;
-  --color-danger-soft: #3b1a1d;
-  --color-danger-solid: #c23b3b;
+  --color-danger: #ff9a85;
+  --color-danger-soft: #3a1a18;
+  --color-danger-solid: #c4321c;
   --color-warning: #f2c274;
   --color-warning-soft: #33260e;
-  --color-info: #9fbef7;
-  --color-info-soft: #16233f;
-  --color-success: #86d9b1;
-  --color-success-soft: #10332a;
+  --color-info: #c9bfff;
+  --color-info-soft: #2a2550;
+  --color-success: #4ed39b;
+  --color-success-soft: #12332a;
+  --color-payable: #ff8a70;
+  --color-payable-soft: #3a1a18;
   --color-scrim: rgba(0, 0, 0, 0.6);
 }
 
@@ -60,26 +68,29 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     color-scheme: dark;
-    --color-canvas: #0d1320;
-    --color-surface: #151c2b;
-    --color-surface-muted: #1c2536;
-    --color-primary: #5bd3a2;
-    --color-primary-strong: #a6efcf;
-    --color-primary-soft: #133b2e;
-    --color-ink: #e5e9f2;
-    --color-muted: #98a2b3;
-    --color-outline: #2c374a;
-    --color-on-primary: #052b1e;
+    --color-canvas: #121122;
+    --color-surface: #1b1a2e;
+    --color-surface-muted: #252338;
+    --color-primary: #9b8dff;
+    --color-primary-strong: #c9bfff;
+    --color-primary-soft: #2a2550;
+    --color-accent: #9b8dff;
+    --color-ink: #eceaf7;
+    --color-muted: #9a97b8;
+    --color-outline: #2e2c48;
+    --color-on-primary: #121122;
     --color-on-danger: #ffffff;
-    --color-danger: #f4a6a3;
-    --color-danger-soft: #3b1a1d;
-    --color-danger-solid: #c23b3b;
+    --color-danger: #ff9a85;
+    --color-danger-soft: #3a1a18;
+    --color-danger-solid: #c4321c;
     --color-warning: #f2c274;
     --color-warning-soft: #33260e;
-    --color-info: #9fbef7;
-    --color-info-soft: #16233f;
-    --color-success: #86d9b1;
-    --color-success-soft: #10332a;
+    --color-info: #c9bfff;
+    --color-info-soft: #2a2550;
+    --color-success: #4ed39b;
+    --color-success-soft: #12332a;
+    --color-payable: #ff8a70;
+    --color-payable-soft: #3a1a18;
     --color-scrim: rgba(0, 0, 0, 0.6);
   }
 }
@@ -87,7 +98,7 @@
 /* Element resets only: every component carries its own Tailwind classes, exactly like the mobile app. */
 :root {
   color-scheme: light;
-  font-family: "Plus Jakarta Sans Variable", "Avenir Next", sans-serif;
+  font-family: var(--font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -120,7 +131,7 @@ a {
 /* Layered so a utility (e.g. `outline-none` on an input inside a focus-within wrapper) can override it. */
 @layer base {
   :focus-visible {
-    outline: 3px solid var(--color-primary); /* accent scored 1.7:1 on canvas; WCAG 2.4.11 needs 3:1 */
+    outline: 3px solid var(--color-primary); /* accent scored 2.5:1 on canvas; WCAG 2.4.11 needs 3:1 */
     outline-offset: 3px;
   }
 }

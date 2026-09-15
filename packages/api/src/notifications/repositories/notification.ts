@@ -1,7 +1,8 @@
 import { HttpBadRequestError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import { ChargePayer, ChargeState, DevicePlatform, type DeviceRegistration, Direction, type NotificationDevice } from '@receivy/common';
-import { ChargeClosedError } from '../../charges/errors';
+import { ChargeClosedError, ChargeInReviewError, SettledNoRemindersError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
+import { StoredProofState } from '../../charges/schemas/charge';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
@@ -109,6 +110,17 @@ export namespace NotificationRepository {
 
       if (row.state !== ChargeState.Pending) {
         throw new ChargeClosedError();
+      }
+
+      const billing = await tx.billings.findOne({ select: { settled: true }, where: { id: row.billing_id } });
+
+      // A registro has nobody to remind: the owner settled it on purpose.
+      if (billing?.settled) {
+        throw new SettledNoRemindersError();
+      }
+
+      if (row.proof_state === StoredProofState.Pending) {
+        throw new ChargeInReviewError();
       }
 
       // Only a reminder that reached someone counts towards the daily quota.

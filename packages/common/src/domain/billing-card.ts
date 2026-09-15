@@ -68,6 +68,21 @@ export function billingBadges(billing: BillingSummary): BillingBadge[] {
     badges.push({ label: 'Liquidado', tone: BadgeTone.Success });
   }
 
+  // A registro names its counterpart instead of the people or the payee.
+  if (billing.settled === true) {
+    badges.push({ label: 'Registro', tone: BadgeTone.Neutral });
+
+    if (billing.direction === Direction.Payable) {
+      badges.push({ label: 'A pagar', tone: BadgeTone.Warning });
+    }
+
+    if (billing.counterpartLabel) {
+      badges.push({ label: billing.counterpartLabel, tone: BadgeTone.Neutral });
+    }
+
+    return badges;
+  }
+
   if (billing.direction === Direction.Payable) {
     badges.push({ label: 'A pagar', tone: BadgeTone.Warning });
     badges.push({ label: billing.payeeName ?? 'Só comigo', tone: BadgeTone.Neutral });

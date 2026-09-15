@@ -1,7 +1,7 @@
 "use client";
 
-import { billingCategoryLabel, calendarDate, chargeShareText, formatMoney, pendingChargesOf, PendingChargesAction, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod, type PixSnapshot } from "@receivy/common";
-import { Bell, Check, CircleDashed, CirclePause, CirclePlay, CircleStop, KeyRound, Pencil, Receipt, RotateCcw, Share2, UserPlus } from "lucide-react";
+import { billingCategoryLabel, calendarDate, chargeShareText, formatMoney, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod, type PixSnapshot } from "@receivy/common";
+import { Bell, BellOff, Check, CircleDashed, CirclePause, CirclePlay, CircleStop, KeyRound, Pencil, Receipt, RotateCcw, Share2, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
@@ -109,6 +109,23 @@ function currentCycle(cycles: Cycle[]): Cycle | null {
   return [...cycles].reverse().find((cycle) => cycle.charges.some((charge) => charge.state === "pending")) ?? cycles.at(-1) ?? null;
 }
 
+/** The first row of each debtor in the list: the participant action shows there, once per person. */
+function firstRowIds(charges: ChargeDetail[]): Set<string> {
+  const seen = new Set<string>();
+  const ids = new Set<string>();
+
+  for (const charge of charges) {
+    if (!charge.debtorUserId || seen.has(charge.debtorUserId)) {
+      continue;
+    }
+
+    seen.add(charge.debtorUserId);
+    ids.add(charge.id);
+  }
+
+  return ids;
+}
+
 function cycleTotals(cycle: Cycle): {
   paid: number;
   goal: number;
@@ -167,6 +184,17 @@ function typeTag(billing: BillingDetail, current: Cycle | null): string {
   return "À vista";
 }
 
+/** "De Empresa X" on a registro a receber, "Para Empresa X" on one a pagar. */
+function counterpartHeadline(billing: BillingDetail): string {
+  const name = billing.counterpartLabel ?? "";
+
+  if (billing.direction === "payable") {
+    return `Para ${name}`;
+  }
+
+  return `De ${name}`;
+}
+
 type BillingDetailScreenProps = {
   id: string;
 };
@@ -185,6 +213,8 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   const [confirmPaid, setConfirmPaid] = useState<{ charge: ChargeDetail; name: string } | null>(null);
   const [confirmReopen, setConfirmReopen] = useState<ChargeDetail | null>(null);
   const [chooser, setChooser] = useState(false);
+  // The participant whose notices wait for the owner's confirmation before going quiet.
+  const [confirmSilence, setConfirmSilence] = useState<{ userId: string; name: string } | null>(null);
 
   const load = useCallback(() => {
     let live = true;
@@ -325,6 +355,22 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
     }, "Não foi possível reabrir a cobrança.");
   }
 
+  /** "Não notificar" / "Voltar a notificar" for one participant; the answer is the billing with its pending charges updated. */
+  async function silenceParticipant(detail: BillingDetail, userId: string, name: string, silenced: boolean) {
+    await run(async () => {
+      const updated = await request<BillingDetail>(`/api/financial/billings/${detail.id}/participants/${userId}/silenced`, jsonInit("PUT", { silenced }), "Não foi possível atualizar os avisos.");
+
+      setBilling(updated);
+      setConfirmSilence(null);
+
+      if (silenced) {
+        return;
+      }
+
+      setNotice(`Avisos reativados para ${name}.`);
+    }, "Não foi possível atualizar os avisos.");
+  }
+
   function pause(detail: BillingDetail) {
     if (!pendingChargesOf(detail).length) {
       void transition(detail, "paused");
@@ -367,12 +413,15 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   const today = calendarDate(new Date(), billing.timezone);
   const cycles = cyclesOf(billing);
   const current = currentCycle(cycles);
+  const firstRows = firstRowIds(current?.charges ?? []);
   const totals = current ? cycleTotals(current) : { paid: 0, goal: billing.total.amountCents, paidCount: 0, open: 0 };
   const goal = totals.goal || billing.total.amountCents;
   const progress = goal ? Math.min(100, Math.floor((totals.paid / goal) * 100)) : 0;
   const pending = current?.charges.filter((charge) => charge.state === "pending") ?? [];
   // A conta a pagar carries its own key; a conta a receber points at the wallet.
   const payable = billing.direction === "payable";
+  // A registro: the owner alone, already settled, with the counterpart typed as free text.
+  const settled = billing.settled === true;
   const pix = payable ? billing.pix : (billing.charges.find((charge) => charge.pix)?.pix ?? pixFromWallet(methods, billing.paymentMethodId));
   const ended = billing.state === "ended";
   const currency = billing.total.currency;
@@ -408,6 +457,31 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
     };
   }
 
+  /** The participant behind a row while the billing still splits with them; a conta a pagar has none. */
+  function participantOf(detail: BillingDetail, charge: ChargeDetail): BillingAllocation | undefined {
+    if (detail.direction === "payable") {
+      return undefined;
+    }
+
+    return detail.allocations.find((allocation) => allocation.kind === SplitPartKind.User && allocation.userId === charge.debtorUserId);
+  }
+
+  /** Silencing asks first; turning the notices back on does not. */
+  function toggleSilence(detail: BillingDetail, participant: BillingAllocation, name: string) {
+    const userId = participant.userId;
+
+    if (!userId) {
+      return;
+    }
+
+    if (participant.silenced) {
+      void silenceParticipant(detail, userId, name, false);
+      return;
+    }
+
+    setConfirmSilence({ userId, name });
+  }
+
   return (
     <section className="flex flex-col gap-5 pb-10">
       {error && (
@@ -429,11 +503,13 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                 </span>
                 <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">{typeTag(billing, current)}</span>
                 {payable && <span className="rounded-full bg-warning-soft px-2.5 py-1 text-[11px] font-semibold text-warning">A pagar</span>}
+                {settled && <span className="rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-semibold text-muted">Registro</span>}
               </div>
               <StatusTag label={STATE_LABELS[billing.state]} tone={stateTone} compact />
             </div>
 
             <h2 className="m-0 text-[22px] font-bold tracking-tight text-primary-strong">{billing.description}</h2>
+            {settled && <p className="m-0 text-sm font-semibold text-ink">{counterpartHeadline(billing)}</p>}
 
             <p className="m-0 text-xs text-muted">
               {ended ? "Sem próximos vencimentos" : "Próx. vencimento: "}
@@ -492,7 +568,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                   disabled={busy}
                   onClick={() => router.push(`/billings/${billing.id}/edit`)}
                 />
-                {billing.state === "active" && !payable && (
+                {billing.state === "active" && !payable && !settled && (
                   <ActionTile label="Convidar" icon={UserPlus} hint="Compartilha um convite para entrar na cobrança" disabled={busy} onClick={() => void inviteSomeone(billing)} />
                 )}
                 {billing.type === "indefinite" && (
@@ -506,7 +582,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                 )}
                 <ActionTile label="Encerrar" icon={CircleStop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onClick={() => end(billing)} />
               </div>
-              {invite && billing.state === "active" && !payable && (
+              {invite && billing.state === "active" && !payable && !settled && (
                 <div className="flex items-center justify-between px-1">
                   <span className="text-[11px] text-muted">Convite ativo até {dayMonth(invite.expiresAt.slice(0, 10))}</span>
                   <button type="button" disabled={busy} onClick={() => void revokeInvite(billing)} className="min-h-8 text-[11px] font-semibold text-danger">
@@ -567,7 +643,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h2 className="m-0 text-lg font-semibold text-primary-strong">{payable ? "Cobranças" : "Participantes"}</h2>
+                <h2 className="m-0 text-lg font-semibold text-primary-strong">{payable || settled ? "Cobranças" : "Participantes"}</h2>
                 <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-primary-strong">{current?.charges.length ?? 0}</span>
               </div>
               {current && billing.type !== "once" && (
@@ -584,8 +660,13 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
               const isPending = charge.state === "pending";
               // A file under review changes what the row asks of the owner: review it, never nag.
               const reviewing = isPending && charge.proofState === "pending";
-              const name = payable ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
-              const avatar = payable ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
+              // A registro's rows carry its counterpart; a conta a pagar names the payee.
+              const name = payable && !settled ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
+              const avatar = payable && !settled ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
+              const participant = participantOf(billing, charge);
+              // The badge is this charge's own switch; the participant's switch drives their action.
+              const quiet = charge.silenced === true;
+              const participantQuiet = participant?.silenced === true;
               const statusColor = {
                 success: "text-primary",
                 warning: "text-warning",
@@ -604,7 +685,10 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                     <span className="flex min-w-0 flex-1 items-center gap-3">
                       <InitialsAvatar name={name} size={40} avatar={avatar} />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-ink">{name}</span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate text-sm font-semibold text-ink">{name}</span>
+                          {quiet && <StatusTag label="Sem avisos" tone="neutral" compact />}
+                        </span>
                         <span className={`block text-[11px] font-medium ${statusColor}`}>{status.text}</span>
                       </span>
                     </span>
@@ -662,7 +746,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                         >
                           Marcar pago
                         </button>
-                        {!payable && (
+                        {!payable && !settled && (
                           <button
                             type="button"
                             aria-label={`Compartilhar link de ${name}`}
@@ -688,6 +772,21 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                       >
                         <RotateCcw size={12} aria-hidden="true" />
                         Reabrir
+                      </button>
+                    </div>
+                  )}
+
+                  {participant && !ended && firstRows.has(charge.id) && (
+                    <div className="flex justify-end border-t border-outline/20 pt-2.5">
+                      <button
+                        type="button"
+                        aria-label={participantQuiet ? `Voltar a notificar ${name}` : `Não notificar ${name}`}
+                        disabled={busy}
+                        onClick={() => toggleSilence(billing, participant, name)}
+                        className="inline-flex min-h-8 items-center gap-1 px-1 text-[11px] font-semibold text-muted disabled:opacity-50"
+                      >
+                        {participantQuiet ? <Bell size={12} aria-hidden="true" /> : <BellOff size={12} aria-hidden="true" />}
+                        {participantQuiet ? "Voltar a notificar" : "Não notificar"}
                       </button>
                     </div>
                   )}
@@ -767,7 +866,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
         </div>
       </div>
 
-      {pending.length > 0 && !ended && !payable && (
+      {pending.length > 0 && !ended && !payable && !settled && (
         <div className="relative">
           <button
             type="button"
@@ -851,6 +950,19 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
           busy={busy}
           onConfirm={() => void reopen(confirmReopen)}
           onCancel={() => setConfirmReopen(null)}
+        />
+      )}
+
+      {confirmSilence && (
+        <ConfirmDialog
+          title={`Não notificar ${confirmSilence.name}?`}
+          icon={BellOff}
+          tone="primary"
+          explanation={`Os lembretes automáticos das cobranças pendentes e futuras de ${confirmSilence.name} nesta conta param.`}
+          confirmLabel="Não notificar"
+          busy={busy}
+          onConfirm={() => void silenceParticipant(billing, confirmSilence.userId, confirmSilence.name, true)}
+          onCancel={() => setConfirmSilence(null)}
         />
       )}
     </section>

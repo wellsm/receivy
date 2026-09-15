@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { fileSizeText, type ChargeState, type ProofUploadTicket, type PublicProofState } from "@receivy/common";
+import { fileSizeText, ProofKind, type ChargeState, type ProofUploadTicket, type PublicProofState } from "@receivy/common";
 import { responseMessage } from "@/lib/financial-response";
 import { CloudUpload, FileText, Loader2, Receipt, Trash2 } from "lucide-react";
 
 const HINT = "m-0 text-sm leading-5 text-muted";
-const PRIMARY_BUTTON = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50";
+const PRIMARY_BUTTON = "inline-flex min-h-[54px] items-center justify-center gap-2 rounded-2xl bg-ink px-4 text-[15px] font-bold text-surface transition hover:opacity-90 disabled:opacity-50";
 const DANGER_BUTTON = "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-danger/30 px-4 text-sm font-semibold text-danger transition hover:bg-danger-soft disabled:opacity-50";
 const FILE_INPUT_LABEL = "Comprovante JPG, PNG ou PDF";
 /** Only a flag: the API knows the slot by the payer, so a reload just asks it again. */
@@ -72,8 +72,8 @@ async function completeStatus(base: string): Promise<PublicProofState | null> {
   } catch { return null; }
 }
 
-export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
-  base: string; state: ChargeState; uploadsEnabled?: boolean; onChanged?: () => void;
+export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, creditor = "quem cobra" }: {
+  base: string; state: ChargeState; uploadsEnabled?: boolean; onChanged?: () => void; creditor?: string;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
@@ -147,17 +147,37 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
       setError(failure instanceof Error ? failure.message : "Não foi possível apagar o comprovante.");
     } finally { setBusy(false); }
   }
+  /** The payer already paid and has no file: the charge waits for the creditor, and a file may still follow. */
+  async function declare() {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`${base}/proof/declaration`, { method: "POST" });
+      if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível informar o pagamento."));
+      showStatus(await response.json() as PublicProofState);
+      onChanged?.();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Não foi possível informar o pagamento.");
+    } finally { setBusy(false); }
+  }
   const effectiveState = status?.state === "accepted" ? "paid" : state;
-  const pending = status?.state === "pending" || (!uploadsEnabled && status?.state !== "rejected");
+  const declared = status?.state === "pending" && status.kind === ProofKind.Declaration;
+  // A declaration keeps the dropzone: the payer may still attach the file.
+  const pending = !declared && (status?.state === "pending" || (!uploadsEnabled && status?.state !== "rejected"));
+  const rejectedAsDeclaration = status?.state === "rejected" && status.kind === ProofKind.Declaration;
+  const rejectedTitle = rejectedAsDeclaration ? "Pagamento não identificado" : "Comprovante rejeitado";
+  const rejectedHint = rejectedAsDeclaration ? "informar de novo ou enviar um comprovante." : "enviar outro arquivo.";
   return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4">
+    <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-4">
       <div className="flex items-center gap-2">
         <Receipt size={20} aria-hidden="true" className="text-primary-strong" />
         <h2 className="m-0 text-base font-bold text-ink">Comprovantes</h2>
       </div>
 
       {status?.state === "rejected" && (
-        <p className={HINT}>Comprovante rejeitado{status.reason ? `: ${status.reason}` : "."} Você pode enviar outro arquivo.</p>
+        <p className={HINT}>
+          {rejectedTitle}
+          {status.reason ? `: ${status.reason}.` : "."} Você pode {rejectedHint}
+        </p>
       )}
 
       {effectiveState !== "pending" ? (
@@ -180,7 +200,16 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
         </>
       ) : (
         <>
-          <p className={HINT}>Envie JPG, PNG ou PDF de até 10 MB. O credor confirmará o pagamento após revisar.</p>
+          {declared ? (
+            <div className="flex flex-col gap-2 rounded-xl bg-primary-soft/40 p-3">
+              <p role="status" className="m-0 text-sm font-semibold text-primary-strong">Pagamento informado · aguardando confirmação de {creditor}.</p>
+              <button type="button" disabled={busy} onClick={() => void withdraw()} className={DANGER_BUTTON}>
+                Desfazer
+              </button>
+            </div>
+          ) : (
+            <p className={HINT}>Envie JPG, PNG ou PDF de até 10 MB. O credor confirmará o pagamento após revisar.</p>
+          )}
           {preview ? (
             <PreviewCard preview={preview}>
               <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-outline/50 bg-surface px-4 text-sm font-semibold text-ink transition hover:bg-surface-muted has-disabled:cursor-not-allowed has-disabled:opacity-50 has-focus-visible:ring-2 has-focus-visible:ring-primary">
@@ -198,8 +227,10 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
               </label>
             </PreviewCard>
           ) : (
-            <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-outline/60 bg-surface-muted/50 px-4 text-sm font-semibold text-ink transition hover:border-primary has-disabled:cursor-not-allowed has-disabled:opacity-50 has-focus-visible:ring-2 has-focus-visible:ring-primary">
-              <CloudUpload size={20} aria-hidden="true" className="text-primary" />
+            <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-[14px] border-[1.5px] border-dashed border-outline p-5 text-center text-[13.5px] font-semibold text-ink transition hover:border-primary has-disabled:cursor-not-allowed has-disabled:opacity-50 has-focus-visible:ring-2 has-focus-visible:ring-primary md:flex-row md:justify-start md:gap-4 md:p-7 md:text-left">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-primary-soft">
+                <CloudUpload size={20} aria-hidden="true" className="text-primary" />
+              </span>
               {FILE_INPUT_LABEL}
               <input
                 key={selectionVersion}
@@ -216,6 +247,11 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged }: {
             {busy && <Loader2 size={16} aria-hidden="true" className="animate-spin" />}
             {busy ? "Enviando…" : "Enviar comprovante"}
           </button>
+          {!declared && (
+            <button type="button" disabled={busy} onClick={() => void declare()} className="self-center text-[12.5px] font-semibold text-primary disabled:opacity-50">
+              Já paguei e não tenho comprovante
+            </button>
+          )}
         </>
       )}
 

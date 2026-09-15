@@ -65,3 +65,9 @@ export class EditScopeNotRecurringError extends UnprocessableEntityError {
     super(message, 'EDIT_SCOPE_NOT_RECURRING');
   }
 }
+
+export class SettledLockedError extends ConflictError {
+  constructor(message = 'Não dá para mudar um registro depois de criado.') {
+    super(message, 'SETTLED_LOCKED');
+  }
+}

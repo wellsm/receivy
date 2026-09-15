@@ -13,6 +13,7 @@ export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["POST", new RegExp(`^charges/${ID}/reminders$`)],
   ["GET", /^billings(?:\?.*)?$/], ["POST", /^billings$/], ["GET", new RegExp(`^billings/${ID}(?:/preview)?$`)],
   ["PATCH", new RegExp(`^billings/${ID}$`)],
+  ["PUT", new RegExp(`^billings/${ID}/participants/${ID}/silenced$`)], ["PUT", new RegExp(`^charges/${ID}/silenced$`)],
   ["POST", new RegExp(`^billings/${ID}/invite$`)], ["DELETE", new RegExp(`^billings/${ID}/invite$`)],
   ["POST", new RegExp(`^billings/${ID}/guests/${ID}$`)],
   ["POST", /^invites\/[^/]+\/accept$/],
@@ -21,7 +22,7 @@ export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["POST", new RegExp(`^payment-methods/${ID}/(?:default|archive)$`)],
   ["GET", new RegExp(`^charges/${ID}$`)], ["POST", new RegExp(`^charges/${ID}/(?:cancel|pay|reopen|public-link|public-link/rotate)$`)],
   ["DELETE", new RegExp(`^charges/${ID}/public-link$`)], ["GET", new RegExp(`^contacts/${ID}/ledger$`)],
-  ["POST", new RegExp(`^charges/${ID}/proof(?:/review|/complete)?$`)], ["DELETE", new RegExp(`^charges/${ID}/proof$`)],
+  ["POST", new RegExp(`^charges/${ID}/proof(?:/review|/complete|/declaration)?$`)], ["DELETE", new RegExp(`^charges/${ID}/proof$`)],
   ["GET", new RegExp(`^charges/${ID}/proof/download$`)],
 ];
 

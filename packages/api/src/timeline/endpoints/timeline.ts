@@ -22,6 +22,8 @@ declare class TimelineRequest implements Http.Request {
     type?: String.Max<64>;
     from?: String.Date;
     to?: String.Date;
+    /** `YYYY-MM`; defaults to the current month. Format is checked by `TimelineRepository.get`. */
+    month?: String.Max<7>;
   };
 }
 
@@ -59,12 +61,13 @@ export async function timelineHandler(
   { identity, query }: TimelineRequest,
   { db, proofFiles }: Service.Context<TimelineProvider>
 ): Promise<TimelineResponse> {
-  const { cursor, direction, status, type, from, to } = query;
+  const { cursor, direction, status, type, from, to, month } = query;
 
   const filters = {
     cursor,
     from,
     to,
+    month,
     direction: parseList('direction', direction, DIRECTIONS),
     status: parseList('status', status, STATUSES),
     type: parseList('type', type, TYPES)

@@ -24,6 +24,12 @@ export const enum ProofState {
   Rejected = 'rejected'
 }
 
+/** What waits for review on a charge: a file, or a payment declared without one. */
+export const enum ProofKind {
+  File = 'file',
+  Declaration = 'declaration'
+}
+
 export const enum SplitMode {
   Fixed = 'fixed',
   Equal = 'equal',
@@ -63,10 +69,20 @@ export type ChargeSummary = {
   payer?: ChargePayer;
   /** True when the viewer owns the billing behind this charge; owner powers key on this, never on direction. */
   ownedByViewer?: boolean;
-  /** A Pix key is attached; the feed offers "Pagar" only then. */
+  /** A Pix key is attached; without one the owner marks their own bill paid straight from the feed. */
   hasPix?: boolean;
   /** The other side has an e-mail or phone on file, so a reminder can reach them; false hides "Lembrar". */
   counterpartReachable?: boolean;
+  /** What is under review when `proofState` is set; null when nothing was sent. */
+  proofKind?: ProofKind | null;
+  /** A payment declared by the paying side waits for the other side to confirm it; false settles at once. */
+  confirmationRequired?: boolean;
+  /** The creditor paused the automatic notices of this charge. The API always sends it, true only to the creditor. */
+  silenced?: boolean;
+  /** The charge belongs to a registro: settled on its due date, never reminded, shared or proven. The API always sends it. */
+  settled?: boolean;
+  /** Registro only: the counterpart typed by the owner, the same text `counterpartName` carries; null otherwise. */
+  counterpartLabel?: string | null;
 };
 
 export const enum ProofMime {
@@ -77,10 +93,12 @@ export const enum ProofMime {
 
 export type ProofFile = { name: string; mime: ProofMime; size: number };
 
-/** The single file attached to a charge; the history of earlier ones lives in the events log. */
+/** The single proof attached to a charge; the history of earlier ones lives in the events log. */
 export type ChargeProof = {
   state: ProofState;
-  file: ProofFile;
+  kind: ProofKind;
+  /** Null on a declaration: the payer said they paid without sending a file. */
+  file: ProofFile | null;
   sentAt: string;
   reviewedAt: string | null;
   /** The creditor's words when rejecting. */
@@ -94,8 +112,13 @@ export type ProofUploadInput = { filename: string; mime: ProofMime; size: number
 /** A signed PUT the client uses directly against the bucket; the API learns about the file from the bucket event. */
 export type ProofUploadTicket = { uploadUrl: string; expiresAt: string };
 
-/** What the public payment page may know: its own upload, never the charge's history. */
-export type PublicProofState = { state: ProofState | 'uploading' | null; reason: string | null; file: ProofFile | null };
+/** What the public payment page may know: its own upload or declaration, never the charge's history. */
+export type PublicProofState = {
+  state: ProofState | 'uploading' | null;
+  kind: ProofKind | null;
+  reason: string | null;
+  file: ProofFile | null;
+};
 
 /** The feed lists charges only: no billing previews, no proof or payment history rows. */
 export type TimelineItem = { kind: 'charge'; direction: Direction; charge: ChargeSummary };
@@ -179,11 +202,16 @@ export type TimelineSummary = {
   proofsToReview: number;
   receivableCount: number;
   payableCount: number;
+  /** Paid charges due this month on each side: the "realizado" shown beside the open totals. */
+  receivedTotal: Money;
+  paidTotal: Money;
 };
 
 export type TimelinePage = {
   items: TimelineItem[];
   summary: TimelineSummary;
+  /** The resolved `YYYY-MM` the page was served for. Always sent by the API; absent on older fixtures. */
+  month?: string;
   nextCursor: string | null;
 };
 

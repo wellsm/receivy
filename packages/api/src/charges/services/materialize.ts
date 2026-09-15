@@ -1,5 +1,14 @@
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
-import { type BillingPlan, type BillingType, ChargePayer, ChargeState, type PaymentMethod, UserStatus } from '@receivy/common';
+import {
+  type BillingPlan,
+  type BillingType,
+  ChargePayer,
+  ChargeState,
+  calendarDate,
+  type PaymentMethod,
+  SplitPartKind,
+  UserStatus
+} from '@receivy/common';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
@@ -103,6 +112,34 @@ export async function prepareChargeMaterialization(
   return { recipients, pix: await pixSnapshot(db, ownerId, paymentMethodId), payer: ChargePayer.Person };
 }
 
+/** Participants whose allocation says "Não notificar": every charge created for them starts silenced. */
+async function silencedDebtors(db: DbClient, billingId: string): Promise<Set<string>> {
+  const { records } = await db.allocations.findMany({
+    select: { user_id: true },
+    where: { billing_id: billingId, kind: SplitPartKind.User, silenced: true }
+  });
+  const silenced = new Set<string>();
+
+  for (const row of records) {
+    if (row.user_id) {
+      silenced.add(row.user_id);
+    }
+  }
+
+  return silenced;
+}
+
+/** How the billing behind new charges settles: a registro pays each charge due by today, in its own timezone. */
+async function settlementOf(db: DbClient, billingId: string, now: string): Promise<{ settled: boolean; timezone: string; today: string }> {
+  const row = await db.billings.findOne({ select: { settled: true, timezone: true }, where: { id: billingId } });
+
+  if (!row) {
+    throw new HttpNotFoundError();
+  }
+
+  return { settled: row.settled === true, timezone: row.timezone, today: calendarDate(new Date(now), row.timezone) };
+}
+
 async function recordCreation(db: DbClient, ownerId: string, row: ChargeRepository.Row, now: string): Promise<void> {
   await EventRepository.record(db, {
     type: 'charge.created',
@@ -129,19 +166,23 @@ export async function persistChargePlan(
   const rows: ChargeRepository.Row[] = [];
   const noticeChargeIds: string[] = [];
 
+  // Creation, the monthly sweep, edits and invites all land here, after the allocations are saved.
+  const silenced = await silencedDebtors(db, billing.id);
+  const settlement = await settlementOf(db, billing.id, now);
+
   for (const item of plan.charges) {
-    // A conta a pagar without a payee has no one on the other side: the owner is both parties.
+    // A conta a pagar without a payee and a registro have no one on the other side.
     const recipient = item.userId ? context.recipients.get(item.userId) : undefined;
 
     if (item.userId && !recipient) {
       throw new HttpNotFoundError('Contato indisponível.');
     }
 
-    if (!item.userId && context.payer !== ChargePayer.Owner) {
+    if (!item.userId && context.payer !== ChargePayer.Owner && !settlement.settled) {
       throw new HttpNotFoundError('Contato indisponível.');
     }
 
-    const row = await db.charges.insertOne({
+    const inserted = await db.charges.insertOne({
       select: ChargeRepository.SELECT,
       data: {
         id: crypto.randomUUID(),
@@ -157,19 +198,25 @@ export async function persistChargePlan(
         ...(item.installment !== null && item.installmentCount !== null
           ? { installment: item.installment, installment_count: item.installmentCount }
           : {}),
-        ...(context.pix
+        // A registro is never paid through a link, so the wallet key stays out of it.
+        ...(context.pix && !settlement.settled
           ? { pix_key_type_snapshot: context.pix.keyType, pix_key_snapshot: context.pix.key, pix_label_snapshot: context.pix.label }
           : {}),
         state: ChargeState.Pending,
+        ...(recipient && silenced.has(recipient.userId) ? { silenced: true } : {}),
         created_at: now,
         updated_at: now
       }
     });
 
+    await recordCreation(db, ownerId, inserted, now);
+
+    // A registro is paid on its due date: whatever is already due settles in the same transaction.
+    const due = settlement.settled && item.dueDate <= settlement.today;
+    const row = due ? await ChargeRepository.markRegistered(db, inserted, settlement.timezone, now) : inserted;
+
     rows.push(row);
     noticeChargeIds.push(row.id);
-
-    await recordCreation(db, ownerId, row, now);
   }
 
   return { rows, noticeChargeIds };

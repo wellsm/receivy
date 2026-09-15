@@ -1,4 +1,4 @@
-import { ConflictError, UnprocessableEntityError } from '../common/errors';
+import { ConflictError, ForbiddenError, UnprocessableEntityError } from '../common/errors';
 
 export class ProofPendingError extends ConflictError {
   constructor(message = 'Já existe um comprovante em revisão.') {
@@ -51,5 +51,11 @@ export class ProofSizeMismatchError extends UnprocessableEntityError {
 export class ProofReviewInvalidError extends UnprocessableEntityError {
   constructor(message = 'Informe aceitar ou recusar e um motivo de até 500 caracteres.') {
     super(message, 'PROOF_REVIEW_INVALID');
+  }
+}
+
+export class ProofDeclarationForbiddenError extends ForbiddenError {
+  constructor(message = 'Só quem paga pode informar o pagamento, e só quando o outro lado pode confirmar.') {
+    super(message, 'PROOF_DECLARATION_FORBIDDEN');
   }
 }

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Alert } from "react-native";
-import { BillingType, ChargeState, Direction, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import { BillingType, ChargeState, Direction, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { ProofViewerScreen } from "@/components/screens/proof-viewer-screen";
 
 jest.mock("expo-router", () => {
@@ -48,6 +48,7 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
 function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
   return {
     state: ProofState.Pending,
+    kind: ProofKind.File,
     file: { name: "comprovante.png", mime: ProofMime.Png, size: 2048 },
     sentAt: "2026-09-05T14:32:00Z",
     reviewedAt: null,

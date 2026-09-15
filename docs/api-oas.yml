@@ -603,6 +603,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/resolveGuestHandler'
+  /billings/{id}/participants/{userId}/silenced:
+    put:
+      operationId: silenceBillingParticipant
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/silenceParticipantHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/silenceParticipantHandler'
   /charges/{id}:
     get:
       operationId: getCharge
@@ -679,6 +709,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/reopenChargeHandler'
+  /charges/{id}/silenced:
+    put:
+      operationId: silenceCharge
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/silenceChargeHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/silenceChargeHandler'
   /charges/{id}/public-link:
     post:
       operationId: createPublicLink
@@ -864,6 +918,12 @@ paths:
           schema:
             type: string
             format: date
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 7
       responses:
         200:
           description: "Successful response."
@@ -1063,6 +1123,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/publicCompleteProofUploadHandler'
+  /charges/{id}/proof/declaration:
+    post:
+      operationId: declarePayment
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/declarePaymentHandler'
+  /public/charges/{token}/proof/declaration:
+    post:
+      operationId: publicDeclarePayment
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/publicDeclarePaymentHandler'
   /devices:
     post:
       operationId: registerDevice
@@ -1425,6 +1521,8 @@ components:
                     userId:
                       type: string
                       format: uuid
+                    silenced:
+                      type: boolean
                     amountCents:
                       type: number
                     basisPoints:
@@ -1478,7 +1576,13 @@ components:
             - 'health'
             - 'education'
             - 'leisure'
+            - 'income'
             - 'other'
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
+          maxLength: 200
       required:
         - type
         - totalCents
@@ -1531,6 +1635,8 @@ components:
                     userId:
                       type: string
                       format: uuid
+                    silenced:
+                      type: boolean
                     amountCents:
                       type: number
                     basisPoints:
@@ -1624,7 +1730,13 @@ components:
             - 'health'
             - 'education'
             - 'leisure'
+            - 'income'
             - 'other'
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
+          maxLength: 200
     resolveGuestHandler:
       anyOf:
       - type: object
@@ -1655,6 +1767,22 @@ components:
             enum: ["dismiss"]
         required:
           - action
+    silenceParticipantHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        silenced:
+          type: boolean
+      required:
+        - silenced
+    silenceChargeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        silenced:
+          type: boolean
+      required:
+        - silenced
     createPublicLinkHandler:
       anyOf:
       - type: object
@@ -2517,6 +2645,10 @@ components:
           required:
             - userId
             - name
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         pix:
           type: object
           additionalProperties: false
@@ -2620,6 +2752,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                     required:
                       - kind
                       - userId
@@ -2655,6 +2789,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                       basisPoints:
                         type: number
                     required:
@@ -2681,6 +2817,8 @@ components:
                       enum: ["user"]
                     userId:
                       type: string
+                    silenced:
+                      type: boolean
                     amountCents:
                       type: number
                   required:
@@ -2719,6 +2857,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                       shares:
                         type: number
                     required:
@@ -2760,6 +2900,8 @@ components:
                   - currency
               order:
                 type: number
+              silenced:
+                type: boolean
               shares:
                 type: number
             required:
@@ -2767,6 +2909,7 @@ components:
               - splitMode
               - amount
               - order
+              - silenced
         charges:
           type: array
           items:
@@ -2835,6 +2978,18 @@ components:
                 type: boolean
               counterpartReachable:
                 type: boolean
+              proofKind:
+                enum: 
+                  - 'file'
+                  - 'declaration'
+              confirmationRequired:
+                type: boolean
+              silenced:
+                type: boolean
+              settled:
+                type: boolean
+              counterpartLabel:
+                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -2898,6 +3053,10 @@ components:
                       - 'pending'
                       - 'accepted'
                       - 'rejected'
+                  kind:
+                    enum: 
+                      - 'file'
+                      - 'declaration'
                   file:
                     type: object
                     additionalProperties: false
@@ -2925,7 +3084,7 @@ components:
                     type: boolean
                 required:
                   - state
-                  - file
+                  - kind
                   - sentAt
                   - sentByViewer
               cancelledAt:
@@ -2997,6 +3156,7 @@ components:
             - 'health'
             - 'education'
             - 'leisure'
+            - 'income'
             - 'other'
         invite:
           type: object
@@ -3108,6 +3268,10 @@ components:
                   - 'payable'
               payeeName:
                 type: string
+              settled:
+                type: boolean
+              counterpartLabel:
+                type: string
               frequency:
                 enum: 
                   - 'monthly'
@@ -3157,6 +3321,7 @@ components:
                   - 'health'
                   - 'education'
                   - 'leisure'
+                  - 'income'
                   - 'other'
               participantCount:
                 type: number
@@ -3223,6 +3388,10 @@ components:
           required:
             - userId
             - name
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         pix:
           type: object
           additionalProperties: false
@@ -3326,6 +3495,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                     required:
                       - kind
                       - userId
@@ -3361,6 +3532,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                       basisPoints:
                         type: number
                     required:
@@ -3387,6 +3560,8 @@ components:
                       enum: ["user"]
                     userId:
                       type: string
+                    silenced:
+                      type: boolean
                     amountCents:
                       type: number
                   required:
@@ -3425,6 +3600,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                       shares:
                         type: number
                     required:
@@ -3466,6 +3643,8 @@ components:
                   - currency
               order:
                 type: number
+              silenced:
+                type: boolean
               shares:
                 type: number
             required:
@@ -3473,6 +3652,7 @@ components:
               - splitMode
               - amount
               - order
+              - silenced
         charges:
           type: array
           items:
@@ -3541,6 +3721,18 @@ components:
                 type: boolean
               counterpartReachable:
                 type: boolean
+              proofKind:
+                enum: 
+                  - 'file'
+                  - 'declaration'
+              confirmationRequired:
+                type: boolean
+              silenced:
+                type: boolean
+              settled:
+                type: boolean
+              counterpartLabel:
+                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -3604,6 +3796,10 @@ components:
                       - 'pending'
                       - 'accepted'
                       - 'rejected'
+                  kind:
+                    enum: 
+                      - 'file'
+                      - 'declaration'
                   file:
                     type: object
                     additionalProperties: false
@@ -3631,7 +3827,7 @@ components:
                     type: boolean
                 required:
                   - state
-                  - file
+                  - kind
                   - sentAt
                   - sentByViewer
               cancelledAt:
@@ -3703,6 +3899,7 @@ components:
             - 'health'
             - 'education'
             - 'leisure'
+            - 'income'
             - 'other'
         invite:
           type: object
@@ -3870,6 +4067,10 @@ components:
           required:
             - userId
             - name
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         pix:
           type: object
           additionalProperties: false
@@ -3973,6 +4174,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                     required:
                       - kind
                       - userId
@@ -4008,6 +4211,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                       basisPoints:
                         type: number
                     required:
@@ -4034,6 +4239,8 @@ components:
                       enum: ["user"]
                     userId:
                       type: string
+                    silenced:
+                      type: boolean
                     amountCents:
                       type: number
                   required:
@@ -4072,6 +4279,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                       shares:
                         type: number
                     required:
@@ -4113,6 +4322,8 @@ components:
                   - currency
               order:
                 type: number
+              silenced:
+                type: boolean
               shares:
                 type: number
             required:
@@ -4120,6 +4331,7 @@ components:
               - splitMode
               - amount
               - order
+              - silenced
         charges:
           type: array
           items:
@@ -4188,6 +4400,18 @@ components:
                 type: boolean
               counterpartReachable:
                 type: boolean
+              proofKind:
+                enum: 
+                  - 'file'
+                  - 'declaration'
+              confirmationRequired:
+                type: boolean
+              silenced:
+                type: boolean
+              settled:
+                type: boolean
+              counterpartLabel:
+                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -4251,6 +4475,10 @@ components:
                       - 'pending'
                       - 'accepted'
                       - 'rejected'
+                  kind:
+                    enum: 
+                      - 'file'
+                      - 'declaration'
                   file:
                     type: object
                     additionalProperties: false
@@ -4278,7 +4506,7 @@ components:
                     type: boolean
                 required:
                   - state
-                  - file
+                  - kind
                   - sentAt
                   - sentByViewer
               cancelledAt:
@@ -4350,6 +4578,7 @@ components:
             - 'health'
             - 'education'
             - 'leisure'
+            - 'income'
             - 'other'
         invite:
           type: object
@@ -4475,6 +4704,10 @@ components:
           required:
             - userId
             - name
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         pix:
           type: object
           additionalProperties: false
@@ -4578,6 +4811,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                     required:
                       - kind
                       - userId
@@ -4613,6 +4848,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                       basisPoints:
                         type: number
                     required:
@@ -4639,6 +4876,8 @@ components:
                       enum: ["user"]
                     userId:
                       type: string
+                    silenced:
+                      type: boolean
                     amountCents:
                       type: number
                   required:
@@ -4677,6 +4916,8 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
+                      silenced:
+                        type: boolean
                       shares:
                         type: number
                     required:
@@ -4718,6 +4959,8 @@ components:
                   - currency
               order:
                 type: number
+              silenced:
+                type: boolean
               shares:
                 type: number
             required:
@@ -4725,6 +4968,7 @@ components:
               - splitMode
               - amount
               - order
+              - silenced
         charges:
           type: array
           items:
@@ -4793,6 +5037,18 @@ components:
                 type: boolean
               counterpartReachable:
                 type: boolean
+              proofKind:
+                enum: 
+                  - 'file'
+                  - 'declaration'
+              confirmationRequired:
+                type: boolean
+              silenced:
+                type: boolean
+              settled:
+                type: boolean
+              counterpartLabel:
+                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -4856,6 +5112,10 @@ components:
                       - 'pending'
                       - 'accepted'
                       - 'rejected'
+                  kind:
+                    enum: 
+                      - 'file'
+                      - 'declaration'
                   file:
                     type: object
                     additionalProperties: false
@@ -4883,7 +5143,7 @@ components:
                     type: boolean
                 required:
                   - state
-                  - file
+                  - kind
                   - sentAt
                   - sentByViewer
               cancelledAt:
@@ -4955,6 +5215,644 @@ components:
             - 'health'
             - 'education'
             - 'leisure'
+            - 'income'
+            - 'other'
+        invite:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            expiresAt:
+              type: string
+          required:
+            - url
+            - expiresAt
+        guests:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              userId:
+                type: string
+              name:
+                type: string
+              email:
+                type: string
+              createdAt:
+                type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
+            required:
+              - id
+              - userId
+              - name
+              - email
+              - createdAt
+        linkableContacts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              contactId:
+                type: string
+              displayName:
+                type: string
+              avatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
+            required:
+              - contactId
+              - displayName
+      required:
+        - id
+        - type
+        - direction
+        - description
+        - total
+        - startDate
+        - state
+        - createdAt
+        - updatedAt
+        - timezone
+        - reminders
+        - split
+        - allocations
+        - charges
+        - previews
+        - category
+        - guests
+        - linkableContacts
+    silenceParticipantHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        type:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        payee:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
+          required:
+            - userId
+            - name
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        frequency:
+          enum: 
+            - 'monthly'
+            - 'yearly'
+        description:
+          type: string
+        total:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        startDate:
+          type: string
+        endDate:
+          type: string
+        dueRule:
+          enum: 
+            - 'fixed'
+            - 'end_of_month'
+        state:
+          enum: 
+            - 'active'
+            - 'paused'
+            - 'ended'
+        installmentCount:
+          type: number
+        nextDueDate:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        timezone:
+          type: string
+        paymentMethodId:
+          type: string
+        reminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+            required:
+              - offsetDays
+              - enabled
+        split:
+          anyOf:
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["equal"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                    required:
+                      - kind
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      silenced:
+                        type: boolean
+                    required:
+                      - kind
+                      - userId
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["percentage"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - basisPoints
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      silenced:
+                        type: boolean
+                      basisPoints:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - basisPoints
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["fixed"]
+              parts:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    kind:
+                      type: string
+                      enum: ["user"]
+                    userId:
+                      type: string
+                    silenced:
+                      type: boolean
+                    amountCents:
+                      type: number
+                  required:
+                    - kind
+                    - userId
+                    - amountCents
+            required:
+              - mode
+              - parts
+          - type: object
+            additionalProperties: false
+            properties:
+              mode:
+                type: string
+                enum: ["shares"]
+              parts:
+                type: array
+                items:
+                  anyOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["owner"]
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - shares
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      kind:
+                        type: string
+                        enum: ["user"]
+                      userId:
+                        type: string
+                      silenced:
+                        type: boolean
+                      shares:
+                        type: number
+                    required:
+                      - kind
+                      - userId
+                      - shares
+            required:
+              - mode
+              - parts
+        allocations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              kind:
+                enum: 
+                  - 'owner'
+                  - 'user'
+              userId:
+                type: string
+              splitMode:
+                enum: 
+                  - 'fixed'
+                  - 'equal'
+                  - 'percentage'
+                  - 'shares'
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              order:
+                type: number
+              silenced:
+                type: boolean
+              shares:
+                type: number
+            required:
+              - kind
+              - splitMode
+              - amount
+              - order
+              - silenced
+        charges:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              dueDate:
+                type: string
+              state:
+                enum: 
+                  - 'pending'
+                  - 'paid'
+                  - 'cancelled'
+              billingId:
+                type: string
+              billingType:
+                enum: 
+                  - 'once'
+                  - 'until'
+                  - 'indefinite'
+              installment:
+                type: number
+              installmentCount:
+                type: number
+              counterpartName:
+                type: string
+              counterpartAvatar:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  version:
+                    type: string
+                required:
+                  - url
+                  - version
+              proofState:
+                enum: 
+                  - 'pending'
+                  - 'accepted'
+                  - 'rejected'
+              payer:
+                enum: 
+                  - 'person'
+                  - 'owner'
+              ownedByViewer:
+                type: boolean
+              hasPix:
+                type: boolean
+              counterpartReachable:
+                type: boolean
+              proofKind:
+                enum: 
+                  - 'file'
+                  - 'declaration'
+              confirmationRequired:
+                type: boolean
+              silenced:
+                type: boolean
+              settled:
+                type: boolean
+              counterpartLabel:
+                type: string
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              recipient:
+                type: object
+                additionalProperties: false
+                properties:
+                  userId:
+                    type: string
+                  name:
+                    type: string
+                  email:
+                    type: string
+                  avatar:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      url:
+                        type: string
+                      version:
+                        type: string
+                    required:
+                      - url
+                      - version
+                required:
+                  - name
+              debtorUserId:
+                type: string
+              pix:
+                type: object
+                additionalProperties: false
+                properties:
+                  keyType:
+                    enum: 
+                      - 'cpf'
+                      - 'cnpj'
+                      - 'email'
+                      - 'phone'
+                      - 'random'
+                  key:
+                    type: string
+                  label:
+                    type: string
+                required:
+                  - keyType
+                  - key
+                  - label
+              sharingState:
+                enum: 
+                  - 'ready'
+                  - 'pix_required'
+                  - 'legacy_without_pix'
+                  - 'closed'
+              proof:
+                type: object
+                additionalProperties: false
+                properties:
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'accepted'
+                      - 'rejected'
+                  kind:
+                    enum: 
+                      - 'file'
+                      - 'declaration'
+                  file:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      name:
+                        type: string
+                      mime:
+                        enum: 
+                          - 'image/jpeg'
+                          - 'image/png'
+                          - 'application/pdf'
+                      size:
+                        type: number
+                    required:
+                      - name
+                      - mime
+                      - size
+                  sentAt:
+                    type: string
+                  reviewedAt:
+                    type: string
+                  reason:
+                    type: string
+                  sentByViewer:
+                    type: boolean
+                required:
+                  - state
+                  - kind
+                  - sentAt
+                  - sentByViewer
+              cancelledAt:
+                type: string
+              paidAt:
+                type: string
+              createdAt:
+                type: string
+            required:
+              - id
+              - description
+              - amount
+              - dueDate
+              - state
+              - billingId
+              - billingType
+              - counterpartName
+              - direction
+              - recipient
+              - sharingState
+              - createdAt
+        previews:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              billingId:
+                type: string
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+              description:
+                type: string
+              amount:
+                type: object
+                additionalProperties: false
+                properties:
+                  amountCents:
+                    type: number
+                  currency:
+                    type: string
+                    enum: ["BRL"]
+                required:
+                  - amountCents
+                  - currency
+              occurrenceDate:
+                type: string
+              materializationDate:
+                type: string
+            required:
+              - billingId
+              - direction
+              - description
+              - amount
+              - occurrenceDate
+        nextMaterialization:
+          type: string
+        category:
+          enum: 
+            - 'food'
+            - 'transport'
+            - 'groceries'
+            - 'subscription'
+            - 'loan'
+            - 'housing'
+            - 'travel'
+            - 'health'
+            - 'education'
+            - 'leisure'
+            - 'income'
             - 'other'
         invite:
           type: object
@@ -5109,6 +6007,18 @@ components:
           type: boolean
         counterpartReachable:
           type: boolean
+        proofKind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        confirmationRequired:
+          type: boolean
+        silenced:
+          type: boolean
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         direction:
           enum: 
             - 'receivable'
@@ -5172,6 +6082,10 @@ components:
                 - 'pending'
                 - 'accepted'
                 - 'rejected'
+            kind:
+              enum: 
+                - 'file'
+                - 'declaration'
             file:
               type: object
               additionalProperties: false
@@ -5199,7 +6113,7 @@ components:
               type: boolean
           required:
             - state
-            - file
+            - kind
             - sentAt
             - sentByViewer
         cancelledAt:
@@ -5287,6 +6201,18 @@ components:
           type: boolean
         counterpartReachable:
           type: boolean
+        proofKind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        confirmationRequired:
+          type: boolean
+        silenced:
+          type: boolean
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         direction:
           enum: 
             - 'receivable'
@@ -5350,6 +6276,10 @@ components:
                 - 'pending'
                 - 'accepted'
                 - 'rejected'
+            kind:
+              enum: 
+                - 'file'
+                - 'declaration'
             file:
               type: object
               additionalProperties: false
@@ -5377,7 +6307,7 @@ components:
               type: boolean
           required:
             - state
-            - file
+            - kind
             - sentAt
             - sentByViewer
         cancelledAt:
@@ -5465,6 +6395,18 @@ components:
           type: boolean
         counterpartReachable:
           type: boolean
+        proofKind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        confirmationRequired:
+          type: boolean
+        silenced:
+          type: boolean
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         direction:
           enum: 
             - 'receivable'
@@ -5528,6 +6470,10 @@ components:
                 - 'pending'
                 - 'accepted'
                 - 'rejected'
+            kind:
+              enum: 
+                - 'file'
+                - 'declaration'
             file:
               type: object
               additionalProperties: false
@@ -5555,7 +6501,7 @@ components:
               type: boolean
           required:
             - state
-            - file
+            - kind
             - sentAt
             - sentByViewer
         cancelledAt:
@@ -5643,6 +6589,18 @@ components:
           type: boolean
         counterpartReachable:
           type: boolean
+        proofKind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        confirmationRequired:
+          type: boolean
+        silenced:
+          type: boolean
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         direction:
           enum: 
             - 'receivable'
@@ -5706,6 +6664,10 @@ components:
                 - 'pending'
                 - 'accepted'
                 - 'rejected'
+            kind:
+              enum: 
+                - 'file'
+                - 'declaration'
             file:
               type: object
               additionalProperties: false
@@ -5733,7 +6695,201 @@ components:
               type: boolean
           required:
             - state
-            - file
+            - kind
+            - sentAt
+            - sentByViewer
+        cancelledAt:
+          type: string
+        paidAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - description
+        - amount
+        - dueDate
+        - state
+        - billingId
+        - billingType
+        - counterpartName
+        - direction
+        - recipient
+        - sharingState
+        - createdAt
+    silenceChargeHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        billingId:
+          type: string
+        billingType:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        installment:
+          type: number
+        installmentCount:
+          type: number
+        counterpartName:
+          type: string
+        counterpartAvatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
+        proofState:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+        payer:
+          enum: 
+            - 'person'
+            - 'owner'
+        ownedByViewer:
+          type: boolean
+        hasPix:
+          type: boolean
+        counterpartReachable:
+          type: boolean
+        proofKind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        confirmationRequired:
+          type: boolean
+        silenced:
+          type: boolean
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        recipient:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
+          required:
+            - name
+        debtorUserId:
+          type: string
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        sharingState:
+          enum: 
+            - 'ready'
+            - 'pix_required'
+            - 'legacy_without_pix'
+            - 'closed'
+        proof:
+          type: object
+          additionalProperties: false
+          properties:
+            state:
+              enum: 
+                - 'pending'
+                - 'accepted'
+                - 'rejected'
+            kind:
+              enum: 
+                - 'file'
+                - 'declaration'
+            file:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                mime:
+                  enum: 
+                    - 'image/jpeg'
+                    - 'image/png'
+                    - 'application/pdf'
+                size:
+                  type: number
+              required:
+                - name
+                - mime
+                - size
+            sentAt:
+              type: string
+            reviewedAt:
+              type: string
+            reason:
+              type: string
+            sentByViewer:
+              type: boolean
+          required:
+            - state
+            - kind
             - sentAt
             - sentByViewer
         cancelledAt:
@@ -5894,6 +7050,7 @@ components:
               - 'health'
               - 'education'
               - 'leisure'
+              - 'income'
               - 'other'
         required:
           - expired
@@ -6002,6 +7159,18 @@ components:
                     type: boolean
                   counterpartReachable:
                     type: boolean
+                  proofKind:
+                    enum: 
+                      - 'file'
+                      - 'declaration'
+                  confirmationRequired:
+                    type: boolean
+                  silenced:
+                    type: boolean
+                  settled:
+                    type: boolean
+                  counterpartLabel:
+                    type: string
                 required:
                   - id
                   - description
@@ -6073,6 +7242,30 @@ components:
               type: number
             payableCount:
               type: number
+            receivedTotal:
+              type: object
+              additionalProperties: false
+              properties:
+                amountCents:
+                  type: number
+                currency:
+                  type: string
+                  enum: ["BRL"]
+              required:
+                - amountCents
+                - currency
+            paidTotal:
+              type: object
+              additionalProperties: false
+              properties:
+                amountCents:
+                  type: number
+                currency:
+                  type: string
+                  enum: ["BRL"]
+              required:
+                - amountCents
+                - currency
           required:
             - receivable
             - payable
@@ -6081,6 +7274,10 @@ components:
             - proofsToReview
             - receivableCount
             - payableCount
+            - receivedTotal
+            - paidTotal
+        month:
+          type: string
         nextCursor:
           type: string
       required:
@@ -6247,6 +7444,18 @@ components:
                 type: boolean
               counterpartReachable:
                 type: boolean
+              proofKind:
+                enum: 
+                  - 'file'
+                  - 'declaration'
+              confirmationRequired:
+                type: boolean
+              silenced:
+                type: boolean
+              settled:
+                type: boolean
+              counterpartLabel:
+                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -6310,6 +7519,10 @@ components:
                       - 'pending'
                       - 'accepted'
                       - 'rejected'
+                  kind:
+                    enum: 
+                      - 'file'
+                      - 'declaration'
                   file:
                     type: object
                     additionalProperties: false
@@ -6337,7 +7550,7 @@ components:
                     type: boolean
                 required:
                   - state
-                  - file
+                  - kind
                   - sentAt
                   - sentByViewer
               cancelledAt:
@@ -6445,6 +7658,18 @@ components:
           type: boolean
         counterpartReachable:
           type: boolean
+        proofKind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        confirmationRequired:
+          type: boolean
+        silenced:
+          type: boolean
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         direction:
           enum: 
             - 'receivable'
@@ -6508,6 +7733,10 @@ components:
                 - 'pending'
                 - 'accepted'
                 - 'rejected'
+            kind:
+              enum: 
+                - 'file'
+                - 'declaration'
             file:
               type: object
               additionalProperties: false
@@ -6535,7 +7764,7 @@ components:
               type: boolean
           required:
             - state
-            - file
+            - kind
             - sentAt
             - sentByViewer
         cancelledAt:
@@ -6623,6 +7852,18 @@ components:
           type: boolean
         counterpartReachable:
           type: boolean
+        proofKind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        confirmationRequired:
+          type: boolean
+        silenced:
+          type: boolean
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
         direction:
           enum: 
             - 'receivable'
@@ -6686,6 +7927,10 @@ components:
                 - 'pending'
                 - 'accepted'
                 - 'rejected'
+            kind:
+              enum: 
+                - 'file'
+                - 'declaration'
             file:
               type: object
               additionalProperties: false
@@ -6713,7 +7958,7 @@ components:
               type: boolean
           required:
             - state
-            - file
+            - kind
             - sentAt
             - sentByViewer
         cancelledAt:
@@ -6767,6 +8012,10 @@ components:
             - 'accepted'
             - 'rejected'
             - 'uploading'
+        kind:
+          enum: 
+            - 'file'
+            - 'declaration'
         reason:
           type: string
         file:
@@ -6796,6 +8045,237 @@ components:
             - 'accepted'
             - 'rejected'
             - 'uploading'
+        kind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        reason:
+          type: string
+        file:
+          type: object
+          additionalProperties: false
+          properties:
+            name:
+              type: string
+            mime:
+              enum: 
+                - 'image/jpeg'
+                - 'image/png'
+                - 'application/pdf'
+            size:
+              type: number
+          required:
+            - name
+            - mime
+            - size
+    declarePaymentHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        billingId:
+          type: string
+        billingType:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        installment:
+          type: number
+        installmentCount:
+          type: number
+        counterpartName:
+          type: string
+        counterpartAvatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
+        proofState:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+        payer:
+          enum: 
+            - 'person'
+            - 'owner'
+        ownedByViewer:
+          type: boolean
+        hasPix:
+          type: boolean
+        counterpartReachable:
+          type: boolean
+        proofKind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        confirmationRequired:
+          type: boolean
+        silenced:
+          type: boolean
+        settled:
+          type: boolean
+        counterpartLabel:
+          type: string
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        recipient:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
+          required:
+            - name
+        debtorUserId:
+          type: string
+        pix:
+          type: object
+          additionalProperties: false
+          properties:
+            keyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            key:
+              type: string
+            label:
+              type: string
+          required:
+            - keyType
+            - key
+            - label
+        sharingState:
+          enum: 
+            - 'ready'
+            - 'pix_required'
+            - 'legacy_without_pix'
+            - 'closed'
+        proof:
+          type: object
+          additionalProperties: false
+          properties:
+            state:
+              enum: 
+                - 'pending'
+                - 'accepted'
+                - 'rejected'
+            kind:
+              enum: 
+                - 'file'
+                - 'declaration'
+            file:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                mime:
+                  enum: 
+                    - 'image/jpeg'
+                    - 'image/png'
+                    - 'application/pdf'
+                size:
+                  type: number
+              required:
+                - name
+                - mime
+                - size
+            sentAt:
+              type: string
+            reviewedAt:
+              type: string
+            reason:
+              type: string
+            sentByViewer:
+              type: boolean
+          required:
+            - state
+            - kind
+            - sentAt
+            - sentByViewer
+        cancelledAt:
+          type: string
+        paidAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - description
+        - amount
+        - dueDate
+        - state
+        - billingId
+        - billingType
+        - counterpartName
+        - direction
+        - recipient
+        - sharingState
+        - createdAt
+    publicDeclarePaymentHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+            - 'uploading'
+        kind:
+          enum: 
+            - 'file'
+            - 'declaration'
         reason:
           type: string
         file:

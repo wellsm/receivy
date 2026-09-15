@@ -13,6 +13,8 @@ export type BillingPlanInput = {
   payer?: ChargePayer;
   /** Conta a pagar only: the contact who receives, or null when the bill is the owner's alone. */
   payeeUserId?: string | null;
+  /** A registro: one charge per due date for the whole total, like a conta a pagar, with nobody on the other side. */
+  settled?: boolean;
 };
 
 export type PlannedCharge = {
@@ -49,7 +51,7 @@ export function planBillingCharges(input: BillingPlanInput): BillingPlan {
     installmentCount: input.numbered ? input.dueDates.length : null
   });
 
-  if (input.payer === ChargePayer.Owner) {
+  if (input.payer === ChargePayer.Owner || input.settled === true) {
     input.dueDates.forEach((dueDate, index) => {
       charges.push({
         userId: input.payeeUserId ?? null,

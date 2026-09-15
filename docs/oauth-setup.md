@@ -7,29 +7,26 @@ as credenciais do respectivo provedor estiverem ausentes.
 
 ## Configuração
 
-`OAUTH_PROVIDERS_CONFIG_B64` contém JSON codificado em base64url. Base64 não é
-criptografia: essa variável é um segredo de backend, nunca `NEXT_PUBLIC_*` ou
-`EXPO_PUBLIC_*`. O valor `disabled` é uma opção de desligamento, não uma credencial.
+Cada provedor tem a sua flag e as suas chaves, todas variáveis da API e segredos
+de backend (nunca `NEXT_PUBLIC_*` ou `EXPO_PUBLIC_*`). Um provedor só é anunciado e
+aceito quando a flag é `true` **e** todas as chaves obrigatórias estão preenchidas;
+`disabled` (o padrão) ou vazio conta como ausente e o botão some no web e no mobile.
 Não reutilizar as credenciais dos projetos de referência.
 
-Formato do objeto (omitir completamente o provedor ainda não configurado):
+| Variável | Obrigatória | Conteúdo |
+| --- | --- | --- |
+| `GOOGLE_SIGNIN_ENABLED` | — | `true` liga o Google; qualquer outro valor desliga |
+| `GOOGLE_CLIENT_ID` | Google | Client ID do cliente OAuth de aplicação web |
+| `GOOGLE_CLIENT_SECRET` | Google | Client secret do mesmo cliente |
+| `APPLE_SIGNIN_ENABLED` | — | `true` liga a Apple; qualquer outro valor desliga |
+| `APPLE_CLIENT_ID` | Apple | Services ID do Receivy |
+| `APPLE_TEAM_ID` | Apple | Team ID da conta Apple Developer |
+| `APPLE_KEY_ID` | Apple | Key ID da chave Sign in with Apple |
+| `APPLE_PRIVATE_KEY_B64` | Apple | arquivo `.p8` em base64 (`base64 -i AuthKey_XXXX.p8 \| tr -d '\n'`) |
+| `APPLE_NATIVE_CLIENT_ID` | não | Bundle ID do app iOS; sem ele o iOS não oferece o botão nativo |
 
-```ts
-type Config = {
-  google?: {
-    clientId: string;
-    clientSecret: string;
-    callbackUri: string;
-  };
-  apple?: {
-    clientId: string; // Services ID do Receivy
-    callbackUri: string;
-    keyId: string;
-    teamId: string;
-    privateKeyBase64: string; // arquivo .p8 codificado em base64
-  };
-};
-```
+As URLs de callback não são variáveis: a API as monta a partir de
+`PUBLIC_WEB_ORIGIN` como `<web>/api/auth/<provedor>/callback`.
 
 ### A base dos callbacks é o Next
 
@@ -54,9 +51,9 @@ ou do provedor. Em local `next dev`, a mesma ponte funciona em
 `http://localhost:3000/api/auth/google/callback` (Google aceita localhost; Apple
 não).
 
-`callbackUri` de cada provedor é, portanto, a URL do **web**:
+O callback de cada provedor é, portanto, a URL do **web**, derivada de `PUBLIC_WEB_ORIGIN`:
 
-| Ambiente | Google `callbackUri` / redirect URI | Apple `callbackUri` / Return URL |
+| Ambiente | Google redirect URI | Apple Return URL |
 | --- | --- | --- |
 | Local | `http://localhost:3000/api/auth/google/callback` | não suportado |
 | Dev | `https://receivy.wellsm.dev/api/auth/google/callback` | `https://receivy.wellsm.dev/api/auth/apple/callback` |

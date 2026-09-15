@@ -150,6 +150,11 @@ export function ProofViewerScreen({ chargeId, client = financialClient, onDone }
     );
   }
 
+  if (!proof.file) {
+    // A declaration has no file to show here; its own view comes in a later task.
+    return null;
+  }
+
   const state = proofStateLabel(proof);
   const note = proofNote(charge);
   const accept = canAcceptProof(charge);

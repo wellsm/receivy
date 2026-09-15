@@ -78,9 +78,10 @@ function periodRange(period: FeedPeriod, today: string): { from: string; to: str
 
 /**
  * The timeline query string. Lists travel comma-separated because the gateway has no array
- * query type; the endpoint splits and validates them back.
+ * query type; the endpoint splits and validates them back. `month` (`YYYY-MM`) selects the Feed's
+ * month; omitted, the API serves the current one.
  */
-export function feedFilterQuery(filters: FeedFilters, today = calendarDate()): URLSearchParams {
+export function feedFilterQuery(filters: FeedFilters, today = calendarDate(), month?: string): URLSearchParams {
   const query = new URLSearchParams();
 
   if (filters.direction.length) {
@@ -100,6 +101,10 @@ export function feedFilterQuery(filters: FeedFilters, today = calendarDate()): U
   if (range) {
     query.set('from', range.from);
     query.set('to', range.to);
+  }
+
+  if (month) {
+    query.set('month', month);
   }
 
   return query;

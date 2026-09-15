@@ -83,7 +83,7 @@ export function PublicPixCopy({ pixKey, timeoutMs = 2_000 }: PublicPixCopyProps)
         aria-label={busy ? "Copiando chave Pix" : "Copiar chave Pix"}
         aria-pressed={copied}
         onClick={() => void copy()}
-        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-outline/50 bg-surface px-4 text-sm font-bold text-primary transition hover:bg-surface-muted disabled:opacity-50"
+        className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl bg-primary px-4 text-[13px] font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
       >
         <Icon size={16} aria-hidden="true" />
         {label}

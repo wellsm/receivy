@@ -144,6 +144,12 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
   }
 
   const proof = charge.proof;
+
+  if (!proof.file) {
+    // A declaration has no file to show here; its own view comes in a later task.
+    return null;
+  }
+
   const state = proofStateLabel(proof);
   const note = proofNote(charge);
   const accept = canAcceptProof(charge);

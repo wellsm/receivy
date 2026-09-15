@@ -113,6 +113,14 @@ Link público:
 - [ ] `Compartilhar` de novo → rotacionar. Esperado: link antigo dá 404 na página pública; novo funciona.
 - [ ] Revogar (se a UI expõe). Esperado: 404 na página pública.
 
+Pagamento informado sem comprovante:
+
+- [ ] Nova cobrança para o Bruno. Janela anônima: abrir o link e tocar em "Já paguei e não tenho comprovante". Esperado: "Pagamento informado · aguardando confirmação de Ana"; dropzone continua disponível.
+- [ ] Como Ana: feed mostra "Em análise" e o selo "Pagamento informado", sem "Lembrar". `Lembrar` via curl devolve 409 `CHARGE_IN_REVIEW`.
+- [ ] Ana abre a cobrança: "Bruno informou que pagou…". Tocar "Não recebi" com motivo "Não caiu". Esperado: volta a pendente; a página pública mostra "Pagamento não identificado: Não caiu."
+- [ ] Anônimo informa de novo e anexa um PDF. Esperado: vira "Comprovante enviado"; Ana confirma e a cobrança fica paga (`charge.paid { via: 'proof' }`).
+- [ ] Conta a pagar da Ana para a Carla (Carla com conta ativa): "Marcar pago" abre "Marcar como pago?" e deixa em análise; Carla confirma no app dela. Com recebedor que nunca entrou, "Marcar pago" marca paga direto.
+
 ## 7. Convite para o rateio — Bruno entra pelo link
 
 Como Ana, em `/billings/{id}`:
@@ -249,6 +257,39 @@ curl -s $API/auth/email/code -H 'content-type: application/json' -d '{"email":"x
 - [ ] Mobile, cobrança vista por quem deve, com credor sem foto: aparece a inicial do credor, nunca a própria foto.
 - [ ] Mobile Android, foto grande da galeria: o envio aceita ou mostra "Envie uma imagem JPG ou PNG de até 2 MB."; a foto carrega sem demora para a outra pessoa.
 - [ ] Excluir a conta: o objeto `avatars/<id>` some do bucket.
+
+## 20. Sem avisos
+
+Como Ana, com Bruno e Carla na agenda (vencimento hoje, para o aviso inicial sair na hora):
+
+- [ ] Nova conta a receber com Bruno e Carla. Ligar "Não notificar" do Bruno; aparece "Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente." Criar. Esperado: só a Carla recebe o aviso inicial no Mailpit; a cobrança do Bruno fica sem `notice.sent`.
+- [ ] Detalhe da conta: a linha do Bruno mostra o selo "Sem avisos"; a da Carla não.
+- [ ] "Não notificar" na linha da Carla. Esperado: confirmação "Não notificar Carla?" com "Os lembretes automáticos das cobranças pendentes e futuras de Carla nesta conta param."; confirmar mostra o selo e grava `billing.participant_silenced { userId }`.
+- [ ] "Voltar a notificar" na linha da Carla. Esperado: sem confirmação; aviso "Avisos reativados para Carla."; o selo some.
+- [ ] Abrir a cobrança do Bruno: selo "Sem avisos" junto ao status e "Voltar a notificar" nas ações da cobrança; "Lembrar" continua igual. Tocar. Esperado: "Avisos reativados."; o selo some só nessa cobrança (no detalhe da conta, a linha dessa cobrança perde o selo e a ação do Bruno continua "Voltar a notificar").
+- [ ] "Não notificar esta cobrança" na mesma cobrança. Esperado: "Avisos desta cobrança pausados."
+- [ ] `Lembrar` na cobrança silenciada. Esperado: o lembrete manual chega no Mailpit.
+- [ ] Conta recorrente com o Bruno silenciado: editar, desligar a chave dele e salvar. Esperado: as pendentes do Bruno perdem o selo; o evento `billing.participant_unsilenced` aparece.
+- [ ] Como Bruno (login dele): a cobrança não mostra "Sem avisos" em lugar nenhum.
+- [ ] Conta a pagar: `curl -X PUT <api>/charges/<id>/silenced -H 'content-type: application/json' -d '{"silenced":true}'` com o token da Ana. Esperado: 409 `SILENCE_UNAVAILABLE`.
+- [ ] Mobile: os mesmos passos no formulário, no detalhe da conta (a confirmação é o alerta nativo) e na cobrança.
+
+## 21. Registros
+
+Como Ana:
+
+- [ ] Nova conta, "Vou receber", ligar "Já recebi". Esperado: somem Participantes, Divisão da Conta e "Receber via Pix"; aparecem "De quem" (placeholder "Ex.: Empresa X") e "Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento."
+- [ ] Salário recorrente: "Recorrente", mensal, vencimento hoje, categoria "Salário e renda", "De quem" = "Empresa X". Criar. Esperado: a cobrança de hoje nasce paga; o feed mostra "Salário · Empresa X" com o selo "Registro"; "Recebido" do mês soma o valor; nada chega no Mailpit.
+- [ ] Recorrente com data anterior a hoje: no web o calendário não deixa escolher (data mínima hoje); no mobile, digitar a data de ontem e criar. Esperado: "Registro recorrente começa hoje ou depois."
+- [ ] Avulso no passado: "Vou pagar", "Já paguei", "Para quem" = "Imobiliária", "À vista", vencimento no mês passado. Criar. Esperado: nasce paga, com `charge.paid { via: 'registered' }` e `paid_at` no início do dia do vencimento; "Pago" do mês passado soma o valor.
+- [ ] Lista de contas: o salário mostra os selos "Registro" e "Empresa X" no lugar de "N pessoas"; o avulso mostra "Registro", "A pagar" e "Imobiliária".
+- [ ] Detalhe da conta do salário: chip "Registro", linha "De Empresa X", seção "Cobranças", sem "Convidar" e sem compartilhar link.
+- [ ] Detalhe da cobrança do salário: selo "Registro" junto ao status; sem "Lembrar", "Compartilhar", comprovante e "Não notificar"; "Reabrir" disponível.
+- [ ] Reabrir a cobrança. Esperado: fica pendente e o cron do dia seguinte não a quita de novo (nenhum `charge.paid` novo); "Marcar como pago" quita de novo.
+- [ ] Lembrar bloqueado: `curl -X POST <api>/charges/<id>/reminders` com o token da Ana, na cobrança reaberta. Esperado: 409 `SETTLED_NO_REMINDERS`.
+- [ ] Editar o salário: "Já recebi" aparece travado com "Não dá para mudar depois de criada."; trocar "De quem" para "Empresa Y" e salvar. Esperado: feed e detalhes mostram "Empresa Y".
+- [ ] `curl -X PATCH <api>/billings/<id> -H 'content-type: application/json' -d '{"settled":false}'` com o token da Ana. Esperado: 409 `SETTLED_LOCKED`.
+- [ ] Mobile: os mesmos passos no formulário (chave nativa), no detalhe da conta e na cobrança.
 
 ## Divergências
 

@@ -1,7 +1,7 @@
 import { deepEqual, equal, notEqual, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import { BillingFrequency, BillingType, ChargeState, Direction, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
+import { HttpBadRequestError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
+import { BillingFrequency, BillingType, ChargeState, Direction, PixKeyType, SplitMode, SplitPartKind, shiftMonth } from '@receivy/common';
 import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { ApiError } from '../../src/common/errors';
@@ -17,6 +17,7 @@ const TIMELINE_OVERFLOW_OWNER = '44444444-4444-4444-8444-444444444444';
 const LEDGER_OVERFLOW_OWNER = '55555555-5555-4555-8555-555555555555';
 const LEDGER_NEGATIVE_VIEWER = '66666666-6666-4666-8666-666666666666';
 const LEDGER_NEGATIVE_COUNTERPART = '77777777-7777-4777-8777-777777777777';
+const MONTH_OWNER = '88888888-8888-4888-8888-888888888888';
 const SECRET = 'native-ez4-test-public-link-secret';
 const OVERFLOW_MESSAGE = 'O total financeiro deve estar entre -9007199254740991 e 9007199254740991 centavos.';
 
@@ -29,7 +30,15 @@ describe('financial repositories on PostgreSQL', () => {
   });
 
   after(async () =>
-    cleanupUsers(db, [OWNER, STRANGER, TIMELINE_OVERFLOW_OWNER, LEDGER_OVERFLOW_OWNER, LEDGER_NEGATIVE_VIEWER, LEDGER_NEGATIVE_COUNTERPART])
+    cleanupUsers(db, [
+      OWNER,
+      STRANGER,
+      TIMELINE_OVERFLOW_OWNER,
+      LEDGER_OVERFLOW_OWNER,
+      LEDGER_NEGATIVE_VIEWER,
+      LEDGER_NEGATIVE_COUNTERPART,
+      MONTH_OWNER
+    ])
   );
 
   it('keeps payment methods owner-scoped and returns post-update default state', async () => {
@@ -230,8 +239,9 @@ describe('financial repositories on PostgreSQL', () => {
       type: BillingType.Until,
       frequency: BillingFrequency.Monthly,
       totalCents: 6_001,
-      startDate: '2026-09-30',
-      endDate: '2026-10-30',
+      // Both installments fall no later than this month: the feed stops at the end of the current month.
+      startDate: '2026-08-31',
+      endDate: '2026-09-30',
       timezone: 'America/Sao_Paulo',
       split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: person.userId, amountCents: 6_001 }] }
     });
@@ -254,6 +264,100 @@ describe('financial repositories on PostgreSQL', () => {
     equal(emptyPage.balance.amountCents, 6_001, 'ledger totals must not change with its cursor');
   });
 
+  it('moves a charge paid this month from the open total to the settled one', async () => {
+    const person = await ContactRepository.save(db, OWNER, { name: 'Settled', email: 'settled@example.com' });
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const billing = await BillingRepository.create(db, OWNER, 'timeline-settled', {
+      type: BillingType.Once,
+      totalCents: 4_321,
+      startDate: today,
+      timezone: 'America/Sao_Paulo',
+      split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: person.userId, amountCents: 4_321 }] }
+    });
+    const before = (await TimelineRepository.get(db, OWNER, {})).summary;
+
+    await ChargeRepository.pay(db, OWNER, billing.charges[0]!.id);
+
+    const after = (await TimelineRepository.get(db, OWNER, {})).summary;
+
+    equal(after.receivedTotal.amountCents - before.receivedTotal.amountCents, 4_321);
+    equal(before.receivable.amountCents - after.receivable.amountCents, 4_321);
+    equal(after.paidTotal.amountCents, before.paidTotal.amountCents);
+  });
+
+  it('serves one selected month, folding an earlier pending charge into the current month as overdue', async () => {
+    await createUser(db, { id: MONTH_OWNER, email: 'month-owner@example.com', name: 'Mês' });
+    const person = await ContactRepository.save(db, MONTH_OWNER, { name: 'Mês contato', email: 'month-contact@example.com' });
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const thisMonth = today.slice(0, 7);
+    const pastMonth = shiftMonth(thisMonth, -1);
+    const nextMonth = shiftMonth(thisMonth, 1);
+
+    const pastPaid = await BillingRepository.create(db, MONTH_OWNER, 'month-past-paid', {
+      type: BillingType.Once,
+      totalCents: 1_100,
+      startDate: `${pastMonth}-05`,
+      timezone: 'America/Sao_Paulo',
+      split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: person.userId, amountCents: 1_100 }] }
+    });
+    await ChargeRepository.pay(db, MONTH_OWNER, pastPaid.charges[0]!.id);
+
+    const pastOverdue = await BillingRepository.create(db, MONTH_OWNER, 'month-past-overdue', {
+      type: BillingType.Once,
+      totalCents: 1_200,
+      startDate: `${pastMonth}-06`,
+      timezone: 'America/Sao_Paulo',
+      split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: person.userId, amountCents: 1_200 }] }
+    });
+
+    const future = await BillingRepository.create(db, MONTH_OWNER, 'month-future', {
+      type: BillingType.Once,
+      totalCents: 1_300,
+      startDate: `${nextMonth}-07`,
+      timezone: 'America/Sao_Paulo',
+      split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: person.userId, amountCents: 1_300 }] }
+    });
+
+    // A past month: only its own charges, and its paid total.
+    const pastPage = await TimelineRepository.get(db, MONTH_OWNER, { month: pastMonth });
+    equal(pastPage.month, pastMonth);
+    deepEqual(
+      new Set(pastPage.items.filter((item) => item.kind === 'charge').map((item) => item.charge.id)),
+      new Set([pastPaid.charges[0]!.id, pastOverdue.charges[0]!.id])
+    );
+    equal(pastPage.summary.receivedTotal.amountCents, 1_100);
+    equal(pastPage.summary.pending.amountCents, 1_200);
+
+    // The current month (no `month`): the earlier pending charge carries over as overdue, the paid one does not.
+    const currentPage = await TimelineRepository.get(db, MONTH_OWNER, {});
+    equal(currentPage.month, thisMonth);
+    const currentIds = currentPage.items.filter((item) => item.kind === 'charge').map((item) => item.charge.id);
+    ok(currentIds.includes(pastOverdue.charges[0]!.id));
+    ok(!currentIds.includes(pastPaid.charges[0]!.id));
+    ok(!currentIds.includes(future.charges[0]!.id));
+    equal(currentPage.summary.receivedTotal.amountCents, 0, 'a paid charge due last month is not this month’s "realizado"');
+
+    // A future month: reachable, and isolated from the others.
+    const nextPage = await TimelineRepository.get(db, MONTH_OWNER, { month: nextMonth });
+    equal(nextPage.month, nextMonth);
+    deepEqual(
+      nextPage.items.filter((item) => item.kind === 'charge').map((item) => item.charge.id),
+      [future.charges[0]!.id]
+    );
+
+    // No `month` equals the current month.
+    deepEqual(await TimelineRepository.get(db, MONTH_OWNER, {}), await TimelineRepository.get(db, MONTH_OWNER, { month: thisMonth }));
+
+    await rejects(
+      () => TimelineRepository.get(db, MONTH_OWNER, { month: '2026-13' }),
+      (error) => {
+        ok(error instanceof HttpBadRequestError);
+        equal(error.status, 400);
+        return true;
+      }
+    );
+  });
+
   it('rejects timeline summaries whose exact aggregate exceeds safe integer cents', async () => {
     await createUser(db, { id: TIMELINE_OVERFLOW_OWNER, email: 'timeline-overflow@example.com', name: 'Timeline Overflow' });
     const person = await ContactRepository.save(db, TIMELINE_OVERFLOW_OWNER, {
@@ -263,14 +367,15 @@ describe('financial repositories on PostgreSQL', () => {
     const first = await BillingRepository.create(db, TIMELINE_OVERFLOW_OWNER, 'timeline-overflow-max', {
       type: BillingType.Once,
       totalCents: Number.MAX_SAFE_INTEGER,
-      startDate: '2027-01-01',
+      // Both due no later than this month, so the feed sums them.
+      startDate: '2026-09-01',
       timezone: 'America/Sao_Paulo',
       split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: person.userId, amountCents: Number.MAX_SAFE_INTEGER }] }
     });
     await BillingRepository.create(db, TIMELINE_OVERFLOW_OWNER, 'timeline-overflow-two', {
       type: BillingType.Once,
       totalCents: 2,
-      startDate: '2027-01-02',
+      startDate: '2026-09-02',
       timezone: 'America/Sao_Paulo',
       split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: person.userId, amountCents: 2 }] }
     });

@@ -131,13 +131,19 @@ async function silencedDebtors(db: DbClient, billingId: string): Promise<Set<str
 
 /** How the billing behind new charges settles: a registro pays each charge due by today, in its own timezone. */
 async function settlementOf(db: DbClient, billingId: string, now: string): Promise<{ settled: boolean; timezone: string; today: string }> {
-  const row = await db.billings.findOne({ select: { settled: true, timezone: true }, where: { id: billingId } });
+  const row = await db.billings.findOne({ select: { settled: true, owner_id: true }, where: { id: billingId } });
 
   if (!row) {
     throw new HttpNotFoundError();
   }
 
-  return { settled: row.settled === true, timezone: row.timezone, today: calendarDate(new Date(now), row.timezone) };
+  const owner = await db.users.findOne({ select: { timezone: true }, where: { id: row.owner_id } });
+
+  if (!owner) {
+    throw new HttpNotFoundError();
+  }
+
+  return { settled: row.settled === true, timezone: owner.timezone, today: calendarDate(new Date(now), owner.timezone) };
 }
 
 async function recordCreation(db: DbClient, ownerId: string, row: ChargeRepository.Row, now: string): Promise<void> {
@@ -187,13 +193,11 @@ export async function persistChargePlan(
       data: {
         id: crypto.randomUUID(),
         creditor: { id: ownerId },
-        ...(recipient ? { debtor_user: { id: recipient.userId } } : {}),
+        ...(recipient ? { debtor: { id: recipient.userId } } : {}),
         payer: context.payer,
         billing: { id: billing.id },
-        billing_type: billing.type,
         description: item.description,
         amount_cents: item.amountCents,
-        currency: item.currency,
         due_date: item.dueDate,
         ...(item.installment !== null && item.installmentCount !== null
           ? { installment: item.installment, installment_count: item.installmentCount }

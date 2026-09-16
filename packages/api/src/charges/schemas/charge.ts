@@ -1,6 +1,6 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
-import type { BillingType, ChargePayer, ChargeState, PixKeyType, ProofKind, ProofMime } from '@receivy/common';
+import type { ChargePayer, ChargeState, PixKeyType, ProofKind, ProofMime } from '@receivy/common';
 
 export const enum StoredProofState {
   Uploading = 'uploading',
@@ -26,10 +26,8 @@ export interface ChargeSchema extends Database.Schema {
   /** Who pays: null or 'person' (the contact) on a conta a receber, 'owner' on a conta a pagar. */
   payer?: ChargePayer;
   billing_id: String.UUID;
-  billing_type: BillingType;
   description: String.Max<500>;
   amount_cents: number;
-  currency: 'BRL';
   due_date: String.Date;
   installment?: number;
   installment_count?: number;

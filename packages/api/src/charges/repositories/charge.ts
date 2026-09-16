@@ -1,4 +1,5 @@
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
+import type { String } from '@ez4/schema';
 import {
   type BillingType,
   type ChargeDetail,
@@ -72,10 +73,8 @@ export namespace ChargeRepository {
     debtor_user_id: true,
     payer: true,
     billing_id: true,
-    billing_type: true,
     description: true,
     amount_cents: true,
-    currency: true,
     due_date: true,
     installment: true,
     installment_count: true,
@@ -120,10 +119,8 @@ export namespace ChargeRepository {
     /** Who pays: undefined or 'person' on a conta a receber, 'owner' on a conta a pagar. */
     payer?: ChargePayer;
     billing_id: string;
-    billing_type: BillingType;
     description: string;
     amount_cents: number;
-    currency: 'BRL';
     due_date: string;
     installment?: number;
     installment_count?: number;
@@ -151,6 +148,19 @@ export namespace ChargeRepository {
     created_at: string;
     updated_at: string;
   };
+
+  export function list(db: DbClient, userId: String.UUID, _query: { month: string }) {
+    return db.charges.findMany({
+      select: {
+        id: true,
+        description: true,
+        state: true,
+      },
+      where: {
+        OR: [{ creditor_id: userId }, { debtor_user_id: userId }]
+      }
+    });
+  }
 
   /** The stored proof state as anyone may see it: a reserved slot (`uploading`) is nobody's business yet. */
   export function visibleProofState(row: Pick<Row, 'proof_state'>): ProofState | null {
@@ -218,13 +228,21 @@ export namespace ChargeRepository {
     return row.creditor_id === userId;
   }
 
-  /** Whether the billing behind a charge is a registro, and the counterpart it names. */
-  export type SettledBilling = { settled: boolean; counterpartLabel: string | null };
+  /** The billing behind a charge: its type, whether it is a registro, and the counterpart it names. */
+  export type SettledBilling = { settled: boolean; counterpartLabel: string | null; type: BillingType };
 
   export async function settledBilling(db: DbClient, row: Pick<Row, 'billing_id'>): Promise<SettledBilling> {
-    const billing = await db.billings.findOne({ select: { settled: true, counterpart_label: true }, where: { id: row.billing_id } });
+    const billing = await db.billings.findOne({
+      select: { settled: true, counterpart_label: true, type: true },
+      where: { id: row.billing_id }
+    });
 
-    return { settled: billing?.settled === true, counterpartLabel: billing?.counterpart_label ?? null };
+    // A charge always points at a billing; a missing one is corruption, not an empty state.
+    if (!billing) {
+      throw new HttpNotFoundError();
+    }
+
+    return { settled: billing.settled === true, counterpartLabel: billing.counterpart_label ?? null, type: billing.type };
   }
 
   /**
@@ -272,11 +290,11 @@ export namespace ChargeRepository {
     return {
       id: row.id,
       description: row.description,
-      amount: { amountCents: row.amount_cents, currency: row.currency },
+      amount: { amountCents: row.amount_cents, currency: 'BRL' },
       dueDate: row.due_date,
       state: row.state,
       billingId: row.billing_id,
-      billingType: row.billing_type,
+      billingType: record.type,
       installment: row.installment ?? null,
       installmentCount: row.installment_count ?? null,
       counterpartName: await counterpartName(db, row, userId),

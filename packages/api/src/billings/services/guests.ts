@@ -66,7 +66,13 @@ export async function resolveGuest(
       await ContactRepository.linkGuest(tx, ownerId, action.contactId, guest.user_id, instant);
     } else if (action.action === 'add') {
       await ContactRepository.ensure(tx, ownerId, guest.user_id, instant);
-      await InviteRepository.joinSplit(tx, billing, guest.user_id, instant, noticeChargeIds);
+      await InviteRepository.joinSplit(
+        tx,
+        { ...billing, timezone: await BillingRepository.ownerTimezone(tx, ownerId) },
+        guest.user_id,
+        instant,
+        noticeChargeIds
+      );
     }
 
     const state =

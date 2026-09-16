@@ -85,31 +85,12 @@ function TotalCard({ tone, open, settled, count }: TotalCardProps) {
     <article className={`flex flex-1 flex-col px-3.5 py-[11px] md:rounded-[20px] md:p-5 ${receivable ? "border-r border-outline md:border-r-0 md:bg-primary" : "md:bg-payable"}`}>
       <div className="flex items-baseline justify-between gap-1.5">
         <span className="text-[10.5px] font-bold tracking-[0.1em] text-muted md:text-[11px] md:font-semibold md:text-on-primary/75">{receivable ? "A RECEBER" : "A PAGAR"}</span>
-        {settled && (
-          <span className="truncate text-[10.5px] font-semibold tabular-nums text-success md:hidden">
-            {formatMoney(settled).replace(/^R\$\s*/, "")} {done}
-          </span>
-        )}
         <span className="hidden text-[11.5px] font-semibold text-on-primary/75 md:inline">{count === 1 ? "1 cobrança" : `${count} cobranças`}</span>
       </div>
 
       <strong className={`mt-1 font-display text-[20px] font-bold tracking-[-0.02em] tabular-nums md:mt-2.5 md:text-[34px] md:leading-none md:text-on-primary ${receivable ? "text-primary" : "text-payable"}`}>
         {open ? formatMoney(open) : "—"}
       </strong>
-
-      {settled && (
-        <div className="hidden md:block">
-          <div aria-hidden="true" className="mt-4 flex h-1.5 overflow-hidden rounded-full bg-on-primary/25">
-            <span className="bg-on-primary" style={{ width: `${progress}%` }} />
-          </div>
-          <div className="mt-[9px] flex justify-between gap-3 text-[11.5px] font-medium text-on-primary/80">
-            <span>
-              {formatMoney(settled)} já {done}
-            </span>
-            <span>{progress}% do mês</span>
-          </div>
-        </div>
-      )}
     </article>
   );
 }
@@ -312,7 +293,8 @@ function MonthTabBar({ month, onSelect }: { month: string; onSelect: (month: str
   const tabs: MonthTab[] = monthTabs(month);
 
   return (
-    <div role="group" aria-label="Mês" className="flex border-b border-outline">
+    <div role="group" aria-label="Mês" className="flex border-b border-outline -mx-5
+    ">
       {tabs.map((tab) => (
         <button
           key={tab.value}

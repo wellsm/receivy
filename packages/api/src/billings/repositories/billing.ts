@@ -117,7 +117,7 @@ async function billingRow(db: DbClient, ownerId: string, id: string, lock = fals
     throw new HttpNotFoundError();
   }
 
-  return row;
+  return { ...row, timezone: await BillingRepository.ownerTimezone(db, ownerId) };
 }
 
 function calendarRule(row: BillingRepository.Row) {
@@ -187,7 +187,7 @@ function summary(
     type: row.type,
     frequency: row.frequency,
     description: row.description,
-    total: { amountCents: row.total_cents, currency: row.currency },
+    total: { amountCents: row.total_cents, currency: 'BRL' },
     startDate: row.start_date,
     endDate: row.end_date,
     dueRule: row.due_rule ?? BillingDueRule.Fixed,
@@ -347,7 +347,7 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
     type: row.type,
     frequency: row.frequency,
     description: row.description,
-    total: { amountCents: row.total_cents, currency: row.currency },
+    total: { amountCents: row.total_cents, currency: 'BRL' },
     startDate: row.start_date,
     endDate: row.end_date,
     dueRule: row.due_rule ?? BillingDueRule.Fixed,
@@ -894,11 +894,9 @@ export namespace BillingRepository {
     description: true,
     category: true,
     total_cents: true,
-    currency: true,
     start_date: true,
     end_date: true,
     due_rule: true,
-    timezone: true,
     payment_method_id: true,
     direction: true,
     payee_user_id: true,
@@ -916,6 +914,20 @@ export namespace BillingRepository {
     updated_at: true
   } as const;
 
+  /**
+   * A billing has no timezone of its own: it is whatever the owner set, read live. Every row load
+   * attaches it, so the calendar helpers keep reading `row.timezone` unchanged.
+   */
+  export async function ownerTimezone(db: DbClient, ownerId: string): Promise<string> {
+    const owner = await db.users.findOne({ select: { timezone: true }, where: { id: ownerId } });
+
+    if (!owner) {
+      throw new HttpNotFoundError();
+    }
+
+    return owner.timezone;
+  }
+
   export type Row = {
     id: string;
     owner_id: string;
@@ -924,7 +936,6 @@ export namespace BillingRepository {
     description: string;
     category: BillingCategory;
     total_cents: number;
-    currency: 'BRL';
     start_date: string;
     end_date?: string;
     /** Null on rows written before the rule existed: read as 'fixed'. */
@@ -1135,7 +1146,7 @@ export namespace BillingRepository {
           throw new IdempotencyMismatchError();
         }
 
-        return dto(tx, existing, now, link);
+        return dto(tx, { ...existing, timezone: await ownerTimezone(tx, ownerId) }, now, link);
       }
 
       const today = calendarDate(now, input.timezone);
@@ -1163,11 +1174,9 @@ export namespace BillingRepository {
           description: input.description,
           category: input.category ?? BillingCategory.Other,
           total_cents: input.totalCents,
-          currency: 'BRL',
           start_date: input.startDate,
           end_date: input.endDate ?? sqlNull,
           due_rule: input.dueRule ?? BillingDueRule.Fixed,
-          timezone: input.timezone,
           ...(input.paymentMethodId ? { payment_method: { id: input.paymentMethodId } } : {}),
           direction: input.direction,
           ...(input.payeeUserId ? { payee_user: { id: input.payeeUserId } } : {}),
@@ -1206,7 +1215,7 @@ export namespace BillingRepository {
 
       await audit(tx, ownerId, id, 'billing.created', instant, { type: input.type });
 
-      return dto(tx, row, now, link);
+      return dto(tx, { ...row, timezone: await ownerTimezone(tx, ownerId) }, now, link);
     });
 
     // The rows are committed before anyone hears about them.
@@ -1261,7 +1270,9 @@ export namespace BillingRepository {
       order: { created_at: Order.Desc, id: Order.Asc },
       take: PAGE_SIZE + 1
     });
-    const page = result.records.slice(0, PAGE_SIZE);
+    // Every row of the page belongs to the same owner, so their timezone is read once.
+    const timezone = await ownerTimezone(db, ownerId);
+    const page = result.records.slice(0, PAGE_SIZE).map((row) => ({ ...row, timezone }));
     const last = result.records.length > PAGE_SIZE ? page.at(-1) : undefined;
 
     const aggregates = await summaryAggregates(db, page, now);
@@ -1484,18 +1495,28 @@ export namespace BillingRepository {
    */
   export async function settleRegistered(db: DbClient, now = new Date()): Promise<number> {
     const { records } = await db.billings.findMany({
-      select: { id: true, owner_id: true, timezone: true },
+      select: { id: true, owner_id: true },
       where: { settled: true },
       order: { id: Order.Asc }
     });
     const instant = now.toISOString();
+    // The sweep spans every account, so timezones are read once per owner instead of once per billing.
+    const timezones = new Map<string, string>();
 
     let settled = 0;
 
-    for (const billing of records) {
+    for (const row of records) {
+      let timezone = timezones.get(row.owner_id);
+
+      if (!timezone) {
+        timezone = await ownerTimezone(db, row.owner_id);
+        timezones.set(row.owner_id, timezone);
+      }
+
+      const billing = { ...row, timezone };
       const { records: due } = await db.charges.findMany({
         select: { id: true },
-        where: { billing_id: billing.id, state: ChargeState.Pending, due_date: { lte: calendarDate(now, billing.timezone) } },
+        where: { billing_id: billing.id, state: ChargeState.Pending, due_date: { lte: calendarDate(now, timezone) } },
         order: { due_date: Order.Asc }
       });
 

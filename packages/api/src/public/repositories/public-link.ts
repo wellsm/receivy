@@ -126,7 +126,7 @@ export namespace PublicLinkRepository {
     return {
       creditorFirstName: firstName,
       description: charge.description,
-      amount: { amountCents: charge.amount_cents, currency: charge.currency },
+      amount: { amountCents: charge.amount_cents, currency: 'BRL' },
       dueDate: charge.due_date,
       state: charge.state,
       pix:

@@ -279,7 +279,7 @@ export async function announceCharges(db: DbClient, context: NoticeContext, char
     }
 
     const billing = await db.billings.findOne({
-      select: { timezone: true, reminders: true, settled: true },
+      select: { owner_id: true, reminders: true, settled: true },
       where: { id: charge.billing_id }
     });
 
@@ -292,11 +292,18 @@ export async function announceCharges(db: DbClient, context: NoticeContext, char
       continue;
     }
 
+    // The billing has no timezone of its own: the owner's is what dates the notice.
+    const owner = await db.users.findOne({ select: { timezone: true }, where: { id: billing.owner_id } });
+
+    if (!owner) {
+      continue;
+    }
+
     // A charge created ahead of its due day meets the debtor through the reminders, not on the day it was created.
     const due = shouldSendInitialNotice({
       dueDate: charge.due_date,
       now,
-      timezone: billing.timezone,
+      timezone: owner.timezone,
       reminders: effectiveReminders(billing)
     });
 
@@ -337,7 +344,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
 
     if (!billing) {
       const row = await db.billings.findOne({
-        select: { timezone: true, reminders: true, settled: true },
+        select: { owner_id: true, reminders: true, settled: true },
         where: { id: charge.billing_id }
       });
 
@@ -345,8 +352,15 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
         continue;
       }
 
-      billing = row;
-      billings.set(charge.billing_id, row);
+      // The billing has no timezone of its own; the cache keeps this to one lookup per billing.
+      const owner = await db.users.findOne({ select: { timezone: true }, where: { id: row.owner_id } });
+
+      if (!owner) {
+        continue;
+      }
+
+      billing = { ...row, timezone: owner.timezone };
+      billings.set(charge.billing_id, billing);
     }
 
     if (billing.settled) {

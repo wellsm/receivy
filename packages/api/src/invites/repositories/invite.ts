@@ -309,7 +309,13 @@ export namespace InviteRepository {
         };
       }
 
-      const { chargeId, joinedSplit } = await joinSplit(tx, billing, userId, instant, noticeChargeIds);
+      const { chargeId, joinedSplit } = await joinSplit(
+        tx,
+        { ...billing, timezone: await BillingRepository.ownerTimezone(tx, billing.owner_id) },
+        userId,
+        instant,
+        noticeChargeIds
+      );
 
       await tx.billing_invites.updateOne({ where: { id: invite.id }, data: { accepted_count: invite.accepted_count + 1 } });
       await BillingRepository.audit(tx, billing.owner_id, billing.id, 'billings.invite_accepted', instant, { userId, joinedSplit });

@@ -112,16 +112,16 @@ export function AppShell({ children, activePath = "/", notificationsBadge = fals
           <HeaderBell badge={notificationsBadge} />
         </div>
         <Navigation activePath={activePath} />
-        <div className="flex items-start gap-[9px] text-xs leading-[1.45] text-muted">
-          <span className="mt-[5px] h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
+        <div className="flex items-start gap-2.25 text-xs leading-[1.45] text-muted">
+          <span className="mt-1.25 h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden="true" />
           Seus registros, sob seu controle.
         </div>
       </aside>
 
-      <div className="min-h-screen pb-[94px] md:pb-0">
+      <div className="min-h-screen pb-23.5 md:pb-0">
         <ScreenHeader title={title} back={back} activePath={activePath} />
 
-        <main className="mx-auto w-full max-w-[1080px] px-5 pt-4 pb-24 md:px-8 md:pt-7 md:pb-[90px] xl:px-10">{children}</main>
+        <main className="mx-auto w-full max-w-270 px-5 pb-24 md:px-8 md:pt-7 md:pb-22.5 xl:px-10">{children}</main>
 
         <Navigation mobile activePath={activePath} />
       </div>

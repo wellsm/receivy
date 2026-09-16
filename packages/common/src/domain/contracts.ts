@@ -7,42 +7,42 @@ export type Money = {
   currency: 'BRL';
 };
 
-export const enum Direction {
+export enum Direction {
   Receivable = 'receivable',
   Payable = 'payable'
 }
 
-export const enum ChargeState {
+export enum ChargeState {
   Pending = 'pending',
   Paid = 'paid',
   Cancelled = 'cancelled'
 }
 
-export const enum ProofState {
+export enum ProofState {
   Pending = 'pending',
   Accepted = 'accepted',
   Rejected = 'rejected'
 }
 
 /** What waits for review on a charge: a file, or a payment declared without one. */
-export const enum ProofKind {
+export enum ProofKind {
   File = 'file',
   Declaration = 'declaration'
 }
 
-export const enum SplitMode {
+export enum SplitMode {
   Fixed = 'fixed',
   Equal = 'equal',
   Percentage = 'percentage',
   Shares = 'shares'
 }
 
-export const enum ChargePayer {
+export enum ChargePayer {
   Person = 'person',
   Owner = 'owner'
 }
 
-export const enum SharingState {
+export enum SharingState {
   Ready = 'ready',
   PixRequired = 'pix_required',
   LegacyWithoutPix = 'legacy_without_pix',
@@ -85,7 +85,7 @@ export type ChargeSummary = {
   counterpartLabel?: string | null;
 };
 
-export const enum ProofMime {
+export enum ProofMime {
   Jpeg = 'image/jpeg',
   Png = 'image/png',
   Pdf = 'application/pdf'
@@ -128,7 +128,7 @@ export type HealthResponse = {
   service: 'receivy-api';
 };
 
-export const enum PixKeyType {
+export enum PixKeyType {
   Cpf = 'cpf',
   Cnpj = 'cnpj',
   Email = 'email',

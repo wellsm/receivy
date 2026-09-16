@@ -1,6 +1,9 @@
 import type { Client, Database, Index } from '@ez4/database';
 import type { PostgresEngine } from '@ez4/raw-pg/client';
-import type { AllocationSchema, BillingSchema } from './billings/schemas/billing';
+import type {
+  AllocationSchema,
+  BillingSchema
+} from './billings/schemas/billing';
 import type { BillingGuestSchema } from './billings/schemas/billing-guest';
 import type { ChargeSchema } from './charges/schemas/charge';
 import type { EventSchema } from './common/schemas/event';
@@ -25,14 +28,26 @@ export declare class Db extends Database.Service<PostgresEngine> {
       name: 'device_tokens';
       schema: DeviceTokenSchema;
       relations: { 'user_id@user': 'users:id' };
-      indexes: { id: Index.Primary; token: Index.Unique; 'user_id:installation_id': Index.Unique };
+      indexes: {
+        id: Index.Primary;
+        token: Index.Unique;
+        'user_id:installation_id': Index.Unique;
+      };
     }>,
-    Database.UseTable<{ name: 'proof_throttles'; schema: ProofThrottleSchema; indexes: { id: Index.Primary } }>,
+    Database.UseTable<{
+      name: 'proof_throttles';
+      schema: ProofThrottleSchema;
+      indexes: { id: Index.Primary };
+    }>,
     Database.UseTable<{
       name: 'payment_methods';
       schema: PaymentMethodSchema;
       relations: { 'owner_id@owner': 'users:id' };
-      indexes: { id: Index.Primary; 'owner_id:pix_key_type:pix_key': Index.Unique; owner_id: Index.Secondary };
+      indexes: {
+        id: Index.Primary;
+        'owner_id:pix_key_type:pix_key': Index.Unique;
+        owner_id: Index.Secondary;
+      };
     }>,
     Database.UseTable<{
       name: 'billings';
@@ -42,20 +57,33 @@ export declare class Db extends Database.Service<PostgresEngine> {
         'payment_method_id@payment_method': 'payment_methods:id';
         'payee_user_id@payee_user': 'users:id';
       };
-      indexes: { id: Index.Primary; 'owner_id:idempotency_key': Index.Unique; owner_id: Index.Secondary; 'state:type': Index.Secondary };
+      indexes: {
+        id: Index.Primary;
+        'owner_id:idempotency_key': Index.Unique;
+        owner_id: Index.Secondary;
+        'state:type': Index.Secondary;
+      };
     }>,
     Database.UseTable<{
       name: 'allocations';
       schema: AllocationSchema;
-      relations: { 'billing_id@billing': 'billings:id'; 'user_id@user': 'users:id' };
-      indexes: { id: Index.Primary; 'billing_id:allocation_order': Index.Unique; billing_id: Index.Secondary; user_id: Index.Secondary };
+      relations: {
+        'billing_id@billing': 'billings:id';
+        'user_id@user': 'users:id';
+      };
+      indexes: {
+        id: Index.Primary;
+        'billing_id:allocation_order': Index.Unique;
+        billing_id: Index.Secondary;
+        user_id: Index.Secondary;
+      };
     }>,
     Database.UseTable<{
       name: 'charges';
       schema: ChargeSchema;
       relations: {
         'creditor_id@creditor': 'users:id';
-        'debtor_user_id@debtor_user': 'users:id';
+        'debtor_user_id@debtor': 'users:id';
         'billing_id@billing': 'billings:id';
         'proof_sender_user_id@proof_sender': 'users:id';
       };
@@ -71,26 +99,51 @@ export declare class Db extends Database.Service<PostgresEngine> {
     Database.UseTable<{
       name: 'billing_invites';
       schema: BillingInviteSchema;
-      relations: { 'billing_id@billing': 'billings:id'; 'owner_id@owner': 'users:id' };
-      indexes: { id: Index.Primary; public_id: Index.Unique; billing_id: Index.Secondary };
+      relations: {
+        'billing_id@billing': 'billings:id';
+        'owner_id@owner': 'users:id';
+      };
+      indexes: {
+        id: Index.Primary;
+        public_id: Index.Unique;
+        billing_id: Index.Secondary;
+      };
     }>,
     Database.UseTable<{
       name: 'billing_guests';
       schema: BillingGuestSchema;
-      relations: { 'billing_id@billing': 'billings:id'; 'owner_id@owner': 'users:id'; 'user_id@user': 'users:id' };
-      indexes: { id: Index.Primary; 'billing_id:user_id': Index.Unique; billing_id: Index.Secondary; owner_id: Index.Secondary };
+      relations: {
+        'billing_id@billing': 'billings:id';
+        'owner_id@owner': 'users:id';
+        'user_id@user': 'users:id';
+      };
+      indexes: {
+        id: Index.Primary;
+        'billing_id:user_id': Index.Unique;
+        billing_id: Index.Secondary;
+        owner_id: Index.Secondary;
+      };
     }>,
     Database.UseTable<{
       name: 'events';
       schema: EventSchema;
       relations: { 'actor_user_id@actor_user': 'users:id' };
-      indexes: { id: Index.Primary; eventable_id: Index.Secondary; actor_user_id: Index.Secondary };
+      indexes: {
+        id: Index.Primary;
+        eventable_id: Index.Secondary;
+        actor_user_id: Index.Secondary;
+      };
     }>,
     Database.UseTable<{
       name: 'contacts';
       schema: ContactSchema;
       relations: { 'owner_id@owner': 'users:id'; 'user_id@user': 'users:id' };
-      indexes: { id: Index.Primary; 'owner_id:user_id': Index.Unique; owner_id: Index.Secondary; user_id: Index.Secondary };
+      indexes: {
+        id: Index.Primary;
+        'owner_id:user_id': Index.Unique;
+        owner_id: Index.Secondary;
+        user_id: Index.Secondary;
+      };
     }>,
     Database.UseTable<{
       name: 'users';

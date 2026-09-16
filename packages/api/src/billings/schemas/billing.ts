@@ -20,12 +20,10 @@ export interface BillingSchema extends Database.Schema {
   description: String.Max<500>;
   category: BillingCategory;
   total_cents: number;
-  currency: 'BRL';
   start_date: String.Date;
   end_date?: String.Date;
   /** 'end_of_month' lands every occurrence on the last day of its month; null (older rows) means 'fixed'. */
   due_rule?: BillingDueRule;
-  timezone: String.Max<100>;
   payment_method_id?: String.UUID;
   /** 'payable' is the owner's own bill; null (legacy) or 'receivable' means the owner collects from contacts. */
   direction?: Direction;

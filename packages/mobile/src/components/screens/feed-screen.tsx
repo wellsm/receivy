@@ -115,30 +115,20 @@ function SummaryBox({ summary }: { summary?: TimelineSummary }) {
   const realized = received - paid;
 
   return (
-    <View className="mx-[18px] overflow-hidden rounded-[18px] border border-outline bg-surface">
+    <View className="mx-4.5 overflow-hidden rounded-[18px] border border-outline bg-surface">
       <View className="flex-row">
-        <View className="flex-1 border-r border-outline px-3.5 py-[11px]">
+        <View className="flex-1 border-r border-outline px-3.5 py-2.75">
           <View className="flex-row items-baseline justify-between gap-1.5">
             <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A RECEBER</Text>
-            {summary && (
-              <Text numberOfLines={1} className="shrink font-sans text-[10.5px] font-semibold text-success" style={TABULAR}>
-                {withoutCurrency(formatMoney(summary.receivedTotal))} recebido
-              </Text>
-            )}
           </View>
           <Text className="mt-1 font-display text-[20px] font-bold text-primary" style={TABULAR}>
             {summary ? formatMoney(summary.receivable) : "—"}
           </Text>
         </View>
 
-        <View className="flex-1 px-3.5 py-[11px]">
+        <View className="flex-1 px-3.5 py-2.75">
           <View className="flex-row items-baseline justify-between gap-1.5">
             <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A PAGAR</Text>
-            {summary && (
-              <Text numberOfLines={1} className="shrink font-sans text-[10.5px] font-semibold text-success" style={TABULAR}>
-                {withoutCurrency(formatMoney(summary.paidTotal))} pago
-              </Text>
-            )}
           </View>
           <Text className="mt-1 font-display text-[20px] font-bold text-payable" style={TABULAR}>
             {summary ? formatMoney(summary.payable) : "—"}
@@ -147,12 +137,12 @@ function SummaryBox({ summary }: { summary?: TimelineSummary }) {
       </View>
 
       {receivable + payable > 0 ? (
-        <View className="h-[5px] flex-row">
+        <View className="h-1.25 flex-row">
           <View className="bg-primary" style={{ flex: receivable }} />
           <View className="bg-payable" style={{ flex: payable }} />
         </View>
       ) : (
-        <View className="h-[5px] bg-outline" />
+        <View className="h-1.25 bg-outline" />
       )}
 
       <View className="flex-row items-center justify-between gap-2.5 bg-surface-muted/60 px-3.5 py-2">
@@ -183,7 +173,7 @@ function DayBar({ date, today, items }: { date: string; today: string; items: Ti
   const textClass = isToday ? "text-on-primary" : "text-muted";
 
   return (
-    <View className={`flex-row items-center justify-between px-[18px] py-2 ${isToday ? "bg-primary" : "bg-surface-muted"}`}>
+    <View className={`flex-row items-center justify-between px-4.5 py-2 ${isToday ? "bg-primary" : "bg-surface-muted"}`}>
       <View className="flex-row items-center">
         <Text className={`font-sans text-xs font-extrabold uppercase ${textClass}`}>{label}</Text>
         {relative && <Text className={`font-sans text-xs font-extrabold uppercase ${textClass}`}> · {shortDay(date)}</Text>}

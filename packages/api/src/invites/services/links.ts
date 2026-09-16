@@ -56,7 +56,6 @@ const PUBLIC_BILLING_SELECT = {
   id: true,
   description: true,
   total_cents: true,
-  currency: true,
   type: true,
   category: true,
   state: true
@@ -66,7 +65,6 @@ type PublicBillingRow = {
   id: string;
   description: string;
   total_cents: number;
-  currency: 'BRL';
   type: BillingType;
   category: BillingCategory;
   state: BillingState;
@@ -257,7 +255,7 @@ export async function publicInviteView(db: DbClient, invite: InviteRow, now = ne
     expired: false,
     creditorFirstName: owner?.name?.trim().split(/\s+/)[0] || 'Pessoa',
     description: billing.description,
-    amount: { amountCents: billing.total_cents, currency: billing.currency },
+    amount: { amountCents: billing.total_cents, currency: 'BRL' },
     type: billing.type,
     participantCount: await db.allocations.count({ where: { billing_id: billing.id, kind: SplitPartKind.User } }),
     category: billing.category

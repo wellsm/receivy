@@ -116,7 +116,8 @@ function visibleWhere(userId: string, filters: TimelineRepository.Filters, withC
     AND: [
       access,
       ...(statuses.length ? [{ OR: statuses.map((status) => statusWhere(status, today)) }] : []),
-      ...(types.length ? [{ billing_type: { isIn: types } }] : []),
+      // The type lives on the billing: EZ4 turns a relation filter into a correlated EXISTS on its primary key.
+      ...(types.length ? [{ billing: { type: { isIn: types } } }] : []),
       ...(filters.from ? [{ due_date: { gte: filters.from } }] : []),
       ...(filters.to ? [{ due_date: { lte: filters.to } }] : []),
       itemSetWhere(month, today),
@@ -185,7 +186,7 @@ export namespace TimelineRepository {
           dueDate: row.due_date,
           state: row.state,
           billingId: row.billing_id,
-          billingType: row.billing_type,
+          billingType: record.type,
           installment: row.installment ?? null,
           installmentCount: row.installment_count ?? null,
           counterpartName: await ChargeRepository.counterpartName(db, row, userId),

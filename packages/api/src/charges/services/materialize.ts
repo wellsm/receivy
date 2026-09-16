@@ -206,7 +206,7 @@ export async function persistChargePlan(
           ? { pix_key_type_snapshot: context.pix.keyType, pix_key_snapshot: context.pix.key, pix_label_snapshot: context.pix.label }
           : {}),
         state: ChargeState.Pending,
-        ...(recipient && quiet.has(recipient.userId) ? { notify: false } : {}),
+        notify: !recipient || !quiet.has(recipient.userId),
         created_at: now,
         updated_at: now
       }

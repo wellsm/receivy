@@ -190,7 +190,7 @@ function summary(
     total: { amountCents: row.total_cents, currency: 'BRL' },
     startDate: row.start_date,
     endDate: row.end_date,
-    dueRule: row.due_rule ?? BillingDueRule.Fixed,
+    dueRule: row.due_rule,
     state: row.state,
     installmentCount,
     nextDueDate,
@@ -352,7 +352,7 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
     total: { amountCents: row.total_cents, currency: 'BRL' },
     startDate: row.start_date,
     endDate: row.end_date,
-    dueRule: row.due_rule ?? BillingDueRule.Fixed,
+    dueRule: row.due_rule,
     state: row.state,
     installmentCount: installmentCountFor(row),
     nextDueDate: earliest?.due_date ?? previews[0]?.occurrenceDate ?? null,
@@ -408,9 +408,7 @@ async function notifyParticipants(db: DbClient, billingId: string, ownerId: stri
   const notify = new Map<string, boolean>();
 
   for (const row of records) {
-    if (row.user_id) {
-      notify.set(row.user_id, row.notify !== false);
-    }
+    notify.set(row.user_id, row.notify);
   }
 
   return notify;
@@ -474,7 +472,7 @@ async function notifyChange(
     where: { billing_id: billingId, debtor_user_id: part.userId, state: ChargeState.Pending }
   });
 
-  if (!records.some((row) => (row.notify !== false) !== notify)) {
+  if (!records.some((row) => row.notify !== notify)) {
     return undefined;
   }
 
@@ -964,8 +962,7 @@ export namespace BillingRepository {
     total_cents: number;
     start_date: string;
     end_date?: string;
-    /** Null on rows written before the rule existed: read as 'fixed'. */
-    due_rule?: BillingDueRule;
+    due_rule: BillingDueRule;
     timezone: string;
     payment_method_id?: string;
     /** Null on rows written before contas a pagar existed: the owner collects. */
@@ -1019,16 +1016,16 @@ export namespace BillingRepository {
       })
     ).records;
     const mode = billing.split_mode ?? SplitMode.Equal;
-    const owns = (userId?: string) => !!userId && userId === billing.owner_id;
+    const owns = (userId: string) => userId === billing.owner_id;
     const parties = rows.map((row) =>
-      owns(row.user_id) ? { kind: SplitPartKind.Owner as const } : { kind: SplitPartKind.User as const, userId: row.user_id! }
+      owns(row.user_id) ? { kind: SplitPartKind.Owner as const } : { kind: SplitPartKind.User as const, userId: row.user_id }
     );
     const split: BillingSplit =
       mode === SplitMode.Fixed
         ? {
             mode,
             parts: rows.flatMap((row) =>
-              owns(row.user_id) ? [] : [{ kind: SplitPartKind.User as const, userId: row.user_id!, amountCents: splitValue(row) }]
+              owns(row.user_id) ? [] : [{ kind: SplitPartKind.User as const, userId: row.user_id, amountCents: splitValue(row) }]
             )
           }
         : mode === SplitMode.Equal
@@ -1041,11 +1038,11 @@ export namespace BillingRepository {
     const allocations = rows.map((row, index) => ({
       kind: owns(row.user_id) ? SplitPartKind.Owner : SplitPartKind.User,
       // The owner part reads as null here, the same shape the clients always saw.
-      userId: owns(row.user_id) ? null : (row.user_id ?? null),
+      userId: owns(row.user_id) ? null : row.user_id,
       splitMode: mode,
       amount: { amountCents: resolved[index]?.amountCents ?? 0, currency: 'BRL' as const },
-      order: row.sort_order ?? 0,
-      notify: row.notify !== false,
+      order: row.sort_order,
+      notify: row.notify,
       ...(mode === SplitMode.Shares ? { shares: splitValue(row) || 1 } : {})
     }));
 
@@ -1134,7 +1131,8 @@ export namespace BillingRepository {
           billing: { id },
           // The owner's own part carries the owner: that is what tells the two sides apart now.
           user: { id: part.kind === SplitPartKind.User ? part.userId : ownerId },
-          ...(part.kind === SplitPartKind.User ? { notify } : {}),
+          // The owner's own part has nobody to notify, so it carries the neutral true.
+          notify: part.kind === SplitPartKind.User ? notify : true,
           ...(value === undefined ? {} : { value }),
           sort_order: index,
           created_at: now
@@ -1424,8 +1422,8 @@ export namespace BillingRepository {
       const resumed = patch.state === BillingState.Active && row.state === BillingState.Paused;
       const boundary = addCalendarDays(today, -1);
       const startDate = patch.startDate ?? row.start_date;
-      const dueRule = patch.dueRule ?? row.due_rule ?? BillingDueRule.Fixed;
-      const rescheduled = startDate !== row.start_date || dueRule !== (row.due_rule ?? BillingDueRule.Fixed);
+      const dueRule = patch.dueRule ?? row.due_rule;
+      const rescheduled = startDate !== row.start_date || dueRule !== row.due_rule;
 
       if (rescheduled) {
         // Same checks as creation: a real date, a month end only on monthly rules, and on its last day.

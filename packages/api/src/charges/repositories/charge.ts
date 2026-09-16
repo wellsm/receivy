@@ -145,8 +145,7 @@ export namespace ChargeRepository {
     link_version?: number;
     link_expires_at?: string;
     link_revoked_at?: string;
-    /** Automatic notices of this charge; undefined reads as true. */
-    notify?: boolean;
+    notify: boolean;
     created_at: string;
     updated_at: string;
   };
@@ -349,7 +348,7 @@ export namespace ChargeRepository {
       proofKind: proofKind(row),
       confirmationRequired: await confirmationRequired(db, row),
       // Only the creditor sees the switch: whoever owes reads every charge the same.
-      notify: !owns(row, userId) || row.notify !== false,
+      notify: !owns(row, userId) || row.notify,
       settled: record.settled,
       counterpartLabel: record.counterpartLabel,
       payer,
@@ -443,7 +442,7 @@ export namespace ChargeRepository {
         throw new ChargeClosedError();
       }
 
-      const current = row.notify !== false;
+      const current = row.notify;
 
       if (current === notify) {
         return dto(tx, row, creditorId);

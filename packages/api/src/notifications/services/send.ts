@@ -75,7 +75,7 @@ export async function sendChargeNotice(
   }
 
   // The creditor paused the automatic notices: only the manual reminder (channel 'both') still reaches the debtor.
-  if (charge.notify === false && options.channel !== 'both') {
+  if (!charge.notify && options.channel !== 'both') {
     await EventRepository.record(db, {
       type: 'notice.skipped',
       eventableType: EventableType.Charge,
@@ -236,7 +236,7 @@ export async function followUpCharge(
   }
 
   // Silenced between the push and this e-mail: the creditor's latest word wins.
-  if (charge.notify === false) {
+  if (!charge.notify) {
     return { channels: [] };
   }
 
@@ -274,7 +274,7 @@ export async function announceCharges(db: DbClient, context: NoticeContext, char
     }
 
     // A silenced charge gets no hello; the manual reminder is still there.
-    if (charge.notify === false) {
+    if (!charge.notify) {
       continue;
     }
 
@@ -336,7 +336,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
       continue;
     }
 
-    if (charge.notify === false) {
+    if (!charge.notify) {
       continue;
     }
 

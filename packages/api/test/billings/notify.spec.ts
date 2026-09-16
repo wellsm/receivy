@@ -77,7 +77,7 @@ async function allocationFlags(billingId: string) {
     order: { sort_order: Order.Asc }
   });
 
-  return records.map((row) => [row.user_id, row.notify !== false]);
+  return records.map((row) => [row.user_id, row.notify]);
 }
 
 /** The owner's own bill, owed to Ana: nothing here has notices to pause. */
@@ -292,9 +292,9 @@ describe('sem avisos on native PostgreSQL', () => {
       ]
     );
     deepEqual(
-      (await chargeRows(billing.id)).map((row) => row.notify ?? null),
-      [null, null, false],
-      'paid and cancelled charges are never written'
+      (await chargeRows(billing.id)).map((row) => row.notify),
+      [true, true, false],
+      'paid and cancelled charges keep the value they were created with'
     );
 
     await BillingRepository.setParticipantNotify(db, OWNER, billing.id, anaId, false, date('2026-03-03'));

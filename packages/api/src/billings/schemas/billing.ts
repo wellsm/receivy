@@ -21,8 +21,8 @@ export interface BillingSchema extends Database.Schema {
   total_cents: number;
   start_date: String.Date;
   end_date?: String.Date;
-  /** 'end_of_month' lands every occurrence on the last day of its month; null (older rows) means 'fixed'. */
-  due_rule?: BillingDueRule;
+  /** 'end_of_month' lands every occurrence on the last day of its month. Defaults to 'fixed' in the database. */
+  due_rule: BillingDueRule;
   payment_method_id?: String.UUID;
   /** 'payable' is the owner's own bill; null (legacy) or 'receivable' means the owner collects from contacts. */
   direction?: Direction;
@@ -53,12 +53,12 @@ export interface AllocationSchema extends Database.Schema {
   id: String.UUID;
   billing_id: String.UUID;
   /** The participant (users.id); the owner's own part carries the billing owner. */
-  user_id?: String.UUID;
+  user_id: String.UUID;
   /** Raw split value: cents on `fixed`, basis points on `percentage`, the quota on `shares`, unused on `equal`. */
   value?: number;
   /** Position of the part inside the split. */
-  sort_order?: number;
-  /** Automatic notices of a 'user' part: new charges of this participant copy it. Null (owner part, older rows) reads as true. */
-  notify?: boolean;
+  sort_order: number;
+  /** Automatic notices of a 'user' part: new charges of this participant copy it. Defaults to true in the database. */
+  notify: boolean;
   created_at: String.DateTime;
 }

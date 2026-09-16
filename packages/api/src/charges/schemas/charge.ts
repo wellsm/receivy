@@ -59,8 +59,8 @@ export interface ChargeSchema extends Database.Schema {
   link_version?: number;
   link_expires_at?: String.DateTime;
   link_revoked_at?: String.DateTime;
-  /** Automatic notices: the only value the notice gate reads. Null on older rows reads as true. */
-  notify?: boolean;
+  /** Automatic notices: the only value the notice gate reads. Defaults to true in the database. */
+  notify: boolean;
   created_at: String.DateTime;
   updated_at: String.DateTime;
 }

@@ -39,7 +39,7 @@ let anaContactId: string;
 let brunoId: string;
 let carlaId: string;
 
-/** A monthly recorrente starting in February, with Ana silenced and Bruno notified. */
+/** A monthly recorrente starting in February, with Ana quiet and Bruno notified. */
 function recurring(key: string, overrides: Partial<BillingInput> = {}): BillingInput {
   return {
     type: BillingType.Indefinite,
@@ -52,7 +52,7 @@ function recurring(key: string, overrides: Partial<BillingInput> = {}): BillingI
     split: {
       mode: SplitMode.Equal,
       parts: [
-        { kind: SplitPartKind.User, userId: anaId, silenced: true },
+        { kind: SplitPartKind.User, userId: anaId, notify: false },
         { kind: SplitPartKind.User, userId: brunoId }
       ]
     },
@@ -62,7 +62,7 @@ function recurring(key: string, overrides: Partial<BillingInput> = {}): BillingI
 
 async function chargeRows(billingId: string) {
   const { records } = await db.charges.findMany({
-    select: { id: true, debtor_user_id: true, due_date: true, state: true, silenced: true },
+    select: { id: true, debtor_user_id: true, due_date: true, state: true, notify: true },
     where: { billing_id: billingId },
     order: { due_date: Order.Asc }
   });
@@ -72,12 +72,12 @@ async function chargeRows(billingId: string) {
 
 async function allocationFlags(billingId: string) {
   const { records } = await db.allocations.findMany({
-    select: { user_id: true, silenced: true },
+    select: { user_id: true, notify: true },
     where: { billing_id: billingId, kind: SplitPartKind.User },
-    order: { allocation_order: Order.Asc }
+    order: { sort_order: Order.Asc }
   });
 
-  return records.map((row) => [row.user_id, row.silenced === true]);
+  return records.map((row) => [row.user_id, row.notify !== false]);
 }
 
 /** The owner's own bill, owed to Ana: nothing here has notices to pause. */
@@ -114,7 +114,7 @@ describe('sem avisos on native PostgreSQL', () => {
 
   after(async () => cleanupUsers(db, [OWNER, OTHER, GUEST]));
 
-  it('copies a silenced participant to the allocation and to every charge created for them', async () => {
+  it('copies a quiet participant to the allocation and to every charge created for them', async () => {
     const created = await BillingRepository.create(
       db,
       OWNER,
@@ -131,7 +131,7 @@ describe('sem avisos on native PostgreSQL', () => {
         split: {
           mode: SplitMode.Fixed,
           parts: [
-            { kind: SplitPartKind.User, userId: anaId, silenced: true, amountCents: 3_000 },
+            { kind: SplitPartKind.User, userId: anaId, notify: false, amountCents: 3_000 },
             { kind: SplitPartKind.User, userId: brunoId, amountCents: 3_000 }
           ]
         }
@@ -140,33 +140,33 @@ describe('sem avisos on native PostgreSQL', () => {
     );
 
     deepEqual(await allocationFlags(created.id), [
-      [anaId, true],
-      [brunoId, false]
+      [anaId, false],
+      [brunoId, true]
     ]);
     deepEqual(
-      created.allocations.map((allocation) => [allocation.kind, allocation.silenced]),
+      created.allocations.map((allocation) => [allocation.kind, allocation.notify]),
       [
-        ['user', true],
         ['user', false],
-        ['owner', false]
+        ['user', true],
+        ['owner', true]
       ]
     );
 
     const rows = await chargeRows(created.id);
 
     equal(rows.length, 4);
-    ok(rows.filter((row) => row.debtor_user_id === anaId).every((row) => row.silenced === true));
-    ok(rows.filter((row) => row.debtor_user_id === brunoId).every((row) => row.silenced !== true));
+    ok(rows.filter((row) => row.debtor_user_id === anaId).every((row) => row.notify === false));
+    ok(rows.filter((row) => row.debtor_user_id === brunoId).every((row) => row.notify !== false));
 
     const anaCharge = created.charges.find((charge) => charge.debtorUserId === anaId)!;
 
-    equal(anaCharge.silenced, true);
-    equal(created.charges.find((charge) => charge.debtorUserId === brunoId)!.silenced, false);
-    equal((await ChargeRepository.get(db, anaId, anaCharge.id)).silenced, false, 'whoever owes sees no difference');
+    equal(anaCharge.notify, false);
+    equal(created.charges.find((charge) => charge.debtorUserId === brunoId)!.notify, true);
+    equal((await ChargeRepository.get(db, anaId, anaCharge.id)).notify, true, 'whoever owes sees no difference');
 
     const ledger = await TimelineRepository.contactLedger(db, OWNER, anaContactId);
 
-    equal(ledger.charges.find((charge) => charge.id === anaCharge.id)?.silenced, true);
+    equal(ledger.charges.find((charge) => charge.id === anaCharge.id)?.notify, false);
   });
 
   it('copies the participant value to the charges of each new month', async () => {
@@ -178,8 +178,8 @@ describe('sem avisos on native PostgreSQL', () => {
     const rows = await chargeRows(billing.id);
 
     equal(rows.length, 2);
-    equal(rows.find((row) => row.debtor_user_id === anaId)?.silenced, true);
-    equal(rows.find((row) => row.debtor_user_id === brunoId)?.silenced === true, false);
+    equal(rows.find((row) => row.debtor_user_id === anaId)?.notify, false);
+    equal(rows.find((row) => row.debtor_user_id === brunoId)?.notify === false, false);
   });
 
   it('keeps the value of whoever stays, applies the one sent and moves their pending charges', async () => {
@@ -197,8 +197,8 @@ describe('sem avisos on native PostgreSQL', () => {
           mode: SplitMode.Equal,
           parts: [
             { kind: SplitPartKind.User, userId: anaId },
-            { kind: SplitPartKind.User, userId: brunoId, silenced: true },
-            { kind: SplitPartKind.User, userId: carlaId, silenced: true }
+            { kind: SplitPartKind.User, userId: brunoId, notify: false },
+            { kind: SplitPartKind.User, userId: carlaId, notify: false }
           ]
         }
       },
@@ -206,17 +206,17 @@ describe('sem avisos on native PostgreSQL', () => {
     );
 
     deepEqual(await allocationFlags(billing.id), [
-      [anaId, true],
-      [brunoId, true],
-      [carlaId, true]
+      [anaId, false],
+      [brunoId, false],
+      [carlaId, false]
     ]);
     deepEqual(
-      edited.allocations.map((allocation) => allocation.silenced),
-      [true, true, true]
+      edited.allocations.map((allocation) => allocation.notify),
+      [false, false, false]
     );
     equal(
-      (await chargeRows(billing.id)).find((row) => row.debtor_user_id === brunoId)?.silenced,
-      true,
+      (await chargeRows(billing.id)).find((row) => row.debtor_user_id === brunoId)?.notify,
+      false,
       'the value sent reaches the pending charge'
     );
     deepEqual(
@@ -233,15 +233,15 @@ describe('sem avisos on native PostgreSQL', () => {
         split: {
           mode: SplitMode.Equal,
           parts: [
-            { kind: SplitPartKind.User, userId: anaId, silenced: false },
-            { kind: SplitPartKind.User, userId: brunoId, silenced: true }
+            { kind: SplitPartKind.User, userId: anaId, notify: true },
+            { kind: SplitPartKind.User, userId: brunoId, notify: false }
           ]
         }
       },
       date('2026-02-11')
     );
 
-    equal((await chargeRows(billing.id)).find((row) => row.debtor_user_id === anaId)?.silenced, false);
+    equal((await chargeRows(billing.id)).find((row) => row.debtor_user_id === anaId)?.notify, true);
     deepEqual(
       (await EventRepository.list(db, billing.id, 'billing.participant_unsilenced')).map((event) => event.payload),
       [{ userId: anaId }]
@@ -277,27 +277,27 @@ describe('sem avisos on native PostgreSQL', () => {
       data: { state: ChargeState.Cancelled, cancelled_at: stamp, updated_at: stamp }
     });
 
-    const silenced = await BillingRepository.silenceParticipant(db, OWNER, billing.id, anaId, true, date('2026-03-02'));
+    const quieted = await BillingRepository.setParticipantNotify(db, OWNER, billing.id, anaId, false, date('2026-03-02'));
 
     deepEqual(
-      silenced.allocations.map((allocation) => allocation.silenced),
-      [true]
+      quieted.allocations.map((allocation) => allocation.notify),
+      [false]
     );
     deepEqual(
-      silenced.charges.map((charge) => [charge.state, charge.silenced]),
+      quieted.charges.map((charge) => [charge.state, charge.notify]),
       [
-        ['paid', false],
-        ['cancelled', false],
-        ['pending', true]
+        ['paid', true],
+        ['cancelled', true],
+        ['pending', false]
       ]
     );
     deepEqual(
-      (await chargeRows(billing.id)).map((row) => row.silenced ?? null),
-      [null, null, true],
+      (await chargeRows(billing.id)).map((row) => row.notify ?? null),
+      [null, null, false],
       'paid and cancelled charges are never written'
     );
 
-    await BillingRepository.silenceParticipant(db, OWNER, billing.id, anaId, true, date('2026-03-03'));
+    await BillingRepository.setParticipantNotify(db, OWNER, billing.id, anaId, false, date('2026-03-03'));
 
     deepEqual(
       (await EventRepository.list(db, billing.id, 'billing.participant_silenced')).map((event) => event.payload),
@@ -305,11 +305,11 @@ describe('sem avisos on native PostgreSQL', () => {
       'the same value records nothing'
     );
 
-    const resumed = await BillingRepository.silenceParticipant(db, OWNER, billing.id, anaId, false, date('2026-03-04'));
+    const resumed = await BillingRepository.setParticipantNotify(db, OWNER, billing.id, anaId, true, date('2026-03-04'));
 
     deepEqual(
-      resumed.charges.map((charge) => charge.silenced),
-      [false, false, false]
+      resumed.charges.map((charge) => charge.notify),
+      [true, true, true]
     );
     equal((await EventRepository.list(db, billing.id, 'billing.participant_unsilenced')).length, 1);
   });
@@ -332,9 +332,9 @@ describe('sem avisos on native PostgreSQL', () => {
     );
     const payable = await BillingRepository.create(db, OWNER, 'silenced-refusals-payable', payableOnce('Luz'), date('2026-03-01'));
 
-    await rejects(() => BillingRepository.silenceParticipant(db, OTHER, billing.id, anaId, true), HttpNotFoundError);
-    await rejects(() => BillingRepository.silenceParticipant(db, OWNER, billing.id, carlaId, true), HttpNotFoundError);
-    await rejects(() => BillingRepository.silenceParticipant(db, OWNER, payable.id, anaId, true), SilenceUnavailableError);
+    await rejects(() => BillingRepository.setParticipantNotify(db, OTHER, billing.id, anaId, false), HttpNotFoundError);
+    await rejects(() => BillingRepository.setParticipantNotify(db, OWNER, billing.id, carlaId, false), HttpNotFoundError);
+    await rejects(() => BillingRepository.setParticipantNotify(db, OWNER, payable.id, anaId, false), SilenceUnavailableError);
     equal(await db.events.count({ where: { eventable_id: billing.id, type: 'billing.participant_silenced' } }), 0);
   });
 
@@ -361,34 +361,34 @@ describe('sem avisos on native PostgreSQL', () => {
       date('2026-03-01')
     );
     const target = billing.charges.find((charge) => charge.debtorUserId === anaId)!;
-    const detail = await ChargeRepository.silence(db, OWNER, target.id, true);
+    const detail = await ChargeRepository.setNotify(db, OWNER, target.id, false);
 
-    equal(detail.silenced, true);
+    equal(detail.notify, false);
     deepEqual(
-      (await chargeRows(billing.id)).filter((row) => row.silenced === true).map((row) => row.id),
+      (await chargeRows(billing.id)).filter((row) => row.notify === false).map((row) => row.id),
       [target.id]
     );
     deepEqual(await allocationFlags(billing.id), [
-      [anaId, false],
-      [brunoId, false]
+      [anaId, true],
+      [brunoId, true]
     ]);
 
-    await ChargeRepository.silence(db, OWNER, target.id, true);
+    await ChargeRepository.setNotify(db, OWNER, target.id, false);
 
     equal((await EventRepository.list(db, target.id, 'charge.silenced')).length, 1, 'the same value records nothing');
 
-    await ChargeRepository.silence(db, OWNER, target.id, false);
+    await ChargeRepository.setNotify(db, OWNER, target.id, true);
 
     equal((await EventRepository.list(db, target.id, 'charge.unsilenced')).length, 1);
-    await rejects(() => ChargeRepository.silence(db, OTHER, target.id, true), HttpNotFoundError);
-    await rejects(() => ChargeRepository.silence(db, anaId, target.id, true), HttpNotFoundError);
+    await rejects(() => ChargeRepository.setNotify(db, OTHER, target.id, false), HttpNotFoundError);
+    await rejects(() => ChargeRepository.setNotify(db, anaId, target.id, false), HttpNotFoundError);
 
     await ChargeRepository.pay(db, OWNER, target.id);
-    await rejects(() => ChargeRepository.silence(db, OWNER, target.id, true), ChargeClosedError);
+    await rejects(() => ChargeRepository.setNotify(db, OWNER, target.id, false), ChargeClosedError);
 
     const payable = await BillingRepository.create(db, OWNER, 'silenced-charge-payable', payableOnce('Água'), date('2026-03-01'));
 
-    await rejects(() => ChargeRepository.silence(db, OWNER, payable.charges[0]!.id, true), SilenceUnavailableError);
+    await rejects(() => ChargeRepository.setNotify(db, OWNER, payable.charges[0]!.id, false), SilenceUnavailableError);
   });
 
   it('moves the leftover pending charges of someone removed and added back with a value', async () => {
@@ -406,7 +406,7 @@ describe('sem avisos on native PostgreSQL', () => {
     const leftover = (await chargeRows(billing.id)).find((row) => row.debtor_user_id === brunoId);
 
     equal(leftover?.state, ChargeState.Pending, 'a next-month edit keeps the charge of whoever left');
-    equal(leftover?.silenced === true, false);
+    equal(leftover?.notify === false, false);
 
     await BillingRepository.patch(
       db,
@@ -417,7 +417,7 @@ describe('sem avisos on native PostgreSQL', () => {
           mode: SplitMode.Equal,
           parts: [
             { kind: SplitPartKind.User, userId: anaId },
-            { kind: SplitPartKind.User, userId: brunoId, silenced: true }
+            { kind: SplitPartKind.User, userId: brunoId, notify: false }
           ]
         }
       },
@@ -425,12 +425,12 @@ describe('sem avisos on native PostgreSQL', () => {
     );
 
     deepEqual(await allocationFlags(billing.id), [
-      [anaId, true],
-      [brunoId, true]
+      [anaId, false],
+      [brunoId, false]
     ]);
     equal(
-      (await chargeRows(billing.id)).find((row) => row.debtor_user_id === brunoId)?.silenced,
-      true,
+      (await chargeRows(billing.id)).find((row) => row.debtor_user_id === brunoId)?.notify,
+      false,
       'the value sent reaches the leftover charge'
     );
     deepEqual(
@@ -447,9 +447,9 @@ describe('sem avisos on native PostgreSQL', () => {
 
     equal(joined.joinedSplit, true);
     deepEqual(await allocationFlags(billing.id), [
-      [anaId, true],
-      [brunoId, false],
-      [GUEST, false]
+      [anaId, false],
+      [brunoId, true],
+      [GUEST, true]
     ]);
 
     await BillingRepository.materializeNextOccurrence(db, billing.id, date('2026-02-01'));
@@ -457,9 +457,9 @@ describe('sem avisos on native PostgreSQL', () => {
     const rows = await chargeRows(billing.id);
 
     equal(rows.length, 3);
-    equal(rows.find((row) => row.debtor_user_id === anaId)?.silenced, true);
-    equal(rows.find((row) => row.debtor_user_id === brunoId)?.silenced === true, false);
-    equal(rows.find((row) => row.debtor_user_id === GUEST)?.silenced === true, false);
+    equal(rows.find((row) => row.debtor_user_id === anaId)?.notify, false);
+    equal(rows.find((row) => row.debtor_user_id === brunoId)?.notify === false, false);
+    equal(rows.find((row) => row.debtor_user_id === GUEST)?.notify === false, false);
   });
 
   it('copies the participant value to the charges an edit of the current month creates', async () => {
@@ -478,7 +478,7 @@ describe('sem avisos on native PostgreSQL', () => {
           parts: [
             { kind: SplitPartKind.User, userId: anaId },
             { kind: SplitPartKind.User, userId: brunoId },
-            { kind: SplitPartKind.User, userId: carlaId, silenced: true }
+            { kind: SplitPartKind.User, userId: carlaId, notify: false }
           ]
         }
       },
@@ -488,8 +488,8 @@ describe('sem avisos on native PostgreSQL', () => {
     const rows = await chargeRows(billing.id);
 
     equal(rows.length, 3, 'the month gains the charge of whoever entered');
-    equal(rows.find((row) => row.debtor_user_id === anaId)?.silenced, true);
-    equal(rows.find((row) => row.debtor_user_id === brunoId)?.silenced === true, false);
-    equal(rows.find((row) => row.debtor_user_id === carlaId)?.silenced, true);
+    equal(rows.find((row) => row.debtor_user_id === anaId)?.notify, false);
+    equal(rows.find((row) => row.debtor_user_id === brunoId)?.notify === false, false);
+    equal(rows.find((row) => row.debtor_user_id === carlaId)?.notify, false);
   });
 });

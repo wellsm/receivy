@@ -296,6 +296,28 @@ e `phone`, `charges.debtor_user_id` substitui `debtor_person_id` e os três `rec
 `people.nickname` é opcional no schema, então o EZ4 adiciona a coluna nullable
 sem passo manual.
 
+Renomes do bloco 2 (2026-09): `allocations.silenced` e `charges.silenced` viraram
+`notify` (valor invertido, nulo lê como "notifica"), `allocations.allocation_order`
+virou `sort_order` e `billings.processed_through` virou `last_occurrence_date`. As
+três colunas novas são opcionais, então o EZ4 as cria no deploy sem passo manual, e o
+código lê só elas. As antigas continuam declaradas no schema de propósito: o EZ4 emite
+`DROP COLUMN` para todo campo que some do `Database.Schema`, e o backfill precisa delas
+vivas. Logo depois do deploy, na mesma janela:
+
+```sql
+UPDATE allocations SET notify = NOT COALESCE(silenced, false);
+UPDATE charges     SET notify = NOT COALESCE(silenced, false);
+UPDATE allocations SET sort_order = allocation_order;
+UPDATE billings    SET last_occurrence_date = processed_through;
+```
+
+Enquanto o backfill não roda, alocação antiga fica com `sort_order` nulo e sai fora de
+ordem no rateio. `allocation_order` é NOT NULL sem default, então a API segue gravando o
+mesmo valor nela até a coluna sair. Com a versão nova estável, apague as quatro
+declarações antigas (`silenced` nos dois schemas, `allocation_order`,
+`processed_through`) e o índice `billing_id:allocation_order` do `database.ts`: o deploy
+seguinte dropa as colunas sozinho.
+
 Depois do deploy, com a versão nova estável, estas tabelas ficam sem nenhum
 leitor e podem ser derrubadas:
 

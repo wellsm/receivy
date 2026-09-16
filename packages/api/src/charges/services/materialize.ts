@@ -112,21 +112,21 @@ export async function prepareChargeMaterialization(
   return { recipients, pix: await pixSnapshot(db, ownerId, paymentMethodId), payer: ChargePayer.Person };
 }
 
-/** Participants whose allocation says "Não notificar": every charge created for them starts silenced. */
-async function silencedDebtors(db: DbClient, billingId: string): Promise<Set<string>> {
+/** Participants whose allocation says "Não notificar": every charge created for them starts with the notices off. */
+async function quietDebtors(db: DbClient, billingId: string): Promise<Set<string>> {
   const { records } = await db.allocations.findMany({
     select: { user_id: true },
-    where: { billing_id: billingId, kind: SplitPartKind.User, silenced: true }
+    where: { billing_id: billingId, kind: SplitPartKind.User, notify: false }
   });
-  const silenced = new Set<string>();
+  const quiet = new Set<string>();
 
   for (const row of records) {
     if (row.user_id) {
-      silenced.add(row.user_id);
+      quiet.add(row.user_id);
     }
   }
 
-  return silenced;
+  return quiet;
 }
 
 /** How the billing behind new charges settles: a registro pays each charge due by today, in its own timezone. */
@@ -173,7 +173,7 @@ export async function persistChargePlan(
   const noticeChargeIds: string[] = [];
 
   // Creation, the monthly sweep, edits and invites all land here, after the allocations are saved.
-  const silenced = await silencedDebtors(db, billing.id);
+  const quiet = await quietDebtors(db, billing.id);
   const settlement = await settlementOf(db, billing.id, now);
 
   for (const item of plan.charges) {
@@ -207,7 +207,7 @@ export async function persistChargePlan(
           ? { pix_key_type_snapshot: context.pix.keyType, pix_key_snapshot: context.pix.key, pix_label_snapshot: context.pix.label }
           : {}),
         state: ChargeState.Pending,
-        ...(recipient && silenced.has(recipient.userId) ? { silenced: true } : {}),
+        ...(recipient && quiet.has(recipient.userId) ? { notify: false } : {}),
         created_at: now,
         updated_at: now
       }

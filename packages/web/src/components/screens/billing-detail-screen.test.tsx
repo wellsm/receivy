@@ -546,14 +546,14 @@ it("reports a billing that cannot be loaded and retries", async () => {
   expect(await screen.findByRole("heading", { name: "Jantar de despedida" })).toBeInTheDocument();
 });
 
-it("badges each silenced charge on its own row and shows the participant action once", async () => {
+it("badges each charge with the notices off on its own row and shows the participant action once", async () => {
   await open(
     billing({
       charges: [
-        charge({ id: "c6", name: "Carlos", silenced: true }),
+        charge({ id: "c6", name: "Carlos", notify: false }),
         charge({ id: "c7", name: "Carlos", state: ChargeState.Cancelled, cancelledAt: "2026-11-01T00:00:00Z" }),
       ],
-      allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, silenced: false }],
+      allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, notify: true }],
     }),
   );
 
@@ -563,19 +563,19 @@ it("badges each silenced charge on its own row and shows the participant action 
   expect(screen.queryByRole("button", { name: "Voltar a notificar Carlos" })).not.toBeInTheDocument();
 });
 
-it("silences a participant after confirmation and turns the notices back on without asking", async () => {
+it("turns the notices of a participant off after confirmation and back on without asking", async () => {
   const quietBilling = billing({
-    charges: [charge({ id: "c6", name: "Carlos", silenced: true })],
-    allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, silenced: true }],
+    charges: [charge({ id: "c6", name: "Carlos", notify: false })],
+    allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, notify: false }],
   });
-  const loudBilling = billing({ charges: [charge({ id: "c6", name: "Carlos", silenced: false })], allocations: [{ ...quietBilling.allocations[0]!, silenced: false }] });
+  const loudBilling = billing({ charges: [charge({ id: "c6", name: "Carlos", notify: true })], allocations: [{ ...quietBilling.allocations[0]!, notify: true }] });
   const bodies: string[] = [];
   const calls = await open(loudBilling, (path, init) => {
-    if (path !== "/api/financial/billings/b1/participants/u1/silenced" || init?.method !== "PUT") return undefined;
+    if (path !== "/api/financial/billings/b1/participants/u1/notify" || init?.method !== "PUT") return undefined;
 
     bodies.push(String(init.body));
 
-    return Response.json(JSON.parse(String(init.body)).silenced ? quietBilling : loudBilling);
+    return Response.json(JSON.parse(String(init.body)).notify ? loudBilling : quietBilling);
   });
   const user = setup();
 
@@ -586,18 +586,18 @@ it("silences a participant after confirmation and turns the notices back on with
   const dialog = await screen.findByRole("dialog", { name: "Não notificar Carlos?" });
 
   expect(within(dialog).getByText("Os lembretes automáticos das cobranças pendentes e futuras de Carlos nesta conta param.")).toBeInTheDocument();
-  expect(calls).not.toContain("PUT /api/financial/billings/b1/participants/u1/silenced");
+  expect(calls).not.toContain("PUT /api/financial/billings/b1/participants/u1/notify");
 
   await user.click(within(dialog).getByRole("button", { name: "Não notificar" }));
 
   expect(await screen.findByText("Sem avisos")).toBeInTheDocument();
-  expect(bodies).toEqual(['{"silenced":true}']);
+  expect(bodies).toEqual(['{"notify":false}']);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Voltar a notificar Carlos" }));
 
   expect(await screen.findByText("Avisos reativados para Carlos.")).toBeInTheDocument();
-  expect(bodies).toEqual(['{"silenced":true}', '{"silenced":false}']);
+  expect(bodies).toEqual(['{"notify":false}', '{"notify":true}']);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(screen.queryByText("Sem avisos")).not.toBeInTheDocument();
 });

@@ -309,7 +309,7 @@ describe('billings on native PostgreSQL', () => {
     const done = await BillingRepository.materializeNextOccurrence(db, valid.id, date('2026-02-01'));
     ok(skipped.skipped, 'an archived recipient never throws out of the consumer');
     equal(done.materialized, true);
-    equal((await db.billings.findOne({ select: { processed_through: true }, where: { id: invalid.id } }))?.processed_through, '2025-12-31');
+    equal((await db.billings.findOne({ select: { last_occurrence_date: true }, where: { id: invalid.id } }))?.last_occurrence_date, '2025-12-31');
     const edited = await BillingRepository.patch(
       db,
       OWNER,
@@ -364,7 +364,7 @@ describe('billings on native PostgreSQL', () => {
         await db.allocations.findMany({
           select: { split_mode: true, shares: true },
           where: { billing_id: created.id },
-          order: { allocation_order: Order.Asc }
+          order: { sort_order: Order.Asc }
         })
       ).records.map((row) => [row.split_mode, row.shares]),
       [
@@ -749,7 +749,7 @@ describe('billings on native PostgreSQL', () => {
       await db.allocations.findMany({
         select: { kind: true, split_mode: true, basis_points: true },
         where: { billing_id: created.id },
-        order: { allocation_order: Order.Asc }
+        order: { sort_order: Order.Asc }
       })
     ).records;
     deepEqual(
@@ -799,7 +799,7 @@ describe('billings on native PostgreSQL', () => {
       await db.allocations.findMany({
         select: { amount_cents: true },
         where: { billing_id: indefinite.id },
-        order: { allocation_order: Order.Asc }
+        order: { sort_order: Order.Asc }
       })
     ).records;
     deepEqual(

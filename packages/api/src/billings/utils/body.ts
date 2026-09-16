@@ -22,7 +22,7 @@ export declare class SplitBody {
     | {
         kind: SplitPartKind.User;
         userId: String.UUID;
-        silenced?: boolean;
+        notify?: boolean;
         amountCents?: number;
         basisPoints?: number;
         shares?: Integer.Range<1, 1000>;

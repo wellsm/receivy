@@ -116,8 +116,8 @@ export type BillingAllocation = {
   splitMode: SplitMode;
   amount: Money;
   order: number;
-  /** The participant's "Não notificar": the value new charges of theirs start with. Always false on the owner part. */
-  silenced: boolean;
+  /** The participant's automatic notices: the value new charges of theirs start with. Always true on the owner part. */
+  notify: boolean;
   shares?: number;
 };
 

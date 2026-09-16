@@ -1,7 +1,7 @@
 import { SplitPartKind } from './billing';
 import { SplitMode } from './contracts';
 
-export type SplitParty = { kind: SplitPartKind.Owner } | { kind: SplitPartKind.User; userId: string; silenced?: boolean };
+export type SplitParty = { kind: SplitPartKind.Owner } | { kind: SplitPartKind.User; userId: string; notify?: boolean };
 
 export type BillingSplit =
   | { mode: SplitMode.Equal; parts: SplitParty[] }
@@ -10,15 +10,15 @@ export type BillingSplit =
       mode: SplitMode.Percentage;
       parts: (
         | { kind: SplitPartKind.Owner; basisPoints: number }
-        | { kind: SplitPartKind.User; userId: string; silenced?: boolean; basisPoints: number }
+        | { kind: SplitPartKind.User; userId: string; notify?: boolean; basisPoints: number }
       )[];
     }
-  | { mode: SplitMode.Fixed; parts: { kind: SplitPartKind.User; userId: string; silenced?: boolean; amountCents: number }[] }
+  | { mode: SplitMode.Fixed; parts: { kind: SplitPartKind.User; userId: string; notify?: boolean; amountCents: number }[] }
   | {
       mode: SplitMode.Shares;
       parts: (
         | { kind: SplitPartKind.Owner; shares: number }
-        | { kind: SplitPartKind.User; userId: string; silenced?: boolean; shares: number }
+        | { kind: SplitPartKind.User; userId: string; notify?: boolean; shares: number }
       )[];
     };
 
@@ -45,7 +45,7 @@ export function resolveBillingSplit(totalCents: number, split: BillingSplit): Re
       throw new RangeError('Contato inválido.');
     }
 
-    if (part.kind === SplitPartKind.User && part.silenced !== undefined && typeof part.silenced !== 'boolean') {
+    if (part.kind === SplitPartKind.User && part.notify !== undefined && typeof part.notify !== 'boolean') {
       throw new RangeError('Participante inválido.');
     }
 
@@ -65,17 +65,17 @@ export function resolveBillingSplit(totalCents: number, split: BillingSplit): Re
   return parties.map((party, index) => ({ ...party, amountCents: amounts[index]! }));
 }
 
-/** The party without its mode weight; `silenced` rides along only when the part carries it. */
+/** The party without its mode weight; `notify` rides along only when the part carries it. */
 function partyOf(part: BillingSplit['parts'][number]): SplitParty {
   if (part.kind === SplitPartKind.Owner) {
     return { kind: SplitPartKind.Owner };
   }
 
-  if (part.silenced === undefined) {
+  if (part.notify === undefined) {
     return { kind: SplitPartKind.User, userId: part.userId };
   }
 
-  return { kind: SplitPartKind.User, userId: part.userId, silenced: part.silenced };
+  return { kind: SplitPartKind.User, userId: part.userId, notify: part.notify };
 }
 
 function resolveAmounts(totalCents: number, split: BillingSplit, parties: SplitParty[]): number[] {

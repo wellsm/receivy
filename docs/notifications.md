@@ -64,9 +64,9 @@ Each push opens `<PUBLIC_WEB_ORIGIN>/charges/<id>` and is recorded once per subm
 ## Sem avisos
 
 The owner of a conta a receber can switch off the automatic notices of one participant or of one charge
-("Não notificar"). The only value the notice gate reads is `charges.silenced`. `allocations.silenced` is the
-participant's default: `persistChargePlan` copies it to every charge created for them (creation, the monthly sweep,
-charges an edit or an invite creates).
+("Não notificar"). The only value the notice gate reads is `charges.notify`, where null reads as true.
+`allocations.notify` is the participant's default: `persistChargePlan` copies it to every charge created for them
+(creation, the monthly sweep, charges an edit or an invite creates).
 
 - `sendChargeNotice` records `notice.skipped { template, offsetDays?, reason: 'silenced' }` and sends nothing for a
   silenced charge, unless the channel is `'both'`: the manual reminder ("Lembrar") still goes out.
@@ -78,11 +78,12 @@ charges an edit or an invite creates).
 - Not silenced: the payment notices (`notice.payment`: Pagamento informado, Comprovante recebido, Pagamento
   confirmado, Pagamento não identificado), the manual reminder, and the owner's own reminders on a conta a pagar.
 
-`PUT /billings/{id}/participants/{userId}/silenced` writes the allocation and the participant's pending charges
+`PUT /billings/{id}/participants/{userId}/notify` writes the allocation and the participant's pending charges
 (`billing.participant_silenced` / `billing.participant_unsilenced { userId }`); a `PATCH /billings/{id}` whose split
-changes the value of someone who stays does the same. `PUT /charges/{id}/silenced` writes one charge
-(`charge.silenced` / `charge.unsilenced`). Sending the value already stored writes and records nothing. A conta a
-pagar answers 409 `SILENCE_UNAVAILABLE`. Only the creditor reads `silenced: true`; whoever owes always reads `false`.
+changes the value of someone who stays does the same. `PUT /charges/{id}/notify` writes one charge
+(`charge.silenced` / `charge.unsilenced`). The event names keep the old wording: they are history already written.
+Sending the value already stored writes and records nothing. A conta a pagar answers 409 `SILENCE_UNAVAILABLE`. Only
+the creditor reads `notify: false`; whoever owes always reads `true`.
 
 ## Registros
 

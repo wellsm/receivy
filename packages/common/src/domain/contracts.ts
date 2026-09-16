@@ -77,8 +77,8 @@ export type ChargeSummary = {
   proofKind?: ProofKind | null;
   /** A payment declared by the paying side waits for the other side to confirm it; false settles at once. */
   confirmationRequired?: boolean;
-  /** The creditor paused the automatic notices of this charge. The API always sends it, true only to the creditor. */
-  silenced?: boolean;
+  /** The automatic notices of this charge are on. The API always sends it; only the creditor ever reads false. */
+  notify?: boolean;
   /** The charge belongs to a registro: settled on its due date, never reminded, shared or proven. The API always sends it. */
   settled?: boolean;
   /** Registro only: the counterpart typed by the owner, the same text `counterpartName` carries; null otherwise. */

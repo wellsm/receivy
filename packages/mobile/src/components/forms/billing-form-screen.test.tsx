@@ -309,7 +309,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
 
-    expect(client.createBilling.mock.calls[0][0].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", silenced: true }, { kind: "owner" }] });
+    expect(client.createBilling.mock.calls[0][0].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", notify: false }, { kind: "owner" }] });
   });
 
   it("renders Não notificar only for a participant who can actually be reached", async () => {
@@ -342,7 +342,7 @@ describe("BillingFormScreen", () => {
       id: "b7",
       type: BillingType.Indefinite,
       frequency: BillingFrequency.Monthly,
-      allocations: [{ kind: SplitPartKind.User, userId: "u3", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, silenced: true }],
+      allocations: [{ kind: SplitPartKind.User, userId: "u3", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, notify: false }],
       split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u3" }] },
     };
     const patchBilling = jest.fn().mockResolvedValue(silencedBilling);
@@ -372,7 +372,7 @@ describe("BillingFormScreen", () => {
       id: "b3",
       type: BillingType.Indefinite,
       frequency: BillingFrequency.Monthly,
-      allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, silenced: true }],
+      allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, notify: false }],
     };
     const patchBilling = jest.fn().mockResolvedValue(silencedBilling);
 
@@ -386,7 +386,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
     await waitFor(() => expect(patchBilling).toHaveBeenCalled());
 
-    expect(patchBilling.mock.calls[0][1].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", silenced: false }] });
+    expect(patchBilling.mock.calls[0][1].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", notify: true }] });
   });
 
   it("records a registro with the name typed in De quem and nobody to split with or pay through", async () => {

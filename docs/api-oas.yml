@@ -603,9 +603,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/resolveGuestHandler'
-  /billings/{id}/participants/{userId}/silenced:
+  /billings/{id}/participants/{userId}/notify:
     put:
-      operationId: silenceBillingParticipant
+      operationId: setBillingParticipantNotify
       security:
         - sessionAuthorizer: []
       parameters:
@@ -625,14 +625,33 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/requestSchemes/silenceParticipantHandler'
+              $ref: '#/components/requestSchemes/setParticipantNotifyHandler'
       responses:
         200:
           description: "Successful response."
           content:
             application/json:
               schema:
-                $ref: '#/components/responseSchemes/silenceParticipantHandler'
+                $ref: '#/components/responseSchemes/setParticipantNotifyHandler'
+  /charges:
+    get:
+      operationId: listCharges
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 7
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/listChargesHandler'
   /charges/{id}:
     get:
       operationId: getCharge
@@ -709,9 +728,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/reopenChargeHandler'
-  /charges/{id}/silenced:
+  /charges/{id}/notify:
     put:
-      operationId: silenceCharge
+      operationId: setChargeNotify
       security:
         - sessionAuthorizer: []
       parameters:
@@ -725,14 +744,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/requestSchemes/silenceChargeHandler'
+              $ref: '#/components/requestSchemes/setChargeNotifyHandler'
       responses:
         200:
           description: "Successful response."
           content:
             application/json:
               schema:
-                $ref: '#/components/responseSchemes/silenceChargeHandler'
+                $ref: '#/components/responseSchemes/setChargeNotifyHandler'
   /charges/{id}/public-link:
     post:
       operationId: createPublicLink
@@ -1521,7 +1540,7 @@ components:
                     userId:
                       type: string
                       format: uuid
-                    silenced:
+                    notify:
                       type: boolean
                     amountCents:
                       type: number
@@ -1635,7 +1654,7 @@ components:
                     userId:
                       type: string
                       format: uuid
-                    silenced:
+                    notify:
                       type: boolean
                     amountCents:
                       type: number
@@ -1767,22 +1786,22 @@ components:
             enum: ["dismiss"]
         required:
           - action
-    silenceParticipantHandler:
+    setParticipantNotifyHandler:
       type: object
       additionalProperties: false
       properties:
-        silenced:
+        notify:
           type: boolean
       required:
-        - silenced
-    silenceChargeHandler:
+        - notify
+    setChargeNotifyHandler:
       type: object
       additionalProperties: false
       properties:
-        silenced:
+        notify:
           type: boolean
       required:
-        - silenced
+        - notify
     createPublicLinkHandler:
       anyOf:
       - type: object
@@ -2752,7 +2771,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                     required:
                       - kind
@@ -2789,7 +2808,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       basisPoints:
                         type: number
@@ -2817,7 +2836,7 @@ components:
                       enum: ["user"]
                     userId:
                       type: string
-                    silenced:
+                    notify:
                       type: boolean
                     amountCents:
                       type: number
@@ -2857,7 +2876,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       shares:
                         type: number
@@ -2900,7 +2919,7 @@ components:
                   - currency
               order:
                 type: number
-              silenced:
+              notify:
                 type: boolean
               shares:
                 type: number
@@ -2909,7 +2928,7 @@ components:
               - splitMode
               - amount
               - order
-              - silenced
+              - notify
         charges:
           type: array
           items:
@@ -2984,7 +3003,7 @@ components:
                   - 'declaration'
               confirmationRequired:
                 type: boolean
-              silenced:
+              notify:
                 type: boolean
               settled:
                 type: boolean
@@ -3495,7 +3514,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                     required:
                       - kind
@@ -3532,7 +3551,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       basisPoints:
                         type: number
@@ -3560,7 +3579,7 @@ components:
                       enum: ["user"]
                     userId:
                       type: string
-                    silenced:
+                    notify:
                       type: boolean
                     amountCents:
                       type: number
@@ -3600,7 +3619,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       shares:
                         type: number
@@ -3643,7 +3662,7 @@ components:
                   - currency
               order:
                 type: number
-              silenced:
+              notify:
                 type: boolean
               shares:
                 type: number
@@ -3652,7 +3671,7 @@ components:
               - splitMode
               - amount
               - order
-              - silenced
+              - notify
         charges:
           type: array
           items:
@@ -3727,7 +3746,7 @@ components:
                   - 'declaration'
               confirmationRequired:
                 type: boolean
-              silenced:
+              notify:
                 type: boolean
               settled:
                 type: boolean
@@ -4174,7 +4193,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                     required:
                       - kind
@@ -4211,7 +4230,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       basisPoints:
                         type: number
@@ -4239,7 +4258,7 @@ components:
                       enum: ["user"]
                     userId:
                       type: string
-                    silenced:
+                    notify:
                       type: boolean
                     amountCents:
                       type: number
@@ -4279,7 +4298,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       shares:
                         type: number
@@ -4322,7 +4341,7 @@ components:
                   - currency
               order:
                 type: number
-              silenced:
+              notify:
                 type: boolean
               shares:
                 type: number
@@ -4331,7 +4350,7 @@ components:
               - splitMode
               - amount
               - order
-              - silenced
+              - notify
         charges:
           type: array
           items:
@@ -4406,7 +4425,7 @@ components:
                   - 'declaration'
               confirmationRequired:
                 type: boolean
-              silenced:
+              notify:
                 type: boolean
               settled:
                 type: boolean
@@ -4811,7 +4830,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                     required:
                       - kind
@@ -4848,7 +4867,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       basisPoints:
                         type: number
@@ -4876,7 +4895,7 @@ components:
                       enum: ["user"]
                     userId:
                       type: string
-                    silenced:
+                    notify:
                       type: boolean
                     amountCents:
                       type: number
@@ -4916,7 +4935,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       shares:
                         type: number
@@ -4959,7 +4978,7 @@ components:
                   - currency
               order:
                 type: number
-              silenced:
+              notify:
                 type: boolean
               shares:
                 type: number
@@ -4968,7 +4987,7 @@ components:
               - splitMode
               - amount
               - order
-              - silenced
+              - notify
         charges:
           type: array
           items:
@@ -5043,7 +5062,7 @@ components:
                   - 'declaration'
               confirmationRequired:
                 type: boolean
-              silenced:
+              notify:
                 type: boolean
               settled:
                 type: boolean
@@ -5304,7 +5323,7 @@ components:
         - category
         - guests
         - linkableContacts
-    silenceParticipantHandler:
+    setParticipantNotifyHandler:
       type: object
       additionalProperties: false
       properties:
@@ -5448,7 +5467,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                     required:
                       - kind
@@ -5485,7 +5504,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       basisPoints:
                         type: number
@@ -5513,7 +5532,7 @@ components:
                       enum: ["user"]
                     userId:
                       type: string
-                    silenced:
+                    notify:
                       type: boolean
                     amountCents:
                       type: number
@@ -5553,7 +5572,7 @@ components:
                         enum: ["user"]
                       userId:
                         type: string
-                      silenced:
+                      notify:
                         type: boolean
                       shares:
                         type: number
@@ -5596,7 +5615,7 @@ components:
                   - currency
               order:
                 type: number
-              silenced:
+              notify:
                 type: boolean
               shares:
                 type: number
@@ -5605,7 +5624,7 @@ components:
               - splitMode
               - amount
               - order
-              - silenced
+              - notify
         charges:
           type: array
           items:
@@ -5680,7 +5699,7 @@ components:
                   - 'declaration'
               confirmationRequired:
                 type: boolean
-              silenced:
+              notify:
                 type: boolean
               settled:
                 type: boolean
@@ -5941,6 +5960,9 @@ components:
         - category
         - guests
         - linkableContacts
+    listChargesHandler:
+      type: object
+      additionalProperties: true
     getChargeHandler:
       type: object
       additionalProperties: false
@@ -6013,7 +6035,7 @@ components:
             - 'declaration'
         confirmationRequired:
           type: boolean
-        silenced:
+        notify:
           type: boolean
         settled:
           type: boolean
@@ -6207,7 +6229,7 @@ components:
             - 'declaration'
         confirmationRequired:
           type: boolean
-        silenced:
+        notify:
           type: boolean
         settled:
           type: boolean
@@ -6401,7 +6423,7 @@ components:
             - 'declaration'
         confirmationRequired:
           type: boolean
-        silenced:
+        notify:
           type: boolean
         settled:
           type: boolean
@@ -6595,7 +6617,7 @@ components:
             - 'declaration'
         confirmationRequired:
           type: boolean
-        silenced:
+        notify:
           type: boolean
         settled:
           type: boolean
@@ -6717,7 +6739,7 @@ components:
         - recipient
         - sharingState
         - createdAt
-    silenceChargeHandler:
+    setChargeNotifyHandler:
       type: object
       additionalProperties: false
       properties:
@@ -6789,7 +6811,7 @@ components:
             - 'declaration'
         confirmationRequired:
           type: boolean
-        silenced:
+        notify:
           type: boolean
         settled:
           type: boolean
@@ -7165,7 +7187,7 @@ components:
                       - 'declaration'
                   confirmationRequired:
                     type: boolean
-                  silenced:
+                  notify:
                     type: boolean
                   settled:
                     type: boolean
@@ -7450,7 +7472,7 @@ components:
                   - 'declaration'
               confirmationRequired:
                 type: boolean
-              silenced:
+              notify:
                 type: boolean
               settled:
                 type: boolean
@@ -7664,7 +7686,7 @@ components:
             - 'declaration'
         confirmationRequired:
           type: boolean
-        silenced:
+        notify:
           type: boolean
         settled:
           type: boolean
@@ -7858,7 +7880,7 @@ components:
             - 'declaration'
         confirmationRequired:
           type: boolean
-        silenced:
+        notify:
           type: boolean
         settled:
           type: boolean
@@ -8140,7 +8162,7 @@ components:
             - 'declaration'
         confirmationRequired:
           type: boolean
-        silenced:
+        notify:
           type: boolean
         settled:
           type: boolean

@@ -232,7 +232,7 @@ describe('silenced charges', () => {
     const creditor = charge({ direction: Direction.Receivable, ownedByViewer: true });
 
     expect(canSilenceCharge(creditor)).toBe(true);
-    expect(canSilenceCharge({ ...creditor, silenced: true })).toBe(true);
+    expect(canSilenceCharge({ ...creditor, notify: false })).toBe(true);
     expect(canSilenceCharge({ ...creditor, state: ChargeState.Paid })).toBe(false);
     expect(canSilenceCharge({ ...creditor, ownedByViewer: false })).toBe(false);
     expect(canSilenceCharge(charge({ direction: Direction.Payable }))).toBe(false);

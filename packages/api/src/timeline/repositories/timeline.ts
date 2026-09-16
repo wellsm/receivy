@@ -197,7 +197,7 @@ export namespace TimelineRepository {
           hasPix: !!row.pix_key_snapshot && !!row.pix_key_type_snapshot,
           proofKind: ChargeRepository.proofKind(row),
           confirmationRequired: await ChargeRepository.confirmationRequired(db, row),
-          silenced: ChargeRepository.owns(row, userId) && row.silenced === true,
+          notify: !ChargeRepository.owns(row, userId) || row.notify !== false,
           settled: record.settled,
           counterpartLabel: record.counterpartLabel
         }

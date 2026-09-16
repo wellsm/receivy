@@ -46,7 +46,7 @@ type Client = Pick<
   | "pay"
   | "reopen"
   | "reviewProof"
-  | "silenceParticipant"
+  | "setParticipantNotify"
 >;
 
 type BillingDetailScreenProps = {
@@ -417,11 +417,11 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   }
 
   /** "Não notificar" / "Voltar a notificar" for one participant; the answer is the billing with its pending charges updated. */
-  async function silenceParticipant(detail: BillingDetail, userId: string, name: string, silenced: boolean) {
+  async function setParticipantNotify(detail: BillingDetail, userId: string, name: string, notify: boolean) {
     await run(async () => {
-      setBilling(await client.silenceParticipant(detail.id, userId, silenced));
+      setBilling(await client.setParticipantNotify(detail.id, userId, notify));
 
-      if (silenced) {
+      if (!notify) {
         return;
       }
 
@@ -430,21 +430,21 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   }
 
   /** Silencing asks first; turning the notices back on does not. */
-  function toggleSilence(detail: BillingDetail, participant: BillingAllocation, name: string) {
+  function toggleNotify(detail: BillingDetail, participant: BillingAllocation, name: string) {
     const userId = participant.userId;
 
     if (!userId) {
       return;
     }
 
-    if (participant.silenced) {
-      void silenceParticipant(detail, userId, name, false);
+    if (!participant.notify) {
+      void setParticipantNotify(detail, userId, name, true);
       return;
     }
 
     Alert.alert(`Não notificar ${name}?`, `Os lembretes automáticos das cobranças pendentes e futuras de ${name} nesta conta param.`, [
       { text: "Voltar", style: "cancel" },
-      { text: "Não notificar", onPress: () => void silenceParticipant(detail, userId, name, true) },
+      { text: "Não notificar", onPress: () => void setParticipantNotify(detail, userId, name, false) },
     ]);
   }
 
@@ -718,8 +718,8 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             const avatar = payable && !settled ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
             const participant = participantOf(billing, charge);
             // The badge is this charge's own switch; the participant's switch drives their action.
-            const quiet = charge.silenced === true;
-            const participantQuiet = participant?.silenced === true;
+            const quiet = charge.notify === false;
+            const participantQuiet = participant?.notify === false;
 
             return (
               <View
@@ -834,7 +834,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                       accessibilityLabel={participantQuiet ? `Voltar a notificar ${name}` : `Não notificar ${name}`}
                       accessibilityState={{ disabled: busy }}
                       disabled={busy}
-                      onPress={() => toggleSilence(billing, participant, name)}
+                      onPress={() => toggleNotify(billing, participant, name)}
                       className={`min-h-8 justify-center px-1 ${busy ? "opacity-50" : ""}`}
                     >
                       <Text className="text-[11px] font-semibold text-muted">{participantQuiet ? "Voltar a notificar" : "Não notificar"}</Text>

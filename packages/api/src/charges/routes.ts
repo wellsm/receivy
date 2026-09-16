@@ -5,7 +5,7 @@ import type { getChargeHandler } from './endpoints/get';
 import type { listChargesHandler } from './endpoints/list';
 import type { payChargeHandler } from './endpoints/pay';
 import type { reopenChargeHandler } from './endpoints/reopen';
-import type { silenceChargeHandler } from './endpoints/silence';
+import type { setChargeNotifyHandler } from './endpoints/notify';
 
 export type ChargeRoutes = [
   Http.UseRoute<{ 
@@ -34,9 +34,9 @@ export type ChargeRoutes = [
     handler: typeof reopenChargeHandler;
   }>,
   Http.UseRoute<{
-    name: 'silenceCharge';
-    path: 'PUT /charges/{id}/silenced';
+    name: 'setChargeNotify';
+    path: 'PUT /charges/{id}/notify';
     authorizer: typeof sessionAuthorizer;
-    handler: typeof silenceChargeHandler;
+    handler: typeof setChargeNotifyHandler;
   }>
 ];

@@ -559,7 +559,7 @@ it("sends Não notificar on the participant it was switched for", async () => {
   const post = sent.find(entry => entry.init.method === "POST");
   expect(JSON.parse(String(post?.init.body)).split).toEqual({
     mode: "equal",
-    parts: [{ kind: "user", userId: "u1", silenced: true }, { kind: "owner" }],
+    parts: [{ kind: "user", userId: "u1", notify: false }, { kind: "owner" }],
   });
 });
 
@@ -607,15 +607,15 @@ it("hides the Não notificar helper entirely when no selected participant can be
 });
 
 it("never sends a stale Não notificar for a participant the agenda no longer shows as reachable", async () => {
-  const silencedBilling: BillingDetail = {
+  const quietBilling: BillingDetail = {
     ...indefiniteBilling,
     id: "b6",
-    allocations: [{ kind: SplitPartKind.User, userId: "u3", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, silenced: true }],
+    allocations: [{ kind: SplitPartKind.User, userId: "u3", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, notify: false }],
     split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u3" }] },
   };
   const sent = api((path, init) => {
     if (init.method === "PATCH") {
-      return Response.json(silencedBilling);
+      return Response.json(quietBilling);
     }
 
     if (path.startsWith("/api/contacts") && !path.includes("search")) {
@@ -624,7 +624,7 @@ it("never sends a stale Não notificar for a participant the agenda no longer sh
 
     return undefined;
   });
-  const { user } = renderForm(silencedBilling);
+  const { user } = renderForm(quietBilling);
 
   await screen.findByRole("button", { name: "Salvar conta" });
   expect(screen.queryByRole("switch", { name: /Não notificar/ })).not.toBeInTheDocument();
@@ -1013,12 +1013,12 @@ it("saves an untouched recurring billing without asking", async () => {
 });
 
 it("seeds Não notificar from the allocations and sends the new value on edit", async () => {
-  const silencedBilling: BillingDetail = {
+  const quietBilling: BillingDetail = {
     ...indefiniteBilling,
-    allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, silenced: true }],
+    allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, notify: false }],
   };
-  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(silencedBilling) : undefined));
-  const { user } = renderForm(silencedBilling);
+  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(quietBilling) : undefined));
+  const { user } = renderForm(quietBilling);
 
   const quiet = await screen.findByRole("switch", { name: "Não notificar Ana" });
 
@@ -1028,7 +1028,7 @@ it("seeds Não notificar from the allocations and sends the new value on edit", 
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
   const patch = sent.find(entry => entry.init.method === "PATCH");
-  expect(JSON.parse(String(patch?.init.body)).split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", silenced: false }] });
+  expect(JSON.parse(String(patch?.init.body)).split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", notify: true }] });
 });
 
 it("keeps the registro switch locked on edit and patches only the new name", async () => {

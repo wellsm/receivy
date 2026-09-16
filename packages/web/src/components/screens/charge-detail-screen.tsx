@@ -205,10 +205,10 @@ export function ChargeDetailScreen({ id }: { id: string }) {
     }, "Não foi possível atualizar a cobrança.");
   }
 
-  async function silence(silenced: boolean) {
+  async function switchNotify(notify: boolean) {
     await run(async () => {
-      setCharge(await request<ChargeDetail>(`${base}/silenced`, jsonInit("PUT", { silenced }), "Não foi possível atualizar os avisos."));
-      setNotice(silenced ? "Avisos desta cobrança pausados." : "Avisos reativados.");
+      setCharge(await request<ChargeDetail>(`${base}/notify`, jsonInit("PUT", { notify }), "Não foi possível atualizar os avisos."));
+      setNotice(notify ? "Avisos reativados." : "Avisos desta cobrança pausados.");
     }, "Não foi possível atualizar os avisos.");
   }
 
@@ -361,7 +361,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
               </div>
               <div className="flex items-center gap-1.5">
                 {charge.settled && <StatusTag label="Registro" tone="neutral" compact />}
-                {charge.silenced && <StatusTag label="Sem avisos" tone="neutral" compact />}
+                {charge.notify === false && <StatusTag label="Sem avisos" tone="neutral" compact />}
                 <StatusTag label={state.label} tone={state.tone} compact />
               </div>
             </div>
@@ -410,9 +410,9 @@ export function ChargeDetailScreen({ id }: { id: string }) {
               {(shareable || silenceable) && (
                 <div className="flex justify-end gap-4 px-1">
                   {silenceable && (
-                    <button type="button" disabled={busy} onClick={() => void silence(!charge.silenced)} className="inline-flex min-h-8 items-center gap-1 text-[11px] font-semibold text-muted disabled:opacity-50">
-                      {charge.silenced ? <Bell size={12} aria-hidden="true" /> : <BellOff size={12} aria-hidden="true" />}
-                      {charge.silenced ? "Voltar a notificar" : "Não notificar esta cobrança"}
+                    <button type="button" disabled={busy} onClick={() => void switchNotify(charge.notify === false)} className="inline-flex min-h-8 items-center gap-1 text-[11px] font-semibold text-muted disabled:opacity-50">
+                      {charge.notify === false ? <Bell size={12} aria-hidden="true" /> : <BellOff size={12} aria-hidden="true" />}
+                      {charge.notify === false ? "Voltar a notificar" : "Não notificar esta cobrança"}
                     </button>
                   )}
                   {shareable && (

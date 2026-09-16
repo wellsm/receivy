@@ -6,7 +6,7 @@ import type { listBillingsHandler } from './endpoints/list';
 import type { patchBillingHandler } from './endpoints/patch';
 import type { previewBillingHandler } from './endpoints/preview';
 import type { resolveGuestHandler } from './endpoints/resolve-guest';
-import type { silenceParticipantHandler } from './endpoints/silence-participant';
+import type { setParticipantNotifyHandler } from './endpoints/notify-participant';
 
 export type BillingRoutes = [
   Http.UseRoute<{
@@ -41,9 +41,9 @@ export type BillingRoutes = [
     handler: typeof resolveGuestHandler;
   }>,
   Http.UseRoute<{
-    name: 'silenceBillingParticipant';
-    path: 'PUT /billings/{id}/participants/{userId}/silenced';
+    name: 'setBillingParticipantNotify';
+    path: 'PUT /billings/{id}/participants/{userId}/notify';
     authorizer: typeof sessionAuthorizer;
-    handler: typeof silenceParticipantHandler;
+    handler: typeof setParticipantNotifyHandler;
   }>
 ];

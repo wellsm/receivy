@@ -29,10 +29,10 @@ describe("native financial client", () => {
     const authenticatedFetch = jest.fn().mockImplementation(() => Promise.resolve(Response.json({ id: "x" })));
     const client = createFinancialClient({ authenticatedFetch });
 
-    await client.silenceParticipant("billing", "user", true);
-    await client.silenceCharge("charge", false);
+    await client.setParticipantNotify("billing", "user", false);
+    await client.setChargeNotify("charge", true);
 
-    expect(authenticatedFetch).toHaveBeenNthCalledWith(1, "billings/billing/participants/user/silenced", { method: "PUT", body: JSON.stringify({ silenced: true }) });
-    expect(authenticatedFetch).toHaveBeenNthCalledWith(2, "charges/charge/silenced", { method: "PUT", body: JSON.stringify({ silenced: false }) });
+    expect(authenticatedFetch).toHaveBeenNthCalledWith(1, "billings/billing/participants/user/notify", { method: "PUT", body: JSON.stringify({ notify: false }) });
+    expect(authenticatedFetch).toHaveBeenNthCalledWith(2, "charges/charge/notify", { method: "PUT", body: JSON.stringify({ notify: true }) });
   });
 });

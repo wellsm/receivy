@@ -7,11 +7,13 @@ import {
   type ChargeProof,
   ChargeState,
   Direction,
+  endOfMonth,
   type PixKeyType,
   ProofKind,
   type ProofMime,
   ProofState,
   SharingState,
+  startOfMonth,
   type UserAvatar,
   UserStatus,
   zonedInstant
@@ -97,7 +99,7 @@ export namespace ChargeRepository {
     link_version: true,
     link_expires_at: true,
     link_revoked_at: true,
-    silenced: true,
+    notify: true,
     created_at: true,
     updated_at: true
   } as const;
@@ -143,23 +145,66 @@ export namespace ChargeRepository {
     link_version?: number;
     link_expires_at?: string;
     link_revoked_at?: string;
-    /** "Não notificar" of this charge; undefined reads as false. */
-    silenced?: boolean;
+    /** Automatic notices of this charge; undefined reads as true. */
+    notify?: boolean;
     created_at: string;
     updated_at: string;
   };
 
-  export function list(db: DbClient, userId: String.UUID, _query: { month: string }) {
-    return db.charges.findMany({
+  export async function list(db: DbClient, userId: String.UUID, query: { month: string }) {
+    const { records } = await db.charges.findMany({
       select: {
         id: true,
         description: true,
+        installment: true,
+        installment_count: true,
         state: true,
+        due_date: true,
+        amount_cents: true,
+        billing: {
+          type: true,
+        },
+        debtor: {
+          name: true,
+          email: true,
+          phone: true,
+        }
       },
       where: {
-        OR: [{ creditor_id: userId }, { debtor_user_id: userId }]
+        AND: [
+          {
+            OR: [
+              { creditor_id: userId },
+              { debtor_user_id: userId }
+            ]
+          },
+          { 
+            OR: [
+              { 
+                due_date: { 
+                  gte: startOfMonth(query.month), 
+                  lte: endOfMonth(query.month) 
+                }
+              },
+              { 
+                AND: [
+                  { 
+                    state: ChargeState.Pending,
+                  },
+                  {
+                    due_date: {
+                      lt: startOfMonth(query.month)
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     });
+
+    return records;
   }
 
   /** The stored proof state as anyone may see it: a reserved slot (`uploading`) is nobody's business yet. */
@@ -304,7 +349,7 @@ export namespace ChargeRepository {
       proofKind: proofKind(row),
       confirmationRequired: await confirmationRequired(db, row),
       // Only the creditor sees the switch: whoever owes reads every charge the same.
-      silenced: owns(row, userId) && row.silenced === true,
+      notify: !owns(row, userId) || row.notify !== false,
       settled: record.settled,
       counterpartLabel: record.counterpartLabel,
       payer,
@@ -380,7 +425,7 @@ export namespace ChargeRepository {
    * The creditor of a conta a receber pauses or resumes the automatic notices of one pending charge. Anyone else
    * gets a 404; sending the value already stored answers without writing or recording anything.
    */
-  export async function silence(db: DbClient, creditorId: string, id: string, silenced: boolean, now = new Date()): Promise<ChargeDetail> {
+  export async function setNotify(db: DbClient, creditorId: string, id: string, notify: boolean, now = new Date()): Promise<ChargeDetail> {
     return db.transaction(async (tx) => {
       await lockAccountReferences(tx, 'write');
 
@@ -398,15 +443,15 @@ export namespace ChargeRepository {
         throw new ChargeClosedError();
       }
 
-      const current = row.silenced === true;
+      const current = row.notify !== false;
 
-      if (current === silenced) {
+      if (current === notify) {
         return dto(tx, row, creditorId);
       }
 
       const stamp = now.toISOString();
 
-      await tx.charges.updateOne({ where: { id }, data: { silenced, updated_at: stamp } });
+      await tx.charges.updateOne({ where: { id }, data: { notify, updated_at: stamp } });
 
       const updated = await tx.charges.findOne({ select: SELECT, where: { id } });
 
@@ -414,7 +459,8 @@ export namespace ChargeRepository {
         throw new HttpNotFoundError();
       }
 
-      await activity(tx, { actorId: creditorId, row: updated, type: silenced ? 'charge.silenced' : 'charge.unsilenced', now: stamp });
+      // The event names are history already written: they keep the old wording on purpose.
+      await activity(tx, { actorId: creditorId, row: updated, type: notify ? 'charge.unsilenced' : 'charge.silenced', now: stamp });
 
       return dto(tx, updated, creditorId);
     });

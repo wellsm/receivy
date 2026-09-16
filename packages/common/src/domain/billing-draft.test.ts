@@ -273,25 +273,25 @@ describe('typed phone key', () => {
   });
 });
 
-describe('silenced participants', () => {
+describe('notify of participants', () => {
   it('sends the switch only for the participants the draft holds it for', () => {
     expect(buildBillingInput(base).split).toEqual({ mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }, { kind: 'owner' }] });
-    expect(buildBillingInput({ ...base, silenced: { p1: true } }).split).toEqual({
+    expect(buildBillingInput({ ...base, notify: { p1: false } }).split).toEqual({
       mode: 'equal',
-      parts: [{ kind: 'user', userId: 'p1', silenced: true }, { kind: 'owner' }]
+      parts: [{ kind: 'user', userId: 'p1', notify: false }, { kind: 'owner' }]
     });
     expect(
       buildBillingInput({
         ...base,
         mode: SplitMode.Fixed,
         values: { ...EMPTY_SPLIT_VALUES(), fixed: { p1: '40,01' } },
-        silenced: { p1: false }
+        notify: { p1: true }
       }).split
-    ).toEqual({ mode: 'fixed', parts: [{ kind: 'user', userId: 'p1', amountCents: 4001, silenced: false }] });
-    expect(buildBillingInput({ ...base, mode: SplitMode.Shares, silenced: { p1: true } }).split).toEqual({
+    ).toEqual({ mode: 'fixed', parts: [{ kind: 'user', userId: 'p1', amountCents: 4001, notify: true }] });
+    expect(buildBillingInput({ ...base, mode: SplitMode.Shares, notify: { p1: false } }).split).toEqual({
       mode: 'shares',
       parts: [
-        { kind: 'user', userId: 'p1', silenced: true, shares: 1 },
+        { kind: 'user', userId: 'p1', notify: false, shares: 1 },
         { kind: 'owner', shares: 1 }
       ]
     });

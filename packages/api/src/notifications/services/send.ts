@@ -75,7 +75,7 @@ export async function sendChargeNotice(
   }
 
   // The creditor paused the automatic notices: only the manual reminder (channel 'both') still reaches the debtor.
-  if (charge.silenced && options.channel !== 'both') {
+  if (charge.notify === false && options.channel !== 'both') {
     await EventRepository.record(db, {
       type: 'notice.skipped',
       eventableType: EventableType.Charge,
@@ -227,7 +227,7 @@ export async function followUpCharge(
   now = Date.now()
 ): Promise<SendResult> {
   const charge = await db.charges.findOne({
-    select: { state: true, proof_state: true, silenced: true, billing_id: true },
+    select: { state: true, proof_state: true, notify: true, billing_id: true },
     where: { id: event.chargeId }
   });
 
@@ -236,7 +236,7 @@ export async function followUpCharge(
   }
 
   // Silenced between the push and this e-mail: the creditor's latest word wins.
-  if (charge.silenced) {
+  if (charge.notify === false) {
     return { channels: [] };
   }
 
@@ -264,7 +264,7 @@ export async function followUpCharge(
 export async function announceCharges(db: DbClient, context: NoticeContext, chargeIds: string[], now = Date.now()): Promise<void> {
   for (const chargeId of chargeIds) {
     const charge = await db.charges.findOne({
-      select: { payer: true, due_date: true, billing_id: true, silenced: true },
+      select: { payer: true, due_date: true, billing_id: true, notify: true },
       where: { id: chargeId }
     });
 
@@ -274,7 +274,7 @@ export async function announceCharges(db: DbClient, context: NoticeContext, char
     }
 
     // A silenced charge gets no hello; the manual reminder is still there.
-    if (charge.silenced) {
+    if (charge.notify === false) {
       continue;
     }
 
@@ -324,7 +324,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
   const from = new Date(now - 100 * 86400_000).toISOString().slice(0, 10);
   const to = new Date(now + 100 * 86400_000).toISOString().slice(0, 10);
   const { records } = await db.charges.findMany({
-    select: { id: true, billing_id: true, due_date: true, proof_state: true, silenced: true },
+    select: { id: true, billing_id: true, due_date: true, proof_state: true, notify: true },
     where: { state: ChargeState.Pending, due_date: { gte: from, lte: to } }
   });
   const billings = new Map<string, { timezone: string; reminders?: string; settled?: boolean }>();
@@ -336,7 +336,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
       continue;
     }
 
-    if (charge.silenced) {
+    if (charge.notify === false) {
       continue;
     }
 

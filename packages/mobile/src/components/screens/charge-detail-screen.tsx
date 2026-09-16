@@ -40,7 +40,7 @@ import { useThemeColors } from "@/theme/colors";
 export type ProofClient = Pick<FinancialClient, "startProofUpload" | "completeProofUpload" | "reviewProof" | "downloadProof" | "withdrawProof">;
 
 type Client = Pick<FinancialClient, "charge" | "cancel" | "pay" | "publicLink" | "publicChargeUrl"> &
-  Partial<ProofClient & Pick<FinancialClient, "reopen" | "paymentMethods" | "savePaymentMethod" | "declarePayment" | "silenceCharge">>;
+  Partial<ProofClient & Pick<FinancialClient, "reopen" | "paymentMethods" | "savePaymentMethod" | "declarePayment" | "setChargeNotify">>;
 
 type ChargeDetailScreenProps = {
   id: string;
@@ -323,21 +323,21 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
     setNotice(wasDeclaration ? "Pagamento informado desfeito." : "Comprovante apagado. Envie outro quando quiser.");
   }
 
-  async function silence(silenced: boolean) {
-    const silenceCharge = client.silenceCharge;
+  async function setNotify(notify: boolean) {
+    const setChargeNotify = client.setChargeNotify;
 
-    if (!silenceCharge) {
+    if (!setChargeNotify) {
       return;
     }
 
-    const detail = await run(() => silenceCharge(id, silenced), "Não foi possível atualizar os avisos.");
+    const detail = await run(() => setChargeNotify(id, notify), "Não foi possível atualizar os avisos.");
 
     if (!detail) {
       return;
     }
 
     setCharge(detail);
-    setNotice(silenced ? "Avisos desta cobrança pausados." : "Avisos reativados.");
+    setNotice(notify ? "Avisos reativados." : "Avisos desta cobrança pausados.");
   }
 
   if (!charge) {
@@ -374,7 +374,8 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   const share = canShare(charge);
   const remindable = canRemind(charge);
   const cancellable = canCancelCharge(charge);
-  const silenceable = !!client.silenceCharge && canSilenceCharge(charge);
+  const quiet = charge.notify === false;
+  const silenceable = !!client.setChargeNotify && canSilenceCharge(charge);
   const acceptProof = canAcceptProof(charge);
   const uploadProofAllowed = canUploadProof(charge);
   const proofsEnabled = !!client.startProofUpload;
@@ -413,7 +414,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
             </View>
             <View className="flex-row items-center gap-1.5">
               {charge.settled && <StatusTag label="Registro" tone={ChargeTone.Neutral} compact />}
-              {charge.silenced && <StatusTag label="Sem avisos" tone={ChargeTone.Neutral} compact />}
+              {quiet && <StatusTag label="Sem avisos" tone={ChargeTone.Neutral} compact />}
               <StatusTag label={state.label} tone={state.tone} compact />
             </View>
           </View>
@@ -497,13 +498,13 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
             {silenceable && (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={charge.silenced ? "Voltar a notificar" : "Não notificar esta cobrança"}
+                accessibilityLabel={quiet ? "Voltar a notificar" : "Não notificar esta cobrança"}
                 accessibilityState={{ disabled: busy }}
                 disabled={busy}
-                onPress={() => void silence(!charge.silenced)}
+                onPress={() => void setNotify(quiet)}
                 className="min-h-8 items-end justify-center px-1"
               >
-                <Text className="text-[11px] font-semibold text-muted">{charge.silenced ? "Voltar a notificar" : "Não notificar esta cobrança"}</Text>
+                <Text className="text-[11px] font-semibold text-muted">{quiet ? "Voltar a notificar" : "Não notificar esta cobrança"}</Text>
               </Pressable>
             )}
           </View>

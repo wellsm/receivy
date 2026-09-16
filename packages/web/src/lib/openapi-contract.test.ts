@@ -45,9 +45,11 @@ const WEB_EXCLUSIONS: Record<string, string> = {
   "POST devices": "push registration is native-only",
   "POST auth/apple/native/start": "native Sign in with Apple only",
   "POST auth/apple/native/exchange": "native Sign in with Apple only",
+  "GET charges": "query bench kept on purpose; no client calls it",
 };
 // Authenticated paths the native app deliberately does not call yet.
 const NATIVE_DEFERRED: Record<string, string> = {
+  "charges": "query bench kept on purpose; no client calls it",
   "billings/{p}/preview": "native reads previews from the billing detail payload",
   "invites/{p}/accept": "an invite link always opens in the browser; there is no native join flow",
 };

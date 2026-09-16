@@ -75,7 +75,7 @@ A guessed token costs one indexed read and a 404; it never creates a throttle ro
 
 | Code | Status | When |
 |---|---|---|
-| `SILENCE_UNAVAILABLE` | 409 | `PUT /billings/{id}/participants/{userId}/silenced` or `PUT /charges/{id}/silenced` on a conta a pagar |
+| `SILENCE_UNAVAILABLE` | 409 | `PUT /billings/{id}/participants/{userId}/notify` or `PUT /charges/{id}/notify` on a conta a pagar |
 
 ## Registro errors
 

@@ -221,16 +221,16 @@ function pixDraftFromBilling(billing: BillingDetail): PixDraft {
 }
 
 /** Each participant's current "Não notificar", so saving the edit sends back what the billing already has. */
-function silencedFromBilling(billing: BillingDetail): Record<string, boolean> {
-  const silenced: Record<string, boolean> = {};
+function notifyFromBilling(billing: BillingDetail): Record<string, boolean> {
+  const notify: Record<string, boolean> = {};
 
   for (const allocation of billing.allocations) {
     if (allocation.kind === SplitPartKind.User && allocation.userId) {
-      silenced[allocation.userId] = allocation.silenced;
+      notify[allocation.userId] = allocation.notify;
     }
   }
 
-  return silenced;
+  return notify;
 }
 
 function draftFromBilling(billing: BillingDetail): BillingDraft {
@@ -257,7 +257,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     values: valuesFromBilling(billing),
     category: billing.category,
     reminders: billing.reminders.map((reminder) => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
-    silenced: silencedFromBilling(billing),
+    notify: notifyFromBilling(billing),
     settled: billing.settled === true,
     counterpartLabel: billing.counterpartLabel ?? "",
   };
@@ -491,8 +491,9 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     update({ selected: draft.selected.includes(userId) ? draft.selected.filter((id) => id !== userId) : [...draft.selected, userId] });
   }
 
-  function switchSilenced(userId: string, silenced: boolean) {
-    update({ silenced: { ...draft.silenced, [userId]: silenced } });
+  /** The switch reads "Não notificar", so the value it carries is the opposite of what the draft stores. */
+  function switchNotify(userId: string, quiet: boolean) {
+    update({ notify: { ...draft.notify, [userId]: !quiet } });
   }
 
   /** The payee seat holds one contact: picking closes the sheet, picking again clears it. */
@@ -630,10 +631,10 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     try {
       // Never send "Não notificar" for a participant the agenda no longer shows as reachable: the
       // switch does not render for them, so a stale value seeded from editing must not travel either.
-      const silenced = draft.silenced && Object.fromEntries(Object.entries(draft.silenced).filter(([userId]) => notifiableIds.has(userId)));
+      const notify = draft.notify && Object.fromEntries(Object.entries(draft.notify).filter(([userId]) => notifiableIds.has(userId)));
       // Only a creation checks that a recorrente registro starts today or later.
       const next: Attempt = {
-        input: buildBillingInput(draftToBuild({ ...draft, silenced }), billing ? undefined : new Date()),
+        input: buildBillingInput(draftToBuild({ ...draft, notify }), billing ? undefined : new Date()),
         key: Crypto.randomUUID(),
         uncertain: false,
       };
@@ -1211,8 +1212,8 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
                     <Switch
                       accessibilityLabel={`Não notificar ${contact.displayName}`}
                       disabled={locked || frozen}
-                      value={draft.silenced?.[contact.userId] === true}
-                      onValueChange={(value) => switchSilenced(contact.userId, value)}
+                      value={draft.notify?.[contact.userId] === false}
+                      onValueChange={(value) => switchNotify(contact.userId, value)}
                       trackColor={{ true: colors.primary }}
                     />
                   </View>

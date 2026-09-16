@@ -17,6 +17,7 @@ import { type BillingSplit, resolveBillingSplit } from './split';
 export type BillingCalendarRule = { frequency: BillingFrequency; startDate: string; endDate?: string; dueRule?: BillingDueRule };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_YEAR_MONTH = /^\d{4}-\d{2}$/;
 const TYPES: BillingType[] = [BillingType.Once, BillingType.Until, BillingType.Indefinite];
 const FREQUENCIES: BillingFrequency[] = [BillingFrequency.Monthly, BillingFrequency.Yearly];
 
@@ -38,12 +39,30 @@ export function addCalendarDays(value: string, days: number): string {
   return result;
 }
 
+export function startOfMonth(value: string): string {
+  const month = Number(value.slice(5, 7));
+
+  if (!ISO_DATE.test(value) && !ISO_YEAR_MONTH.test(value)) {
+    throw new RangeError('Invalid date.');
+  }
+
+  if (month < 1 || month > 12) {
+    throw new RangeError('Invalid month.');
+  }
+
+  return `${value.slice(0, 7)}-01`;
+}
+
 /** Last day of the month `value` falls in; only its year and month are read. */
 export function endOfMonth(value: string): string {
   const month = Number(value.slice(5, 7));
 
-  if (!ISO_DATE.test(value) || month < 1 || month > 12) {
-    throw new RangeError('Data inválida.');
+  if (!ISO_DATE.test(value) && !ISO_YEAR_MONTH.test(value)) {
+    throw new RangeError('Invalid date.');
+  }
+
+  if (month < 1 || month > 12) {
+    throw new RangeError('Invalid month.');
   }
 
   const day = new Date(Date.UTC(Number(value.slice(0, 4)), month, 0)).getUTCDate();

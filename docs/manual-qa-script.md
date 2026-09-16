@@ -271,7 +271,7 @@ Como Ana, com Bruno e Carla na agenda (vencimento hoje, para o aviso inicial sai
 - [ ] `Lembrar` na cobrança silenciada. Esperado: o lembrete manual chega no Mailpit.
 - [ ] Conta recorrente com o Bruno silenciado: editar, desligar a chave dele e salvar. Esperado: as pendentes do Bruno perdem o selo; o evento `billing.participant_unsilenced` aparece.
 - [ ] Como Bruno (login dele): a cobrança não mostra "Sem avisos" em lugar nenhum.
-- [ ] Conta a pagar: `curl -X PUT <api>/charges/<id>/silenced -H 'content-type: application/json' -d '{"silenced":true}'` com o token da Ana. Esperado: 409 `SILENCE_UNAVAILABLE`.
+- [ ] Conta a pagar: `curl -X PUT <api>/charges/<id>/notify -H 'content-type: application/json' -d '{"notify":false}'` com o token da Ana. Esperado: 409 `SILENCE_UNAVAILABLE`.
 - [ ] Mobile: os mesmos passos no formulário, no detalhe da conta (a confirmação é o alerta nativo) e na cobrança.
 
 ## 21. Registros

@@ -215,7 +215,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   const [confirmReopen, setConfirmReopen] = useState<ChargeDetail | null>(null);
   const [chooser, setChooser] = useState(false);
   // The participant whose notices wait for the owner's confirmation before going quiet.
-  const [confirmSilence, setConfirmSilence] = useState<{ userId: string; name: string } | null>(null);
+  const [confirmStopNotify, setConfirmStopNotify] = useState<{ userId: string; name: string } | null>(null);
 
   const load = useCallback(() => {
     let live = true;
@@ -357,14 +357,14 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   }
 
   /** "Não notificar" / "Voltar a notificar" for one participant; the answer is the billing with its pending charges updated. */
-  async function silenceParticipant(detail: BillingDetail, userId: string, name: string, silenced: boolean) {
+  async function notifyParticipant(detail: BillingDetail, userId: string, name: string, notify: boolean) {
     await run(async () => {
-      const updated = await request<BillingDetail>(`/api/financial/billings/${detail.id}/participants/${userId}/silenced`, jsonInit("PUT", { silenced }), "Não foi possível atualizar os avisos.");
+      const updated = await request<BillingDetail>(`/api/financial/billings/${detail.id}/participants/${userId}/notify`, jsonInit("PUT", { notify }), "Não foi possível atualizar os avisos.");
 
       setBilling(updated);
-      setConfirmSilence(null);
+      setConfirmStopNotify(null);
 
-      if (silenced) {
+      if (!notify) {
         return;
       }
 
@@ -468,19 +468,19 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   }
 
   /** Silencing asks first; turning the notices back on does not. */
-  function toggleSilence(detail: BillingDetail, participant: BillingAllocation, name: string) {
+  function toggleNotify(detail: BillingDetail, participant: BillingAllocation, name: string) {
     const userId = participant.userId;
 
     if (!userId) {
       return;
     }
 
-    if (participant.silenced) {
-      void silenceParticipant(detail, userId, name, false);
+    if (!participant.notify) {
+      void notifyParticipant(detail, userId, name, true);
       return;
     }
 
-    setConfirmSilence({ userId, name });
+    setConfirmStopNotify({ userId, name });
   }
 
   return (
@@ -666,8 +666,8 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
               const avatar = payable && !settled ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
               const participant = participantOf(billing, charge);
               // The badge is this charge's own switch; the participant's switch drives their action.
-              const quiet = charge.silenced === true;
-              const participantQuiet = participant?.silenced === true;
+              const quiet = charge.notify === false;
+              const participantQuiet = participant?.notify === false;
               const statusColor = {
                 success: "text-primary",
                 warning: "text-warning",
@@ -781,7 +781,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                         type="button"
                         aria-label={participantQuiet ? `Voltar a notificar ${name}` : `Não notificar ${name}`}
                         disabled={busy}
-                        onClick={() => toggleSilence(billing, participant, name)}
+                        onClick={() => toggleNotify(billing, participant, name)}
                         className="inline-flex min-h-8 items-center gap-1 px-1 text-[11px] font-semibold text-muted disabled:opacity-50"
                       >
                         {participantQuiet ? <Bell size={12} aria-hidden="true" /> : <BellOff size={12} aria-hidden="true" />}
@@ -952,16 +952,16 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
         />
       )}
 
-      {confirmSilence && (
+      {confirmStopNotify && (
         <ConfirmDialog
-          title={`Não notificar ${confirmSilence.name}?`}
+          title={`Não notificar ${confirmStopNotify.name}?`}
           icon={BellOff}
           tone="primary"
-          explanation={`Os lembretes automáticos das cobranças pendentes e futuras de ${confirmSilence.name} nesta conta param.`}
+          explanation={`Os lembretes automáticos das cobranças pendentes e futuras de ${confirmStopNotify.name} nesta conta param.`}
           confirmLabel="Não notificar"
           busy={busy}
-          onConfirm={() => void silenceParticipant(billing, confirmSilence.userId, confirmSilence.name, true)}
-          onCancel={() => setConfirmSilence(null)}
+          onConfirm={() => void notifyParticipant(billing, confirmStopNotify.userId, confirmStopNotify.name, false)}
+          onCancel={() => setConfirmStopNotify(null)}
         />
       )}
     </section>

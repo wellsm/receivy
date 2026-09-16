@@ -59,8 +59,8 @@ export type BillingDraft = {
   values: SplitValues;
   category: BillingCategory;
   reminders: ReminderDraft[];
-  /** "Não notificar" per participant user id. A participant without a key sends nothing, so the API keeps what it stores. */
-  silenced?: Record<string, boolean>;
+  /** Automatic notices per participant user id. A participant without a key sends nothing, so the API keeps what it stores. */
+  notify?: Record<string, boolean>;
   /** "Já recebi" / "Já paguei": the draft is a registro. Absent on drafts stored before registros existed. */
   settled?: boolean;
   /** Registro only: the name typed in "De quem" / "Para quem". */
@@ -198,14 +198,14 @@ export function untilInstallmentPreview(draft: BillingDraft): UntilInstallmentPr
 }
 
 /** The switch travels only when the draft holds it for that participant. */
-function silencedOf(draft: BillingDraft, userId: string): { silenced?: boolean } {
-  const value = draft.silenced?.[userId];
+function notifyOf(draft: BillingDraft, userId: string): { notify?: boolean } {
+  const value = draft.notify?.[userId];
 
   if (value === undefined) {
     return {};
   }
 
-  return { silenced: value };
+  return { notify: value };
 }
 
 function buildSplit(draft: BillingDraft, parties: SplitParty[]): BillingInput['split'] {
@@ -221,7 +221,7 @@ function buildSplit(draft: BillingDraft, parties: SplitParty[]): BillingInput['s
       parts: draft.selected.map((userId) => ({
         kind: SplitPartKind.User,
         userId,
-        ...silencedOf(draft, userId),
+        ...notifyOf(draft, userId),
         amountCents: parseBRLCents(values[userId] ?? '')
       }))
     };
@@ -306,7 +306,7 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
   }
 
   const parties = [
-    ...draft.selected.map((userId) => ({ kind: SplitPartKind.User, userId, ...silencedOf(draft, userId) }) satisfies SplitParty),
+    ...draft.selected.map((userId) => ({ kind: SplitPartKind.User, userId, ...notifyOf(draft, userId) }) satisfies SplitParty),
     ...(draft.owner ? [{ kind: SplitPartKind.Owner } satisfies SplitParty] : [])
   ];
 

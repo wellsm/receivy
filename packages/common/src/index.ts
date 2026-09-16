@@ -16,6 +16,7 @@ export * from './domain/billing-plan';
 export * from './domain/billing-preview';
 export * from './domain/billing-scope';
 export * from './domain/calendar-labels';
+export * from './domain/charge';
 export * from './domain/charge-text';
 export * from './domain/contact-format';
 export * from './domain/contacts';

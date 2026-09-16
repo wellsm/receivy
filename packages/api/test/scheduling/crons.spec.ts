@@ -41,9 +41,9 @@ async function dueDates(billingId: string): Promise<string[]> {
 }
 
 async function cursorOf(billingId: string): Promise<string | undefined> {
-  const row = await db.billings.findOne({ select: { processed_through: true }, where: { id: billingId } });
+  const row = await db.billings.findOne({ select: { last_occurrence_date: true }, where: { id: billingId } });
 
-  return row?.processed_through;
+  return row?.last_occurrence_date;
 }
 
 async function auditTypes(billingId: string): Promise<string[]> {

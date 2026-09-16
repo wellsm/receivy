@@ -125,16 +125,16 @@ describe('billing split', () => {
     );
   });
 
-  it('carries the silenced flag of a participant and refuses anything but a boolean', () => {
-    expect(resolveBillingSplit(100, { mode: SplitMode.Equal, parts: [{ ...ana, silenced: true }, owner] })).toEqual([
-      { ...ana, silenced: true, amountCents: 50 },
+  it('carries the notify flag of a participant and refuses anything but a boolean', () => {
+    expect(resolveBillingSplit(100, { mode: SplitMode.Equal, parts: [{ ...ana, notify: false }, owner] })).toEqual([
+      { ...ana, notify: false, amountCents: 50 },
       { ...owner, amountCents: 50 }
     ]);
-    expect(resolveBillingSplit(100, { mode: SplitMode.Fixed, parts: [{ ...bia, silenced: false, amountCents: 40 }] })).toEqual([
-      { ...bia, silenced: false, amountCents: 40 },
+    expect(resolveBillingSplit(100, { mode: SplitMode.Fixed, parts: [{ ...bia, notify: true, amountCents: 40 }] })).toEqual([
+      { ...bia, notify: true, amountCents: 40 },
       { ...owner, amountCents: 60 }
     ]);
-    expect(() => resolveBillingSplit(100, { mode: SplitMode.Equal, parts: [{ ...ana, silenced: 'yes' as unknown as boolean }] })).toThrow(
+    expect(() => resolveBillingSplit(100, { mode: SplitMode.Equal, parts: [{ ...ana, notify: 'yes' as unknown as boolean }] })).toThrow(
       'Participante inválido.'
     );
   });

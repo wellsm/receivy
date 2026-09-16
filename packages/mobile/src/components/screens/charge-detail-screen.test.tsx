@@ -465,26 +465,26 @@ describe("ChargeDetailScreen", () => {
       pay: jest.fn(),
       publicLink: jest.fn(),
       publicChargeUrl: jest.fn(),
-      silenceCharge: jest.fn(async (_id: string, silenced: boolean) => charge({ direction: Direction.Receivable, silenced })),
+      setChargeNotify: jest.fn(async (_id: string, notify: boolean) => charge({ direction: Direction.Receivable, notify })),
     };
 
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
     await fireEvent.press(await screen.findByRole("button", { name: "Não notificar esta cobrança" }));
 
-    await waitFor(() => expect(client.silenceCharge).toHaveBeenCalledWith("charge", true));
+    await waitFor(() => expect(client.setChargeNotify).toHaveBeenCalledWith("charge", false));
     expect(await screen.findByText("Avisos desta cobrança pausados.")).toBeOnTheScreen();
     expect(screen.getByText("Sem avisos")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Lembrar" })).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByRole("button", { name: "Voltar a notificar" }));
 
-    await waitFor(() => expect(client.silenceCharge).toHaveBeenLastCalledWith("charge", false));
+    await waitFor(() => expect(client.setChargeNotify).toHaveBeenLastCalledWith("charge", true));
     expect(await screen.findByText("Avisos reativados.")).toBeOnTheScreen();
     expect(screen.queryByText("Sem avisos")).toBeNull();
   });
 
   it("offers no notice switch to whoever owes", async () => {
-    const client = { charge: jest.fn().mockResolvedValue(charge()), cancel: jest.fn(), pay: jest.fn(), publicLink: jest.fn(), publicChargeUrl: jest.fn(), silenceCharge: jest.fn() };
+    const client = { charge: jest.fn().mockResolvedValue(charge()), cancel: jest.fn(), pay: jest.fn(), publicLink: jest.fn(), publicChargeUrl: jest.fn(), setChargeNotify: jest.fn() };
 
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
 
@@ -512,7 +512,7 @@ describe("ChargeDetailScreen", () => {
       publicChargeUrl: jest.fn(),
       startProofUpload: jest.fn(),
       reviewProof: jest.fn(),
-      silenceCharge: jest.fn(),
+      setChargeNotify: jest.fn(),
     };
 
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);

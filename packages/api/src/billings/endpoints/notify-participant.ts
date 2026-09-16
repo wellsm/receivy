@@ -8,10 +8,10 @@ import type { BillingProvider } from '../provider';
 import { BillingRepository } from '../repositories/billing';
 import { inviteLink } from '../utils/context';
 
-declare class SilenceParticipantRequest implements Http.Request {
+declare class NotifyParticipantRequest implements Http.Request {
   identity: SessionIdentity;
   parameters: { id: String.UUID; userId: String.UUID };
-  body: { silenced: boolean };
+  body: { notify: boolean };
 }
 
 declare class DetailResponse implements Http.Response {
@@ -19,16 +19,16 @@ declare class DetailResponse implements Http.Response {
   body: BillingDetail;
 }
 
-export async function silenceParticipantHandler(
-  request: SilenceParticipantRequest,
+export async function setParticipantNotifyHandler(
+  request: NotifyParticipantRequest,
   { db, variables, proofFiles }: Service.Context<BillingProvider>
 ): Promise<DetailResponse> {
-  const detail = await BillingRepository.silenceParticipant(
+  const detail = await BillingRepository.setParticipantNotify(
     db,
     request.identity.userId,
     request.parameters.id,
     request.parameters.userId,
-    request.body.silenced,
+    request.body.notify,
     new Date(),
     inviteLink({ variables })
   );

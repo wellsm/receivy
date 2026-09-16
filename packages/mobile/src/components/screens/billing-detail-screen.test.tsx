@@ -93,7 +93,7 @@ function makeClient(detail = billing(), overrides: Record<string, unknown> = {})
     invite: jest.fn().mockResolvedValue({ url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" }),
     revokeInvite: jest.fn().mockResolvedValue(undefined),
     resolveGuest: jest.fn().mockResolvedValue(detail),
-    silenceParticipant: jest.fn().mockResolvedValue(detail),
+    setParticipantNotify: jest.fn().mockResolvedValue(detail),
     publicLink: jest.fn().mockResolvedValue({ token: "tk" }),
     publicChargeUrl: (token: string) => `http://localhost:3000/pay/${token}`,
     paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }),
@@ -473,9 +473,9 @@ describe("BillingDetailScreen", () => {
   });
 
   it("badges each silenced charge on its own row and shows the participant action once", async () => {
-    const allocation: BillingAllocation = { kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, silenced: false };
+    const allocation: BillingAllocation = { kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, notify: true };
     const detail = billing({
-      charges: [charge({ id: "c6", name: "Carlos", silenced: true }), charge({ id: "c7", name: "Carlos", state: ChargeState.Cancelled, cancelledAt: "2026-11-01T00:00:00Z" })],
+      charges: [charge({ id: "c6", name: "Carlos", notify: false }), charge({ id: "c7", name: "Carlos", state: ChargeState.Cancelled, cancelledAt: "2026-11-01T00:00:00Z" })],
       allocations: [allocation],
     });
 
@@ -488,23 +488,23 @@ describe("BillingDetailScreen", () => {
   });
 
   it("silences a participant after confirmation and turns the notices back on without asking", async () => {
-    const allocation: BillingAllocation = { kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, silenced: false };
-    const loud = billing({ charges: [charge({ id: "c6", name: "Carlos", silenced: false })], allocations: [allocation] });
-    const quiet = billing({ charges: [charge({ id: "c6", name: "Carlos", silenced: true })], allocations: [{ ...allocation, silenced: true }] });
-    const silenceParticipant = jest.fn(async (_billingId: string, _userId: string, silenced: boolean) => (silenced ? quiet : loud));
+    const allocation: BillingAllocation = { kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 6_000, currency: "BRL" }, order: 0, notify: true };
+    const loud = billing({ charges: [charge({ id: "c6", name: "Carlos", notify: true })], allocations: [allocation] });
+    const quiet = billing({ charges: [charge({ id: "c6", name: "Carlos", notify: false })], allocations: [{ ...allocation, notify: false }] });
+    const setParticipantNotify = jest.fn(async (_billingId: string, _userId: string, notify: boolean) => (notify ? loud : quiet));
 
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Não notificar")?.onPress?.());
 
-    await open(makeClient(loud, { silenceParticipant }));
+    await open(makeClient(loud, { setParticipantNotify }));
     await fireEvent.press(screen.getByRole("button", { name: "Não notificar Carlos" }));
 
     expect(Alert.alert).toHaveBeenCalledWith("Não notificar Carlos?", "Os lembretes automáticos das cobranças pendentes e futuras de Carlos nesta conta param.", expect.any(Array));
-    await waitFor(() => expect(silenceParticipant).toHaveBeenCalledWith("b1", "u1", true));
+    await waitFor(() => expect(setParticipantNotify).toHaveBeenCalledWith("b1", "u1", false));
     expect(await screen.findByText("Sem avisos")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByRole("button", { name: "Voltar a notificar Carlos" }));
 
-    await waitFor(() => expect(silenceParticipant).toHaveBeenLastCalledWith("b1", "u1", false));
+    await waitFor(() => expect(setParticipantNotify).toHaveBeenLastCalledWith("b1", "u1", true));
     expect(Alert.alert).toHaveBeenCalledTimes(1);
     expect(await screen.findByText("Avisos reativados para Carlos.")).toBeOnTheScreen();
     expect(screen.queryByText("Sem avisos")).toBeNull();

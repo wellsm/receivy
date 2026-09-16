@@ -13,7 +13,7 @@ export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["POST", new RegExp(`^charges/${ID}/reminders$`)],
   ["GET", /^billings(?:\?.*)?$/], ["POST", /^billings$/], ["GET", new RegExp(`^billings/${ID}(?:/preview)?$`)],
   ["PATCH", new RegExp(`^billings/${ID}$`)],
-  ["PUT", new RegExp(`^billings/${ID}/participants/${ID}/silenced$`)], ["PUT", new RegExp(`^charges/${ID}/silenced$`)],
+  ["PUT", new RegExp(`^billings/${ID}/participants/${ID}/notify$`)], ["PUT", new RegExp(`^charges/${ID}/notify$`)],
   ["POST", new RegExp(`^billings/${ID}/invite$`)], ["DELETE", new RegExp(`^billings/${ID}/invite$`)],
   ["POST", new RegExp(`^billings/${ID}/guests/${ID}$`)],
   ["POST", /^invites\/[^/]+\/accept$/],

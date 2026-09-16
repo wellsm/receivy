@@ -468,7 +468,7 @@ describe('charge notices, follow-ups and devices', () => {
     const quiet = await charge();
     const control = await charge();
 
-    await ChargeRepository.silence(db, OWNER, quiet.id, true);
+    await ChargeRepository.setNotify(db, OWNER, quiet.id, false);
 
     deepEqual(await send(quiet.id, NoticeTemplate.Initial), { channels: [] });
     deepEqual(await send(quiet.id, NoticeTemplate.Reminder, 0), { channels: [] });
@@ -513,7 +513,7 @@ describe('charge notices, follow-ups and devices', () => {
     const armed = notify.events.get(notifyIdentifier(id));
 
     ok(armed);
-    await ChargeRepository.silence(db, OWNER, id, true);
+    await ChargeRepository.setNotify(db, OWNER, id, false);
 
     deepEqual(await followUpCharge(db, context, armed.event, armed.date.getTime()), { channels: [] });
     equal(sent.emails.length, 0);

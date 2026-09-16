@@ -130,7 +130,7 @@ async function previewsFor(db: DbClient, row: BillingRepository.Row, reminders: 
   }
 
   const today = calendarDate(now, row.timezone);
-  const cursor = row.processed_through ?? addCalendarDays(today, -1);
+  const cursor = row.last_occurrence_date ?? addCalendarDays(today, -1);
   const existing = (
     await db.charges.findMany({ select: { due_date: true }, where: { billing_id: row.id, due_date: { gte: today } } })
   ).records.map((charge) => charge.due_date);
@@ -160,7 +160,7 @@ async function nextMaterialization(db: DbClient, row: BillingRepository.Row, rem
     return null;
   }
 
-  const cursor = row.processed_through ?? row.start_date;
+  const cursor = row.last_occurrence_date ?? row.start_date;
   const existing = (
     await db.charges.findMany({ select: { due_date: true }, where: { billing_id: row.id, due_date: { gt: cursor } } })
   ).records.map((charge) => charge.due_date);
@@ -375,85 +375,86 @@ function userIds(split: BillingSplit): string[] {
   return split.parts.flatMap((part) => (part.kind === SplitPartKind.User ? [part.userId] : []));
 }
 
-/** The stored "Não notificar" of each participant of a billing, by user id. */
-async function silencedParticipants(db: DbClient, billingId: string): Promise<Map<string, boolean>> {
+/** The stored automatic notices of each participant of a billing, by user id. */
+async function notifyParticipants(db: DbClient, billingId: string): Promise<Map<string, boolean>> {
   const { records } = await db.allocations.findMany({
-    select: { user_id: true, silenced: true },
+    select: { user_id: true, notify: true },
     where: { billing_id: billingId, kind: SplitPartKind.User }
   });
-  const silenced = new Map<string, boolean>();
+  const notify = new Map<string, boolean>();
 
   for (const row of records) {
     if (row.user_id) {
-      silenced.set(row.user_id, row.silenced === true);
+      notify.set(row.user_id, row.notify !== false);
     }
   }
 
-  return silenced;
+  return notify;
 }
 
-/** The part's own value wins; a participant who stays without one keeps theirs; the owner part is never silenced. */
-function silencedFor(part: SplitParty, before: Map<string, boolean>): boolean {
+/** The part's own value wins; a participant who stays without one keeps theirs; the owner part always notifies. */
+function notifyFor(part: SplitParty, before: Map<string, boolean>): boolean {
   if (part.kind !== SplitPartKind.User) {
-    return false;
+    return true;
   }
 
-  if (part.silenced !== undefined) {
-    return part.silenced;
+  if (part.notify !== undefined) {
+    return part.notify;
   }
 
-  return before.get(part.userId) ?? false;
+  return before.get(part.userId) ?? true;
 }
 
 /** A participant's switch lands on their pending charges of the billing; paid and cancelled ones keep theirs. */
-async function silencePendingCharges(db: DbClient, billingId: string, userId: string, silenced: boolean, now: string): Promise<void> {
+async function setPendingChargesNotify(db: DbClient, billingId: string, userId: string, notify: boolean, now: string): Promise<void> {
   await db.charges.updateMany({
     where: { billing_id: billingId, debtor_user_id: userId, state: ChargeState.Pending },
-    data: { silenced, updated_at: now }
+    data: { notify, updated_at: now }
   });
 }
 
-function participantSilenceEvent(silenced: boolean): string {
-  return silenced ? 'billing.participant_silenced' : 'billing.participant_unsilenced';
+/** The event names are history already written: they keep the old wording on purpose. */
+function participantNotifyEvent(notify: boolean): string {
+  return notify ? 'billing.participant_unsilenced' : 'billing.participant_silenced';
 }
 
 /**
  * Whoever stayed follows their allocation. Whoever enters sending a value also moves the pending charges a
  * next-month edit left behind when they were removed, as long as those charges carry a different value.
  */
-async function silenceChange(
+async function notifyChange(
   db: DbClient,
   billingId: string,
   part: SplitParty,
   before: Map<string, boolean>,
-  silenced: boolean
-): Promise<{ userId: string; silenced: boolean } | undefined> {
+  notify: boolean
+): Promise<{ userId: string; notify: boolean } | undefined> {
   if (part.kind !== SplitPartKind.User) {
     return undefined;
   }
 
   if (before.has(part.userId)) {
-    if (before.get(part.userId) === silenced) {
+    if (before.get(part.userId) === notify) {
       return undefined;
     }
 
-    return { userId: part.userId, silenced };
+    return { userId: part.userId, notify };
   }
 
-  if (part.silenced === undefined) {
+  if (part.notify === undefined) {
     return undefined;
   }
 
   const { records } = await db.charges.findMany({
-    select: { silenced: true },
+    select: { notify: true },
     where: { billing_id: billingId, debtor_user_id: part.userId, state: ChargeState.Pending }
   });
 
-  if (!records.some((row) => (row.silenced === true) !== silenced)) {
+  if (!records.some((row) => (row.notify !== false) !== notify)) {
     return undefined;
   }
 
-  return { userId: part.userId, silenced };
+  return { userId: part.userId, notify };
 }
 
 function decodeCursor(cursor?: string): { createdAt: string; id: string } | undefined {
@@ -800,7 +801,7 @@ function rescheduledCursor(row: BillingRepository.Row, startDate: string, today:
 
   const boundary = addCalendarDays(startDate, -1);
 
-  return (row.processed_through ?? boundary) > boundary ? row.processed_through! : boundary;
+  return (row.last_occurrence_date ?? boundary) > boundary ? row.last_occurrence_date! : boundary;
 }
 
 /** A new due day never adds a second charge to a month that already has one: that month is skipped. */
@@ -848,7 +849,7 @@ function dueOccurrences(row: BillingRepository.Row, now: Date, limit: number): s
 
   const today = calendarDate(now, row.timezone);
   const latest = materializationHorizon(today, effectiveReminders(row));
-  const cursor = row.processed_through ?? addCalendarDays(row.start_date, -1);
+  const cursor = row.last_occurrence_date ?? addCalendarDays(row.start_date, -1);
 
   return billingDates(calendarRule(row), addCalendarDays(cursor, 1), latest, limit);
 }
@@ -907,7 +908,7 @@ export namespace BillingRepository {
     settled: true,
     reminders: true,
     state: true,
-    processed_through: true,
+    last_occurrence_date: true,
     idempotency_key: true,
     request_hash: true,
     created_at: true,
@@ -954,7 +955,7 @@ export namespace BillingRepository {
     settled?: boolean;
     reminders?: string;
     state: BillingState;
-    processed_through?: string;
+    last_occurrence_date?: string;
     request_hash: string;
     created_at: string;
     updated_at: string;
@@ -984,11 +985,11 @@ export namespace BillingRepository {
           amount_cents: true,
           basis_points: true,
           shares: true,
-          allocation_order: true,
-          silenced: true
+          sort_order: true,
+          notify: true
         },
         where: { billing_id: id },
-        order: { allocation_order: Order.Asc }
+        order: { sort_order: Order.Asc }
       })
     ).records;
     const mode = rows[0]?.split_mode ?? SplitMode.Equal;
@@ -1017,8 +1018,8 @@ export namespace BillingRepository {
       userId: row.user_id ?? null,
       splitMode: row.split_mode,
       amount: { amountCents: row.amount_cents, currency: 'BRL' as const },
-      order: row.allocation_order,
-      silenced: row.silenced === true,
+      order: row.sort_order ?? 0,
+      notify: row.notify !== false,
       ...(row.shares === undefined || row.shares === null ? {} : { shares: row.shares })
     }));
 
@@ -1068,12 +1069,12 @@ export namespace BillingRepository {
     await EventRepository.record(db, { type, eventableType: EventableType.Billing, eventableId: id, actorId: ownerId, payload, at: now });
   }
 
-  /** A participant whose "Não notificar" the saved split changed, for them or for their leftover pending charges. */
-  export type SilenceChange = { userId: string; silenced: boolean };
+  /** A participant whose automatic notices the saved split changed, for them or for their leftover pending charges. */
+  export type NotifyChange = { userId: string; notify: boolean };
 
   /**
-   * Rewrites the allocations of a billing. Whoever stays keeps their `silenced` unless the part sends one; whoever
-   * enters takes the part's value (absent is false). Returns the changes of those who stayed, and of whoever came
+   * Rewrites the allocations of a billing. Whoever stays keeps their `notify` unless the part sends one; whoever
+   * enters takes the part's value (absent notifies). Returns the changes of those who stayed, and of whoever came
    * back sending a value their leftover pending charges lack, so those charges can follow.
    */
   export async function saveAllocations(
@@ -1082,17 +1083,17 @@ export namespace BillingRepository {
     totalCents: number,
     split: BillingSplit,
     now: string
-  ): Promise<SilenceChange[]> {
+  ): Promise<NotifyChange[]> {
     const resolved = resolveBillingSplit(totalCents, split);
-    const before = await silencedParticipants(db, id);
-    const changes: SilenceChange[] = [];
+    const before = await notifyParticipants(db, id);
+    const changes: NotifyChange[] = [];
 
     await db.allocations.deleteMany({ where: { billing_id: id } });
 
     for (const [index, part] of resolved.entries()) {
       const original = split.parts[index];
-      const silenced = silencedFor(part, before);
-      const change = await silenceChange(db, id, part, before, silenced);
+      const notify = notifyFor(part, before);
+      const change = await notifyChange(db, id, part, before, notify);
 
       if (change) {
         changes.push(change);
@@ -1103,9 +1104,11 @@ export namespace BillingRepository {
           id: crypto.randomUUID(),
           billing: { id },
           kind: part.kind,
-          ...(part.kind === SplitPartKind.User ? { user: { id: part.userId }, silenced } : {}),
+          ...(part.kind === SplitPartKind.User ? { user: { id: part.userId }, notify } : {}),
           split_mode: split.mode,
           amount_cents: part.amountCents,
+          sort_order: index,
+          // allocation_order is NOT NULL with no default: it keeps taking the same value until the column goes.
           allocation_order: index,
           ...(original && 'basisPoints' in original ? { basis_points: original.basisPoints } : {}),
           // Only the `shares` mode owns the quota column; a stray field on another mode stays null.
@@ -1186,7 +1189,7 @@ export namespace BillingRepository {
           ...(input.settled ? { settled: true, counterpart_label: input.counterpartLabel } : {}),
           reminders: input.reminders ? JSON.stringify(input.reminders) : sqlNull,
           state: BillingState.Active,
-          processed_through: input.type === BillingType.Indefinite ? addCalendarDays(today, -1) : sqlNull,
+          last_occurrence_date: input.type === BillingType.Indefinite ? addCalendarDays(today, -1) : sqlNull,
           idempotency_key: key,
           request_hash: hash,
           created_at: instant,
@@ -1297,12 +1300,12 @@ export namespace BillingRepository {
    * The owner of a conta a receber switches one participant's automatic notices: the allocation and every pending
    * charge of theirs in the billing follow, paid and cancelled ones stay. Sending the value already stored writes nothing.
    */
-  export async function silenceParticipant(
+  export async function setParticipantNotify(
     db: DbClient,
     ownerId: string,
     id: string,
     userId: string,
-    silenced: boolean,
+    notify: boolean,
     now = new Date(),
     link?: InviteLinkContext
   ): Promise<BillingDetail> {
@@ -1315,21 +1318,21 @@ export namespace BillingRepository {
         throw new SilenceUnavailableError();
       }
 
-      const current = (await silencedParticipants(tx, id)).get(userId);
+      const current = (await notifyParticipants(tx, id)).get(userId);
 
       if (current === undefined) {
         throw new HttpNotFoundError();
       }
 
-      if (current === silenced) {
+      if (current === notify) {
         return dto(tx, row, now, link);
       }
 
       const instant = now.toISOString();
 
-      await tx.allocations.updateMany({ where: { billing_id: id, kind: SplitPartKind.User, user_id: userId }, data: { silenced } });
-      await silencePendingCharges(tx, id, userId, silenced, instant);
-      await audit(tx, ownerId, id, participantSilenceEvent(silenced), instant, { userId });
+      await tx.allocations.updateMany({ where: { billing_id: id, kind: SplitPartKind.User, user_id: userId }, data: { notify } });
+      await setPendingChargesNotify(tx, id, userId, notify, instant);
+      await audit(tx, ownerId, id, participantNotifyEvent(notify), instant, { userId });
 
       return dto(tx, row, now, link);
     });
@@ -1386,10 +1389,10 @@ export namespace BillingRepository {
       if (patch.split !== undefined || patch.totalCents !== undefined) {
         const changes = await saveAllocations(tx, id, totalCents, split, instant);
 
-        // Same rule as PUT /billings/{id}/participants/{userId}/silenced for whoever stayed and changed.
+        // Same rule as PUT /billings/{id}/participants/{userId}/notify for whoever stayed and changed.
         for (const change of changes) {
-          await silencePendingCharges(tx, id, change.userId, change.silenced, instant);
-          await audit(tx, ownerId, id, participantSilenceEvent(change.silenced), instant, { userId: change.userId });
+          await setPendingChargesNotify(tx, id, change.userId, change.notify, instant);
+          await audit(tx, ownerId, id, participantNotifyEvent(change.notify), instant, { userId: change.userId });
         }
       }
 
@@ -1421,9 +1424,11 @@ export namespace BillingRepository {
           ...(counterpartLabel === undefined ? {} : { counterpart_label: counterpartLabel }),
           ...(patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
           ...(patch.state ? { state: patch.state } : {}),
-          ...(resumed ? { processed_through: (row.processed_through ?? boundary) > boundary ? row.processed_through : boundary } : {}),
+          ...(resumed
+            ? { last_occurrence_date: (row.last_occurrence_date ?? boundary) > boundary ? row.last_occurrence_date : boundary }
+            : {}),
           // A new due day wins over the resume cursor: both only ever move the cursor forward.
-          ...(rescheduled ? { start_date: startDate, due_rule: dueRule, processed_through: cursor } : {}),
+          ...(rescheduled ? { start_date: startDate, due_rule: dueRule, last_occurrence_date: cursor } : {}),
           updated_at: instant
         }
       });
@@ -1610,7 +1615,7 @@ export namespace BillingRepository {
           await audit(tx, row.owner_id, row.id, 'billing.materialized', instant, { dueDate });
         }
 
-        await tx.billings.updateOne({ where: { id: row.id }, data: { processed_through: dueDate, updated_at: instant } });
+        await tx.billings.updateOne({ where: { id: row.id }, data: { last_occurrence_date: dueDate, updated_at: instant } });
 
         return { materialized: !exists, remaining: rest.length > 0, noticeChargeIds };
       });

@@ -437,11 +437,11 @@ describe("ChargeDetailScreen", () => {
   });
 
   it("pauses and resumes the notices of one charge, keeping Lembrar", async () => {
-    const put = vi.fn((silenced: boolean) => Response.json(charge({ direction: Direction.Receivable, silenced })));
+    const put = vi.fn((notify: boolean) => Response.json(charge({ direction: Direction.Receivable, notify })));
 
     vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-      if (init?.method === "PUT" && path === "/api/financial/charges/charge/silenced") {
-        return put(JSON.parse(String(init.body)).silenced);
+      if (init?.method === "PUT" && path === "/api/financial/charges/charge/notify") {
+        return put(JSON.parse(String(init.body)).notify);
       }
 
       return Response.json(charge({ direction: Direction.Receivable }));
@@ -452,14 +452,14 @@ describe("ChargeDetailScreen", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Não notificar esta cobrança" }));
 
     expect(await screen.findByText("Avisos desta cobrança pausados.")).toBeInTheDocument();
-    expect(put).toHaveBeenCalledWith(true);
+    expect(put).toHaveBeenCalledWith(false);
     expect(screen.getByText("Sem avisos")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lembrar" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Voltar a notificar" }));
 
     expect(await screen.findByText("Avisos reativados.")).toBeInTheDocument();
-    expect(put).toHaveBeenLastCalledWith(false);
+    expect(put).toHaveBeenLastCalledWith(true);
     expect(screen.queryByText("Sem avisos")).not.toBeInTheDocument();
   });
 

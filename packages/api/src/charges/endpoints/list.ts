@@ -1,6 +1,7 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
-import type { Object, String } from '@ez4/schema';
+import type { String } from '@ez4/schema';
+import type { ListCharge } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { ChargeProvider } from '../provider';
 import { ChargeRepository } from '../repositories/charge';
@@ -14,7 +15,7 @@ declare class ListChargesRequest implements Http.Request {
 
 declare class ListChargesResponse implements Http.Response {
   status: 200;
-  body: Object.Any;
+  body: ListCharge;
 }
 
 export async function listChargesHandler(

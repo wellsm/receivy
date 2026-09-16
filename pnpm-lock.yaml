@@ -1652,7 +1652,7 @@ packages:
     engines: {node: '>=22.7'}
 
   '@ez4/raw-pg@file:vendor/ez4-raw-pg-0.53.0.tgz':
-    resolution: {integrity: sha512-U20xyl8Q4wSVpjSI9VUbWfRocrbCfttWS6Zovy08gTSoUl5uRqN5dJOf5VXtjDkhsILa4ZZTsGmZo+2xsmaS6w==, tarball: file:vendor/ez4-raw-pg-0.53.0.tgz}
+    resolution: {integrity: sha512-TVjWfuEoISDmfUibfRLTFxE7KwbTZEk0engy+Xb/Fm6ibJ1aBYzGIvxSdnDQlZUdLFEopgsZxhPLrHzD5dmfsQ==, tarball: file:vendor/ez4-raw-pg-0.53.0.tgz}
     version: 0.53.0
     engines: {node: '>=22.7'}
 

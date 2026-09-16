@@ -362,7 +362,7 @@ describe('billing invites on native PostgreSQL', () => {
     const contactOnly = await InviteRepository.accept(db, GUEST, tokenOf(fixedInvite.url), SECRET, now);
 
     deepEqual(contactOnly, { billingId: fixed.id, chargeId: null, joinedSplit: false, awaitingOwner: false });
-    equal(await db.allocations.count({ where: { billing_id: fixed.id, kind: SplitPartKind.User } }), 1);
+    equal(await db.allocations.count({ where: { billing_id: fixed.id, user_id: { not: OWNER } } }), 1);
     equal((await chargesOf(fixed.id)).length, 1);
   });
 

@@ -249,7 +249,9 @@ async function summaryAggregates(db: DbClient, rows: BillingRepository.Row[], no
     ),
     participants AS (
       SELECT p.billing_id, COUNT(DISTINCT a.user_id) AS participant_count
-      FROM page p JOIN allocations a ON a.billing_id = p.billing_id AND a.kind = 'user'
+      FROM page p
+      JOIN billings b ON b.id = p.billing_id
+      JOIN allocations a ON a.billing_id = p.billing_id AND a.user_id <> b.owner_id
       GROUP BY p.billing_id
     ),
     proofs AS (
@@ -375,12 +377,9 @@ function userIds(split: BillingSplit): string[] {
   return split.parts.flatMap((part) => (part.kind === SplitPartKind.User ? [part.userId] : []));
 }
 
-/**
- * The raw number of a stored part. `value` is null until the block 3 backfill runs, so the three folded columns
- * answer meanwhile; this fallback goes away with them, and the COALESCE order matches the backfill itself.
- */
-function splitValue(row: { value?: number; basis_points?: number; shares?: number; amount_cents: number }): number {
-  return row.value ?? row.basis_points ?? row.shares ?? row.amount_cents;
+/** The raw number of a stored part; `equal` is the one mode that keeps none. */
+function splitValue(row: { value?: number }): number {
+  return row.value ?? 0;
 }
 
 /** What each mode keeps in `value`: cents on `fixed`, basis points on `percentage`, the quota on `shares`. */
@@ -1012,9 +1011,6 @@ export namespace BillingRepository {
         select: {
           user_id: true,
           value: true,
-          amount_cents: true,
-          basis_points: true,
-          shares: true,
           sort_order: true,
           notify: true
         },
@@ -1141,10 +1137,6 @@ export namespace BillingRepository {
           ...(part.kind === SplitPartKind.User ? { notify } : {}),
           ...(value === undefined ? {} : { value }),
           sort_order: index,
-          // Deprecated pair, NOT NULL with no default: written with the same values until the columns go.
-          kind: part.kind,
-          split_mode: split.mode,
-          amount_cents: part.amountCents,
           created_at: now
         }
       });

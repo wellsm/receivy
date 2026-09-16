@@ -795,15 +795,10 @@ describe('billings on native PostgreSQL', () => {
     const patched = await BillingRepository.patch(db, OWNER, indefinite.id, { totalCents: 20_003 }, date('2026-01-01'));
     equal(patched.total.amountCents, 20_003);
     const reallocated = resolveBillingSplit(20_003, split);
-    const reallocatedRows = (
-      await db.allocations.findMany({
-        select: { amount_cents: true },
-        where: { billing_id: indefinite.id },
-        order: { sort_order: Order.Asc }
-      })
-    ).records;
+
+    // The amounts are no longer a column: the response carries what resolveBillingSplit worked out.
     deepEqual(
-      reallocatedRows.map((row) => row.amount_cents),
+      patched.allocations.map((allocation) => allocation.amount.amountCents),
       reallocated.map((allocation) => allocation.amountCents)
     );
 

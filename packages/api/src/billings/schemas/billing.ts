@@ -8,8 +8,7 @@ import type {
   BillingType,
   Direction,
   PixKeyType,
-  SplitMode,
-  SplitPartKind
+  SplitMode
 } from '@receivy/common';
 
 export interface BillingSchema extends Database.Schema {
@@ -57,16 +56,6 @@ export interface AllocationSchema extends Database.Schema {
   user_id?: String.UUID;
   /** Raw split value: cents on `fixed`, basis points on `percentage`, the quota on `shares`, unused on `equal`. */
   value?: number;
-  /** @deprecated Derived from `user_id === billings.owner_id`. NOT NULL with no default, so every insert keeps filling it. */
-  kind: SplitPartKind;
-  /** @deprecated Moved to `billings.split_mode`. NOT NULL with no default, so every insert keeps filling it. */
-  split_mode: SplitMode;
-  /** @deprecated Folded into `value`. */
-  basis_points?: number;
-  /** @deprecated Folded into `value`. */
-  shares?: number;
-  /** @deprecated Folded into `value`; the resolved amount comes from `resolveBillingSplit`. NOT NULL, still written. */
-  amount_cents: number;
   /** Position of the part inside the split. */
   sort_order?: number;
   /** Automatic notices of a 'user' part: new charges of this participant copy it. Null (owner part, older rows) reads as true. */

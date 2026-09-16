@@ -118,9 +118,22 @@ describe("BillingDetailScreen", () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    jest.useRealTimers();
   });
 
+  // Only Date is faked: RNTL keeps its real timers for waitFor/findBy.
+  function pinClock(iso: string) {
+    jest.useFakeTimers({
+      now: new Date(iso),
+      doNotFake: ["nextTick", "setImmediate", "clearImmediate", "setInterval", "clearInterval", "setTimeout", "clearTimeout", "queueMicrotask", "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback", "cancelIdleCallback", "hrtime", "performance"],
+    });
+  }
+
   it("sums the current cycle in the hero and lists its participants with their status", async () => {
+    // Pinned before the second cycle's due date (2026-11-15) so Carlos's charge reads "Pendente", not
+    // "Vence hoje"/"Atrasado" once the real clock catches up to it.
+    pinClock("2026-11-10T12:00:00Z");
+
     await open();
 
     expect(screen.getByText("Parcelado (2/3)")).toBeOnTheScreen();
@@ -139,6 +152,46 @@ describe("BillingDetailScreen", () => {
     expect(screen.getByText("Pendente")).toBeOnTheScreen();
     expect(screen.getByText("Aguardando pagamento")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Compartilhar link de Carlos" })).toBeOnTheScreen();
+  });
+
+  it("tags an overdue pending charge Atrasado", async () => {
+    pinClock("2026-11-20T12:00:00Z"); // noon UTC = 09:00 in America/Sao_Paulo, same calendar day
+
+    const overdue = billing({ nextDueDate: "2026-11-15", charges: [charge({ id: "c1", name: "Carlos", dueDate: "2026-11-15" })] });
+    await open(makeClient(overdue));
+
+    expect(screen.getByText("Atrasado")).toBeOnTheScreen();
+  });
+
+  it("tags a charge due today Vence hoje", async () => {
+    pinClock("2026-11-20T12:00:00Z");
+
+    const dueToday = billing({ nextDueDate: "2026-11-20", charges: [charge({ id: "c2", name: "Carlos", dueDate: "2026-11-20" })] });
+    await open(makeClient(dueToday));
+
+    // The corner tag and the secondary line both read "Vence hoje" for a charge due today.
+    expect(screen.getAllByText("Vence hoje")).toHaveLength(2);
+  });
+
+  it("keeps a far-future pending charge tagged Pendente", async () => {
+    pinClock("2026-11-20T12:00:00Z");
+
+    const future = billing({ nextDueDate: "2027-01-31", charges: [charge({ id: "c3", name: "Carlos", dueDate: "2027-01-31" })] });
+    await open(makeClient(future));
+
+    expect(screen.getByText("Pendente")).toBeOnTheScreen();
+  });
+
+  it("still tags a paid charge Pago once its due date has passed", async () => {
+    pinClock("2026-11-20T12:00:00Z");
+
+    const paid = billing({
+      nextDueDate: "2026-11-15",
+      charges: [charge({ id: "c1", name: "Carlos", dueDate: "2026-11-15", state: ChargeState.Paid, paidAt: "2026-11-14T22:42:00Z" })],
+    });
+    await open(makeClient(paid));
+
+    expect(screen.getByText("Pago")).toBeOnTheScreen();
   });
 
   it("asks the owner to review a sent proof instead of sharing the link", async () => {

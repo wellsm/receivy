@@ -9,6 +9,7 @@
  */
 export function appOrigin(request: Request): string {
   const configured = process.env.WEB_APP_URL?.trim();
+
   if (configured) {
     let url: URL;
     try { url = new URL(configured); } catch { throw new Error("WEB_APP_URL must be an absolute URL"); }
@@ -17,6 +18,7 @@ export function appOrigin(request: Request): string {
     }
     return url.origin;
   }
+  
   return new URL(request.url).origin;
 }
 

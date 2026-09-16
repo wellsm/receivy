@@ -26,20 +26,24 @@ export async function oauthStartHandler(
   { db, variables }: Service.Context<UserProvider>
 ): Promise<OauthStartResponse> {
   const dependencies = oauthDependencies(request.body.provider, { variables });
+
   try {
     const body = await beginOauth(request.body, {
       allowList: dependencies.allowList,
       providerClient: dependencies.client,
       repo: AuthRepository.create(db)
     });
+
     return { status: 200, body };
   } catch (error) {
     if (error instanceof OauthFlowError) {
       if (error.code === ErrorCode.ProviderDisabled) {
         throw new HttpNotFoundError();
       }
+
       throw new HttpBadRequestError();
     }
+
     throw error;
   }
 }

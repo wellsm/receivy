@@ -8,7 +8,7 @@ const routerMock = { push: vi.fn(), replace: vi.fn() };
 
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
-afterEach(() => { cleanup(); vi.resetAllMocks(); });
+afterEach(() => { cleanup(); vi.resetAllMocks(); vi.useRealTimers(); });
 
 function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
   return {
@@ -283,6 +283,11 @@ describe("ChargeDetailScreen", () => {
   });
 
   it("reopens a paid receivable charge after confirmation", async () => {
+    // Pinned well after the fixture's due date (2026-09-10) so the reopened charge deterministically reads
+    // as overdue, regardless of the real clock.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-20T12:00:00Z"));
+
     const reopened = charge({ direction: Direction.Receivable });
     const reopen = vi.fn(() => Response.json(reopened));
 
@@ -303,7 +308,7 @@ describe("ChargeDetailScreen", () => {
     await waitFor(() => expect(reopen).toHaveBeenCalled());
     expect(await screen.findByRole("button", { name: "Marcar como pago" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByText("Pendente")).toBeInTheDocument();
+    expect(screen.getByText("Atrasado")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reabrir" })).not.toBeInTheDocument();
   });
 

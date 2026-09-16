@@ -156,6 +156,27 @@ describe('billing draft review', () => {
   });
 });
 
+describe('parcelado: the typed amount is the total, rounded up per installment', () => {
+  it('rounds the total up when it does not split evenly', () => {
+    const input = buildBillingInput({ ...base, type: BillingType.Until, amount: '100,00', occurrences: '3' });
+
+    expect(input.totalCents).toBe(3334);
+  });
+
+  it('splits evenly when the total divides without a remainder', () => {
+    const input = buildBillingInput({ ...base, type: BillingType.Until, amount: '1.200,00', occurrences: '12' });
+
+    expect(input.totalCents).toBe(10000);
+  });
+
+  it('counts the installments from an explicit end date the same way as from "N vezes"', () => {
+    const byEnd = buildBillingInput({ ...base, type: BillingType.Until, amount: '100,00', end: '2026-03-31' });
+    const byCount = buildBillingInput({ ...base, type: BillingType.Until, amount: '100,00', occurrences: '3' });
+
+    expect(byEnd.totalCents).toBe(byCount.totalCents);
+  });
+});
+
 describe('EMPTY_BILLING_DRAFT', () => {
   it('returns a fresh draft with the expected defaults', () => {
     const draft = EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-10');

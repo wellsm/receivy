@@ -41,6 +41,11 @@ export type Contact = {
 
 export type ContactsPage = { contacts: Contact[]; nextCursor: string | null };
 
+/** A contact can actually receive a notice once it has an e-mail or a phone; a placeholder with neither is reachable by shared link only. */
+export function canNotifyContact(contact: Pick<Contact, 'email' | 'phone'>): boolean {
+  return Boolean(contact.email.trim()) || Boolean(contact.phone?.trim());
+}
+
 export function normalizeContact(input: ContactInput): ContactInput {
   if (
     typeof input?.name !== 'string' ||

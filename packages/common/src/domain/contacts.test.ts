@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeContact } from './contacts';
+import { canNotifyContact, normalizeContact } from './contacts';
 
 describe('contacts', () => {
   it('normalizes the name and the e-mail without changing e-mail aliases', () => {
@@ -34,5 +34,18 @@ describe('contacts', () => {
     { name: 'a'.repeat(121), email: 'ana@example.com' }
   ])('rejects %j', (input) => {
     expect(() => normalizeContact(input)).toThrow();
+  });
+});
+
+describe('canNotifyContact', () => {
+  it('is reachable with an e-mail, a phone, or both', () => {
+    expect(canNotifyContact({ email: 'ana@example.com', phone: null })).toBe(true);
+    expect(canNotifyContact({ email: '', phone: '+5511987654321' })).toBe(true);
+    expect(canNotifyContact({ email: 'ana@example.com', phone: '+5511987654321' })).toBe(true);
+  });
+
+  it('is unreachable without either, blank or not, once trimmed', () => {
+    expect(canNotifyContact({ email: '', phone: null })).toBe(false);
+    expect(canNotifyContact({ email: '   ', phone: '   ' })).toBe(false);
   });
 });

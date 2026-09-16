@@ -362,8 +362,9 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   const receivable = charge.direction === "receivable";
   const pending = charge.state === "pending";
   const proof = charge.proof;
-  const state = chargeStateTag(charge);
-  const status = chargeStatusLine(charge, calendarDate());
+  const today = calendarDate();
+  const state = chargeStateTag(charge, today);
+  const status = chargeStatusLine(charge, today);
   const guidance = payableGuidance(charge);
   const ownBill = charge.payer === "owner" && charge.ownedByViewer === true;
   // Who could publish a link once a key exists: the creditor of a conta a receber with contacts, never a registro.

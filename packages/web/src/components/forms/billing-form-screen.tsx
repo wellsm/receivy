@@ -23,6 +23,8 @@ import {
   shouldAskEditScope,
   splitPartyKey,
   splitParties,
+  canNotifyContact,
+  untilInstallmentPreview,
   BillingDueRule,
   BillingFrequency,
   BillingType,
@@ -95,7 +97,7 @@ const SETTLED_LOCKED = "Não dá para mudar depois de criada.";
 
 const AMOUNT_LABELS: Record<BillingType, string> = {
   once: "Valor total",
-  until: "Valor por parcela",
+  until: "Valor total",
   indefinite: "Valor por ocorrência",
 };
 
@@ -194,7 +196,8 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     type: billing.type,
     selected: parts.flatMap(part => (part.kind === "user" ? [part.userId] : [])),
     owner: parts.some(part => part.kind === "owner") || billing.split.mode === "fixed",
-    amount: moneyText(billing.total.amountCents),
+    // Parcelado: the form shows the total, so saving it unchanged rebuilds the same per-installment amount.
+    amount: moneyText(billing.type === BillingType.Until ? billing.total.amountCents * (billing.installmentCount ?? 1) : billing.total.amountCents),
     description: billing.description,
     frequency: billing.frequency ?? BillingFrequency.Monthly,
     start: billing.startDate,
@@ -463,8 +466,11 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     }
 
     try {
+      // Never send "Não notificar" for a participant the agenda no longer shows as reachable: the
+      // switch does not render for them, so a stale value seeded from editing must not travel either.
+      const silenced = draft.silenced && Object.fromEntries(Object.entries(draft.silenced).filter(([userId]) => notifiableIds.has(userId)));
       // Only a creation checks that a recorrente registro starts today or later.
-      const next: Attempt = { input: buildBillingInput(draft, billing ? undefined : new Date()), key: crypto.randomUUID(), uncertain: false };
+      const next: Attempt = { input: buildBillingInput({ ...draft, silenced }, billing ? undefined : new Date()), key: crypto.randomUUID(), uncertain: false };
 
       // Only a recorrente edit that changes what its charges carry, with charges of this month still ahead, needs the answer.
       if (billing && shouldAskEditScope(billing, patchBody(next.input), todayIn(billing.timezone))) {
@@ -494,6 +500,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     update({ dueRule: BillingDueRule.EndOfMonth, start: endOfMonth(draft.start && draft.start >= today ? draft.start : today) });
   }
   const totalCents = draftTotalCents(draft);
+  const installmentPreview = untilInstallmentPreview(draft);
   const { amounts, error: hint } = previewBillingSplit(draft);
   /** The draft seats people by account; the chips and split rows look their agenda entry up by that id. */
   function contactFor(userId: string): Contact {
@@ -501,6 +508,9 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   }
 
   const chosen = draft.selected.map(userId => contactFor(userId));
+  // Nothing reaches a contact without an e-mail or a phone, so the switch never shows for them.
+  const notifiable = chosen.filter(canNotifyContact);
+  const notifiableIds = new Set(notifiable.map(contact => contact.userId));
 
   function nameOf(key: string): string {
     if (key === "owner") {
@@ -687,6 +697,12 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
               className="w-full min-w-0 border-0 bg-transparent p-0 font-display text-[30px] font-bold leading-none tracking-[-0.02em] text-ink tabular-nums outline-none disabled:opacity-60"
             />
           </div>
+          {installmentPreview && (
+            <p className="m-0 text-[11px] text-muted">
+              {installmentPreview.count}x de {money(installmentPreview.perInstallmentCents)}
+              {installmentPreview.roundedUp ? ` · total ${money(installmentPreview.totalCents)}` : ""}
+            </p>
+          )}
         </Card>
       </fieldset>
 
@@ -949,9 +965,9 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           Adicionar pessoa
         </button>
 
-        {chosen.length > 0 && (
+        {notifiable.length > 0 && (
           <div className="flex flex-col gap-2">
-            {chosen.map(contact => (
+            {notifiable.map(contact => (
               <label key={contact.userId} className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-2.5">
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
                   <InitialsAvatar name={contact.displayName} size={24} avatar={contact.avatar} />
@@ -1102,7 +1118,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
       {error && <p className="m-0 rounded-xl bg-danger-soft p-4 text-danger" role="alert">{error}</p>}
 
-      <ScreenFooter className="-mx-1 border-t border-outline/30 bg-surface/95 px-1 pb-2 pt-4 backdrop-blur">
+      <ScreenFooter className="-mx-1 border-t border-outline/30 bg-canvas/95 px-1 pb-2 pt-4 backdrop-blur-md">
         {busy && <p className="m-0 mb-2 text-sm text-muted" role="status">Salvando…</p>}
         {/* Only on create: an edit patches a subset of fields, so the full draft summary would not match what is actually sent. */}
         {!editing && draftSummary && (

@@ -24,7 +24,7 @@ import type {
 } from './charges/errors';
 import type { ChargeRoutes } from './charges/routes';
 import type { TooManyRequestsError } from './common/errors';
-import type { requestListener } from './common/services/listener';
+import type { listener } from './common/services/sentry/listener';
 import type { DuplicateContactError, EmailTakenError, LinkedContactError, NotLinkableError, OwnEmailError } from './contacts/errors';
 import type { ContactRoutes } from './contacts/routes';
 import type { HealthRoutes } from './health/routes';
@@ -66,7 +66,7 @@ export declare class Api extends Http.Service {
   cache: Http.UseCache<{ authorizerTTL: 0 }>;
 
   defaults: Http.UseDefaults<{
-    listener: typeof requestListener;
+    listener: typeof listener;
     preferences: {
       namingStyle: NamingStyle.CamelCase;
     };

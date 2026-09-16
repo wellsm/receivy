@@ -24,6 +24,8 @@ const today = () => calendarDate(new Date(), TIMEZONE);
 
 const ana = { id: "c1", userId: "u1", name: "Ana Souza", nickname: "Ana", displayName: "Ana", email: "ana@example.com", phone: null, status: "pending", archivedAt: null, createdAt: "2026-01-01", lastBilledAt: `${addCalendarDays(today(), -1)}T10:00:00.000Z`, activeCharges: 0 };
 const bruno = { id: "c2", userId: "u2", name: "Bruno Lima", nickname: null, displayName: "Bruno Lima", email: "bruno@example.com", phone: null, status: "active", archivedAt: null, createdAt: "2026-01-01", lastBilledAt: null, activeCharges: 0 };
+/** No e-mail and no phone: a placeholder contact nobody can notify. */
+const carla = { id: "c3", userId: "u3", name: "Carla Dias", nickname: null, displayName: "Carla", email: "", phone: null, status: "pending", archivedAt: null, createdAt: "2026-01-01", lastBilledAt: null, activeCharges: 0 };
 const method = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, archivedAt: null };
 const PIX_SETUP = "/settings/pix/new?returnTo=%2Fbillings%2Fnew&required=1";
 
@@ -193,18 +195,54 @@ it("keeps Criar conta disabled while the amount is still zero", async () => {
   expect(screen.getByText("Automático")).toBeInTheDocument();
 });
 
-it("shows the installment field and renames the amount for a parcelado billing", async () => {
+it("shows the installment field and keeps Valor total for a parcelado billing", async () => {
   api();
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("radio", { name: "Parcelado" }));
 
   expect(screen.getByLabelText("Parcelas")).toBeInTheDocument();
-  expect(screen.getByLabelText("Valor por parcela")).toBeInTheDocument();
+  expect(screen.getByLabelText("Valor total")).toBeInTheDocument();
 
   await user.click(screen.getByRole("radio", { name: "Recorrente" }));
 
   expect(screen.getByLabelText("Valor por ocorrência")).toBeInTheDocument();
+});
+
+it("shows the per-installment helper below the typed total, with the rounded-up total once it does not divide evenly", async () => {
+  api();
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("radio", { name: "Parcelado" }));
+  await user.clear(screen.getByLabelText("Parcelas"));
+  await user.type(screen.getByLabelText("Parcelas"), "3");
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+
+  expect(screen.getByText("3x de R$ 33,34 · total R$ 100,02")).toBeInTheDocument();
+
+  await user.clear(screen.getByLabelText("Valor total"));
+  await user.type(screen.getByLabelText("Valor total"), "1.200,00");
+  await user.clear(screen.getByLabelText("Parcelas"));
+  await user.type(screen.getByLabelText("Parcelas"), "12");
+
+  expect(screen.getByText("12x de R$ 100,00")).toBeInTheDocument();
+});
+
+it("posts the rounded-up per-installment amount for a parcelado billing", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await pickAna(user);
+  await user.click(screen.getByRole("checkbox", { name: "Eu também participo" }));
+  await user.click(screen.getByRole("radio", { name: "Parcelado" }));
+  await user.clear(screen.getByLabelText("Parcelas"));
+  await user.type(screen.getByLabelText("Parcelas"), "3");
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  const post = sent.find(entry => entry.init.method === "POST");
+  expect(JSON.parse(String(post?.init.body))).toMatchObject({ totalCents: 3334 });
 });
 
 it("computes the live amount for each share row", async () => {
@@ -540,6 +578,63 @@ it("offers Não notificar only on a conta a receber", async () => {
   expect(screen.queryByText("Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.")).not.toBeInTheDocument();
 });
 
+it("renders Não notificar only for a participant who can actually be reached", async () => {
+  api((path) => (path.startsWith("/api/contacts") && !path.includes("search") ? Response.json({ contacts: [ana, carla], nextCursor: null }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("button", { name: "Adicionar" }));
+  const panel = screen.getByRole("dialog", { name: "Contatos" });
+  await user.click(await within(panel).findByRole("checkbox", { name: "Ana" }));
+  await user.click(within(panel).getByRole("checkbox", { name: "Carla" }));
+  await user.click(within(panel).getByRole("button", { name: "Concluir" }));
+
+  expect(screen.getByRole("switch", { name: "Não notificar Ana" })).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: "Não notificar Carla" })).not.toBeInTheDocument();
+  expect(screen.getByText("Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.")).toBeInTheDocument();
+});
+
+it("hides the Não notificar helper entirely when no selected participant can be reached", async () => {
+  api((path) => (path.startsWith("/api/contacts") && !path.includes("search") ? Response.json({ contacts: [carla], nextCursor: null }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("button", { name: "Adicionar" }));
+  const panel = screen.getByRole("dialog", { name: "Contatos" });
+  await user.click(await within(panel).findByRole("checkbox", { name: "Carla" }));
+  await user.click(within(panel).getByRole("button", { name: "Concluir" }));
+
+  expect(screen.queryByRole("switch", { name: "Não notificar Carla" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.")).not.toBeInTheDocument();
+});
+
+it("never sends a stale Não notificar for a participant the agenda no longer shows as reachable", async () => {
+  const silencedBilling: BillingDetail = {
+    ...indefiniteBilling,
+    id: "b6",
+    allocations: [{ kind: SplitPartKind.User, userId: "u3", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, silenced: true }],
+    split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u3" }] },
+  };
+  const sent = api((path, init) => {
+    if (init.method === "PATCH") {
+      return Response.json(silencedBilling);
+    }
+
+    if (path.startsWith("/api/contacts") && !path.includes("search")) {
+      return Response.json({ contacts: [carla], nextCursor: null });
+    }
+
+    return undefined;
+  });
+  const { user } = renderForm(silencedBilling);
+
+  await screen.findByRole("button", { name: "Salvar conta" });
+  expect(screen.queryByRole("switch", { name: /Não notificar/ })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  const patch = sent.find(entry => entry.init.method === "PATCH");
+  expect(JSON.parse(String(patch?.init.body)).split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u3" }] });
+});
+
 it("records a registro with the name typed in De quem and nobody to split with or pay through", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
   const { user } = renderForm();
@@ -765,6 +860,15 @@ it("freezes a finite billing and patches only category, Pix and reminders", asyn
     reminders: [{ offsetDays: -3, enabled: true }],
     category: "other",
   });
+});
+
+const untilBilling: BillingDetail = { ...onceBilling, id: "b5", type: BillingType.Until, endDate: "2026-12-31", installmentCount: 3, total: { amountCents: 3_334, currency: "BRL" } };
+
+it("seeds the amount of a parcelado billing as its total, per-installment × installments", async () => {
+  api();
+  renderForm(untilBilling);
+
+  expect(await screen.findByLabelText("Valor total")).toHaveValue("100,02");
 });
 
 const payableBilling: BillingDetail = { ...onceBilling, id: "b3", direction: Direction.Payable, paymentMethodId: undefined, payee: { userId: "u1", name: "Ana" }, pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" } };
@@ -1000,18 +1104,19 @@ it("places the restyled Adicionar action below the participant list, before Não
   expect(addButton.querySelector(".border-dashed")).not.toBeNull();
 });
 
-it("shows the footer summary and total for a parcelado draft", async () => {
+it("shows the footer summary and the rounded-up total for a parcelado draft", async () => {
   api();
   const { user } = renderForm();
 
   await pickAna(user);
+  await user.click(screen.getByRole("checkbox", { name: "Eu também participo" }));
   await user.click(screen.getByRole("radio", { name: "Parcelado" }));
   await user.clear(screen.getByLabelText("Parcelas"));
   await user.type(screen.getByLabelText("Parcelas"), "3");
-  await user.type(screen.getByLabelText("Valor por parcela"), "100,00");
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
 
   expect(await screen.findByText("Gera 3 cobranças · 1 pessoa × 3 meses")).toBeInTheDocument();
-  expect(screen.getByText("R$ 150,00")).toBeInTheDocument();
+  expect(screen.getByText("R$ 100,02")).toBeInTheDocument();
 });
 
 it("shows the footer summary with the per-month total for an indefinite draft", async () => {
@@ -1040,4 +1145,14 @@ it("never shows the footer summary while editing", async () => {
 
   await screen.findByRole("button", { name: "Salvar conta" });
   expect(screen.queryByText(/^Gera /)).not.toBeInTheDocument();
+});
+
+it("keeps the footer flush with the page background, like every other screen's ScreenFooter", async () => {
+  api();
+  renderForm();
+
+  const footer = (await screen.findByRole("button", { name: "Criar conta" })).closest("footer")!;
+
+  expect(footer.className).toContain("bg-canvas/95");
+  expect(footer.className).not.toContain("bg-surface/95");
 });

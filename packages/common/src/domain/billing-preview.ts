@@ -1,5 +1,5 @@
-import { SplitPartKind } from './billing';
-import type { BillingDraft } from './billing-draft';
+import { BillingType, SplitPartKind } from './billing';
+import { type BillingDraft, untilInstallmentPreview } from './billing-draft';
 import { SplitMode } from './contracts';
 import { parseBRLCents, parsePercentageBasisPoints } from './financial-form';
 import { formatMoney } from './money';
@@ -94,8 +94,15 @@ function remainderHint(draft: BillingDraft, totalCents: number): string {
   return '';
 }
 
-/** The typed amount in cents, or zero while it is still being typed. */
+/**
+ * The amount actually split among participants, in cents, or zero while it is still being typed. A
+ * parcelado types its total; this is the per-installment amount `buildBillingInput` sends and splits.
+ */
 export function draftTotalCents(draft: BillingDraft): number {
+  if (draft.type === BillingType.Until) {
+    return untilInstallmentPreview(draft)?.perInstallmentCents ?? 0;
+  }
+
   try {
     return parseBRLCents(draft.amount);
   } catch {
@@ -107,10 +114,20 @@ export function draftTotalCents(draft: BillingDraft): number {
 export function previewBillingSplit(draft: BillingDraft): BillingSplitPreview {
   let totalCents: number;
 
-  try {
-    totalCents = parseBRLCents(draft.amount);
-  } catch {
-    return { amounts: {}, error: null };
+  if (draft.type === BillingType.Until) {
+    const preview = untilInstallmentPreview(draft);
+
+    if (!preview) {
+      return { amounts: {}, error: null };
+    }
+
+    totalCents = preview.perInstallmentCents;
+  } else {
+    try {
+      totalCents = parseBRLCents(draft.amount);
+    } catch {
+      return { amounts: {}, error: null };
+    }
   }
 
   const amounts: Record<string, number> = {};

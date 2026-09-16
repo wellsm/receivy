@@ -1,4 +1,12 @@
-import { BillingDueRule, BillingFrequency, type BillingInput, type BillingReminder, BillingType, SplitPartKind } from './billing';
+import {
+  BillingDueRule,
+  BillingFrequency,
+  type BillingInput,
+  type BillingReminder,
+  BillingType,
+  MAX_FINITE_OCCURRENCES,
+  SplitPartKind
+} from './billing';
 import { billingDates, normalizeBillingInput } from './billing-calendar';
 import { BillingCategory } from './billing-category';
 import { pixKeyField } from './contact-format';
@@ -130,6 +138,65 @@ function endDateFor(draft: BillingDraft): string | undefined {
   return dates.at(-1);
 }
 
+/** Due dates a `until` draft produces for `endDate`, reusing the same calendar rule `endDateFor` computed it from. */
+function installmentCountFor(draft: BillingDraft, endDate: string | undefined): number {
+  if (!endDate) {
+    throw new RangeError('Informe a data final ou quantas vezes cobrar.');
+  }
+
+  return billingDates(
+    { frequency: draft.frequency, startDate: draft.start, dueRule: dueRuleFor(draft) },
+    draft.start,
+    endDate,
+    MAX_FINITE_OCCURRENCES + 1
+  ).length;
+}
+
+export type UntilInstallmentPreview = {
+  /** Number of due dates the parcelado produces. */
+  count: number;
+  /** The typed total, ceiling-split across `count`. What each due date is actually charged. */
+  perInstallmentCents: number;
+  /** `perInstallmentCents * count`: may exceed the typed total once rounded up. */
+  totalCents: number;
+  /** Whether rounding up made `totalCents` differ from the typed amount. */
+  roundedUp: boolean;
+};
+
+/**
+ * Live preview of a parcelado's per-installment amount, for the form to show "Nx de R$ …" beside the
+ * typed total. Tolerant like `previewBillingSplit`: null while the draft cannot price one yet, never throws.
+ */
+export function untilInstallmentPreview(draft: BillingDraft): UntilInstallmentPreview | null {
+  if (draft.type !== BillingType.Until) {
+    return null;
+  }
+
+  let typedCents: number;
+
+  try {
+    typedCents = parseBRLCents(draft.amount);
+  } catch {
+    return null;
+  }
+
+  if (typedCents <= 0) {
+    return null;
+  }
+
+  let count: number;
+
+  try {
+    count = installmentCountFor(draft, endDateFor(draft));
+  } catch {
+    return null;
+  }
+
+  const perInstallmentCents = Math.ceil(typedCents / count);
+
+  return { count, perInstallmentCents, totalCents: perInstallmentCents * count, roundedUp: perInstallmentCents * count !== typedCents };
+}
+
 /** The switch travels only when the draft holds it for that participant. */
 function silencedOf(draft: BillingDraft, userId: string): { silenced?: boolean } {
   const value = draft.silenced?.[userId];
@@ -185,13 +252,19 @@ function buildSplit(draft: BillingDraft, parties: SplitParty[]): BillingInput['s
 
 /** Shared pure review boundary; raw text stays in each platform's local UI. `now` is passed only on creation. */
 export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput {
+  const endDate = endDateFor(draft);
+  const typedCents = parseBRLCents(draft.amount);
+  // Parcelado: the typed amount is the total, ceiling-split across its due dates; the API still stores
+  // totalCents per occurrence, so every other type sends the typed amount unchanged.
+  const totalCents = draft.type === BillingType.Until ? Math.ceil(typedCents / installmentCountFor(draft, endDate)) : typedCents;
+
   const schedule = {
     type: draft.type,
     frequency: draft.type === BillingType.Once ? undefined : draft.frequency,
     description: draft.description,
-    totalCents: parseBRLCents(draft.amount),
+    totalCents,
     startDate: draft.start,
-    endDate: endDateFor(draft),
+    endDate,
     dueRule: dueRuleFor(draft),
     category: draft.category,
     timezone: draft.timezone

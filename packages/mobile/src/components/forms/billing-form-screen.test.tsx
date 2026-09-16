@@ -94,6 +94,8 @@ const yesterday = () => addCalendarDays(calendarDate(new Date(), TIMEZONE), -1);
 
 const ana = contact("p1", "u1", "Ana", `${yesterday()}T12:00:00.000Z`);
 const bruno = contact("p2", "u2", "Bruno");
+/** No e-mail and no phone: a placeholder contact nobody can notify. */
+const carla: Contact = { ...contact("p3", "u3", "Carla"), email: "" };
 
 function contactsApi(pages: { contacts: Contact[]; nextCursor: string | null }[] = [{ contacts: [ana, bruno], nextCursor: null }]) {
   const list = jest.fn();
@@ -179,6 +181,8 @@ const onceBilling: BillingDetail = {
   guests: [],
   linkableContacts: [],
 };
+
+const untilBilling: BillingDetail = { ...onceBilling, id: "b5", type: BillingType.Until, endDate: "2026-12-31", installmentCount: 3, total: { amountCents: 3_334, currency: "BRL" } };
 
 const payableBilling: BillingDetail = {
   ...onceBilling,
@@ -308,6 +312,60 @@ describe("BillingFormScreen", () => {
     expect(client.createBilling.mock.calls[0][0].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", silenced: true }, { kind: "owner" }] });
   });
 
+  it("renders Não notificar only for a participant who can actually be reached", async () => {
+    await quickForm(financialApi(), contactsApi([{ contacts: [ana, carla], nextCursor: null }]));
+
+    await fireEvent.press(screen.getByRole("button", { name: "Adicionar" }));
+    await fireEvent.press(await screen.findByRole("checkbox", { name: "Ana" }));
+    await fireEvent.press(screen.getByRole("checkbox", { name: "Carla" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Concluir" }));
+
+    expect(screen.getByLabelText("Não notificar Ana")).toBeOnTheScreen();
+    expect(screen.queryByLabelText("Não notificar Carla")).toBeNull();
+    expect(screen.getByText("Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.")).toBeOnTheScreen();
+  });
+
+  it("hides the Não notificar helper entirely when no selected participant can be reached", async () => {
+    await quickForm(financialApi(), contactsApi([{ contacts: [carla], nextCursor: null }]));
+
+    await fireEvent.press(screen.getByRole("button", { name: "Adicionar" }));
+    await fireEvent.press(await screen.findByRole("checkbox", { name: "Carla" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Concluir" }));
+
+    expect(screen.queryByLabelText("Não notificar Carla")).toBeNull();
+    expect(screen.queryByText("Sem avisos automáticos para esta pessoa. Você ainda pode lembrar manualmente.")).toBeNull();
+  });
+
+  it("never sends a stale Não notificar for a participant the agenda no longer shows as reachable", async () => {
+    const silencedBilling: BillingDetail = {
+      ...onceBilling,
+      id: "b7",
+      type: BillingType.Indefinite,
+      frequency: BillingFrequency.Monthly,
+      allocations: [{ kind: SplitPartKind.User, userId: "u3", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, silenced: true }],
+      split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u3" }] },
+    };
+    const patchBilling = jest.fn().mockResolvedValue(silencedBilling);
+
+    await render(
+      <BillingFormScreen
+        client={financialApi({ patchBilling }) as never}
+        contacts={contactsApi([{ contacts: [carla], nextCursor: null }])}
+        billing={silencedBilling}
+        onSaved={jest.fn()}
+        onBack={jest.fn()}
+      />,
+    );
+    await screen.findByText("Editar conta");
+
+    expect(screen.queryByLabelText(/Não notificar/)).toBeNull();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
+    expect(patchBilling.mock.calls[0][1].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u3" }] });
+  });
+
   it("seeds Não notificar from the allocations and sends the new value on edit", async () => {
     const silencedBilling: BillingDetail = {
       ...onceBilling,
@@ -414,6 +472,25 @@ describe("BillingFormScreen", () => {
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
 
     expect(client.createBilling.mock.calls[0][0]).toMatchObject({ type: "until", endDate: "2026-03-31" });
+  });
+
+  it("shows the per-installment helper below the typed total and posts the rounded-up per-installment amount", async () => {
+    const { client } = await quickForm();
+
+    await pickAna();
+    await fireEvent(screen.getByLabelText("Eu também participo"), "valueChange", false);
+    await fireEvent.press(screen.getByRole("button", { name: "Parcelado" }));
+    await fireEvent.changeText(screen.getByLabelText("Vencimento"), "2026-01-31");
+    await fireEvent.changeText(screen.getByLabelText("Parcelas"), "3");
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Mercado QA");
+
+    expect(screen.getByText("3x de R$ 33,34 · total R$ 100,02")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ totalCents: 3334 });
   });
 
   it("picks the month of a due date on the last day with Final do mês", async () => {
@@ -1034,6 +1111,13 @@ describe("BillingFormScreen", () => {
     expect(screen.getByRole("button", { name: "Parcelado" })).toBeDisabled();
   });
 
+  it("seeds the amount of a parcelado billing as its total, per-installment × installments", async () => {
+    await render(<BillingFormScreen client={financialApi() as never} contacts={contactsApi()} billing={untilBilling} onSaved={jest.fn()} onBack={jest.fn()} />);
+    await screen.findByText("Editar conta");
+
+    expect(screen.getByLabelText("Valor")).toHaveDisplayValue("100,02");
+  });
+
   it("orders the new-billing sections as Direção, Valor, Título, Frequência, Divisão and Chave Pix, with Adicionar pessoa below the participant list", async () => {
     await quickForm();
     await pickAna();
@@ -1093,7 +1177,8 @@ describe("BillingFormScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("Título"), "Mercado QA");
 
     expect(screen.getByText("Gera 3 cobranças · 1 pessoa × 3 meses")).toBeOnTheScreen();
-    expect(screen.getByText("R$ 300,00")).toBeOnTheScreen();
+    // R$ 100,00 typed as the total, over 3 installments, rounds up to R$ 33,34 each.
+    expect(screen.getByText("R$ 100,02")).toBeOnTheScreen();
   });
 
   it("shows the per-month total with /mês above the submit button for an indefinite draft", async () => {

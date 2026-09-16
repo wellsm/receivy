@@ -319,8 +319,9 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   const receivable = charge.direction === "receivable";
   const pending = charge.state === "pending";
   const proof = charge.proof;
-  const state = chargeStateTag(charge);
-  const status = chargeStatusLine(charge, calendarDate());
+  const today = calendarDate();
+  const state = chargeStateTag(charge, today);
+  const status = chargeStatusLine(charge, today);
   const guidance = payableGuidance(charge);
   const ownBill = charge.payer === "owner";
   // The creditor of a conta a receber with contacts: a registro publishes no link.

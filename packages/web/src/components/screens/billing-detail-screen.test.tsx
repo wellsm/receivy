@@ -22,6 +22,7 @@ function setup() {
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+  vi.useRealTimers();
 });
 
 const PIX = { keyType: PixKeyType.Phone, key: "11987654321", label: "" };
@@ -150,6 +151,11 @@ function patchBodies(): unknown[] {
 }
 
 it("sums the current cycle in the hero and lists its participants with their status", async () => {
+  // Pinned before the second cycle's due date (2026-11-15) so Carlos's charge reads "Pendente", not
+  // "Vence hoje"/"Atrasado" once the real clock catches up to it.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-10T12:00:00Z"));
+
   await open();
 
   expect(screen.getByText("Parcelado (2/3)")).toBeInTheDocument();
@@ -167,6 +173,43 @@ it("sums the current cycle in the hero and lists its participants with their sta
   expect(screen.getByText("Pendente")).toBeInTheDocument();
   expect(screen.getByText("Aguardando pagamento")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Compartilhar link de Carlos" })).toBeInTheDocument();
+});
+
+it("tags a pending charge as Atrasado, Vence hoje or Pendente depending on its due date, agreeing with the feed", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-20T12:00:00Z")); // noon UTC = 09:00 in America/Sao_Paulo, same calendar day
+
+  const overdue = billing({ nextDueDate: "2026-11-15", charges: [charge({ id: "c1", name: "Carlos", dueDate: "2026-11-15" })] });
+  await open(overdue);
+  expect(screen.getByText("Atrasado")).toBeInTheDocument();
+  cleanup();
+
+  const dueToday = billing({ nextDueDate: "2026-11-20", charges: [charge({ id: "c2", name: "Carlos", dueDate: "2026-11-20" })] });
+  await open(dueToday);
+  // The corner tag and the secondary line both read "Vence hoje" for a charge due today.
+  expect(screen.getAllByText("Vence hoje")).toHaveLength(2);
+  cleanup();
+
+  const future = billing({ nextDueDate: "2027-01-31", charges: [charge({ id: "c3", name: "Carlos", dueDate: "2027-01-31" })] });
+  await open(future);
+  expect(screen.getByText("Pendente")).toBeInTheDocument();
+
+  vi.useRealTimers();
+});
+
+it("still tags a paid charge Pago once its due date has passed", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-20T12:00:00Z"));
+
+  const paid = billing({
+    nextDueDate: "2026-11-15",
+    charges: [charge({ id: "c1", name: "Carlos", dueDate: "2026-11-15", state: ChargeState.Paid, paidAt: "2026-11-14T22:42:00Z" })],
+  });
+  await open(paid);
+
+  expect(screen.getByText("Pago")).toBeInTheDocument();
+
+  vi.useRealTimers();
 });
 
 it("asks the owner to review a sent proof instead of reminding the debtor", async () => {

@@ -87,5 +87,10 @@ export type UserRoutes = [
     authorizer: typeof sessionAuthorizer;
     handler: typeof completeAvatarUploadHandler;
   }>,
-  Http.UseRoute<{ name: 'deleteAccount'; path: 'DELETE /account'; authorizer: typeof sessionAuthorizer; handler: typeof deleteHandler }>
+  Http.UseRoute<{
+    name: 'deleteAccount';
+    path: 'DELETE /account';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof deleteHandler;
+  }>
 ];

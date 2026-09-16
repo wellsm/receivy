@@ -1,6 +1,6 @@
 "use client";
 
-import { billingCategoryLabel, calendarDate, chargeShareText, formatMoney, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod, type PixSnapshot } from "@receivy/common";
+import { billingCategoryLabel, calendarDate, chargeShareText, chargeStateTag, formatMoney, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod, type PixSnapshot } from "@receivy/common";
 import { Bell, BellOff, Check, CircleDashed, CirclePause, CirclePlay, CircleStop, KeyRound, Pencil, Receipt, RotateCcw, Share2, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -101,7 +101,8 @@ function cyclesOf(billing: BillingDetail): Cycle[] {
       dueDate,
       index: index + 1,
       charges,
-    }));
+    }))
+    .reverse();
 }
 
 /** The cycle the owner is collecting now: the latest one with something pending, else the last one. */
@@ -673,6 +674,8 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                 danger: "text-danger",
                 neutral: "text-muted",
               }[status.tone];
+              // The corner tag's own urgency wording matches the feed's badges; only "Em revisão" overrides it.
+              const tag = reviewing ? { label: "Em revisão", tone: "info" as const } : chargeStateTag(charge, today);
 
               return (
                 <article key={charge.id} className={`flex flex-col gap-2.5 rounded-xl border border-outline/30 bg-surface p-3.5 ${isPending ? "border-l-4 border-l-warning" : ""}`}>
@@ -694,11 +697,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                     </span>
                     <span className="flex flex-col items-end gap-1">
                       <span className="text-sm font-semibold text-ink">{formatMoney(charge.amount)}</span>
-                      <StatusTag
-                        label={charge.state === "paid" ? "Pago" : reviewing ? "Em revisão" : charge.state === "pending" ? "Pendente" : "Cancelada"}
-                        tone={charge.state === "paid" ? "success" : reviewing ? "info" : charge.state === "pending" ? "warning" : "neutral"}
-                        compact
-                      />
+                      <StatusTag label={tag.label} tone={tag.tone} compact />
                     </span>
                   </button>
 

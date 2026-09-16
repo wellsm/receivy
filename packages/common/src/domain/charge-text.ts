@@ -50,13 +50,22 @@ export function chargeTypeLabel(charge: ChargeDetail): string {
   return 'À vista';
 }
 
-export function chargeStateTag(charge: ChargeDetail): { label: string; tone: ChargeTone } {
+/** Short corner badge, its urgency wording matching the feed's `chargeBadges`. */
+export function chargeStateTag(charge: ChargeDetail, today: string): { label: string; tone: ChargeTone } {
   if (charge.state === ChargeState.Paid) {
     return { label: 'Pago', tone: ChargeTone.Success };
   }
 
   if (charge.state === ChargeState.Cancelled) {
     return { label: 'Cancelada', tone: ChargeTone.Neutral };
+  }
+
+  if (charge.dueDate < today) {
+    return { label: 'Atrasado', tone: ChargeTone.Danger };
+  }
+
+  if (charge.dueDate === today) {
+    return { label: 'Vence hoje', tone: ChargeTone.Danger };
   }
 
   return { label: 'Pendente', tone: ChargeTone.Warning };
@@ -231,14 +240,15 @@ export function canCancelCharge(charge: ChargeDetail): boolean {
   );
 }
 
-/** Only the creditor of a conta a receber pauses the automatic notices of a pending charge; a registro has none to pause. */
+/** Only the creditor of a conta a receber pauses the automatic notices of a pending charge; a registro has none to pause, and neither does a counterpart nobody can reach. */
 export function canSilenceCharge(charge: ChargeDetail): boolean {
   return (
     charge.settled !== true &&
     charge.state === ChargeState.Pending &&
     charge.ownedByViewer !== false &&
     charge.direction === Direction.Receivable &&
-    charge.payer !== ChargePayer.Owner
+    charge.payer !== ChargePayer.Owner &&
+    charge.counterpartReachable !== false
   );
 }
 

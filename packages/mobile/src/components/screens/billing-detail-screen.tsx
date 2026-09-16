@@ -7,6 +7,7 @@ import {
   BillingState,
   calendarDate,
   chargeShareText,
+  chargeStateTag,
   formatMoney,
   pendingChargesOf,
   PendingChargesAction,
@@ -710,6 +711,8 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             // A file under review changes what the row asks of the owner: review it, never nag.
             const reviewing = isPending && charge.proofState === "pending";
             const statusColor = { success: "text-primary", warning: "text-warning", danger: "text-danger", neutral: "text-muted" }[status.tone];
+            // The corner tag's own urgency wording matches the feed's badges; only "Em revisão" overrides it.
+            const tag = reviewing ? { label: "Em revisão", tone: "info" as const } : chargeStateTag(charge, today);
             // A registro's rows carry its counterpart; a conta a pagar names the payee.
             const name = payable && !settled ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
             const avatar = payable && !settled ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
@@ -743,10 +746,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                   </View>
                   <View className="items-end gap-1">
                     <Text className="text-sm font-semibold text-ink">{formatMoney(charge.amount)}</Text>
-                    <Tag
-                      label={charge.state === "paid" ? "Pago" : reviewing ? "Em revisão" : charge.state === "pending" ? "Pendente" : "Cancelada"}
-                      tone={charge.state === "paid" ? "success" : reviewing ? "info" : charge.state === "pending" ? "warning" : "neutral"}
-                    />
+                    <Tag label={tag.label} tone={tag.tone} />
                   </View>
                 </Pressable>
 

@@ -18,15 +18,15 @@ export declare class UserProvider implements Http.Provider {
     EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
     RESEND_FROM_EMAIL: Environment.Variable<'RESEND_FROM_EMAIL'>;
     OAUTH_REDIRECT_ALLOW_LIST: Environment.Variable<'OAUTH_REDIRECT_ALLOW_LIST'>;
-    PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
-    GOOGLE_SIGNIN_ENABLED: Environment.VariableOrValue<'GOOGLE_SIGNIN_ENABLED', 'false'>;
-    GOOGLE_CLIENT_ID: Environment.VariableOrValue<'GOOGLE_CLIENT_ID', 'disabled'>;
-    GOOGLE_CLIENT_SECRET: Environment.VariableOrValue<'GOOGLE_CLIENT_SECRET', 'disabled'>;
-    APPLE_SIGNIN_ENABLED: Environment.VariableOrValue<'APPLE_SIGNIN_ENABLED', 'false'>;
-    APPLE_CLIENT_ID: Environment.VariableOrValue<'APPLE_CLIENT_ID', 'disabled'>;
-    APPLE_NATIVE_CLIENT_ID: Environment.VariableOrValue<'APPLE_NATIVE_CLIENT_ID', 'disabled'>;
-    APPLE_TEAM_ID: Environment.VariableOrValue<'APPLE_TEAM_ID', 'disabled'>;
-    APPLE_KEY_ID: Environment.VariableOrValue<'APPLE_KEY_ID', 'disabled'>;
-    APPLE_PRIVATE_KEY_B64: Environment.VariableOrValue<'APPLE_PRIVATE_KEY_B64', 'disabled'>;
+    PUBLIC_WEB_ORIGIN: Environment.Variable<'PUBLIC_WEB_ORIGIN'>;
+    GOOGLE_SIGNIN_ENABLED: Environment.Variable<'GOOGLE_SIGNIN_ENABLED'>;
+    GOOGLE_CLIENT_ID: Environment.Variable<'GOOGLE_CLIENT_ID'>;
+    GOOGLE_CLIENT_SECRET: Environment.Variable<'GOOGLE_CLIENT_SECRET'>;
+    APPLE_SIGNIN_ENABLED: Environment.Variable<'APPLE_SIGNIN_ENABLED'>;
+    APPLE_CLIENT_ID: Environment.Variable<'APPLE_CLIENT_ID'>;
+    APPLE_NATIVE_CLIENT_ID: Environment.Variable<'APPLE_NATIVE_CLIENT_ID'>;
+    APPLE_TEAM_ID: Environment.Variable<'APPLE_TEAM_ID'>;
+    APPLE_KEY_ID: Environment.Variable<'APPLE_KEY_ID'>;
+    APPLE_PRIVATE_KEY_B64: Environment.Variable<'APPLE_PRIVATE_KEY_B64'>;
   };
 }

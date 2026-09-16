@@ -37,6 +37,14 @@ describe('draftTotalCents', () => {
     expect(draftTotalCents({ ...base, amount: '' })).toBe(0);
     expect(draftTotalCents({ ...base, amount: 'abc' })).toBe(0);
   });
+
+  it('reads a parcelado total as its rounded-up per-installment amount', () => {
+    expect(draftTotalCents({ ...base, type: BillingType.Until, amount: '100,00', occurrences: '3' })).toBe(3334);
+  });
+
+  it('reads a parcelado without a valid installment count as zero', () => {
+    expect(draftTotalCents({ ...base, type: BillingType.Until, amount: '100,00', occurrences: '' })).toBe(0);
+  });
 });
 
 describe('previewBillingSplit', () => {

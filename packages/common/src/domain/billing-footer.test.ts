@@ -32,7 +32,8 @@ describe('billing draft summary', () => {
     };
     const summary = billingDraftSummary(draft, TODAY);
 
-    expect(summary).toEqual({ charges: 3, people: 1, occurrences: 3, totalCents: 30000, perOccurrenceCents: 10000 });
+    // The typed amount is now the total: R$ 100,00 over 3 installments rounds up to R$ 33,34 each.
+    expect(summary).toEqual({ charges: 3, people: 1, occurrences: 3, totalCents: 10002, perOccurrenceCents: 3334 });
     expect(billingDraftSummaryText(summary!)).toBe('Gera 3 cobranças · 1 pessoa × 3 meses');
   });
 

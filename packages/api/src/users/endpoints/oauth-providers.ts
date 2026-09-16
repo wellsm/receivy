@@ -11,11 +11,12 @@ declare class OauthProvidersResponse implements Http.Response {
 }
 
 export async function oauthProvidersHandler(
-  _request: OauthProvidersRequest,
+  _: OauthProvidersRequest,
   { variables }: Service.Context<UserProvider>
 ): Promise<OauthProvidersResponse> {
   const config = oauthProviderConfigFrom(variables);
   const apple = appleConfigurationAvailable(config.apple);
+
   return {
     status: 200,
     body: {

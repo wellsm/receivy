@@ -13,6 +13,7 @@ import {
   canWithdrawProof,
   chargeInReview,
   chargeShareText,
+  chargeStateTag,
   chargeStatusLine,
   chargeTypeLabel,
   counterpartRoleLabel,
@@ -88,6 +89,14 @@ describe('charge text', () => {
       text: 'Pago em 08/09 às 15:04',
       tone: 'success'
     });
+  });
+
+  it('tags a pending charge by how its due date relates to today, agreeing with the feed', () => {
+    expect(chargeStateTag(charge(), '2026-09-07')).toEqual({ label: 'Pendente', tone: 'warning' });
+    expect(chargeStateTag(charge(), '2026-09-10')).toEqual({ label: 'Vence hoje', tone: 'danger' });
+    expect(chargeStateTag(charge(), '2026-09-11')).toEqual({ label: 'Atrasado', tone: 'danger' });
+    expect(chargeStateTag(charge({ state: ChargeState.Paid }), '2026-09-11')).toEqual({ label: 'Pago', tone: 'success' });
+    expect(chargeStateTag(charge({ state: ChargeState.Cancelled }), '2026-09-11')).toEqual({ label: 'Cancelada', tone: 'neutral' });
   });
 
   it('labels and explains a proof', () => {
@@ -228,6 +237,7 @@ describe('silenced charges', () => {
     expect(canSilenceCharge({ ...creditor, ownedByViewer: false })).toBe(false);
     expect(canSilenceCharge(charge({ direction: Direction.Payable }))).toBe(false);
     expect(canSilenceCharge(charge({ direction: Direction.Receivable, payer: ChargePayer.Owner, ownedByViewer: false }))).toBe(false);
+    expect(canSilenceCharge({ ...creditor, counterpartReachable: false })).toBe(false);
   });
 });
 

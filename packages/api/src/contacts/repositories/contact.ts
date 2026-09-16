@@ -34,7 +34,7 @@ async function lastBilledDates(db: DbClient, ownerId: string, userIds: string[])
   const rows = await db.rawQuery(
     `SELECT a.user_id, to_char(MAX(a.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS last
     FROM allocations a JOIN billings b ON b.id = a.billing_id AND b.owner_id = :ownerId::uuid
-    WHERE a.user_id = ANY(string_to_array(:ids::text, ',')::uuid[]) GROUP BY a.user_id`,
+    WHERE a.user_id = ANY(string_to_array(:ids::text, ',')::uuid[]) AND a.user_id <> b.owner_id GROUP BY a.user_id`,
     { ownerId, ids: userIds.join(',') }
   );
   return new Map(rows.map((row) => [String(row['user_id']), String(row['last'])]));
@@ -123,7 +123,7 @@ async function recentContacts(db: DbClient, ownerId: string, query: string, arch
       SELECT c.id, COALESCE(u.name, u.email, '') AS name, MAX(a.created_at) AS last_at,
         to_char(MAX(a.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS last
       FROM contacts c JOIN users u ON u.id = c.user_id
-      LEFT JOIN allocations a ON a.user_id = c.user_id
+      LEFT JOIN allocations a ON a.user_id = c.user_id AND a.user_id <> c.owner_id
         AND EXISTS (SELECT 1 FROM billings b WHERE b.id = a.billing_id AND b.owner_id = c.owner_id)
       WHERE c.owner_id = :ownerId::uuid AND (c.archived_at IS NOT NULL) = :archived::boolean AND ${SEARCH}
       GROUP BY c.id, u.name, u.email

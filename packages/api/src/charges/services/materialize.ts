@@ -6,7 +6,6 @@ import {
   ChargeState,
   calendarDate,
   type PaymentMethod,
-  SplitPartKind,
   UserStatus
 } from '@receivy/common';
 import { EventRepository } from '../../common/repositories/events';
@@ -113,10 +112,10 @@ export async function prepareChargeMaterialization(
 }
 
 /** Participants whose allocation says "Não notificar": every charge created for them starts with the notices off. */
-async function quietDebtors(db: DbClient, billingId: string): Promise<Set<string>> {
+async function quietDebtors(db: DbClient, billingId: string, ownerId: string): Promise<Set<string>> {
   const { records } = await db.allocations.findMany({
     select: { user_id: true },
-    where: { billing_id: billingId, kind: SplitPartKind.User, notify: false }
+    where: { billing_id: billingId, user_id: { not: ownerId }, notify: false }
   });
   const quiet = new Set<string>();
 
@@ -173,7 +172,7 @@ export async function persistChargePlan(
   const noticeChargeIds: string[] = [];
 
   // Creation, the monthly sweep, edits and invites all land here, after the allocations are saved.
-  const quiet = await quietDebtors(db, billing.id);
+  const quiet = await quietDebtors(db, billing.id, ownerId);
   const settlement = await settlementOf(db, billing.id, now);
 
   for (const item of plan.charges) {

@@ -139,7 +139,7 @@ async function previewsFor(db: DbClient, row: BillingRepository.Row, reminders: 
   const projected =
     direction === Direction.Payable || row.settled === true
       ? row.total_cents
-      : resolveBillingSplit(row.total_cents, (await BillingRepository.splitFor(db, row.id)).split)
+      : resolveBillingSplit(row.total_cents, (await BillingRepository.splitFor(db, row)).split)
           .filter((allocation) => allocation.kind === SplitPartKind.User)
           .reduce((sum, allocation) => sum + allocation.amountCents, 0);
 
@@ -327,7 +327,7 @@ async function summaryDto(db: DbClient, row: BillingRepository.Row, now: Date, a
 
 async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: InviteLinkContext): Promise<BillingDetail> {
   const reminders = effectiveReminders(row);
-  const { split, allocations } = await BillingRepository.splitFor(db, row.id);
+  const { split, allocations } = await BillingRepository.splitFor(db, row);
   const charges = await db.charges.findMany({
     select: ChargeRepository.SELECT,
     where: { billing_id: row.id },
@@ -375,11 +375,36 @@ function userIds(split: BillingSplit): string[] {
   return split.parts.flatMap((part) => (part.kind === SplitPartKind.User ? [part.userId] : []));
 }
 
-/** The stored automatic notices of each participant of a billing, by user id. */
-async function notifyParticipants(db: DbClient, billingId: string): Promise<Map<string, boolean>> {
+/**
+ * The raw number of a stored part. `value` is null until the block 3 backfill runs, so the three folded columns
+ * answer meanwhile; this fallback goes away with them, and the COALESCE order matches the backfill itself.
+ */
+function splitValue(row: { value?: number; basis_points?: number; shares?: number; amount_cents: number }): number {
+  return row.value ?? row.basis_points ?? row.shares ?? row.amount_cents;
+}
+
+/** What each mode keeps in `value`: cents on `fixed`, basis points on `percentage`, the quota on `shares`. */
+function storedValue(mode: SplitMode, original: BillingSplit['parts'][number] | undefined, amountCents: number): number | undefined {
+  if (mode === SplitMode.Fixed) {
+    return amountCents;
+  }
+
+  if (mode === SplitMode.Percentage) {
+    return original && 'basisPoints' in original ? original.basisPoints : undefined;
+  }
+
+  if (mode === SplitMode.Shares) {
+    return original && 'shares' in original ? original.shares : undefined;
+  }
+
+  return undefined;
+}
+
+/** The stored automatic notices of each participant of a billing, by user id. The owner's own part never counts. */
+async function notifyParticipants(db: DbClient, billingId: string, ownerId: string): Promise<Map<string, boolean>> {
   const { records } = await db.allocations.findMany({
     select: { user_id: true, notify: true },
-    where: { billing_id: billingId, kind: SplitPartKind.User }
+    where: { billing_id: billingId, user_id: { not: ownerId } }
   });
   const notify = new Map<string, boolean>();
 
@@ -615,7 +640,7 @@ async function rewriteMonthCharges(
   const dueDate = rescheduled
     ? (billingDates(calendarRule(row), addCalendarDays(today, 1), monthEnd, 1)[0] ?? editable[0]!.due_date)
     : editable[0]!.due_date;
-  const { split } = await BillingRepository.splitFor(db, row.id);
+  const { split } = await BillingRepository.splitFor(db, row);
   const payable = payableOf(row);
   const payer = payable ? payable.payer : ChargePayer.Person;
   const plan = planBillingCharges({
@@ -908,6 +933,7 @@ export namespace BillingRepository {
     settled: true,
     reminders: true,
     state: true,
+    split_mode: true,
     last_occurrence_date: true,
     idempotency_key: true,
     request_hash: true,
@@ -955,6 +981,8 @@ export namespace BillingRepository {
     settled?: boolean;
     reminders?: string;
     state: BillingState;
+    /** Null only until the block 3 backfill runs; reads as 'equal'. */
+    split_mode?: SplitMode;
     last_occurrence_date?: string;
     request_hash: string;
     created_at: string;
@@ -975,52 +1003,54 @@ export namespace BillingRepository {
     return row.direction ?? Direction.Receivable;
   }
 
-  export async function splitFor(db: DbClient, id: string): Promise<{ split: BillingSplit; allocations: BillingAllocation[] }> {
+  /** What the stored parts cannot say on their own: the mode, who the owner is, and the total the amounts resolve from. */
+  export type SplitSource = Pick<Row, 'id' | 'owner_id' | 'total_cents' | 'split_mode'>;
+
+  export async function splitFor(db: DbClient, billing: SplitSource): Promise<{ split: BillingSplit; allocations: BillingAllocation[] }> {
     const rows = (
       await db.allocations.findMany({
         select: {
-          kind: true,
           user_id: true,
-          split_mode: true,
+          value: true,
           amount_cents: true,
           basis_points: true,
           shares: true,
           sort_order: true,
           notify: true
         },
-        where: { billing_id: id },
+        where: { billing_id: billing.id },
         order: { sort_order: Order.Asc }
       })
     ).records;
-    const mode = rows[0]?.split_mode ?? SplitMode.Equal;
+    const mode = billing.split_mode ?? SplitMode.Equal;
+    const owns = (userId?: string) => !!userId && userId === billing.owner_id;
     const parties = rows.map((row) =>
-      row.kind === SplitPartKind.Owner
-        ? { kind: SplitPartKind.Owner as const }
-        : { kind: SplitPartKind.User as const, userId: row.user_id! }
+      owns(row.user_id) ? { kind: SplitPartKind.Owner as const } : { kind: SplitPartKind.User as const, userId: row.user_id! }
     );
     const split: BillingSplit =
       mode === SplitMode.Fixed
         ? {
             mode,
             parts: rows.flatMap((row) =>
-              row.kind === SplitPartKind.User
-                ? [{ kind: SplitPartKind.User as const, userId: row.user_id!, amountCents: row.amount_cents }]
-                : []
+              owns(row.user_id) ? [] : [{ kind: SplitPartKind.User as const, userId: row.user_id!, amountCents: splitValue(row) }]
             )
           }
         : mode === SplitMode.Equal
           ? { mode, parts: parties }
           : mode === SplitMode.Shares
-            ? { mode, parts: parties.map((party, index) => ({ ...party, shares: rows[index]!.shares ?? 1 })) }
-            : { mode, parts: parties.map((party, index) => ({ ...party, basisPoints: rows[index]!.basis_points! })) };
-    const allocations = rows.map((row) => ({
-      kind: row.kind,
-      userId: row.user_id ?? null,
-      splitMode: row.split_mode,
-      amount: { amountCents: row.amount_cents, currency: 'BRL' as const },
+            ? { mode, parts: parties.map((party, index) => ({ ...party, shares: splitValue(rows[index]!) || 1 })) }
+            : { mode, parts: parties.map((party, index) => ({ ...party, basisPoints: splitValue(rows[index]!) })) };
+    // The stored parts carry the raw value; what each side owes is recomputed, never read back from a column.
+    const resolved = resolveBillingSplit(billing.total_cents, split);
+    const allocations = rows.map((row, index) => ({
+      kind: owns(row.user_id) ? SplitPartKind.Owner : SplitPartKind.User,
+      // The owner part reads as null here, the same shape the clients always saw.
+      userId: owns(row.user_id) ? null : (row.user_id ?? null),
+      splitMode: mode,
+      amount: { amountCents: resolved[index]?.amountCents ?? 0, currency: 'BRL' as const },
       order: row.sort_order ?? 0,
       notify: row.notify !== false,
-      ...(row.shares === undefined || row.shares === null ? {} : { shares: row.shares })
+      ...(mode === SplitMode.Shares ? { shares: splitValue(row) || 1 } : {})
     }));
 
     return { split, allocations };
@@ -1079,13 +1109,14 @@ export namespace BillingRepository {
    */
   export async function saveAllocations(
     db: DbClient,
-    id: string,
+    billing: Pick<Row, 'id' | 'owner_id'>,
     totalCents: number,
     split: BillingSplit,
     now: string
   ): Promise<NotifyChange[]> {
+    const { id, owner_id: ownerId } = billing;
     const resolved = resolveBillingSplit(totalCents, split);
-    const before = await notifyParticipants(db, id);
+    const before = await notifyParticipants(db, id, ownerId);
     const changes: NotifyChange[] = [];
 
     await db.allocations.deleteMany({ where: { billing_id: id } });
@@ -1099,18 +1130,21 @@ export namespace BillingRepository {
         changes.push(change);
       }
 
+      const value = storedValue(split.mode, original, part.amountCents);
+
       await db.allocations.insertOne({
         data: {
           id: crypto.randomUUID(),
           billing: { id },
+          // The owner's own part carries the owner: that is what tells the two sides apart now.
+          user: { id: part.kind === SplitPartKind.User ? part.userId : ownerId },
+          ...(part.kind === SplitPartKind.User ? { notify } : {}),
+          ...(value === undefined ? {} : { value }),
+          sort_order: index,
+          // Deprecated pair, NOT NULL with no default: written with the same values until the columns go.
           kind: part.kind,
-          ...(part.kind === SplitPartKind.User ? { user: { id: part.userId }, notify } : {}),
           split_mode: split.mode,
           amount_cents: part.amountCents,
-          sort_order: index,
-          ...(original && 'basisPoints' in original ? { basis_points: original.basisPoints } : {}),
-          // Only the `shares` mode owns the quota column; a stray field on another mode stays null.
-          ...(split.mode === SplitMode.Shares && original && 'shares' in original ? { shares: original.shares } : {}),
           created_at: now
         }
       });
@@ -1187,6 +1221,7 @@ export namespace BillingRepository {
           ...(input.settled ? { settled: true, counterpart_label: input.counterpartLabel } : {}),
           reminders: input.reminders ? JSON.stringify(input.reminders) : sqlNull,
           state: BillingState.Active,
+          split_mode: input.split.mode,
           last_occurrence_date: input.type === BillingType.Indefinite ? addCalendarDays(today, -1) : sqlNull,
           idempotency_key: key,
           request_hash: hash,
@@ -1195,7 +1230,7 @@ export namespace BillingRepository {
         }
       });
 
-      await saveAllocations(tx, id, input.totalCents, input.split, instant);
+      await saveAllocations(tx, { id, owner_id: ownerId }, input.totalCents, input.split, instant);
 
       if (input.type !== BillingType.Indefinite) {
         const plan = planBillingCharges({
@@ -1316,7 +1351,7 @@ export namespace BillingRepository {
         throw new SilenceUnavailableError();
       }
 
-      const current = (await notifyParticipants(tx, id)).get(userId);
+      const current = (await notifyParticipants(tx, id, ownerId)).get(userId);
 
       if (current === undefined) {
         throw new HttpNotFoundError();
@@ -1328,7 +1363,7 @@ export namespace BillingRepository {
 
       const instant = now.toISOString();
 
-      await tx.allocations.updateMany({ where: { billing_id: id, kind: SplitPartKind.User, user_id: userId }, data: { notify } });
+      await tx.allocations.updateMany({ where: { billing_id: id, user_id: userId }, data: { notify } });
       await setPendingChargesNotify(tx, id, userId, notify, instant);
       await audit(tx, ownerId, id, participantNotifyEvent(notify), instant, { userId });
 
@@ -1356,7 +1391,7 @@ export namespace BillingRepository {
       const instant = now.toISOString();
       const today = calendarDate(now, row.timezone);
       const totalCents = patch.totalCents ?? row.total_cents;
-      const split = patch.split ?? (await splitFor(tx, row.id)).split;
+      const split = patch.split ?? (await splitFor(tx, row)).split;
       const paymentMethodId = patch.clearPaymentMethod ? undefined : (patch.paymentMethodId ?? row.payment_method_id);
       const payeeUserId = patch.clearPayee ? undefined : (patch.payeeUserId ?? row.payee_user_id);
       const description = patch.description === undefined ? row.description : patch.description.normalize('NFC').trim() || 'Conta';
@@ -1385,7 +1420,7 @@ export namespace BillingRepository {
       }
 
       if (patch.split !== undefined || patch.totalCents !== undefined) {
-        const changes = await saveAllocations(tx, id, totalCents, split, instant);
+        const changes = await saveAllocations(tx, row, totalCents, split, instant);
 
         // Same rule as PUT /billings/{id}/participants/{userId}/notify for whoever stayed and changed.
         for (const change of changes) {
@@ -1421,6 +1456,7 @@ export namespace BillingRepository {
           pix_label: pix?.label ?? sqlNull,
           ...(counterpartLabel === undefined ? {} : { counterpart_label: counterpartLabel }),
           ...(patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
+          ...(patch.split !== undefined ? { split_mode: split.mode } : {}),
           ...(patch.state ? { state: patch.state } : {}),
           ...(resumed
             ? { last_occurrence_date: (row.last_occurrence_date ?? boundary) > boundary ? row.last_occurrence_date : boundary }
@@ -1591,7 +1627,7 @@ export namespace BillingRepository {
         const exists = await tx.charges.count({ where: { billing_id: row.id, due_date: dueDate } });
 
         if (!exists) {
-          const { split } = await splitFor(tx, row.id);
+          const { split } = await splitFor(tx, row);
           const payable = payableOf(row);
           const counterparts = payable ? (row.payee_user_id ? [row.payee_user_id] : []) : userIds(split);
           const context = await prepareChargeMaterialization(tx, row.owner_id, counterparts, row.payment_method_id, payable);

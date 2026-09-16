@@ -7,8 +7,7 @@ import {
   BillingState,
   type BillingType,
   Direction,
-  type PublicInviteView,
-  SplitPartKind
+  type PublicInviteView
 } from '@receivy/common';
 import { SettledLockedError } from '../../billings/errors';
 import { lockOwner } from '../../charges/services/materialize';
@@ -257,7 +256,7 @@ export async function publicInviteView(db: DbClient, invite: InviteRow, now = ne
     description: billing.description,
     amount: { amountCents: billing.total_cents, currency: 'BRL' },
     type: billing.type,
-    participantCount: await db.allocations.count({ where: { billing_id: billing.id, kind: SplitPartKind.User } }),
+    participantCount: await db.allocations.count({ where: { billing_id: billing.id, user_id: { not: invite.owner_id } } }),
     category: billing.category
   };
 }

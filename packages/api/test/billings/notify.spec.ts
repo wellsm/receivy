@@ -73,7 +73,7 @@ async function chargeRows(billingId: string) {
 async function allocationFlags(billingId: string) {
   const { records } = await db.allocations.findMany({
     select: { user_id: true, notify: true },
-    where: { billing_id: billingId, kind: SplitPartKind.User },
+    where: { billing_id: billingId, user_id: { not: OWNER } },
     order: { sort_order: Order.Asc }
   });
 

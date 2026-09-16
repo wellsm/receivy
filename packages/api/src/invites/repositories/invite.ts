@@ -167,7 +167,7 @@ export namespace InviteRepository {
     instant: string,
     noticeChargeIds: string[]
   ): Promise<{ chargeId: string | null; joinedSplit: boolean }> {
-    const { split } = await BillingRepository.splitFor(tx, billing.id);
+    const { split } = await BillingRepository.splitFor(tx, billing);
 
     if (split.parts.some((part) => part.kind === SplitPartKind.User && part.userId === userId)) {
       return { chargeId: await nearestPendingCharge(tx, billing.id, userId), joinedSplit: false };
@@ -192,7 +192,7 @@ export namespace InviteRepository {
           ).records;
 
     assertSplitReshapable(charges);
-    await BillingRepository.saveAllocations(tx, billing.id, billing.total_cents, next, instant);
+    await BillingRepository.saveAllocations(tx, billing, billing.total_cents, next, instant);
 
     const chargeId = charges.length ? await reshapeOccurrences(tx, billing, charges, next, userId, instant, noticeChargeIds) : null;
 
@@ -253,7 +253,7 @@ export namespace InviteRepository {
       }
 
       const instant = now.toISOString();
-      const { split } = await BillingRepository.splitFor(tx, billing.id);
+      const { split } = await BillingRepository.splitFor(tx, billing);
       const alreadyIn = split.parts.some((part) => part.kind === SplitPartKind.User && part.userId === userId);
 
       // Contacts without e-mail may be this very person: the owner decides, so the guest waits outside the split.

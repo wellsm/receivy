@@ -40,6 +40,8 @@ export interface BillingSchema extends Database.Schema {
   /** JSON array of { offsetDays, enabled }; null falls back to the owner's notification preferences. */
   reminders?: String.Max<2000>;
   state: BillingState;
+  /** The one split mode of the billing; every allocation used to carry its own copy. */
+  split_mode?: SplitMode;
   /** Recorrente only: the last occurrence already materialized; null before the first one. */
   last_occurrence_date?: String.Date;
   idempotency_key: String.Max<200>;
@@ -51,13 +53,19 @@ export interface BillingSchema extends Database.Schema {
 export interface AllocationSchema extends Database.Schema {
   id: String.UUID;
   billing_id: String.UUID;
-  /** The participant (users.id) on a 'user' part; null on the owner part. */
+  /** The participant (users.id); the owner's own part carries the billing owner. */
   user_id?: String.UUID;
+  /** Raw split value: cents on `fixed`, basis points on `percentage`, the quota on `shares`, unused on `equal`. */
+  value?: number;
+  /** @deprecated Derived from `user_id === billings.owner_id`. NOT NULL with no default, so every insert keeps filling it. */
   kind: SplitPartKind;
+  /** @deprecated Moved to `billings.split_mode`. NOT NULL with no default, so every insert keeps filling it. */
   split_mode: SplitMode;
+  /** @deprecated Folded into `value`. */
   basis_points?: number;
-  /** Quota weight for `shares` splits; null for every other mode. */
+  /** @deprecated Folded into `value`. */
   shares?: number;
+  /** @deprecated Folded into `value`; the resolved amount comes from `resolveBillingSplit`. NOT NULL, still written. */
   amount_cents: number;
   /** Position of the part inside the split. */
   sort_order?: number;

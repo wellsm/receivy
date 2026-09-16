@@ -359,20 +359,16 @@ describe('billings on native PostgreSQL', () => {
       created.charges.map((charge) => charge.amount.amountCents).sort((left, right) => left - right),
       [2_000, 2_000, 4_000, 4_000]
     );
+    equal((await db.billings.findOne({ select: { split_mode: true }, where: { id: created.id } }))?.split_mode, 'shares');
     deepEqual(
       (
         await db.allocations.findMany({
-          select: { split_mode: true, shares: true },
+          select: { value: true },
           where: { billing_id: created.id },
           order: { sort_order: Order.Asc }
         })
-      ).records.map((row) => [row.split_mode, row.shares]),
-      [
-        ['shares', 2],
-        ['shares', 2],
-        ['shares', 1],
-        ['shares', 1]
-      ]
+      ).records.map((row) => row.value),
+      [2, 2, 1, 1]
     );
 
     const fetched = await BillingRepository.get(db, OWNER, created.id);
@@ -635,9 +631,10 @@ describe('billings on native PostgreSQL', () => {
       ]
     } as unknown as BillingSplit;
     const created = await BillingRepository.create(db, OWNER, 'stray-shares-key', once({ description: 'Cotas indevidas', split: stray }));
-    const rows = await db.allocations.findMany({ select: { shares: true }, where: { billing_id: created.id } });
+    const rows = await db.allocations.findMany({ select: { value: true }, where: { billing_id: created.id } });
 
-    ok(rows.records.every((row) => row.shares === null || row.shares === undefined));
+    // `equal` has no weight of its own, so the stray quota reaches no column at all.
+    ok(rows.records.every((row) => row.value === null || row.value === undefined));
     deepEqual(
       (await BillingRepository.get(db, OWNER, created.id)).allocations.map((allocation) => allocation.shares),
       [undefined, undefined]
@@ -747,16 +744,19 @@ describe('billings on native PostgreSQL', () => {
     const created = await BillingRepository.create(db, OWNER, 'percentage-key', { ...once({ totalCents: 10_001 }), split });
     const persisted = (
       await db.allocations.findMany({
-        select: { kind: true, split_mode: true, basis_points: true },
+        select: { user_id: true, value: true },
         where: { billing_id: created.id },
         order: { sort_order: Order.Asc }
       })
     ).records;
+
+    equal((await db.billings.findOne({ select: { split_mode: true }, where: { id: created.id } }))?.split_mode, 'percentage');
+    // The owner's own part is the one carrying the owner id; nothing else tells the two sides apart.
     deepEqual(
-      persisted.map((row) => [row.kind, row.split_mode, row.basis_points]),
+      persisted.map((row) => [row.user_id === OWNER, row.value]),
       [
-        ['user', 'percentage', 3333],
-        ['owner', 'percentage', 6667]
+        [false, 3333],
+        [true, 6667]
       ]
     );
 

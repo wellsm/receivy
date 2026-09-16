@@ -1108,8 +1108,6 @@ export namespace BillingRepository {
           split_mode: split.mode,
           amount_cents: part.amountCents,
           sort_order: index,
-          // allocation_order is NOT NULL with no default: it keeps taking the same value until the column goes.
-          allocation_order: index,
           ...(original && 'basisPoints' in original ? { basis_points: original.basisPoints } : {}),
           // Only the `shares` mode owns the quota column; a stray field on another mode stays null.
           ...(split.mode === SplitMode.Shares && original && 'shares' in original ? { shares: original.shares } : {}),

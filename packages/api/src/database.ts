@@ -74,8 +74,6 @@ export declare class Db extends Database.Service<PostgresEngine> {
       indexes: {
         id: Index.Primary;
         'billing_id:sort_order': Index.Unique;
-        // Dropped with the allocation_order column, once the backfill ran.
-        'billing_id:allocation_order': Index.Unique;
         billing_id: Index.Secondary;
         user_id: Index.Secondary;
       };

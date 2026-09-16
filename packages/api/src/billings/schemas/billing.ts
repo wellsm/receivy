@@ -42,8 +42,6 @@ export interface BillingSchema extends Database.Schema {
   state: BillingState;
   /** Recorrente only: the last occurrence already materialized; null before the first one. */
   last_occurrence_date?: String.Date;
-  /** @deprecated Renamed to `last_occurrence_date`. Nothing reads it; the declaration goes once the backfill ran, and EZ4 drops the column with it. */
-  processed_through?: String.Date;
   idempotency_key: String.Max<200>;
   request_hash: String.Max<64>;
   created_at: String.DateTime;
@@ -63,14 +61,7 @@ export interface AllocationSchema extends Database.Schema {
   amount_cents: number;
   /** Position of the part inside the split. */
   sort_order?: number;
-  /**
-   * @deprecated Renamed to `sort_order`. It is NOT NULL with no default, so every insert keeps filling it until the
-   * backfill ran and the declaration goes; only `sort_order` is ever read.
-   */
-  allocation_order: number;
   /** Automatic notices of a 'user' part: new charges of this participant copy it. Null (owner part, older rows) reads as true. */
   notify?: boolean;
-  /** @deprecated Inverted into `notify`. Nothing reads it; the declaration goes once the backfill ran. */
-  silenced?: boolean;
   created_at: String.DateTime;
 }

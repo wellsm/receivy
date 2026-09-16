@@ -61,8 +61,6 @@ export interface ChargeSchema extends Database.Schema {
   link_revoked_at?: String.DateTime;
   /** Automatic notices: the only value the notice gate reads. Null on older rows reads as true. */
   notify?: boolean;
-  /** @deprecated Inverted into `notify`. Nothing reads it; the declaration goes once the backfill ran. */
-  silenced?: boolean;
   created_at: String.DateTime;
   updated_at: String.DateTime;
 }

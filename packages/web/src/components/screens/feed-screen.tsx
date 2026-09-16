@@ -74,12 +74,8 @@ type TotalCardProps = {
 };
 
 /** One side of the month: a column of the narrow box (design 1b) or a solid card on wide screens (design 2a). */
-function TotalCard({ tone, open, settled, count }: TotalCardProps) {
+function TotalCard({ tone, open, count }: TotalCardProps) {
   const receivable = tone === "receivable";
-  const done = receivable ? "recebido" : "pago";
-  const openCents = open?.amountCents ?? 0;
-  const settledCents = settled?.amountCents ?? 0;
-  const progress = openCents + settledCents ? Math.round((settledCents / (openCents + settledCents)) * 100) : 0;
 
   return (
     <article className={`flex flex-1 flex-col px-3.5 py-[11px] md:rounded-[20px] md:p-5 ${receivable ? "border-r border-outline md:border-r-0 md:bg-primary" : "md:bg-payable"}`}>
@@ -119,8 +115,8 @@ function SummaryBox({ summary }: { summary?: TimelineSummary }) {
       className="overflow-hidden rounded-[18px] border border-outline bg-surface md:flex md:flex-col md:gap-4 md:overflow-visible md:rounded-none md:border-0 md:bg-transparent"
     >
       <div className="flex md:flex-col md:gap-4">
-        <TotalCard tone="receivable" open={summary?.receivable} settled={summary?.receivedTotal} count={summary?.receivableCount ?? 0} />
-        <TotalCard tone="payable" open={summary?.payable} settled={summary?.paidTotal} count={summary?.payableCount ?? 0} />
+        <TotalCard tone="receivable" open={summary?.receivable} count={summary?.receivableCount ?? 0} />
+        <TotalCard tone="payable" open={summary?.payable} count={summary?.payableCount ?? 0} />
       </div>
 
       <div aria-hidden="true" className={`flex h-[5px] md:hidden ${total ? "bg-payable" : "bg-outline"}`}>

@@ -1,28 +1,62 @@
 # EZ4 vendor patches
 
-Receivy uses three EZ4 0.52.0 packages built from local EZ4 sources. They are
-pinned in `pnpm-workspace.yaml` so local builds and deploys remain reproducible.
+Receivy uses two EZ4 0.53.0 packages built from the local EZ4 sources
+(`~/Projects/ez4`). They are pinned in `pnpm-workspace.yaml` so local builds and
+deploys remain reproducible.
 
-- `@ez4/raw-pg`: exports `ClientConnection` and `ClientContext` as types. The
-  npm bundle re-exported both as runtime values, which makes esbuild fail with
-  `No matching export` because `@ez4/pgclient` declares them with
-  `export type`.
+- `@ez4/raw-pg`: `src/client.ts` re-exports `ClientConnection`, `Client` and
+  `ClientContext` with `export type`. Upstream re-exports them as runtime
+  values, but `@ez4/pgclient` declares all three with `export type`, so esbuild
+  fails with `No matching export` when bundling anything that reaches
+  `@ez4/raw-pg/client`.
 - `@ez4/aws-common`: treats `BucketAlreadyOwnedByYou` as a successful outcome.
-  Without that handling, EZ4 remote state cannot reuse its S3 bucket in
-  `sa-east-1`. It also queries STS to report the effective AWS account ID,
-  caller ARN and region before deployment confirmation. Account Management
-  supplies the registered name for `AWS account: ID - name`.
-- `@ez4/project`: invokes the account report after the deployment plan and
-  before `Are you sure you want to proceed?`. It also reports the account when
-  confirmation is disabled. Identity lookup failures stop the deployment.
+  Without it EZ4 cannot reuse its remote state bucket: the name is
+  `ez4-<sha256(accountId)>`, which is deterministic, so every run after the
+  first one fails on `CreateBucket`.
 
-The account report uses the AWS SDK credential chain, including session or
-profile credentials when the environment file does not supply credentials.
-Both `aws-common` and `project` overrides are required for this report.
-Reading the account name requires `account:GetAccountInformation`. If the
-name lookup fails, returns no name or identifies a different account, the
-report keeps the STS-verified ID and displays `name unavailable`.
+`@ez4/project` is no longer vendored. Its patch printed an STS account report
+(`AWS account: ID - name`) between the deployment plan and `Are you sure you
+want to proceed?`. Upstream 0.53.0 has no equivalent, so the confirmation no
+longer says which account is about to be touched — check it by hand before
+confirming a deploy.
 
-Before upgrading EZ4, remove one override at a time, install the upstream
-version, and exercise `ez4 output` plus a development deploy. Delete the
-matching archive and override once upstream passes both checks.
+## Rebuilding the archives
+
+Each package in the EZ4 monorepo compiles against its siblings' `dist`, so a
+stale `dist` fails the build with type errors unrelated to the patch (a stale
+`@ez4/pgmigration` breaks `raw-pg` on `PgMigrationStepQueries`). Build the
+dependency chain first:
+
+```sh
+cd ~/Projects/ez4
+(cd contracts/database && npm run build)
+(cd libraries/pgsql && npm run build)
+(cd libraries/pgmigration && npm run build)
+(cd providers/raw/raw-pg && npm run build && npm pack --pack-destination ~/Projects/receivy/vendor)
+(cd providers/aws/aws-common && npm run build && npm pack --pack-destination ~/Projects/receivy/vendor)
+```
+
+Then point the `overrides` in `pnpm-workspace.yaml` at the new archives and run
+`pnpm install`.
+
+## Checking an upgrade
+
+`ez4 test --local` never bundles — esbuild only runs from
+`@ez4/aws-common/src/common/bundler.ts`, on the deploy path — so the integration
+suite cannot catch the `raw-pg` problem. Reproduce the bundling step directly:
+
+```sh
+cd packages/api
+ESBUILD=$(find ../../node_modules/.pnpm -path '*esbuild/bin/esbuild' | head -1)
+printf "import { Client } from '@ez4/raw-pg/client';\n" > .probe.mjs
+"$ESBUILD" .probe.mjs --bundle --format=esm --platform=node --outfile=/dev/null
+rm .probe.mjs
+```
+
+`No matching export` means the override is still needed. A clean bundle means
+upstream can be reconsidered — the `Import "Client" will always be undefined`
+warning is expected, since `export type` leaves the module with no runtime
+exports.
+
+The `aws-common` behaviour only shows on a real deploy. Before deleting that
+archive, remove the override, then run `ez4 output` and a development deploy.

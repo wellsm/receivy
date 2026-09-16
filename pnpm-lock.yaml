@@ -44,9 +44,8 @@ catalogs:
       version: 3.2.7
 
 overrides:
-  '@ez4/aws-common': file:./vendor/ez4-aws-common-0.52.0.tgz
-  '@ez4/project': file:./vendor/ez4-project-0.52.0.tgz
-  '@ez4/raw-pg': file:./vendor/ez4-raw-pg-0.52.0.tgz
+  '@ez4/aws-common': file:./vendor/ez4-aws-common-0.53.0.tgz
+  '@ez4/raw-pg': file:./vendor/ez4-raw-pg-0.53.0.tgz
 
 importers:
 
@@ -65,78 +64,78 @@ importers:
   packages/api:
     dependencies:
       '@ez4/common':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/database':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/factory':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/gateway':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/pgclient':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/project':
-        specifier: file:../../vendor/ez4-project-0.52.0.tgz
-        version: file:vendor/ez4-project-0.52.0.tgz
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/queue':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/raw-pg':
-        specifier: file:../../vendor/ez4-raw-pg-0.52.0.tgz
-        version: file:vendor/ez4-raw-pg-0.52.0.tgz
+        specifier: file:../../vendor/ez4-raw-pg-0.53.0.tgz
+        version: file:vendor/ez4-raw-pg-0.53.0.tgz
       '@ez4/scheduler':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/schema':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/storage':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/utils':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@receivy/common':
         specifier: workspace:*
         version: link:../common
     devDependencies:
       '@ez4/aws-bucket':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/aws-gateway':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/aws-queue':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/aws-scheduler':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/docs-gateway':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/docs-gateway-ui':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/local-database':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/local-gateway':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/local-queue':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/local-scheduler':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@ez4/local-storage':
-        specifier: 0.52.0
-        version: 0.52.0
+        specifier: 0.53.0
+        version: 0.53.0
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
@@ -414,36 +413,32 @@ packages:
     resolution: {integrity: sha512-Dtu0gr4dnATZAPwEYbpCsG+MpLM7OAliy2gTepEFQwl1vZ6DL3QMH2FveMa3HLvPsOdhJsPRB3KtxVhph9T75A==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-account@3.1131.0':
-    resolution: {integrity: sha512-TM9UNhAHsNoR9Drw8g7rajWmzITpKKCUNbhIc7wj3/4QyMsZ4kyoWpxlIQaW2mBLCqSjH2qqwNksUvRfSeef6A==}
+  '@aws-sdk/client-apigatewaymanagementapi@3.1133.0':
+    resolution: {integrity: sha512-mOuGrb3VQSjnIyh4EIoPgr1M6piKCb96X8Co/SqTaiHS/AJojZKDeTEP4LDzTXBKzM8yToZROSvO1RaL24IpWA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-apigatewaymanagementapi@3.1126.0':
-    resolution: {integrity: sha512-MejOLAbstJFOJn2Z26lPn7o490zR7xca9FcG0HDvgpyf/guqTi/a/fWNxCyP2kwrDNPIv0c7LuA4IGQKWmfoKQ==}
+  '@aws-sdk/client-apigatewayv2@3.1133.0':
+    resolution: {integrity: sha512-VDFpW0DRQa1CLioYvJwrjNv/MfdcVxO9hK6VHHxOG6m2bPsakY2ZlHsNdoF4nfP7bPbziDncjK4PqXbgZgphJw==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-apigatewayv2@3.1126.0':
-    resolution: {integrity: sha512-ZkMJGDDJuWR/aiRSrBmhDxlFKPjdat4MOrcAe6iWFdZxxELpv8NpGX0PtFUyp2fpdNTc504Y6JYtN2ENC0zArg==}
+  '@aws-sdk/client-cloudwatch-logs@3.1133.0':
+    resolution: {integrity: sha512-ORsB3fmXzVq2oJXl1p1tISEKX//eMT4rQz1fDYeudM4aCB4mtnceEuo5wiFNrwAQYQOfJWBsW7k32x79sYBTaQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-cloudwatch-logs@3.1126.0':
-    resolution: {integrity: sha512-B3BG2HSrxqT/DXYvsQLcyTERXARiCFCS5jo8Tniu5zH2ha6Zo+pd6m4rEq8RguvKkU79iu+ishtQ7hlYb3zRJQ==}
+  '@aws-sdk/client-dynamodb@3.1133.0':
+    resolution: {integrity: sha512-oFgJwU1ODcQYuz4eeOzilfhtr1VOEicumIe7eAEkzkOpF24QOUbOaexUz/up6DVCycC1ysxI9SS2HS6waANOAg==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-dynamodb@3.1126.0':
-    resolution: {integrity: sha512-JJquheUb1DCcY4p2cejC5HBDC45UEMIlIBHXkKJnIhDj132fEFOgSOdlEdu+tbXxNi/SybFiVezydVvqfKDjGQ==}
+  '@aws-sdk/client-ec2@3.1133.0':
+    resolution: {integrity: sha512-wDO6GPH3LVWQn3Pq6VDNcbmwY2UEp3UbJHweBPD2NvbU5bzHtU1zpLkMzImnfL92QS8my/NavQKudKnoQaeaeA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-ec2@3.1126.0':
-    resolution: {integrity: sha512-idFPgdoVg/lNE+YOumkGt+WCvKCVBoaM3iRDdp8wTwRYbnESvzTOs7GedAL054QXD41miTwoELWqDXCzOrVElA==}
+  '@aws-sdk/client-iam@3.1133.0':
+    resolution: {integrity: sha512-Tv0DAdkTJy5rkBid6ynVDj/Yw2s5j3SpfL0oJQ+EOy+nJQv0KxM5K5QCUuqwgx95+guWhxEOOh0qeJ0SCIZoAA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-iam@3.1126.0':
-    resolution: {integrity: sha512-UsDAqfqNPzD8avW8MY0PHAGdCIfMyf3cv4CtQwqKghIRE5wD7jr/v3raKweao7AxvCDINDAJE7+fEblPNYLUoA==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/client-lambda@3.1126.0':
-    resolution: {integrity: sha512-XygPrTShLUmccumtD7Bh7dYzD1qD6YKlF8b+zdt+HPx6SFONYnqZfbhcPMAT1Kp0BIXOez73vVbDkCq0iREz5w==}
+  '@aws-sdk/client-lambda@3.1133.0':
+    resolution: {integrity: sha512-VLA/lEVPGdWUJuvQT7bU7OHk2b51ud3sPnoMV+pv8PiiCU6PYJV6tQ+GBMeSnnHNnuWGDKkBddr/bMVoHoeGQA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-s3@3.1127.0':
@@ -458,102 +453,66 @@ packages:
     resolution: {integrity: sha512-M0CQ5fy/jDuK6kcUBVOpciqm4rjiSR1AEKGt875EcbSjGmDccTU8V8YDbEmWNcJlJnZTaRawj+WLREe4MTYKcQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-sts@3.1126.0':
-    resolution: {integrity: sha512-5h0Ro+RIToYQbjL/yfMDH8pGTwOEuzXuTKM3punYhpvf3WXyApg9j7DsACw3+Q5qDfG0VQjef2qCi+SgmVz0wg==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/core@3.977.9':
-    resolution: {integrity: sha512-reqPFEQrZxDZpeGj4PFMepBeR5LGYHRqq/L0motTzgFkCRBA4rFdaVXDSLYyGHhxVz7sT2PDnPN9CluGSfgyJA==}
+  '@aws-sdk/client-sts@3.1133.0':
+    resolution: {integrity: sha512-TB24UGL+yzO08y/4kYEpCSs3njl+PZbyxqhGphi2ZRR7f7w7wewKqzLv/MtZ9m0zuO3ugXu+c4jIlQa30xy0aQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/core@3.978.0':
     resolution: {integrity: sha512-2yX9LUmxPklVjSGTb8dfnWRJSiFQ3TeH2nn7G1mdKHTfnabzF0+gfrS8rYfLWmZrQ8A3mEcxMJjRc51dL5KWaA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-env@3.972.70':
-    resolution: {integrity: sha512-H404B7dJl2mCrBqahDEYsanB0xhdDp6tXnXcTUnXmmpy2Q3J0Ho0bUajZ2jr/RdwzCyS59Gi8xXIFwPLGBl6Uw==}
-    engines: {node: '>=20.0.0'}
-
   '@aws-sdk/credential-provider-env@3.972.71':
     resolution: {integrity: sha512-JN+JHruYZw3GUZB8YGAlDk4wTDPOEAEEdEzj5nS0xodWR4smzHsN7PnK2j6IeOsDIj2aqua5DSbhXl9Gtf90FQ==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/credential-provider-http@3.972.72':
-    resolution: {integrity: sha512-X98zYOrVOeuosCX+6ktf29FC2N2GHPLia7qv6mzPzTc+RPAuHWCDS++Z6JK7eGYqb/v6uaW7bAXaOvDBfol+0w==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-http@3.972.73':
     resolution: {integrity: sha512-uyYYnJOnlis8uQzaYGPd7N1JoioCoNpXgnkXYixsWJXHXgXyYi8WXJSDfofxJeWfQIGWLe2Nwyq60Uc7MZdVOg==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-ini@3.973.15':
-    resolution: {integrity: sha512-Rykg6s5ceBuynMOGWgoowO4N+27JfnqXAnVaSunZl0hOO1XodSrxGNz6sCEbnmS0lAfQZDKyb3fbr46gSuv6Sg==}
-    engines: {node: '>=20.0.0'}
-
   '@aws-sdk/credential-provider-ini@3.973.16':
     resolution: {integrity: sha512-i++ly+0Uxa+u3ebSSyr0S/3CFhFJDxCXT3+Zj+mW2bXenEx5bKGCdTIKFu39SgXBNhWDjex/8cXUx9MUTMCrTw==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/credential-provider-login@3.972.77':
-    resolution: {integrity: sha512-Jb59xfEISoN5mmbnA+HYqdtrSX3CgCtJoof+V5D8/TgUI56W63GEEd5Y58WijU3Ou6+WEgaLD1feVzaRXV5IDQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-login@3.972.78':
     resolution: {integrity: sha512-eUtswnXu0+Ii9ieRK+0L7aPFV3Z/dnW2VntJzjBP9xs8s+8p5nBNuymIXtXwZ+5r5+XJP3e32nMkuZ/r0HozEA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-node@3.972.82':
-    resolution: {integrity: sha512-znDkEOGXB8W3kG1LJUKP3foBZY/9qLM0eil/DxWXSp37XsdsRLQHE/d/OaCGGVgKpA6znR38h/+INk8do1FjiA==}
-    engines: {node: '>=20.0.0'}
-
   '@aws-sdk/credential-provider-node@3.972.83':
     resolution: {integrity: sha512-jdso7ejzfRnatxMUZK4S/U6KbaDPCvfIV4XL+IQAPFDBt5rj5Fq595euqlK8Le4lNCMFR9oUpt+1l0aMgaayOQ==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/credential-provider-process@3.972.70':
-    resolution: {integrity: sha512-2ry03fGRJr4sV3jI+ocjj5JqALnFD6ymM5KiNCDZMvq8bX2GSbE0vji4aM43TVCl2nXqqLRZaUxdq/KeWRAY4Q==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-process@3.972.71':
     resolution: {integrity: sha512-lYmXJa4gvq4xN1lrT5NiP5vIYYKcGWAdj8y+8o6dlcateB5eF3Dn8DtmjjHKfMBrTPAMr2pebIiX/UOj8c1/UA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-sso@3.973.14':
-    resolution: {integrity: sha512-jkhg/8ocAAoc0RFyLMhCw+/zZh7gystQgd4F4hznNa8P4Cc501PQmxd+jGLiMHodPJ+7Zv/3znM62gZojyasmA==}
-    engines: {node: '>=20.0.0'}
-
   '@aws-sdk/credential-provider-sso@3.973.15':
     resolution: {integrity: sha512-6Jhcf4v0pSFdjk1EW2kvzuEBKD+UZ2uNcHUIglKKLndD20YhvkL2kdmDOV5/j4mYuWWwe/a1FQ1aomU86/Cg5Q==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/credential-provider-web-identity@3.972.76':
-    resolution: {integrity: sha512-d3AGyVu759PGr35mEB2s22xxlNEA5rpdxtSPJthfPFJvoQ8dt357iVPECqWfUxXp1toJAvKmbtcIYVGigaGsCA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-web-identity@3.972.77':
     resolution: {integrity: sha512-uylIQSUWpfLuH2LovxEEfwzJGM/SabLOfLMg6YXu/E8jJEKUdpdILCVCQCdFvHyu/7dLJOHPMfrSwduxO56NkQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/dynamodb-codec@3.973.44':
-    resolution: {integrity: sha512-eo27HNeBqMAfy9JBQug6ErU6DeG8OmOH6ou8+KmX3/fWdTmWUsHsfisz2tEQOG+GJ57bBC7kC6AjKAjpcxU4QA==}
+  '@aws-sdk/dynamodb-codec@3.973.45':
+    resolution: {integrity: sha512-WMnbfe3igJy14RRzEnLDW9G2V0WbrXdnp2UYAGYJIgbB1wR33bBle0dmbVnejs6sHJWfP2N1cAAx/QxXnoyK8w==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/endpoint-cache@3.972.11':
     resolution: {integrity: sha512-8q1ICxcDjHId3bBryuu/j+1L9y5/3uQnwzLDt5j2ElcjZSoWmFtymdJy7OjLrluSMe0Z4mq5bcH4fxBXvlEHfw==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/lib-dynamodb@3.1126.0':
-    resolution: {integrity: sha512-FC3NLbBPQn6PhSj3sWNPP7gdqG7wVtFmRRA6q3UwE0FWXn6TezpCIAAWzxMAJGPJmHeuuaI49kAWmqCcufM88A==}
+  '@aws-sdk/lib-dynamodb@3.1133.0':
+    resolution: {integrity: sha512-DWq+1qDHF4kuOzEKOvd4BSIemwCVZyiroBECVEuQOzVC/qOnO2raLI1ffH8QFDVuKEa09QGz1duZsr2SIz4lVA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
-      '@aws-sdk/client-dynamodb': ^3.1126.0
+      '@aws-sdk/client-dynamodb': ^3.1133.0
 
   '@aws-sdk/middleware-endpoint-discovery@3.972.30':
     resolution: {integrity: sha512-0hmD7/NG2NoVOVHvUb6rtY5POQYr+/9gdHvrYhIBA1zmCqKOBd5Gz3dL+iZ15FHOJbs/5kLplGoePc8PHTlzYA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/middleware-sdk-ec2@3.972.58':
-    resolution: {integrity: sha512-k1yW3bEUcy/e9oxIH0zT81sbPCqgERdNf0bOsBZg/tXP75tyEKp8kp8BG9xag64+u9fF8064fLDUdIItWgQxWw==}
+  '@aws-sdk/middleware-sdk-ec2@3.972.59':
+    resolution: {integrity: sha512-BJLwpH+l4ZpzEhMzigwR35Ox24a41oOm70b92pwbF2Pq5n9IPBZhqiN5WyF7XH9zoJwc9wsDmC1wC7rlz8idBg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/middleware-sdk-s3@3.972.75':
@@ -562,10 +521,6 @@ packages:
 
   '@aws-sdk/middleware-sdk-sqs@3.972.42':
     resolution: {integrity: sha512-D/O6iHAqlm0b430vIGewanSsr5RzaWbSDFlHYdKLWlZb4kaMKBmb44ReNHAFEKj5tNRY8pysw0qfciosB/VcJg==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/nested-clients@3.997.44':
-    resolution: {integrity: sha512-NhEgryjlBF9w38ZXqGymQV28IhkYa1mKhlbYnqIis57AYwWGVYfUPgg/qC2rLRqOUfblxx++irvju10kVTa8Vw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/nested-clients@3.997.45':
@@ -578,10 +533,6 @@ packages:
 
   '@aws-sdk/signature-v4-multi-region@3.996.46':
     resolution: {integrity: sha512-L+2xZTye/2T96f3lwCws0Zw6GG2JHZW9e8FpVgGBeeExSKyeoZ6CWRpBml/7DNiK/O26jrgPM9F+Ay8VkgzUWQ==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/token-providers@3.1116.0':
-    resolution: {integrity: sha512-ygIivKqh8aHzNkucOCXHyIBgBpLPfrSI0mCqXF+vLBsPTUKqj0VSqAY0GFPe7lQl4HntjOcQ+KSyS7oUV2C54Q==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/token-providers@3.1129.0':
@@ -1585,156 +1536,156 @@ packages:
     resolution: {integrity: sha512-4aQzz9vgxcNXFfo/iyNgDDYfsU5XGKKxWxZopw0cVotHiW+U8IJbIxMaxsINs6bHhtkG3StKNPcOrn3eBuxKPw==}
     hasBin: true
 
-  '@ez4/aws-bucket@0.52.0':
-    resolution: {integrity: sha512-bV7ZinyQqA0x3M3IQzzq4O6RBj0heDbQcfna2zs79os24iWVHN1AOl4MXdMzN3WzQsZC0Or64sX/a6rlxUmJog==}
+  '@ez4/aws-bucket@0.53.0':
+    resolution: {integrity: sha512-fN/gTHFiy45Z7Qf6sJKT3Cdnt/gfMRALV8Iwby5OHPzzx/vGjJkz1dUZwbyqjbS58ygc7/d5nerq+wUa9hgP2g==}
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-common@file:vendor/ez4-aws-common-0.52.0.tgz':
-    resolution: {integrity: sha512-FHRJsSaJ54pBFhupDymPge1jeypUIqeNl3kUWEASbB0cauMSZMY4hHdCG4vQ3rnJGqGyn0uoBSJ0EpaaDF0pZQ==, tarball: file:vendor/ez4-aws-common-0.52.0.tgz}
-    version: 0.52.0
+  '@ez4/aws-common@file:vendor/ez4-aws-common-0.53.0.tgz':
+    resolution: {integrity: sha512-rjTPGbRspkN/e184BPkoLSQFYSFIrzscXoKsiYP6VEVb57FMStgeL5Ci1qia4OfnN4vjexoCN6rXEJZ/bVwljA==, tarball: file:vendor/ez4-aws-common-0.53.0.tgz}
+    version: 0.53.0
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-function@0.52.0':
-    resolution: {integrity: sha512-nWrMmv/4HDZqAM8tDA5zKAtNzRLNoXjf63g9aU3Dpehnf923CxEEOzYKSrv2oYSy4e+Of9eA6qD7MiChbPfREA==}
+  '@ez4/aws-function@0.53.0':
+    resolution: {integrity: sha512-7QGXyDnOhBXGe9qauhIYHbSEx75F4DSoMpRjOsuW6LVNfGJNeOebqMIT9qg5htS+zUvH0yckT/J46Xk2hoTCQw==}
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-gateway@0.52.0':
-    resolution: {integrity: sha512-+7gAB4w5VPfm0el4Gs3SG4FxsscjuBJyprRl/MB9CdlSSZj97gvQ0ZXfUzwILXAVDLgOqAf2dysDtCJfK2SK7w==}
+  '@ez4/aws-gateway@0.53.0':
+    resolution: {integrity: sha512-wa6dZmcywoJcdGqW67/Y5m9MALYMe0uW8silafFcFktTFkQrUvjzp/SHR32HhMZzOjib6gzoLJidWcJmyWN7wA==}
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-identity@0.52.0':
-    resolution: {integrity: sha512-rKkaYj06qfpWQY9uMdCqnfu0+xML25wCIxinerLX/27gTizz2HmxNG85g2I4dsvJmAoZzw3uhggF8+r54DYSeA==}
+  '@ez4/aws-identity@0.53.0':
+    resolution: {integrity: sha512-ocWm/WwU8EKAMXy4ghFcjiJ3HZUP9Dm+VtOc2sv09iAcm9JgO0y2zFOBsXjp1k+Xvw8o3tBZ2pJVlp+4qBBtfQ==}
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-logs@0.52.0':
-    resolution: {integrity: sha512-x5JmJ+pLjLhOcvpSord7sjkadI7DKL1UrEkz6QRAFJfWVytHadwqfiO4CZ07ZLF6I5U1pexAMN+aH+txRDLEUg==}
+  '@ez4/aws-logs@0.53.0':
+    resolution: {integrity: sha512-OL0Y2PdP40SnTkTdZefJK+vhKKCDkxy6Nm4zgRea09ao4AqlRYXx9JtZRyQYJDU3jjj41oOq9PyWp3X85VPCMA==}
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-queue@0.52.0':
-    resolution: {integrity: sha512-3h4ypbD3CElL41EH4szFNGVSahN3hTtHbp0nOgPxdE+iJpIxDZRussVRtF2ZTgV4WxPu7U99elhjMYNIwwR9uA==}
+  '@ez4/aws-queue@0.53.0':
+    resolution: {integrity: sha512-iXE8/4y/74gXLxH50u1iySKDBAtZBLq0/oD51AgVEc5w/evl/mZkFoF05S9wr233N7foJSsZZ/kSdpu6FJCmtA==}
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-scheduler@0.52.0':
-    resolution: {integrity: sha512-hUvRScMNtuFIwmduE5AymHbZ9sabfCGfeso8mgywWI5Hmm6dYIZHg323PR3p/J/l77ayT3P5DI+U0thZJTXryw==}
+  '@ez4/aws-scheduler@0.53.0':
+    resolution: {integrity: sha512-8R4tuTfkpKCVReyrwJ+g/NfOcfozH5C8kJkADBqeKiOCRI744GeJeaPB1obSNaA6qCk/0oGSbauBAe/2Cvm7Qw==}
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-vpc@0.52.0':
-    resolution: {integrity: sha512-pvQSh8ToR3dNB5IbfxXoGjzHeDVxCqAoPwuMV8kW7/tzcB1wC39VBGI1rfj3pCtMbpRtPUlFkmRt9cwcRHw6CA==}
+  '@ez4/aws-vpc@0.53.0':
+    resolution: {integrity: sha512-6vUoVNdXanfi+fak7KPDkm4NfYoyo1nz0WtvZ7YVq7H+Fp4kzJPPDMs1ptcnuZ5xgD+JEvCKoHBnpT0J5j04Uw==}
     engines: {node: '>=22.7'}
 
-  '@ez4/common@0.52.0':
-    resolution: {integrity: sha512-iQTKY87mUW8euKGHBiOG2zNH3wi263B2kRAoY7YvQTQcTAQuOX3L2C7AqMkcpJoL3pynhMasbsEzFDM7Gs+kgg==}
+  '@ez4/common@0.53.0':
+    resolution: {integrity: sha512-T6tv7vDIf262P98hlwFMJGj82wXFaYCHtB+RYz59lMAbapRagigDuDO/Q6UxTMWJK9RqJVaL3rwRWvlZeMdOdw==}
     engines: {node: '>=22.7'}
 
-  '@ez4/database@0.52.0':
-    resolution: {integrity: sha512-Ps8rfmpmrERlQJ3ke2r3V9W5GOtu2HdxH3EseAbFOtg565E8PirNmxa7QDPclLueSK1B/CrfieLc3zn3I50VAw==}
+  '@ez4/database@0.53.0':
+    resolution: {integrity: sha512-0hZP2CGhs5B74EWrTWKBvDqTenSbDo/Ju643K0G2FLcK6a7mnmFY+LRp4Rzge39WasLrWPUcI8u0xDhruhPAfA==}
     engines: {node: '>=22.7'}
 
-  '@ez4/docs-gateway-ui@0.52.0':
-    resolution: {integrity: sha512-LPobziXiMYZ2Rlb2/eq/0Gm+TDWve+lJGHa6UDXScu15UvXE07Uc9U92q4mU/G10bdLWPetYHfJ/e8Z67blI9g==}
+  '@ez4/docs-gateway-ui@0.53.0':
+    resolution: {integrity: sha512-JPYWQhWbeBD/74ppRZznOfCCKdl6ggBJczQwSDUew+aEOGB7NXREJnchwrp07H3TU/8Bof8cI5PVoMZ14zgKBQ==}
     engines: {node: '>=22.7'}
 
-  '@ez4/docs-gateway@0.52.0':
-    resolution: {integrity: sha512-lHKrBYICdDSjaHD2TzALdq/quVKR2m9lf6eZ7J9e7UJXAOdUoO6Vr5IdaJy7D9oAWnh8UeqfOC9xYnpz1qNMBw==}
+  '@ez4/docs-gateway@0.53.0':
+    resolution: {integrity: sha512-57lVVmwGCqSYLorPaaqCaEAx9oWGNnEe5nCaLqvIBSSYkoyvpnNTngcySGsdrXe/iGnXDC/BR++J1+xcqQHR4A==}
     engines: {node: '>=22.7'}
 
-  '@ez4/factory@0.52.0':
-    resolution: {integrity: sha512-Vf7rD04Puc7B22ik8YTORqVpRCldGr39rkhG2FFpNmdlXHF8qNewaMZ/LGZNGuW7MJM4cmKoFbROBa/YzCMQ+g==}
+  '@ez4/factory@0.53.0':
+    resolution: {integrity: sha512-DPXglS4kwQd6nf2chbbaxpijqUBV97Dj6oPDJQm6tqxxaQuAI54esC46m6jJyIBG6QmBMS7a6f1jj74uRRu1LA==}
     engines: {node: '>=22.7'}
 
-  '@ez4/gateway@0.52.0':
-    resolution: {integrity: sha512-t7BAwi7s6dDVQ10YZQXjSEL6zzIQu7NlCLvQsw50rZZZATscvb41Mch2Cr7irvE2whjawAnH3fAu3oAT9qqcXA==}
+  '@ez4/gateway@0.53.0':
+    resolution: {integrity: sha512-ARwr9HcAO1mIOKY5Lth5GzfwLAeQ6vRzQWvlKeEywqWL8yDpGKZxX5ian8SZdHFvGsH+iQIZztWNKHvYBI8Fsw==}
     engines: {node: '>=22.7'}
 
-  '@ez4/http@0.52.0':
-    resolution: {integrity: sha512-I9QhXPzrvv28SY381kLFdSUYFRdP/yhMxgJgRVQ4A02Z7zm9WCANdQOeJ+pa/ovEeijtcZ78kGbOLuUcInetPw==}
+  '@ez4/http@0.53.0':
+    resolution: {integrity: sha512-A8H49+Cp9TG+LWaJgiibjh9aRCQ/Shu8hkaMkEUe+MfMIvxSGq1IyIcaBhCRUCWLoCzrswH0P4sgp2Kq0AptnQ==}
     engines: {node: '>=22.7'}
 
-  '@ez4/local-common@0.52.0':
-    resolution: {integrity: sha512-qwPVc1peRMPLAVhArGRBEyKT9EcRXD2Ee1SdQJ6H1qjDq0kZVaXJWLy+NgM7mx8+aoa7uVMG+/Iy1sYis04Ohw==}
+  '@ez4/local-common@0.53.0':
+    resolution: {integrity: sha512-ojaB7X4MKTq3JTRpEBmlZRufA0XzU/b4/dM/iOwG8+N8J7muGEugwpK/cWHu7p9k7RWcmXzXc4cwfbAYdKUlFg==}
     engines: {node: '>=22.7'}
 
-  '@ez4/local-database@0.52.0':
-    resolution: {integrity: sha512-7DsuXZz4wtXtD1T1lAa6UYimy3Y6eGA420tbCaA7KFpHH0wfP0mV1jXR8iAxA/Mmb9zTQ4EvdMsDzvUG+uVDYw==}
+  '@ez4/local-database@0.53.0':
+    resolution: {integrity: sha512-3j90BSCMixMosbq14zLwyYcQNdqCN1ND4i0H3g1h/HnL3s0yDxD0hU5zIPlpuoq5R1E6bBJm7vynS2PjWBzK8g==}
     engines: {node: '>=22.7'}
 
-  '@ez4/local-gateway@0.52.0':
-    resolution: {integrity: sha512-EXmXrcWUyJ360bX+fK2vitnNePZ/wD2BlFA/4o8cS/gJqHA0tjmrVZYDOb9GqZ0udw5FjOzIp6uClnCwRGlSnQ==}
+  '@ez4/local-gateway@0.53.0':
+    resolution: {integrity: sha512-iQCUPRe9evot/jlAEkiyp+dSitDLgrsWXW/Fu0JOJ6J/ztvvx/JWVg4chhgZ2+dR6M4P1ayEt13/NSm3qKYI+A==}
     engines: {node: '>=22.7'}
 
-  '@ez4/local-queue@0.52.0':
-    resolution: {integrity: sha512-o8U9ThSZUXwZXn/mTUQYFx8i4Cx/Lm0cO98k3eqFQO5swv1qn7Ey6GmFW8MR/ewinx0MEYbERmtxXEQFHltKHQ==}
+  '@ez4/local-queue@0.53.0':
+    resolution: {integrity: sha512-uBHq2iwzh/0LmOoUecszfW8IlKJ2BsuHCLp4xDMl2R1Lyhw9XBfU84vydtAp0/nnzftT2kZZ7SAacEqNq/yhnQ==}
     engines: {node: '>=22.7'}
 
-  '@ez4/local-scheduler@0.52.0':
-    resolution: {integrity: sha512-sfUt7EfnaY8tNNJbrCilQ0Ucxk5TeEZL8WBPpKuL/e5+dpgCUeZEUX8eNPJL+P9Mdy2OUCj66zPtlkNTDvLJnA==}
+  '@ez4/local-scheduler@0.53.0':
+    resolution: {integrity: sha512-5C5CfYheeOLmHoZP8iZYLIVSclXs7LsWj0cbvebvViBZQHm7JWPnxy2VAfG3XlBFn55Ht9wdN/EBADVu8Mfoyg==}
     engines: {node: '>=22.7'}
 
-  '@ez4/local-storage@0.52.0':
-    resolution: {integrity: sha512-KvWVUEyi3sGf7owwwoKCsKuO1hk2MuCXXYUOOTPP1SXzGvzqsQOej26lvkzHCDEPMATlYeJs/1QkgE0gOGA+9w==}
+  '@ez4/local-storage@0.53.0':
+    resolution: {integrity: sha512-pOjAYwGcdp3Gvktzm0+89lAdXXb/WgV0sc8vTU6hFvAL0dto2l5o4uP5ZHVTS0Y+hMHX52NvLuYGAOrlw8di+g==}
     engines: {node: '>=22.7'}
 
-  '@ez4/logger@0.52.0':
-    resolution: {integrity: sha512-jGntn8LKRAS+Bm7GeGU4Jta5NxAgXLmp0MQC/KRqVaeVF0Sg+sb/ACFjTgEtOdQCSfa7gkNvDqG5QqeFMtV5lw==}
+  '@ez4/logger@0.53.0':
+    resolution: {integrity: sha512-WyVtAT8cZ+/KD5A/6Gh+vq2ivJZPvjH+V3MaBhR8wrYp7p8AdZpfBGCXrSvL7PUOqIwSJZzV6axFVSsEjP/PYg==}
     engines: {node: '>=22.7'}
 
-  '@ez4/pgclient@0.52.0':
-    resolution: {integrity: sha512-sLwHqilrIMaR7ixZ1x+QCJKAbRA9hSzkJRMUWfUJ0JKgbFaLiMP61H3WjMtqKHqqqfYK/h0b9o/Da1nh5W5yug==}
+  '@ez4/pgclient@0.53.0':
+    resolution: {integrity: sha512-Euyv5Cdoa/pTxQKv5pnsnazA+XA1BZJ0iPAEqBdWNWtA27neK8p9nU6Pz34LSpbN3qCo3dRVzaw490Rluj+okA==}
     engines: {node: '>=22.7'}
 
-  '@ez4/pgmigration@0.52.0':
-    resolution: {integrity: sha512-EUMAzzOtlbfDn5nef7wMBT/79tZ5hfNOrJewnM++xFjgMU+8MAADTDedNCmHQ0QAx8VGqmWf4ICYucssX3nNJw==}
+  '@ez4/pgmigration@0.53.0':
+    resolution: {integrity: sha512-wV33pn0SrG1tuKHJ0agYamXjMzNYt6eqi4ZHqUVcHiIesy4fErQabgoZzC+UgiAtV6/3o8h9NZNycMo93o091A==}
+    engines: {node: '>=22.7'}
+    deprecated: this package has been deprecated
+
+  '@ez4/pgsql@0.53.0':
+    resolution: {integrity: sha512-nkczPq90bl96zmK0JJEn6nQqGSr7vAbqrMCQP0Kl8AWIZEyVBccQ3DWNq5/u6U9JBIGNmyvcAzMN9Zsh9xFglg==}
     engines: {node: '>=22.7'}
 
-  '@ez4/pgsql@0.52.0':
-    resolution: {integrity: sha512-oBhNJs68fb38LQsE5Gg5zY2vDk6zeMnnEM2nNAQ6UHOT2E1DyvTBwtZ23gMGYkNdUQW/4/i3mC4VsSw5hDmeDg==}
-    engines: {node: '>=22.7'}
-
-  '@ez4/project@file:vendor/ez4-project-0.52.0.tgz':
-    resolution: {integrity: sha512-HGiMZ46u7GFyqMsZQ4bEcnqOddCs1xJh/GRjeOLMoN4F9SH8JGZw8BjCrKoqnwpUeJOTQL0JRlNq/4WcnoMpRg==, tarball: file:vendor/ez4-project-0.52.0.tgz}
-    version: 0.52.0
+  '@ez4/project@0.53.0':
+    resolution: {integrity: sha512-umtiMFCBL6dHwMT0U/Zrzl4d/o6VG6bPbnYM+hNZ9WU0EU3wk84mlH03YUx1Fxh30qURWLbIUTomXWHHrX5Btg==}
     engines: {node: '>=22.7'}
     hasBin: true
 
-  '@ez4/queue@0.52.0':
-    resolution: {integrity: sha512-tLDQk0/+NCbZ3S7bqSj6jFRuE25NYLbyd7+6u/7kUgcGO+rDurEx2skPTYJqXBOf5BeU1B6UHF6urXw86jbRFQ==}
+  '@ez4/queue@0.53.0':
+    resolution: {integrity: sha512-4sgC5EyazScDonDSicT6AOIZZuAsKLNqZjo/aOB+Rqauij8yvuA9wr6xVwhvnLELkxG8BdrHneQmEdY/z6XhPA==}
     engines: {node: '>=22.7'}
 
-  '@ez4/raw-pg@file:vendor/ez4-raw-pg-0.52.0.tgz':
-    resolution: {integrity: sha512-oTU18WJVW+3Kny6ZKtcwfbz5hiij9oeK1olGqNyUpmN8ztLSPN58Vy3BSCQPS05JX/eWdJpZBthFzfY4Fcy49Q==, tarball: file:vendor/ez4-raw-pg-0.52.0.tgz}
-    version: 0.52.0
+  '@ez4/raw-pg@file:vendor/ez4-raw-pg-0.53.0.tgz':
+    resolution: {integrity: sha512-U20xyl8Q4wSVpjSI9VUbWfRocrbCfttWS6Zovy08gTSoUl5uRqN5dJOf5VXtjDkhsILa4ZZTsGmZo+2xsmaS6w==, tarball: file:vendor/ez4-raw-pg-0.53.0.tgz}
+    version: 0.53.0
     engines: {node: '>=22.7'}
 
-  '@ez4/reflection@0.52.0':
-    resolution: {integrity: sha512-EF9xwmQBzVULHqDBV4yIMGlrj82vbiPVh61cqTWdeHaDVcl0c+x1/Q4OYfxPliZSctjxsO8tSdwU4aT9hA4qpQ==}
+  '@ez4/reflection@0.53.0':
+    resolution: {integrity: sha512-T+WsCGF3ubQxVAaUdoXgiHp/pGfj2tI5D+kH9MF1PGyXTkIk85Xf4Nh+xgPaHxh0ffX6VkOFPg05Uj4pnaYtvQ==}
     engines: {node: '>=22.7'}
 
-  '@ez4/scheduler@0.52.0':
-    resolution: {integrity: sha512-OOmrOfp4cKC092liDm5k0iNweECpEdbdPJl7bNzZt+2zdCf2+w32B97raCWOpLagrcjglrfbUse4gAr412aUUA==}
+  '@ez4/scheduler@0.53.0':
+    resolution: {integrity: sha512-y1d54c1GUmXfVvM3Y66GkjiuusjdaBNDmmnxD/1+UaSvFHdQFSf+ZgPEbFs+DZFIUzlwxt7VFots4zQ2znZPhw==}
     engines: {node: '>=22.7'}
 
-  '@ez4/schema@0.52.0':
-    resolution: {integrity: sha512-DyOnUZiE2mNd/w4AQU5XdWwgI7gDlvYlz2sN5jMt+ex5u5Cx7deoI505e9igtUAfsmwIvP1Ks2EKRU6SKzCVaw==}
+  '@ez4/schema@0.53.0':
+    resolution: {integrity: sha512-N5wlp41HPysYbRAhLSZ5lq4E3k11BY9njsoPbg00s3rWBlNEmn0dcmAinnGiTjLUhG0JgXQK8mYKVWwurvzNiQ==}
     engines: {node: '>=22.7'}
 
-  '@ez4/state@0.52.0':
-    resolution: {integrity: sha512-VnlY5obTKMyKnO0aEEnb1XbHbiPPP6a180sjMVszUrmBiq1HgKZXjWL6e+MNhVKPv/6Oz6j0Jym0vYMno/2kdw==}
+  '@ez4/state@0.53.0':
+    resolution: {integrity: sha512-bS67HvsowLJwf1QXp6o8Y+icqZU/pkj4hP4oZu9Q5haJYf+tp9f6qN99H3XHhGRgTvwXCxERWZTNzs/fDzqJrg==}
     engines: {node: '>=22.7'}
 
-  '@ez4/storage@0.52.0':
-    resolution: {integrity: sha512-/nat2VGfpGR3qZdB0hONGQytBs3y6yewWEDxZieiYBHqhL4cg0AyNNLRh681QpcjUSXGb4KfhipBIVpLZGKzCA==}
+  '@ez4/storage@0.53.0':
+    resolution: {integrity: sha512-ijFWC5wUnBrlulbBu+m3iXzwN7R1VqsZOYqy0S0qRRJov5zd/saQDzjQvG+Iu5Y/0OEokAmI7RyPX6gn7mbw0w==}
     engines: {node: '>=22.7'}
 
-  '@ez4/transform@0.52.0':
-    resolution: {integrity: sha512-epqIq6rGyfB1c6Nv+xBK0YVNuhz3r76nc0T5Dmw81olUWpauq2BhW5DeWSSrlyESfxPLtKzv2mRPCTdWBXLB5Q==}
+  '@ez4/transform@0.53.0':
+    resolution: {integrity: sha512-ePIz8zyzr8Us5tHN9RNAHSvGUn+lku9of6k3pxufoVEt/V5MfaVubfY/dTmLyhGXqfKx6JkZFKIdCMFtWo7uLw==}
     engines: {node: '>=22.7'}
 
-  '@ez4/utils@0.52.0':
-    resolution: {integrity: sha512-s5w1GJjZq8YeWtyTalCYONmX6VD5yqtI2T0x+euQ7zYJ2n+hkhVxopCkAf5OP7Op2ivHJJ8svvKzHVOrt9YwvA==}
+  '@ez4/utils@0.53.0':
+    resolution: {integrity: sha512-vafda/ofDDabv8N1OD1luyd9KFyzux59zAAtVtBSEaGCsBAh4rw/vOqaYLZNw57kG7yWy+WYzMfctyeP7Qefuw==}
     engines: {node: '>=22.7'}
 
-  '@ez4/validator@0.52.0':
-    resolution: {integrity: sha512-shjlAheb++TcKCNN4vdNYk/b4Tu4gCyKnqEcS1xgpG3gY5hQNQwXFUgUqWpbzULulpkTmDtQ8FA5hStiaapbXA==}
+  '@ez4/validator@0.53.0':
+    resolution: {integrity: sha512-JlH5wBgYTi4ZQDfKbmw3T0aylHuFjyAOKISFhtmq8dVAgoYj3802fMlvf2N5JhcXs+h8cO2s3GFAKUI4b6QDbg==}
     engines: {node: '>=22.7'}
 
   '@fontsource-variable/public-sans@5.3.0':
@@ -2607,10 +2558,6 @@ packages:
 
   '@sinonjs/fake-timers@10.3.0':
     resolution: {integrity: sha512-V4BG07kuYSUkTCSBHG8G8TNhM+F19jXFWnQtzj+we8DrkpSBCee9Z3Ms8yiGer/dlmhe35/Xdgyo3/0rQKg7YA==}
-
-  '@smithy/core@3.33.3':
-    resolution: {integrity: sha512-CsOeKq/9kA3y6VJHt+/+VTCtBaxJ4OTFpgrjIUhPpDIKxBci1k2bJaQASF2h/ELWrulGp+t97DZ0mevfAD8idg==}
-    engines: {node: '>=18.0.0'}
 
   '@smithy/core@3.34.0':
     resolution: {integrity: sha512-YvlfAEyHmuWpwjEKgq4FBaXhLEoSEwS/nNbyCF/ef05ZvSuwMDB4NIMgXqkJojzYyQWjhVDapPHXfhkz/tZYlg==}
@@ -7216,13 +7163,13 @@ snapshots:
 
   '@aws-sdk/checksums@3.1000.29':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/client-account@3.1131.0':
+  '@aws-sdk/client-apigatewaymanagementapi@3.1133.0':
     dependencies:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/credential-provider-node': 3.972.83
@@ -7233,81 +7180,70 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/client-apigatewaymanagementapi@3.1126.0':
+  '@aws-sdk/client-apigatewayv2@3.1133.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/client-apigatewayv2@3.1126.0':
+  '@aws-sdk/client-cloudwatch-logs@3.1133.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/client-cloudwatch-logs@3.1126.0':
+  '@aws-sdk/client-dynamodb@3.1133.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/fetch-http-handler': 5.8.0
-      '@smithy/node-http-handler': 4.12.1
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/client-dynamodb@3.1126.0':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
-      '@aws-sdk/dynamodb-codec': 3.973.44
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
+      '@aws-sdk/dynamodb-codec': 3.973.45
       '@aws-sdk/middleware-endpoint-discovery': 3.972.30
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/client-ec2@3.1126.0':
+  '@aws-sdk/client-ec2@3.1133.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
-      '@aws-sdk/middleware-sdk-ec2': 3.972.58
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
+      '@aws-sdk/middleware-sdk-ec2': 3.972.59
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/client-iam@3.1126.0':
+  '@aws-sdk/client-iam@3.1133.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/client-lambda@3.1126.0':
+  '@aws-sdk/client-lambda@3.1133.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
@@ -7316,12 +7252,12 @@ snapshots:
   '@aws-sdk/client-s3@3.1127.0':
     dependencies:
       '@aws-sdk/checksums': 3.1000.29
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
       '@aws-sdk/middleware-sdk-s3': 3.972.75
       '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
@@ -7332,7 +7268,7 @@ snapshots:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/credential-provider-node': 3.972.83
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
@@ -7340,37 +7276,26 @@ snapshots:
 
   '@aws-sdk/client-sqs@3.1127.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
       '@aws-sdk/middleware-sdk-sqs': 3.972.42
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/client-sts@3.1126.0':
+  '@aws-sdk/client-sts@3.1133.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.83
       '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/core@3.977.9':
-    dependencies:
-      '@aws-sdk/types': 3.974.5
-      '@aws-sdk/xml-builder': 3.972.40
-      '@aws/lambda-invoke-store': 0.3.0
-      '@smithy/core': 3.33.3
-      '@smithy/signature-v4': 5.7.3
-      '@smithy/types': 4.18.0
-      bowser: 2.14.1
       tslib: 2.8.1
 
   '@aws-sdk/core@3.978.0':
@@ -7378,35 +7303,17 @@ snapshots:
       '@aws-sdk/types': 3.974.5
       '@aws-sdk/xml-builder': 3.972.40
       '@aws/lambda-invoke-store': 0.3.0
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/signature-v4': 5.7.3
       '@smithy/types': 4.18.0
       bowser: 2.14.1
-      tslib: 2.8.1
-
-  '@aws-sdk/credential-provider-env@3.972.70':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/types': 4.18.0
       tslib: 2.8.1
 
   '@aws-sdk/credential-provider-env@3.972.71':
     dependencies:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/credential-provider-http@3.972.72':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/fetch-http-handler': 5.8.0
-      '@smithy/node-http-handler': 4.12.1
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7414,25 +7321,9 @@ snapshots:
     dependencies:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/credential-provider-ini@3.973.15':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/credential-provider-env': 3.972.70
-      '@aws-sdk/credential-provider-http': 3.972.72
-      '@aws-sdk/credential-provider-login': 3.972.77
-      '@aws-sdk/credential-provider-process': 3.972.70
-      '@aws-sdk/credential-provider-sso': 3.973.14
-      '@aws-sdk/credential-provider-web-identity': 3.972.76
-      '@aws-sdk/nested-clients': 3.997.44
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/credential-provider-imds': 4.5.2
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7447,17 +7338,8 @@ snapshots:
       '@aws-sdk/credential-provider-web-identity': 3.972.77
       '@aws-sdk/nested-clients': 3.997.45
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/credential-provider-imds': 4.5.2
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/credential-provider-login@3.972.77':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/nested-clients': 3.997.44
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7466,21 +7348,7 @@ snapshots:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/nested-clients': 3.997.45
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/credential-provider-node@3.972.82':
-    dependencies:
-      '@aws-sdk/credential-provider-env': 3.972.70
-      '@aws-sdk/credential-provider-http': 3.972.72
-      '@aws-sdk/credential-provider-ini': 3.973.15
-      '@aws-sdk/credential-provider-process': 3.972.70
-      '@aws-sdk/credential-provider-sso': 3.973.14
-      '@aws-sdk/credential-provider-web-identity': 3.972.76
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/credential-provider-imds': 4.5.2
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7493,16 +7361,8 @@ snapshots:
       '@aws-sdk/credential-provider-sso': 3.973.15
       '@aws-sdk/credential-provider-web-identity': 3.972.77
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/credential-provider-imds': 4.5.2
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/credential-provider-process@3.972.70':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7510,17 +7370,7 @@ snapshots:
     dependencies:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/credential-provider-sso@3.973.14':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/nested-clients': 3.997.44
-      '@aws-sdk/token-providers': 3.1116.0
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7530,16 +7380,7 @@ snapshots:
       '@aws-sdk/nested-clients': 3.997.45
       '@aws-sdk/token-providers': 3.1129.0
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/credential-provider-web-identity@3.972.76':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/nested-clients': 3.997.44
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7548,14 +7389,14 @@ snapshots:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/nested-clients': 3.997.45
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/dynamodb-codec@3.973.44':
+  '@aws-sdk/dynamodb-codec@3.973.45':
     dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@smithy/core': 3.33.3
+      '@aws-sdk/core': 3.978.0
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7564,12 +7405,12 @@ snapshots:
       mnemonist: 0.38.3
       tslib: 2.8.1
 
-  '@aws-sdk/lib-dynamodb@3.1126.0(@aws-sdk/client-dynamodb@3.1126.0)':
+  '@aws-sdk/lib-dynamodb@3.1133.0(@aws-sdk/client-dynamodb@3.1133.0)':
     dependencies:
-      '@aws-sdk/client-dynamodb': 3.1126.0
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/util-dynamodb': 3.996.9(@aws-sdk/client-dynamodb@3.1126.0)
-      '@smithy/core': 3.33.3
+      '@aws-sdk/client-dynamodb': 3.1133.0
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/util-dynamodb': 3.996.9(@aws-sdk/client-dynamodb@3.1133.0)
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7577,43 +7418,32 @@ snapshots:
     dependencies:
       '@aws-sdk/endpoint-cache': 3.972.11
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/middleware-sdk-ec2@3.972.58':
+  '@aws-sdk/middleware-sdk-ec2@3.972.59':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/signature-v4': 5.7.3
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
   '@aws-sdk/middleware-sdk-s3@3.972.75':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
   '@aws-sdk/middleware-sdk-sqs@3.972.42':
     dependencies:
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
-  '@aws-sdk/nested-clients@3.997.44':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/signature-v4-multi-region': 3.996.46
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/fetch-http-handler': 5.8.0
-      '@smithy/node-http-handler': 4.12.1
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7622,7 +7452,7 @@ snapshots:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/fetch-http-handler': 5.8.0
       '@smithy/node-http-handler': 4.12.1
       '@smithy/types': 4.18.0
@@ -7630,10 +7460,10 @@ snapshots:
 
   '@aws-sdk/s3-request-presigner@3.1127.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7644,21 +7474,12 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/token-providers@3.1116.0':
-    dependencies:
-      '@aws-sdk/core': 3.977.9
-      '@aws-sdk/nested-clients': 3.997.44
-      '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
   '@aws-sdk/token-providers@3.1129.0':
     dependencies:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/nested-clients': 3.997.45
       '@aws-sdk/types': 3.974.5
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
@@ -7667,9 +7488,9 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0)':
+  '@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1133.0)':
     dependencies:
-      '@aws-sdk/client-dynamodb': 3.1126.0
+      '@aws-sdk/client-dynamodb': 3.1133.0
       tslib: 2.8.1
 
   '@aws-sdk/xml-builder@3.972.40':
@@ -8846,343 +8667,342 @@ snapshots:
       chalk: 4.1.2
       js-yaml: 4.3.2
 
-  '@ez4/aws-bucket@0.52.0':
+  '@ez4/aws-bucket@0.53.0':
     dependencies:
       '@aws-sdk/client-s3': 3.1127.0
       '@aws-sdk/s3-request-presigner': 3.1127.0
-      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/aws-function': 0.52.0
-      '@ez4/aws-identity': 0.52.0
-      '@ez4/aws-logs': 0.52.0
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/state': 0.52.0
-      '@ez4/storage': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
+      '@ez4/aws-function': 0.53.0
+      '@ez4/aws-identity': 0.53.0
+      '@ez4/aws-logs': 0.53.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/storage': 0.53.0
+      '@ez4/utils': 0.53.0
       mime: 3.0.0
 
-  '@ez4/aws-common@file:vendor/ez4-aws-common-0.52.0.tgz':
+  '@ez4/aws-common@file:vendor/ez4-aws-common-0.53.0.tgz':
     dependencies:
-      '@aws-sdk/client-account': 3.1131.0
-      '@aws-sdk/client-dynamodb': 3.1126.0
+      '@aws-sdk/client-dynamodb': 3.1133.0
       '@aws-sdk/client-s3': 3.1127.0
-      '@aws-sdk/client-sts': 3.1126.0
-      '@aws-sdk/lib-dynamodb': 3.1126.0(@aws-sdk/client-dynamodb@3.1126.0)
-      '@ez4/logger': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/reflection': 0.52.0
-      '@ez4/state': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@aws-sdk/client-sts': 3.1133.0
+      '@aws-sdk/lib-dynamodb': 3.1133.0(@aws-sdk/client-dynamodb@3.1133.0)
+      '@ez4/logger': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/utils': 0.53.0
       esbuild: 0.28.2
 
-  '@ez4/aws-function@0.52.0':
+  '@ez4/aws-function@0.53.0':
     dependencies:
-      '@aws-sdk/client-lambda': 3.1126.0
-      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/aws-identity': 0.52.0
-      '@ez4/aws-logs': 0.52.0
-      '@ez4/aws-vpc': 0.52.0
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/state': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@aws-sdk/client-lambda': 3.1133.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
+      '@ez4/aws-identity': 0.53.0
+      '@ez4/aws-logs': 0.53.0
+      '@ez4/aws-vpc': 0.53.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/utils': 0.53.0
       '@types/adm-zip': 0.5.8
       adm-zip: 0.5.18
 
-  '@ez4/aws-gateway@0.52.0':
+  '@ez4/aws-gateway@0.53.0':
     dependencies:
-      '@aws-sdk/client-apigatewaymanagementapi': 3.1126.0
-      '@aws-sdk/client-apigatewayv2': 3.1126.0
-      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/aws-function': 0.52.0
-      '@ez4/aws-identity': 0.52.0
-      '@ez4/aws-logs': 0.52.0
-      '@ez4/common': 0.52.0
-      '@ez4/gateway': 0.52.0
-      '@ez4/http': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/schema': 0.52.0
-      '@ez4/state': 0.52.0
-      '@ez4/transform': 0.52.0
-      '@ez4/utils': 0.52.0
-      '@ez4/validator': 0.52.0
+      '@aws-sdk/client-apigatewaymanagementapi': 3.1133.0
+      '@aws-sdk/client-apigatewayv2': 3.1133.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
+      '@ez4/aws-function': 0.53.0
+      '@ez4/aws-identity': 0.53.0
+      '@ez4/aws-logs': 0.53.0
+      '@ez4/common': 0.53.0
+      '@ez4/gateway': 0.53.0
+      '@ez4/http': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/transform': 0.53.0
+      '@ez4/utils': 0.53.0
+      '@ez4/validator': 0.53.0
 
-  '@ez4/aws-identity@0.52.0':
+  '@ez4/aws-identity@0.53.0':
     dependencies:
-      '@aws-sdk/client-iam': 3.1126.0
-      '@aws-sdk/client-sts': 3.1126.0
-      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/state': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@aws-sdk/client-iam': 3.1133.0
+      '@aws-sdk/client-sts': 3.1133.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
+      '@ez4/project': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/aws-logs@0.52.0':
+  '@ez4/aws-logs@0.53.0':
     dependencies:
-      '@aws-sdk/client-cloudwatch-logs': 3.1126.0
-      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/aws-identity': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/state': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@aws-sdk/client-cloudwatch-logs': 3.1133.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
+      '@ez4/aws-identity': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/aws-queue@0.52.0':
+  '@ez4/aws-queue@0.53.0':
     dependencies:
       '@aws-sdk/client-sqs': 3.1127.0
-      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/aws-function': 0.52.0
-      '@ez4/aws-identity': 0.52.0
-      '@ez4/aws-logs': 0.52.0
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/queue': 0.52.0
-      '@ez4/schema': 0.52.0
-      '@ez4/state': 0.52.0
-      '@ez4/transform': 0.52.0
-      '@ez4/utils': 0.52.0
-      '@ez4/validator': 0.52.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
+      '@ez4/aws-function': 0.53.0
+      '@ez4/aws-identity': 0.53.0
+      '@ez4/aws-logs': 0.53.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/queue': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/transform': 0.53.0
+      '@ez4/utils': 0.53.0
+      '@ez4/validator': 0.53.0
 
-  '@ez4/aws-scheduler@0.52.0':
+  '@ez4/aws-scheduler@0.53.0':
     dependencies:
       '@aws-sdk/client-scheduler': 3.1130.0
-      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/aws-function': 0.52.0
-      '@ez4/aws-identity': 0.52.0
-      '@ez4/aws-logs': 0.52.0
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/scheduler': 0.52.0
-      '@ez4/schema': 0.52.0
-      '@ez4/state': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
+      '@ez4/aws-function': 0.53.0
+      '@ez4/aws-identity': 0.53.0
+      '@ez4/aws-logs': 0.53.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/scheduler': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/aws-vpc@0.52.0':
+  '@ez4/aws-vpc@0.53.0':
     dependencies:
-      '@aws-sdk/client-ec2': 3.1126.0
-      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
+      '@aws-sdk/client-ec2': 3.1133.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
+      '@ez4/project': 0.53.0
 
-  '@ez4/common@0.52.0':
+  '@ez4/common@0.53.0':
     dependencies:
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/reflection': 0.52.0
-      '@ez4/state': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/project': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/database@0.52.0':
+  '@ez4/database@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/reflection': 0.52.0
-      '@ez4/schema': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/docs-gateway-ui@0.52.0':
+  '@ez4/docs-gateway-ui@0.53.0':
     dependencies:
-      '@ez4/docs-gateway': 0.52.0
-      '@ez4/gateway': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
+      '@ez4/docs-gateway': 0.53.0
+      '@ez4/gateway': 0.53.0
+      '@ez4/project': 0.53.0
       yaml: 2.9.0
 
-  '@ez4/docs-gateway@0.52.0':
+  '@ez4/docs-gateway@0.53.0':
     dependencies:
-      '@ez4/gateway': 0.52.0
-      '@ez4/logger': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/schema': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/gateway': 0.53.0
+      '@ez4/logger': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/factory@0.52.0':
+  '@ez4/factory@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/reflection': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/gateway@0.52.0':
+  '@ez4/gateway@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/http': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/reflection': 0.52.0
-      '@ez4/schema': 0.52.0
-      '@ez4/transform': 0.52.0
-      '@ez4/utils': 0.52.0
-      '@ez4/validator': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/http': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/transform': 0.53.0
+      '@ez4/utils': 0.53.0
+      '@ez4/validator': 0.53.0
 
-  '@ez4/http@0.52.0':
+  '@ez4/http@0.53.0':
     dependencies:
-      '@ez4/schema': 0.52.0
-      '@ez4/transform': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/schema': 0.53.0
+      '@ez4/transform': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/local-common@0.52.0':
+  '@ez4/local-common@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/logger': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/utils': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/logger': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/local-database@0.52.0':
+  '@ez4/local-database@0.53.0':
     dependencies:
-      '@ez4/database': 0.52.0
-      '@ez4/local-common': 0.52.0
-      '@ez4/logger': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/utils': 0.52.0
+      '@ez4/database': 0.53.0
+      '@ez4/local-common': 0.53.0
+      '@ez4/logger': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/local-gateway@0.52.0':
+  '@ez4/local-gateway@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/gateway': 0.52.0
-      '@ez4/http': 0.52.0
-      '@ez4/local-common': 0.52.0
-      '@ez4/logger': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/schema': 0.52.0
-      '@ez4/utils': 0.52.0
-      '@ez4/validator': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/gateway': 0.53.0
+      '@ez4/http': 0.53.0
+      '@ez4/local-common': 0.53.0
+      '@ez4/logger': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/utils': 0.53.0
+      '@ez4/validator': 0.53.0
 
-  '@ez4/local-queue@0.52.0':
+  '@ez4/local-queue@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/local-common': 0.52.0
-      '@ez4/logger': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/queue': 0.52.0
-      '@ez4/utils': 0.52.0
-      '@ez4/validator': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/local-common': 0.53.0
+      '@ez4/logger': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/queue': 0.53.0
+      '@ez4/utils': 0.53.0
+      '@ez4/validator': 0.53.0
 
-  '@ez4/local-scheduler@0.52.0':
+  '@ez4/local-scheduler@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/local-common': 0.52.0
-      '@ez4/logger': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/scheduler': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/local-common': 0.53.0
+      '@ez4/logger': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/scheduler': 0.53.0
+      '@ez4/utils': 0.53.0
       cron-parser: 5.10.0
 
-  '@ez4/local-storage@0.52.0':
+  '@ez4/local-storage@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/local-common': 0.52.0
-      '@ez4/logger': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/storage': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/local-common': 0.53.0
+      '@ez4/logger': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/storage': 0.53.0
+      '@ez4/utils': 0.53.0
       file-type: 21.3.4
     transitivePeerDependencies:
       - supports-color
 
-  '@ez4/logger@0.52.0':
+  '@ez4/logger@0.53.0':
     dependencies:
-      '@ez4/utils': 0.52.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/pgclient@0.52.0':
+  '@ez4/pgclient@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/database': 0.52.0
-      '@ez4/pgsql': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/schema': 0.52.0
-      '@ez4/transform': 0.52.0
-      '@ez4/utils': 0.52.0
-      '@ez4/validator': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/database': 0.53.0
+      '@ez4/pgsql': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/transform': 0.53.0
+      '@ez4/utils': 0.53.0
+      '@ez4/validator': 0.53.0
       '@types/pg': 8.23.1
       pg: 8.23.0
     transitivePeerDependencies:
       - pg-native
 
-  '@ez4/pgmigration@0.52.0':
+  '@ez4/pgmigration@0.53.0':
     dependencies:
-      '@ez4/database': 0.52.0
-      '@ez4/pgclient': 0.52.0
-      '@ez4/pgsql': 0.52.0
-      '@ez4/schema': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/database': 0.53.0
+      '@ez4/pgclient': 0.53.0
+      '@ez4/pgsql': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/utils': 0.53.0
     transitivePeerDependencies:
       - pg-native
 
-  '@ez4/pgsql@0.52.0':
+  '@ez4/pgsql@0.53.0':
     dependencies:
-      '@ez4/database': 0.52.0
-      '@ez4/schema': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/database': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/project@file:vendor/ez4-project-0.52.0.tgz':
+  '@ez4/project@0.53.0':
     dependencies:
-      '@ez4/logger': 0.52.0
-      '@ez4/reflection': 0.52.0
-      '@ez4/state': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/logger': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/queue@0.52.0':
+  '@ez4/queue@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/reflection': 0.52.0
-      '@ez4/schema': 0.52.0
-      '@ez4/transform': 0.52.0
-      '@ez4/utils': 0.52.0
-      '@ez4/validator': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/transform': 0.53.0
+      '@ez4/utils': 0.53.0
+      '@ez4/validator': 0.53.0
 
-  '@ez4/raw-pg@file:vendor/ez4-raw-pg-0.52.0.tgz':
+  '@ez4/raw-pg@file:vendor/ez4-raw-pg-0.53.0.tgz':
     dependencies:
-      '@ez4/aws-common': file:vendor/ez4-aws-common-0.52.0.tgz
-      '@ez4/common': 0.52.0
-      '@ez4/database': 0.52.0
-      '@ez4/pgclient': 0.52.0
-      '@ez4/pgmigration': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/state': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
+      '@ez4/common': 0.53.0
+      '@ez4/database': 0.53.0
+      '@ez4/pgclient': 0.53.0
+      '@ez4/pgmigration': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/state': 0.53.0
+      '@ez4/utils': 0.53.0
     transitivePeerDependencies:
       - pg-native
 
-  '@ez4/reflection@0.52.0':
+  '@ez4/reflection@0.53.0':
     dependencies:
       typescript: 6.0.3
 
-  '@ez4/scheduler@0.52.0':
+  '@ez4/scheduler@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/reflection': 0.52.0
-      '@ez4/schema': 0.52.0
-      '@ez4/transform': 0.52.0
-      '@ez4/utils': 0.52.0
-      '@ez4/validator': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/transform': 0.53.0
+      '@ez4/utils': 0.53.0
+      '@ez4/validator': 0.53.0
 
-  '@ez4/schema@0.52.0':
+  '@ez4/schema@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/reflection': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/state@0.52.0':
+  '@ez4/state@0.53.0':
     dependencies:
-      '@ez4/utils': 0.52.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/storage@0.52.0':
+  '@ez4/storage@0.53.0':
     dependencies:
-      '@ez4/common': 0.52.0
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/reflection': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/common': 0.53.0
+      '@ez4/project': 0.53.0
+      '@ez4/reflection': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/transform@0.52.0':
+  '@ez4/transform@0.53.0':
     dependencies:
-      '@ez4/schema': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/schema': 0.53.0
+      '@ez4/utils': 0.53.0
 
-  '@ez4/utils@0.52.0': {}
+  '@ez4/utils@0.53.0': {}
 
-  '@ez4/validator@0.52.0':
+  '@ez4/validator@0.53.0':
     dependencies:
-      '@ez4/project': file:vendor/ez4-project-0.52.0.tgz
-      '@ez4/schema': 0.52.0
-      '@ez4/utils': 0.52.0
+      '@ez4/project': 0.53.0
+      '@ez4/schema': 0.53.0
+      '@ez4/utils': 0.53.0
 
   '@fontsource-variable/public-sans@5.3.0': {}
 
@@ -10033,11 +9853,6 @@ snapshots:
     dependencies:
       '@sinonjs/commons': 3.0.1
 
-  '@smithy/core@3.33.3':
-    dependencies:
-      '@smithy/types': 4.18.0
-      tslib: 2.8.1
-
   '@smithy/core@3.34.0':
     dependencies:
       '@smithy/types': 4.18.0
@@ -10045,25 +9860,25 @@ snapshots:
 
   '@smithy/credential-provider-imds@4.5.2':
     dependencies:
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
   '@smithy/fetch-http-handler@5.8.0':
     dependencies:
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
   '@smithy/node-http-handler@4.12.1':
     dependencies:
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
   '@smithy/signature-v4@5.7.3':
     dependencies:
-      '@smithy/core': 3.33.3
+      '@smithy/core': 3.34.0
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 

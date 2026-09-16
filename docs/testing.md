@@ -16,7 +16,7 @@ A pedido do usuário, foram examinados 50 commits sem merge que alteram
 - Banco exclusivo em `testOptions.db.database` e `tsconfig.test.json` incluindo
   código e specs.
 
-O EZ4 0.52.0 instalado também expõe `HttpTester` em `@ez4/local-gateway/test`.
+O EZ4 0.53.0 instalado também expõe `HttpTester` em `@ez4/local-gateway/test`.
 Seu cliente real faz requisições HTTP; nesta versão, o runner de teste inicializa
 os emuladores, mas não o listener HTTP. Por isso, o smoke de transporte continua
 separado e pequeno. Um cliente mock não serve como prova de autorização/schema.

@@ -43,7 +43,7 @@ lembrete habilitado (inclusive se ele for após o vencimento); sem lembretes
 habilitados, no vencimento. O canal `auto` reserva o roteamento push disponível,
 e-mail como alternativa e compartilhamento manual quando nenhum está disponível.
 
-`RecurrenceScheduler` usa EZ4 0.52.0, `cron(0 * * * ? *)`, timezone `UTC`, timeout
+`RecurrenceScheduler` usa EZ4 0.53.0, `cron(0 * * * ? *)`, timezone `UTC`, timeout
 300 s e 3 retries. A cadência UTC só dispara a avaliação; cada regra calcula seu
 dia local. Nenhum deploy ou agendamento cloud foi executado neste trabalho.
 O runner `ez4 test --local` suprime o disparo automático do agendador.

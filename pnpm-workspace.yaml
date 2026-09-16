@@ -17,11 +17,49 @@ catalog:
   "zod": "^4.1.12"
 
 overrides:
-  "@ez4/aws-common": "file:./vendor/ez4-aws-common-0.52.0.tgz"
-  "@ez4/project": "file:./vendor/ez4-project-0.52.0.tgz"
-  "@ez4/raw-pg": "file:./vendor/ez4-raw-pg-0.52.0.tgz"
+  "@ez4/aws-common": "file:./vendor/ez4-aws-common-0.53.0.tgz"
+  "@ez4/raw-pg": "file:./vendor/ez4-raw-pg-0.53.0.tgz"
 
 allowBuilds:
   esbuild: true
   sharp: true
   unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - '@ez4/aws-bucket@0.53.0'
+  - '@ez4/aws-common@0.53.0'
+  - '@ez4/aws-function@0.53.0'
+  - '@ez4/aws-gateway@0.53.0'
+  - '@ez4/aws-identity@0.53.0'
+  - '@ez4/aws-logs@0.53.0'
+  - '@ez4/aws-queue@0.53.0'
+  - '@ez4/aws-scheduler@0.53.0'
+  - '@ez4/aws-vpc@0.53.0'
+  - '@ez4/common@0.53.0'
+  - '@ez4/database@0.53.0'
+  - '@ez4/docs-gateway-ui@0.53.0'
+  - '@ez4/docs-gateway@0.53.0'
+  - '@ez4/factory@0.53.0'
+  - '@ez4/gateway@0.53.0'
+  - '@ez4/http@0.53.0'
+  - '@ez4/local-common@0.53.0'
+  - '@ez4/local-database@0.53.0'
+  - '@ez4/local-gateway@0.53.0'
+  - '@ez4/local-queue@0.53.0'
+  - '@ez4/local-scheduler@0.53.0'
+  - '@ez4/local-storage@0.53.0'
+  - '@ez4/logger@0.53.0'
+  - '@ez4/pgclient@0.53.0'
+  - '@ez4/pgmigration@0.53.0'
+  - '@ez4/pgsql@0.53.0'
+  - '@ez4/project@0.53.0'
+  - '@ez4/queue@0.53.0'
+  - '@ez4/raw-pg@0.53.0'
+  - '@ez4/reflection@0.53.0'
+  - '@ez4/scheduler@0.53.0'
+  - '@ez4/schema@0.53.0'
+  - '@ez4/state@0.53.0'
+  - '@ez4/storage@0.53.0'
+  - '@ez4/transform@0.53.0'
+  - '@ez4/utils@0.53.0'
+  - '@ez4/validator@0.53.0'

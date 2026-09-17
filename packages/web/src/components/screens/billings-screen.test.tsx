@@ -29,8 +29,8 @@ type Overrides = Record<string, unknown>;
 function summary(overrides: Overrides = {}) {
   return {
     id: "b1",
-    type: "once",
-    direction: "receivable",
+    recurrence: "once",
+    type: "receivable",
     payeeName: null,
     description: "Churrasco",
     total: { amountCents: 12000, currency: "BRL" },
@@ -116,7 +116,7 @@ it("shows only active billings by default and switches state without asking the 
   const calls = listOnly([
     summary(),
     summary({ id: "b2", description: "Netflix", state: "ended", paidCount: 3 }),
-    summary({ id: "b3", description: "Academia", type: "indefinite", state: "paused" }),
+    summary({ id: "b3", description: "Academia", recurrence: "indefinite", state: "paused" }),
   ]);
 
   render(<BillingsScreen />);
@@ -207,19 +207,19 @@ it("asks the API for one direction when the filter changes", async () => {
 
   await screen.findByRole("article", { name: "Cobrança Churrasco" });
   expect(screen.getByRole("radio", { name: "Todas" })).toHaveAttribute("aria-checked", "true");
-  expect(calls[0]).not.toContain("direction=");
+  expect(calls[0]).not.toContain("type=");
 
   await user.click(screen.getByRole("radio", { name: "A pagar" }));
 
-  await vi.waitFor(() => expect(calls.some((call) => call.includes("direction=payable"))).toBe(true));
+  await vi.waitFor(() => expect(calls.some((call) => call.includes("type=payable"))).toBe(true));
 
   await user.click(screen.getByRole("radio", { name: "A receber" }));
 
-  await vi.waitFor(() => expect(calls.some((call) => call.includes("direction=receivable"))).toBe(true));
+  await vi.waitFor(() => expect(calls.some((call) => call.includes("type=receivable"))).toBe(true));
 });
 
 it("opens a conta a pagar from its card action instead of sharing a link", async () => {
-  const calls = listOnly([summary({ direction: "payable", payeeName: "Ana", shareChargeId: "c9" })]);
+  const calls = listOnly([summary({ type: "payable", payeeName: "Ana", shareChargeId: "c9" })]);
 
   render(<BillingsScreen />);
   const user = setup();

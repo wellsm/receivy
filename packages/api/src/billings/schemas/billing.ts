@@ -6,7 +6,7 @@ import type {
   BillingFrequency,
   BillingKind,
   BillingState,
-  BillingType,
+  BillingRecurrence,
   Direction,
   PixKeyType,
   SplitMode
@@ -16,7 +16,7 @@ export interface BillingSchema extends Database.Schema {
   id: String.UUID;
   owner_id: String.UUID;
   /** How the billing repeats. */
-  recurrence: BillingType;
+  recurrence: BillingRecurrence;
   /** A live billing or a registro. */
   kind: BillingKind;
   frequency?: BillingFrequency;

@@ -6,7 +6,7 @@ import {
   BillingCategory,
   BillingFrequency,
   type BillingInput,
-  BillingType,
+  BillingRecurrence,
   ChargeState,
   PixKeyType,
   ProofKind,
@@ -49,7 +49,7 @@ const tokenOf = (url: string) => url.slice(`${ORIGIN}/join/`.length);
 
 function once(overrides: Partial<BillingInput> = {}): BillingInput {
   return {
-    type: BillingType.Once,
+    recurrence: BillingRecurrence.Once,
     description: 'Churrasco',
     totalCents: 8_000,
     startDate: '2026-11-20',
@@ -148,7 +148,7 @@ describe('billing invites on native PostgreSQL', () => {
       creditorFirstName: 'Lucas',
       description: 'Churrasco de sábado',
       amount: { amountCents: 8_000, currency: 'BRL' },
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       participantCount: 1,
       category: BillingCategory.Food,
       expired: false
@@ -229,7 +229,7 @@ describe('billing invites on native PostgreSQL', () => {
       OWNER,
       'invite-until',
       once({
-        type: BillingType.Until,
+        recurrence: BillingRecurrence.Until,
         frequency: BillingFrequency.Monthly,
         totalCents: 9_000,
         startDate: '2026-11-20',
@@ -343,7 +343,7 @@ describe('billing invites on native PostgreSQL', () => {
       db,
       OWNER,
       'invite-indefinite',
-      once({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-10-06', paymentMethodId: pixId }),
+      once({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-10-06', paymentMethodId: pixId }),
       now
     );
 
@@ -402,7 +402,7 @@ describe('billing invites on native PostgreSQL', () => {
       OTHER_OWNER,
       'invite-existing-contact',
       {
-        type: BillingType.Once,
+        recurrence: BillingRecurrence.Once,
         description: 'Mercado',
         totalCents: 6_000,
         startDate: '2026-11-20',
@@ -442,7 +442,7 @@ describe('billing invites on native PostgreSQL', () => {
       LINKED_OWNER,
       'invite-linked-contact',
       {
-        type: BillingType.Once,
+        recurrence: BillingRecurrence.Once,
         description: 'Feira',
         totalCents: 6_000,
         startDate: '2026-11-20',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BillingDueRule, BillingFrequency, BillingType, SplitPartKind } from './billing';
+import { BillingDueRule, BillingFrequency, BillingRecurrence, SplitPartKind } from './billing';
 import { BillingCategory } from './billing-category';
 import { type BillingDraft, EMPTY_SPLIT_VALUES } from './billing-draft';
 import { draftTotalCents, previewBillingSplit, splitParties, splitPartyKey } from './billing-preview';
@@ -10,7 +10,7 @@ const base: BillingDraft = {
   direction: Direction.Receivable,
   payee: '',
   pixInline: { type: PixKeyType.Email, key: '', label: '' },
-  type: BillingType.Once,
+  type: BillingRecurrence.Once,
   selected: ['p1', 'p2'],
   owner: true,
   amount: '90,00',
@@ -39,11 +39,11 @@ describe('draftTotalCents', () => {
   });
 
   it('reads a parcelado total as its rounded-up per-installment amount', () => {
-    expect(draftTotalCents({ ...base, type: BillingType.Until, amount: '100,00', occurrences: '3' })).toBe(3334);
+    expect(draftTotalCents({ ...base, type: BillingRecurrence.Until, amount: '100,00', occurrences: '3' })).toBe(3334);
   });
 
   it('reads a parcelado without a valid installment count as zero', () => {
-    expect(draftTotalCents({ ...base, type: BillingType.Until, amount: '100,00', occurrences: '' })).toBe(0);
+    expect(draftTotalCents({ ...base, type: BillingRecurrence.Until, amount: '100,00', occurrences: '' })).toBe(0);
   });
 });
 

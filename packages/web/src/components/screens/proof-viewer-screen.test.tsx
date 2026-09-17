@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BillingType, ChargeState, Direction, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import { BillingRecurrence, ChargeState, Direction, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ProofViewerScreen } from "@/components/screens/proof-viewer-screen";
 
@@ -32,13 +32,13 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
     dueDate: "2026-09-10",
     state: ChargeState.Pending,
     billingId: "b1",
-    billingType: BillingType.Once,
+    recurrence: BillingRecurrence.Once,
     installment: 1,
     installmentCount: 1,
     counterpartName: "Ana",
     proofState: ProofState.Pending,
     recipient: { userId: "u1", name: "Ana", email: null },
-    debtorUserId: "u1",
+    debtorId: "u1",
     pix: null,
     sharingState: SharingState.Ready,
     proof: proof(),

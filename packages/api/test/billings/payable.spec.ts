@@ -5,8 +5,9 @@ import {
   BillingFrequency,
   type BillingInput,
   BillingState,
-  BillingType,
+  BillingRecurrence,
   Direction,
+  ownerPays,
   PixKeyType,
   ProofState,
   SplitMode,
@@ -32,8 +33,8 @@ let payeeContactId: string;
 
 function payable(overrides: Partial<BillingInput> = {}): BillingInput {
   return {
-    type: BillingType.Once,
-    direction: Direction.Payable,
+    recurrence: BillingRecurrence.Once,
+    type: Direction.Payable,
     description: 'Aluguel',
     totalCents: 150_000,
     startDate: '2026-11-05',
@@ -62,7 +63,7 @@ describe('contas a pagar on native PostgreSQL', () => {
       payable({ description: 'Netflix', totalCents: 3_990, pix: undefined })
     );
 
-    equal(created.direction, 'payable');
+    equal(created.type, 'payable');
     equal(created.payee, null);
     equal(created.pix, null);
     ok(!created.paymentMethodId);
@@ -72,20 +73,20 @@ describe('contas a pagar on native PostgreSQL', () => {
     const charge = created.charges[0]!;
 
     equal(charge.direction, 'payable');
-    equal(charge.payer, 'owner');
+    equal(ownerPays(charge), true);
     equal(charge.ownedByViewer, true);
     equal(charge.hasPix, false);
     equal(charge.counterpartName, 'Você');
     equal(charge.sharingState, 'closed');
     equal(charge.amount.amountCents, 3_990);
 
-    const summary = (await BillingRepository.list(db, OWNER, { direction: Direction.Payable })).billings.find(
+    const summary = (await BillingRepository.list(db, OWNER, { type: Direction.Payable })).billings.find(
       (row) => row.id === created.id
     );
 
-    equal(summary?.direction, 'payable');
+    equal(summary?.type, 'payable');
     equal(summary?.payeeName, null);
-    ok(!(await BillingRepository.list(db, OWNER, { direction: Direction.Receivable })).billings.some((row) => row.id === created.id));
+    ok(!(await BillingRepository.list(db, OWNER, { type: Direction.Receivable })).billings.some((row) => row.id === created.id));
   });
 
   it('rejects contacts, wallet keys and invalid typed keys on a conta a pagar', async () => {
@@ -122,7 +123,7 @@ describe('contas a pagar on native PostgreSQL', () => {
     const seenByPayee = await ChargeRepository.get(db, PAYEE, chargeId);
 
     equal(seenByPayee.direction, 'receivable');
-    equal(seenByPayee.payer, 'owner');
+    equal(ownerPays(seenByPayee), true);
     equal(seenByPayee.ownedByViewer, false);
     equal(seenByPayee.counterpartName, 'Dona');
     equal(seenByPayee.sharingState, 'closed');
@@ -227,7 +228,7 @@ describe('contas a pagar on native PostgreSQL', () => {
       db,
       OWNER,
       'payable-self-settle',
-      payable({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2099-01-05', description: 'Assinatura' })
+      payable({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2099-01-05', description: 'Assinatura' })
     );
 
     const patched = await BillingRepository.patch(db, OWNER, created.id, {
@@ -264,9 +265,9 @@ describe('assinatura due date on native PostgreSQL', () => {
   it('materializes an assinatura due today at creation and moves the next due date on patch', async () => {
     const today = new Date().toISOString().slice(0, 10);
     const created = await BillingRepository.create(db, OWNER2, 'due-today', {
-      type: BillingType.Indefinite,
+      recurrence: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Monthly,
-      direction: Direction.Payable,
+      type: Direction.Payable,
       description: 'Academia',
       totalCents: 9_900,
       startDate: today,

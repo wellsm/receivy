@@ -1,7 +1,7 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpForbiddenError } from '@ez4/gateway';
-import { BillingType, DevicePlatform, Direction, PixKeyType, ProofKind, SplitMode, SplitPartKind } from '@receivy/common';
+import { BillingKind, BillingRecurrence, DevicePlatform, Direction, PixKeyType, ProofKind, SplitMode, SplitPartKind } from '@receivy/common';
 import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ChargeInReviewError, SettledNoRemindersError } from '../../src/charges/errors';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
@@ -75,7 +75,7 @@ async function charge(owner = OWNER, email?: string, announce = false) {
     owner,
     `notify-${count}`,
     {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 1234,
       startDate: DUE_DATE,
       timezone: TZ,
@@ -98,8 +98,8 @@ async function payableCharge(announce = false) {
     OWNER,
     `notify-payable-${count}`,
     {
-      type: BillingType.Once,
-      direction: Direction.Payable,
+      recurrence: BillingRecurrence.Once,
+      type: Direction.Payable,
       description: 'Aluguel',
       totalCents: 150_000,
       startDate: DUE_DATE,
@@ -123,13 +123,13 @@ async function registroCharge(direction: Direction = Direction.Receivable) {
     OWNER,
     `notify-registro-${count}`,
     {
-      type: BillingType.Once,
-      direction,
+      recurrence: BillingRecurrence.Once,
+      type: direction,
       description: 'Salário',
       totalCents: 500_000,
       startDate: DUE_DATE,
       timezone: TZ,
-      settled: true,
+      kind: BillingKind.Record,
       counterpartLabel: 'Empresa X'
     },
     new Date(clock)

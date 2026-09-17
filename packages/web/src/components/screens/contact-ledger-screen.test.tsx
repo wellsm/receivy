@@ -1,4 +1,4 @@
-import { BillingType, ChargeState, Direction, ProofState, SharingState, UserStatus, type ChargeDetail, type Contact, type ContactLedger } from "@receivy/common";
+import { BillingRecurrence, ChargeState, Direction, ProofState, SharingState, UserStatus, type ChargeDetail, type Contact, type ContactLedger } from "@receivy/common";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -51,14 +51,14 @@ function charge(overrides: Partial<ChargeDetail> & { id: string }): ChargeDetail
     dueDate: "2099-01-15",
     state: ChargeState.Pending,
     billingId: "b1",
-    billingType: BillingType.Until,
+    recurrence: BillingRecurrence.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: "Ana Paula Souza",
     proofState: null,
     direction: Direction.Receivable,
     recipient: { userId: "u1", name: "Ana Paula Souza", email: "ana@example.com" },
-    debtorUserId: "u1",
+    debtorId: "u1",
     pix: null,
     sharingState: SharingState.Ready,
     proof: null,

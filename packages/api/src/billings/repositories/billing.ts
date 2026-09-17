@@ -18,7 +18,7 @@ import {
   BillingState,
   type BillingSummary,
   type BillingsPage,
-  BillingType,
+  BillingRecurrence,
   billingDates,
   billingDueDates,
   ChargePayer,
@@ -58,7 +58,7 @@ import type { DbClient } from '../../database';
 import { activeInvite, type InviteLinkContext } from '../../invites/services/links';
 import { announceCharges, type NoticeContext } from '../../notifications/services/send';
 import { AvatarRepository } from '../../users/repositories/avatar';
-import { billingDirection, billingRecurrence, billingRegistered } from '../utils/columns';
+import { billingDirection, billingKind, billingRecurrence, billingRegistered } from '../utils/columns';
 import {
   BillingEndedError,
   BillingNotPausableError,
@@ -135,7 +135,7 @@ function calendarRule(row: BillingRepository.Row) {
 }
 
 async function previewsFor(db: DbClient, row: BillingRepository.Row, reminders: BillingReminder[], now: Date): Promise<BillingPreview[]> {
-  if (billingRecurrence(row) !== BillingType.Indefinite || row.state !== BillingState.Active) {
+  if (billingRecurrence(row) !== BillingRecurrence.Indefinite || row.state !== BillingState.Active) {
     return [];
   }
 
@@ -157,7 +157,7 @@ async function previewsFor(db: DbClient, row: BillingRepository.Row, reminders: 
     .filter((date) => !existing.includes(date) && date > cursor)
     .map((occurrenceDate) => ({
       billingId: row.id,
-      direction,
+      type: direction,
       description: row.description,
       amount: { amountCents: projected, currency: 'BRL' as const },
       occurrenceDate,
@@ -166,7 +166,7 @@ async function previewsFor(db: DbClient, row: BillingRepository.Row, reminders: 
 }
 
 async function nextMaterialization(db: DbClient, row: BillingRepository.Row, reminders: BillingReminder[]): Promise<string | null> {
-  if (billingRecurrence(row) !== BillingType.Indefinite || row.state !== BillingState.Active) {
+  if (billingRecurrence(row) !== BillingRecurrence.Indefinite || row.state !== BillingState.Active) {
     return null;
   }
 
@@ -190,11 +190,11 @@ function summary(
 ): BillingSummary {
   return {
     id: row.id,
-    direction: BillingRepository.direction(row),
+    type: BillingRepository.direction(row),
     payeeName: payee?.name ?? null,
-    settled: billingRegistered(row),
+    kind: billingKind(row),
     counterpartLabel: row.counterpart_label ?? null,
-    type: billingRecurrence(row),
+    recurrence: billingRecurrence(row),
     frequency: row.frequency,
     description: row.description,
     total: { amountCents: row.total_cents, currency: 'BRL' },
@@ -318,12 +318,12 @@ async function summaryAggregates(db: DbClient, rows: BillingRepository.Row[], no
 }
 
 function installmentCountFor(row: BillingRepository.Row): number | undefined {
-  if (billingRecurrence(row) === BillingType.Indefinite) {
+  if (billingRecurrence(row) === BillingRecurrence.Indefinite) {
     return undefined;
   }
 
   return billingDueDates({
-    type: billingRecurrence(row),
+    recurrence: billingRecurrence(row),
     frequency: row.frequency,
     startDate: row.start_date,
     endDate: row.end_date,
@@ -335,7 +335,7 @@ async function summaryDto(db: DbClient, row: BillingRepository.Row, now: Date, a
   const { earliestPendingDue, ...counters } = aggregate;
   const nextDueDate =
     earliestPendingDue ??
-    (billingRecurrence(row) === BillingType.Indefinite
+    (billingRecurrence(row) === BillingRecurrence.Indefinite
       ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null)
       : null);
 
@@ -360,12 +360,12 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
   // The detail response has its own field list: the card counters stay out of it.
   return {
     id: row.id,
-    direction: BillingRepository.direction(row),
+    type: BillingRepository.direction(row),
     payee: await payeeOf(db, split),
-    settled: billingRegistered(row),
+    kind: billingKind(row),
     counterpartLabel: row.counterpart_label ?? null,
     pix: billingPix(row),
-    type: billingRecurrence(row),
+    recurrence: billingRecurrence(row),
     frequency: row.frequency,
     description: row.description,
     total: { amountCents: row.total_cents, currency: 'BRL' },
@@ -549,10 +549,10 @@ async function searchBillingIds(
     ORDER BY b.created_at DESC, b.id ASC LIMIT ${PAGE_SIZE + 1}`,
     {
       ownerId,
-      type: filters.type ?? null,
+      type: filters.recurrence ?? null,
       state: filters.state ?? null,
       category: filters.category ?? null,
-      direction: filters.direction ?? null,
+      direction: filters.type ?? null,
       ...(cursor ? { createdAt: cursor.createdAt, cursorId: cursor.id } : {}),
       query
     }
@@ -768,7 +768,7 @@ async function rewriteMonthCharges(
     db,
     row.owner_id,
     { ...plan, charges: creatable },
-    { id: row.id, type: BillingType.Indefinite },
+    { id: row.id, type: BillingRecurrence.Indefinite },
     context!,
     now
   );
@@ -784,7 +784,7 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
   const settled = billingRegistered(row);
 
   // A registro stays a registro, and only a registro has a free-text counterpart.
-  if (patch.settled !== undefined && patch.settled !== settled) {
+  if (patch.kind !== undefined && (patch.kind === BillingKind.Record) !== settled) {
     throw new SettledLockedError();
   }
 
@@ -813,11 +813,11 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
     throw new PendingChargesWithoutStateError();
   }
 
-  if (patch.applyTo !== undefined && billingRecurrence(row) !== BillingType.Indefinite) {
+  if (patch.applyTo !== undefined && billingRecurrence(row) !== BillingRecurrence.Indefinite) {
     throw new EditScopeNotRecurringError();
   }
 
-  if (patch.state === BillingState.Paused && billingRecurrence(row) !== BillingType.Indefinite) {
+  if (patch.state === BillingState.Paused && billingRecurrence(row) !== BillingRecurrence.Indefinite) {
     throw new BillingNotPausableError();
   }
 
@@ -834,7 +834,7 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
 
   const payeeChanged = patch.payeeUserId !== undefined || patch.clearPayee;
   const frozen =
-    billingRecurrence(row) !== BillingType.Indefinite &&
+    billingRecurrence(row) !== BillingRecurrence.Indefinite &&
     (patch.description !== undefined ||
       patch.totalCents !== undefined ||
       patch.split !== undefined ||
@@ -876,7 +876,7 @@ function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): Bill
   const pix = billingPix(row);
 
   return {
-    type: billingRecurrence(row),
+    recurrence: billingRecurrence(row),
     frequency: row.frequency,
     description: row.description,
     totalCents: row.total_cents,
@@ -888,17 +888,17 @@ function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): Bill
     // A conta a pagar takes no split as input: the normalizer rebuilds it from the payee, as it did at creation.
     split: direction === Direction.Payable ? undefined : split,
     category: row.category,
-    direction,
+    type: direction,
     payeeUserId: payeeIdOf(split),
     pix: pix ? { keyType: pix.keyType, key: pix.key, label: pix.label } : undefined,
-    settled: billingRegistered(row),
+    kind: billingKind(row),
     counterpartLabel: row.counterpart_label
   };
 }
 
 /** Occurrences already past their materialization date, oldest first. */
 function dueOccurrences(row: BillingRepository.Row, now: Date, limit: number): string[] {
-  if (row.state !== BillingState.Active || billingRecurrence(row) !== BillingType.Indefinite) {
+  if (row.state !== BillingState.Active || billingRecurrence(row) !== BillingRecurrence.Indefinite) {
     return [];
   }
 
@@ -987,7 +987,7 @@ export namespace BillingRepository {
   export type Row = {
     id: string;
     owner_id: string;
-    recurrence: BillingType;
+    recurrence: BillingRecurrence;
     kind: BillingKind;
     frequency?: BillingFrequency;
     description: string;
@@ -1016,9 +1016,9 @@ export namespace BillingRepository {
   };
 
   export type Filters = {
-    type?: BillingType;
+    recurrence?: BillingRecurrence;
     state?: BillingState;
-    direction?: Direction;
+    type?: Direction;
     cursor?: string;
     search?: string;
     category?: BillingCategory;
@@ -1209,12 +1209,12 @@ export namespace BillingRepository {
       // Only a new creation obeys the clock: a recorrente registro starts today or later.
       normalizeBillingInput(raw, now);
 
-      if (input.type === BillingType.Indefinite && input.startDate < today) {
+      if (input.recurrence === BillingRecurrence.Indefinite && input.startDate < today) {
         throw new RangeError('O início não pode estar no passado.');
       }
 
       const payable: PayableMaterialization | undefined =
-        input.direction === Direction.Payable ? { payer: ChargePayer.Owner, pix: input.pix } : undefined;
+        input.type === Direction.Payable ? { payer: ChargePayer.Owner, pix: input.pix } : undefined;
       // The normalized split already carries the payee of a conta a pagar as its one User part.
       const context = await prepareChargeMaterialization(tx, ownerId, userIds(input.split), input.paymentMethodId, payable);
       const id = crypto.randomUUID();
@@ -1224,8 +1224,8 @@ export namespace BillingRepository {
         data: {
           id,
           owner: { id: ownerId },
-          recurrence: input.type,
-          kind: input.settled ? BillingKind.Record : BillingKind.Live,
+          recurrence: input.recurrence,
+          kind: input.kind ?? BillingKind.Live,
           frequency: input.frequency ?? sqlNull,
           description: input.description,
           category: input.category ?? BillingCategory.Other,
@@ -1234,15 +1234,15 @@ export namespace BillingRepository {
           end_date: input.endDate ?? sqlNull,
           due_rule: input.dueRule ?? BillingDueRule.Fixed,
           ...(input.paymentMethodId ? { payment_method: { id: input.paymentMethodId } } : {}),
-          type: input.direction,
+          type: input.type,
           pix_key_type: input.pix?.keyType ?? sqlNull,
           pix_key: input.pix?.key ?? sqlNull,
           pix_label: input.pix?.label ?? sqlNull,
-          ...(input.settled ? { counterpart_label: input.counterpartLabel } : {}),
+          ...(input.kind === BillingKind.Record ? { counterpart_label: input.counterpartLabel } : {}),
           reminders: input.reminders ? JSON.stringify(input.reminders) : sqlNull,
           state: BillingState.Active,
           split_mode: input.split.mode,
-          last_occurrence_date: input.type === BillingType.Indefinite ? addCalendarDays(today, -1) : sqlNull,
+          last_occurrence_date: input.recurrence === BillingRecurrence.Indefinite ? addCalendarDays(today, -1) : sqlNull,
           idempotency_key: key,
           request_hash: hash,
           created_at: instant,
@@ -1252,7 +1252,7 @@ export namespace BillingRepository {
 
       await saveAllocations(tx, { id, owner_id: ownerId }, input.totalCents, input.split, instant);
 
-      if (input.type !== BillingType.Indefinite) {
+      if (input.recurrence !== BillingRecurrence.Indefinite) {
         const plan = planBillingCharges({
           description: input.description,
           totalCents: input.totalCents,
@@ -1261,15 +1261,15 @@ export namespace BillingRepository {
           numbered: true,
           payer: context.payer,
           payeeUserId: input.payeeUserId ?? null,
-          settled: input.settled === true
+          settled: input.kind === BillingKind.Record
         });
 
-        const persisted = await persistChargePlan(tx, ownerId, plan, { id, type: input.type }, context, instant);
+        const persisted = await persistChargePlan(tx, ownerId, plan, { id, type: input.recurrence }, context, instant);
 
         noticeChargeIds.push(...persisted.noticeChargeIds);
       }
 
-      await audit(tx, ownerId, id, 'billing.created', instant, { type: input.type });
+      await audit(tx, ownerId, id, 'billing.created', instant, { type: input.recurrence });
 
       return dto(tx, { ...row, timezone: await ownerTimezone(tx, ownerId) }, now, link);
     });
@@ -1281,7 +1281,7 @@ export namespace BillingRepository {
 
     // An assinatura gets the charges of its first month right away instead of waiting for the daily sweep.
     const materialized =
-      input.type === BillingType.Indefinite && detail.state === BillingState.Active && !detail.charges.length
+      input.recurrence === BillingRecurrence.Indefinite && detail.state === BillingState.Active && !detail.charges.length
         ? (await materializeDue(db, detail.id, notice, now)).materialized
         : false;
 
@@ -1311,9 +1311,9 @@ export namespace BillingRepository {
       where: {
         AND: [
           { owner_id: ownerId },
-          ...(filters.type ? [{ recurrence: filters.type }] : []),
+          ...(filters.recurrence ? [{ recurrence: filters.recurrence }] : []),
           ...(filters.state ? [{ state: filters.state }] : []),
-          ...(filters.direction ? [{ type: filters.direction }] : []),
+          ...(filters.type ? [{ type: filters.type }] : []),
           ...(matchingIds ? [{ id: { isIn: matchingIds } }] : []),
           ...(cursor ? [{ OR: [{ created_at: { lt: cursor.createdAt } }, { created_at: cursor.createdAt, id: { gt: cursor.id } }] }] : [])
         ]
@@ -1337,7 +1337,7 @@ export namespace BillingRepository {
   export async function preview(db: DbClient, ownerId: string, id: string, now = new Date()): Promise<{ previews: BillingPreview[] }> {
     const row = await billingRow(db, ownerId, id);
 
-    if (billingRecurrence(row) !== BillingType.Indefinite) {
+    if (billingRecurrence(row) !== BillingRecurrence.Indefinite) {
       throw new BillingPreviewUnavailableError();
     }
 
@@ -1527,7 +1527,7 @@ export namespace BillingRepository {
   export async function materializeDueBillings(db: DbClient, notice?: NoticeContext, now = new Date()): Promise<number> {
     const { records } = await db.billings.findMany({
       select: { id: true },
-      where: { recurrence: BillingType.Indefinite, state: BillingState.Active },
+      where: { recurrence: BillingRecurrence.Indefinite, state: BillingState.Active },
       order: { id: Order.Asc }
     });
 
@@ -1662,7 +1662,7 @@ export namespace BillingRepository {
             settled: billingRegistered(row)
           });
 
-          const persisted = await persistChargePlan(tx, row.owner_id, plan, { id: row.id, type: BillingType.Indefinite }, context, instant);
+          const persisted = await persistChargePlan(tx, row.owner_id, plan, { id: row.id, type: BillingRecurrence.Indefinite }, context, instant);
 
           noticeChargeIds.push(...persisted.noticeChargeIds);
 

@@ -1,6 +1,7 @@
-import { BillingType } from './billing';
+import { BillingRecurrence } from './billing';
 import { addCalendarDays } from './billing-calendar';
-import { Direction } from './contracts';
+import { chargeDirection, type ListCharge, type ListChargeItem } from './charge';
+import { ChargeState, Direction } from './contracts';
 import { calendarDate } from './financial-form';
 
 /** `overdue` is not a stored state: it is a pending charge whose due date already passed. */
@@ -21,7 +22,7 @@ export const enum FeedPeriod {
 export type FeedFilters = {
   direction: Direction[];
   status: FeedStatus[];
-  type: BillingType[];
+  recurrence: BillingRecurrence[];
   period: FeedPeriod;
 };
 
@@ -29,7 +30,7 @@ export type FeedFilters = {
 export const DEFAULT_FEED_FILTERS: FeedFilters = {
   direction: [],
   status: [FeedStatus.Pending, FeedStatus.Overdue, FeedStatus.Paid],
-  type: [],
+  recurrence: [],
   period: FeedPeriod.Any
 };
 
@@ -45,10 +46,10 @@ export const FEED_STATUSES: { value: FeedStatus; label: string }[] = [
   { value: FeedStatus.Cancelled, label: 'Canceladas' }
 ];
 
-export const FEED_TYPES: { value: BillingType; label: string }[] = [
-  { value: BillingType.Once, label: 'À vista' },
-  { value: BillingType.Until, label: 'Parcelado' },
-  { value: BillingType.Indefinite, label: 'Recorrente' }
+export const FEED_TYPES: { value: BillingRecurrence; label: string }[] = [
+  { value: BillingRecurrence.Once, label: 'À vista' },
+  { value: BillingRecurrence.Until, label: 'Parcelado' },
+  { value: BillingRecurrence.Indefinite, label: 'Recorrente' }
 ];
 
 export const FEED_PERIODS: { value: FeedPeriod; label: string }[] = [
@@ -92,8 +93,8 @@ export function feedFilterQuery(filters: FeedFilters, today = calendarDate(), mo
     query.set('status', filters.status.join(','));
   }
 
-  if (filters.type.length) {
-    query.set('type', filters.type.join(','));
+  if (filters.recurrence.length) {
+    query.set('recurrence', filters.recurrence.join(','));
   }
 
   const range = periodRange(filters.period, today);
@@ -130,7 +131,7 @@ export function feedStatusLabel(filters: FeedFilters): string {
 }
 
 export function feedTypeLabel(filters: FeedFilters): string {
-  return groupLabel(FEED_TYPES, filters.type, 'Todas');
+  return groupLabel(FEED_TYPES, filters.recurrence, 'Todas');
 }
 
 export function feedPeriodLabel(filters: FeedFilters): string {
@@ -153,7 +154,7 @@ export function activeFeedFilterCount(filters: FeedFilters): number {
     count++;
   }
 
-  if (!sameList(filters.type, DEFAULT_FEED_FILTERS.type)) {
+  if (!sameList(filters.recurrence, DEFAULT_FEED_FILTERS.recurrence)) {
     count++;
   }
 
@@ -162,4 +163,84 @@ export function activeFeedFilterCount(filters: FeedFilters): number {
   }
 
   return count;
+}
+
+function readGroup<T extends string>(raw: string | string[] | undefined, allowed: readonly T[]): T[] {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+
+  if (!value) {
+    return [];
+  }
+
+  return value.split(',').filter((entry): entry is T => allowed.includes(entry as T));
+}
+
+/**
+ * The URL read back into filters: the inverse of `feedFilterQuery`, so the feed can live on the
+ * address bar. Anything unknown is dropped, which leaves that group unrestricted.
+ */
+export function feedFiltersFromQuery(params: Record<string, string | string[] | undefined>, today = calendarDate()): FeedFilters {
+  return {
+    direction: readGroup(
+      params.direction,
+      FEED_DIRECTIONS.map(({ value }) => value)
+    ),
+    status: params.status === undefined ? DEFAULT_FEED_FILTERS.status : readGroup(params.status, FEED_STATUSES.map(({ value }) => value)),
+    recurrence: readGroup(
+      params.recurrence,
+      FEED_TYPES.map(({ value }) => value)
+    ),
+    period: readPeriod(params, today)
+  };
+}
+
+/** `feedFilterQuery` writes the period as the due-date range it stands for, so it is read back from there. */
+function readPeriod(params: Record<string, string | string[] | undefined>, today: string): FeedPeriod {
+  const single = (raw: string | string[] | undefined) => (Array.isArray(raw) ? raw[0] : raw);
+  const from = single(params.from);
+  const to = single(params.to);
+
+  if (from !== today) {
+    return FeedPeriod.Any;
+  }
+
+  if (to === today) {
+    return FeedPeriod.Today;
+  }
+
+  return to === addCalendarDays(today, 7) ? FeedPeriod.Week : FeedPeriod.Any;
+}
+
+function matchesStatus(charge: ListChargeItem, statuses: FeedStatus[], today: string): boolean {
+  return statuses.some((status) => {
+    if (status === FeedStatus.Overdue) {
+      return charge.state === ChargeState.Pending && charge.due_date < today;
+    }
+
+    return charge.state === status;
+  });
+}
+
+/**
+ * The month narrowed down to what the filters ask for. The list endpoint answers with the whole
+ * month, so every group is applied here; an empty group means no restriction on it.
+ */
+export function filterCharges(viewerEmail: string, charges: ListCharge, filters: FeedFilters, today = calendarDate()): ListCharge {
+  const range = periodRange(filters.period, today);
+
+  return charges.filter((charge) => {
+    if (filters.direction.length && !filters.direction.includes(chargeDirection(charge, viewerEmail))) {
+      return false;
+    }
+
+    if (filters.status.length && !matchesStatus(charge, filters.status, today)) {
+      return false;
+    }
+
+    if (filters.recurrence.length && !filters.recurrence.includes(charge.billing.type as BillingRecurrence)) {
+      return false;
+    }
+
+    return !range || (charge.due_date >= range.from && charge.due_date <= range.to);
+  });
 }

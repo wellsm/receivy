@@ -113,10 +113,10 @@ export function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetPr
           <ChipGroup
             group="Modalidade"
             options={FEED_TYPES}
-            selected={draft.type}
+            selected={draft.recurrence}
             everyLabel="Todas"
-            onClear={() => setDraft({ ...draft, type: [] })}
-            onPick={(type) => setDraft({ ...draft, type: toggleFeedValue(draft.type, type) })}
+            onClear={() => setDraft({ ...draft, recurrence: [] })}
+            onPick={(recurrence) => setDraft({ ...draft, recurrence: toggleFeedValue(draft.recurrence, recurrence) })}
           />
           <ChipGroup group="Período" options={FEED_PERIODS} selected={[draft.period]} onPick={(period) => setDraft({ ...draft, period })} />
         </ScrollView>

@@ -1,7 +1,7 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import { BillingType, ChargeState, Direction, FeedStatus, type TimelinePage } from '@receivy/common';
+import { BillingRecurrence, ChargeState, Direction, FeedStatus, type TimelinePage } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import { InvalidTimelineFilterError } from '../errors';
@@ -10,16 +10,16 @@ import { TimelineRepository } from '../repositories/timeline';
 
 const DIRECTIONS: readonly Direction[] = [Direction.Receivable, Direction.Payable];
 const STATUSES: readonly TimelineRepository.Status[] = [ChargeState.Pending, FeedStatus.Overdue, ChargeState.Paid, ChargeState.Cancelled];
-const TYPES: readonly BillingType[] = [BillingType.Once, BillingType.Until, BillingType.Indefinite];
+const TYPES: readonly BillingRecurrence[] = [BillingRecurrence.Once, BillingRecurrence.Until, BillingRecurrence.Indefinite];
 
 declare class TimelineRequest implements Http.Request {
   identity: SessionIdentity;
   query: {
     cursor?: String.Max<500>;
-    /** `direction`, `status` and `type` are comma-separated lists: the gateway has no array query type. */
+    /** `direction`, `status` and `recurrence` are comma-separated lists: the gateway has no array query type. */
     direction?: String.Max<64>;
     status?: String.Max<64>;
-    type?: String.Max<64>;
+    recurrence?: String.Max<64>;
     from?: String.Date;
     to?: String.Date;
     /** `YYYY-MM`; defaults to the current month. Format is checked by `TimelineRepository.get`. */
@@ -61,7 +61,7 @@ export async function timelineHandler(
   { identity, query }: TimelineRequest,
   { db, avatarFiles }: Service.Context<TimelineProvider>
 ): Promise<TimelineResponse> {
-  const { cursor, direction, status, type, from, to, month } = query;
+  const { cursor, direction, status, recurrence, from, to, month } = query;
 
   const filters = {
     cursor,
@@ -70,7 +70,7 @@ export async function timelineHandler(
     month,
     direction: parseList('direction', direction, DIRECTIONS),
     status: parseList('status', status, STATUSES),
-    type: parseList('type', type, TYPES)
+    recurrence: parseList('recurrence', recurrence, TYPES)
   };
 
   return { status: 200, body: await AvatarRepository.sign(avatarFiles, await TimelineRepository.get(db, identity.userId, filters)) };

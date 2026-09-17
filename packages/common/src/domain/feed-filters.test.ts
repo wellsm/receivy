@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BillingType } from './billing';
-import { Direction } from './contracts';
+import { BillingRecurrence } from './billing';
+import type { ListChargeItem } from './charge';
+import { ChargeState, Direction } from './contracts';
 import {
   activeFeedFilterCount,
   DEFAULT_FEED_FILTERS,
@@ -9,7 +10,9 @@ import {
   FeedStatus,
   feedDirectionLabel,
   feedFilterQuery,
+  feedFiltersFromQuery,
   feedStatusLabel,
+  filterCharges,
   toggleFeedValue
 } from './feed-filters';
 
@@ -25,11 +28,11 @@ describe('feed filters', () => {
     const filters: FeedFilters = {
       direction: [Direction.Receivable, Direction.Payable],
       status: [FeedStatus.Paid, FeedStatus.Cancelled],
-      type: [BillingType.Once],
+      recurrence: [BillingRecurrence.Once],
       period: FeedPeriod.Any
     };
 
-    expect(feedFilterQuery(filters, '2026-09-11').toString()).toBe('direction=receivable%2Cpayable&status=paid%2Ccancelled&type=once');
+    expect(feedFilterQuery(filters, '2026-09-11').toString()).toBe('direction=receivable%2Cpayable&status=paid%2Ccancelled&recurrence=once');
   });
 
   it('turns the period into a due-date range', () => {
@@ -62,5 +65,61 @@ describe('feed filters', () => {
     expect(activeFeedFilterCount(base)).toBe(0);
     expect(activeFeedFilterCount({ ...base, status: [] })).toBe(1);
     expect(activeFeedFilterCount({ ...base, direction: [Direction.Payable], period: FeedPeriod.Today })).toBe(2);
+  });
+});
+
+describe('feed filters over a month of charges', () => {
+  const viewer = 'ana@example.com';
+  const today = '2026-09-11';
+  const charge = (overrides: Partial<ListChargeItem> = {}): ListChargeItem => ({
+    id: crypto.randomUUID(),
+    description: 'Aluguel',
+    state: ChargeState.Pending,
+    due_date: today,
+    amount_cents: 1000,
+    billing: { type: BillingRecurrence.Once, direction: Direction.Receivable },
+    debtor: { email: 'bruno@example.com' },
+    ...overrides
+  });
+
+  it('reads back what feedFilterQuery wrote', () => {
+    const filters: FeedFilters = {
+      direction: [Direction.Payable],
+      status: [FeedStatus.Paid],
+      recurrence: [BillingRecurrence.Until],
+      period: FeedPeriod.Week
+    };
+
+    expect(feedFiltersFromQuery(Object.fromEntries(feedFilterQuery(filters, today)), today)).toEqual(filters);
+  });
+
+  it('falls back to the open feed when the URL says nothing or says nonsense', () => {
+    expect(feedFiltersFromQuery({})).toEqual(DEFAULT_FEED_FILTERS);
+    expect(feedFiltersFromQuery({ status: 'burned', period: 'yesterday' })).toEqual({ ...DEFAULT_FEED_FILTERS, status: [] });
+  });
+
+  it('keeps only the side, state, type and period the filters ask for', () => {
+    const mine = { email: viewer };
+    const charges = [
+      charge({ id: 'open-in' }),
+      charge({ id: 'paid-in', state: ChargeState.Paid }),
+      charge({ id: 'open-out', debtor: mine }),
+      charge({ id: 'until-in', billing: { type: BillingRecurrence.Until, direction: Direction.Receivable } }),
+      charge({ id: 'late-in', due_date: '2026-09-01' })
+    ];
+    const ids = (filters: Partial<FeedFilters>) =>
+      filterCharges(viewer, charges, { ...DEFAULT_FEED_FILTERS, ...filters }, today).map((item) => item.id);
+
+    expect(ids({ direction: [Direction.Payable] })).toEqual(['open-out']);
+    expect(ids({ status: [FeedStatus.Paid] })).toEqual(['paid-in']);
+    expect(ids({ status: [FeedStatus.Overdue] })).toEqual(['late-in']);
+    expect(ids({ recurrence: [BillingRecurrence.Until] })).toEqual(['until-in']);
+    expect(ids({ period: FeedPeriod.Today })).toEqual(['open-in', 'paid-in', 'open-out', 'until-in']);
+  });
+
+  it('leaves the month untouched when every group is open', () => {
+    const charges = [charge(), charge({ state: ChargeState.Cancelled })];
+
+    expect(filterCharges(viewer, charges, { ...DEFAULT_FEED_FILTERS, status: [] }, today)).toHaveLength(2);
   });
 });

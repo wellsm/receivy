@@ -238,10 +238,10 @@ function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetProps) {
         <ChipGroup
           group="Modalidade"
           options={FEED_TYPES}
-          selected={draft.type}
+          selected={draft.recurrence}
           everyLabel="Todas"
-          onClear={() => setDraft({ ...draft, type: [] })}
-          onPick={type => setDraft({ ...draft, type: toggleFeedValue(draft.type, type) })}
+          onClear={() => setDraft({ ...draft, recurrence: [] })}
+          onPick={type => setDraft({ ...draft, recurrence: toggleFeedValue(draft.recurrence, type) })}
         />
         <ChipGroup group="Período" options={FEED_PERIODS} selected={[draft.period]} onPick={period => setDraft({ ...draft, period })} />
 
@@ -307,9 +307,9 @@ export function FeedFiltersBar({ value, onChange, counts }: FeedFiltersBarProps)
           group="Modalidade"
           summary={feedTypeLabel(value)}
           options={FEED_TYPES}
-          selected={value.type}
+          selected={value.recurrence}
           multiple
-          onPick={type => onChange({ ...value, type: toggleFeedValue(value.type, type) })}
+          onPick={type => onChange({ ...value, recurrence: toggleFeedValue(value.recurrence, type) })}
         />
         <FilterDropdown
           group="Período"

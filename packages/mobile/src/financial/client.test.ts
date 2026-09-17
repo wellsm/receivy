@@ -1,11 +1,11 @@
-import { BillingType, SplitMode, SplitPartKind } from "@receivy/common";
+import { BillingRecurrence, SplitMode, SplitPartKind } from "@receivy/common";
 import { createFinancialClient, FinancialRequestError } from "./client";
 
 describe("native financial client", () => {
   it("keeps the caller idempotency key on billing requests", async () => {
     const authenticatedFetch = jest.fn().mockResolvedValue(Response.json({ id: "billing", charges: [] }, { status: 201 }));
     const client = createFinancialClient({ authenticatedFetch, publicWebBaseUrl: "https://receivy.example" });
-    await client.createBilling({ type: BillingType.Once, totalCents: 100, startDate: "2026-09-10", timezone: "America/Sao_Paulo", split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } }, "same-key");
+    await client.createBilling({ recurrence: BillingRecurrence.Once, totalCents: 100, startDate: "2026-09-10", timezone: "America/Sao_Paulo", split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } }, "same-key");
     expect(authenticatedFetch).toHaveBeenCalledWith("billings", expect.objectContaining({ headers: expect.objectContaining({ "idempotency-key": "same-key" }) }));
   });
 

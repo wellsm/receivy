@@ -5,7 +5,7 @@ import { HttpNotFoundError } from '@ez4/gateway';
 import {
   BillingFrequency,
   type BillingInput,
-  BillingType,
+  BillingRecurrence,
   ChargeState,
   Direction,
   EditScope,
@@ -42,7 +42,7 @@ let carlaId: string;
 /** A monthly recorrente starting in February, with Ana quiet and Bruno notified. */
 function recurring(key: string, overrides: Partial<BillingInput> = {}): BillingInput {
   return {
-    type: BillingType.Indefinite,
+    recurrence: BillingRecurrence.Indefinite,
     frequency: BillingFrequency.Monthly,
     description: key,
     totalCents: 10_000,
@@ -83,8 +83,8 @@ async function allocationFlags(billingId: string) {
 /** The owner's own bill, owed to Ana: nothing here has notices to pause. */
 function payableOnce(key: string): BillingInput {
   return {
-    type: BillingType.Once,
-    direction: Direction.Payable,
+    recurrence: BillingRecurrence.Once,
+    type: Direction.Payable,
     description: key,
     totalCents: 5_000,
     startDate: '2026-03-10',
@@ -120,7 +120,7 @@ describe('sem avisos on native PostgreSQL', () => {
       OWNER,
       'silenced-create',
       {
-        type: BillingType.Until,
+        recurrence: BillingRecurrence.Until,
         frequency: BillingFrequency.Monthly,
         description: 'Curso',
         totalCents: 6_000,
@@ -158,10 +158,10 @@ describe('sem avisos on native PostgreSQL', () => {
     ok(rows.filter((row) => row.debtor_id === anaId).every((row) => row.notify === false));
     ok(rows.filter((row) => row.debtor_id === brunoId).every((row) => row.notify !== false));
 
-    const anaCharge = created.charges.find((charge) => charge.debtorUserId === anaId)!;
+    const anaCharge = created.charges.find((charge) => charge.debtorId === anaId)!;
 
     equal(anaCharge.notify, false);
-    equal(created.charges.find((charge) => charge.debtorUserId === brunoId)!.notify, true);
+    equal(created.charges.find((charge) => charge.debtorId === brunoId)!.notify, true);
     equal((await ChargeRepository.get(db, anaId, anaCharge.id)).notify, true, 'whoever owes sees no difference');
 
     const ledger = await TimelineRepository.contactLedger(db, OWNER, anaContactId);
@@ -255,7 +255,7 @@ describe('sem avisos on native PostgreSQL', () => {
       OWNER,
       'silenced-participant',
       {
-        type: BillingType.Until,
+        recurrence: BillingRecurrence.Until,
         frequency: BillingFrequency.Monthly,
         description: 'Parcelas',
         totalCents: 3_000,
@@ -320,7 +320,7 @@ describe('sem avisos on native PostgreSQL', () => {
       OWNER,
       'silenced-refusals',
       {
-        type: BillingType.Once,
+        recurrence: BillingRecurrence.Once,
         description: 'Jantar',
         totalCents: 2_000,
         startDate: '2026-03-10',
@@ -344,7 +344,7 @@ describe('sem avisos on native PostgreSQL', () => {
       OWNER,
       'silenced-charge',
       {
-        type: BillingType.Once,
+        recurrence: BillingRecurrence.Once,
         description: 'Pizza',
         totalCents: 4_000,
         startDate: '2026-03-10',
@@ -360,7 +360,7 @@ describe('sem avisos on native PostgreSQL', () => {
       },
       date('2026-03-01')
     );
-    const target = billing.charges.find((charge) => charge.debtorUserId === anaId)!;
+    const target = billing.charges.find((charge) => charge.debtorId === anaId)!;
     const detail = await ChargeRepository.setNotify(db, OWNER, target.id, false);
 
     equal(detail.notify, false);

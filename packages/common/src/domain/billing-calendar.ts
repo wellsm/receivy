@@ -1,10 +1,11 @@
 import {
   BillingDueRule,
   BillingFrequency,
+  BillingKind,
   type BillingInput,
   type BillingPixInput,
   type BillingReminder,
-  BillingType,
+  BillingRecurrence,
   MAX_FINITE_OCCURRENCES,
   type NormalizedBillingInput,
   SplitPartKind
@@ -18,7 +19,7 @@ export type BillingCalendarRule = { frequency: BillingFrequency; startDate: stri
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_YEAR_MONTH = /^\d{4}-\d{2}$/;
-const TYPES: BillingType[] = [BillingType.Once, BillingType.Until, BillingType.Indefinite];
+const TYPES: BillingRecurrence[] = [BillingRecurrence.Once, BillingRecurrence.Until, BillingRecurrence.Indefinite];
 const FREQUENCIES: BillingFrequency[] = [BillingFrequency.Monthly, BillingFrequency.Yearly];
 
 export function addCalendarDays(value: string, days: number): string {
@@ -132,12 +133,12 @@ export function billingDates(rule: BillingCalendarRule, from: string, to: string
 }
 
 /** Every due date of a finite billing. Throws for `indefinite`, which is materialized by the job. */
-export function billingDueDates(input: Pick<BillingInput, 'type' | 'frequency' | 'startDate' | 'endDate' | 'dueRule'>): string[] {
-  if (input.type === BillingType.Once) {
+export function billingDueDates(input: Pick<BillingInput, 'recurrence' | 'frequency' | 'startDate' | 'endDate' | 'dueRule'>): string[] {
+  if (input.recurrence === BillingRecurrence.Once) {
     return [input.startDate];
   }
 
-  if (input.type === BillingType.Indefinite) {
+  if (input.recurrence === BillingRecurrence.Indefinite) {
     throw new RangeError('Cobranças sem fim são geradas pelo job, não na criação.');
   }
 
@@ -191,7 +192,7 @@ export function normalizeCounterpartLabel(label: string | undefined, direction: 
 
 /** `now` turns on the rule only a creation obeys: a recorrente registro starts today or later. */
 export function normalizeBillingInput(input: BillingInput, now?: Date): NormalizedBillingInput {
-  if (!TYPES.includes(input.type)) {
+  if (!TYPES.includes(input.recurrence)) {
     throw new RangeError('Tipo de cobrança inválido.');
   }
 
@@ -208,7 +209,7 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     addCalendarDays(input.endDate, 0);
   }
 
-  const recurring = input.type !== BillingType.Once;
+  const recurring = input.recurrence !== BillingRecurrence.Once;
 
   if (recurring && (!input.frequency || !FREQUENCIES.includes(input.frequency))) {
     throw new RangeError('Informe a frequência: mensal ou anual.');
@@ -224,11 +225,11 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     throw new RangeError('Com final do mês, o vencimento deve ser o último dia do mês.');
   }
 
-  if (input.type === BillingType.Until && !input.endDate) {
+  if (input.recurrence === BillingRecurrence.Until && !input.endDate) {
     throw new RangeError('Informe a data final.');
   }
 
-  if (input.type === BillingType.Indefinite && input.endDate) {
+  if (input.recurrence === BillingRecurrence.Indefinite && input.endDate) {
     throw new RangeError('Cobranças sem fim não aceitam data final.');
   }
 
@@ -242,30 +243,30 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     throw new RangeError('Informe uma descrição de até 500 caracteres.');
   }
 
-  const direction = input.direction ?? Direction.Receivable;
+  const direction = input.type ?? Direction.Receivable;
 
   if (direction !== Direction.Receivable && direction !== Direction.Payable) {
     throw new RangeError('Direção inválida.');
   }
 
-  const settled = input.settled === true;
+  const settled = input.kind === BillingKind.Record;
   // Checked before the split, so a registro reads its own message instead of the direction's.
   const counterpartLabel = settled ? registroLabel(input, direction, now) : undefined;
   const split = splitOf(input, direction, settled);
 
   resolveBillingSplit(input.totalCents, split);
 
-  if (input.type === BillingType.Until) {
+  if (input.recurrence === BillingRecurrence.Until) {
     billingDueDates(input);
   }
 
   return {
-    type: input.type,
+    recurrence: input.recurrence,
     frequency: recurring ? input.frequency : undefined,
     description,
     totalCents: input.totalCents,
     startDate: input.startDate,
-    endDate: input.type === BillingType.Until ? input.endDate : undefined,
+    endDate: input.recurrence === BillingRecurrence.Until ? input.endDate : undefined,
     // Only the month end is carried: 'fixed' stays implicit, like before the rule existed.
     dueRule: monthEnd ? BillingDueRule.EndOfMonth : undefined,
     timezone: input.timezone,
@@ -273,10 +274,10 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     reminders: input.reminders ? validateReminders(input.reminders) : undefined,
     split,
     category: input.category,
-    direction,
+    type: direction,
     payeeUserId: direction === Direction.Payable ? input.payeeUserId?.trim() || undefined : undefined,
     pix: direction === Direction.Payable && input.pix ? normalizeBillingPix(input.pix) : undefined,
-    settled: settled ? true : undefined,
+    kind: settled ? BillingKind.Record : undefined,
     counterpartLabel
   };
 }
@@ -317,7 +318,7 @@ function registroLabel(input: BillingInput, direction: Direction, now: Date | un
     throw new RangeError('Registro não tem participantes nem avisos.');
   }
 
-  if (now && input.type !== BillingType.Once && input.startDate < calendarDate(now, input.timezone)) {
+  if (now && input.recurrence !== BillingRecurrence.Once && input.startDate < calendarDate(now, input.timezone)) {
     throw new RangeError('Registro recorrente começa hoje ou depois.');
   }
 

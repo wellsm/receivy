@@ -4,7 +4,7 @@ import {
   type BillingInvite,
   type BillingKind,
   BillingState,
-  type BillingType,
+  type BillingRecurrence,
   Direction,
   type PublicInviteView
 } from '@receivy/common';
@@ -50,7 +50,7 @@ type PublicBillingRow = {
   id: string;
   description: string;
   total_cents: number;
-  recurrence: BillingType;
+  recurrence: BillingRecurrence;
   category: BillingCategory;
   state: BillingState;
 };
@@ -227,7 +227,7 @@ export async function publicInviteView(db: DbClient, invite: InviteRow, now = ne
     creditorFirstName: user?.name?.trim().split(/\s+/)[0] || 'Pessoa',
     description: billing.description,
     amount: { amountCents: billing.total_cents, currency: 'BRL' },
-    type: billingRecurrence(billing),
+    recurrence: billingRecurrence(billing),
     participantCount: owner
       ? await db.allocations.count({ where: { billing_id: billing.id, user_id: { not: owner.owner_id } } })
       : 0,

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import type { ComponentType, ReactElement } from "react";
 import { Alert } from "react-native";
-import { BillingType, calendarDate, ChargePayer, ChargeState, currentMonth, Direction, monthLabel, ProofState, shiftMonth, type ChargeSummary, type TimelinePage } from "@receivy/common";
+import { BillingRecurrence, calendarDate, ChargeState, currentMonth, Direction, monthLabel, ProofState, shiftMonth, type ChargeSummary, type TimelinePage } from "@receivy/common";
 import { FeedScreen } from "@/components/screens/feed-screen";
 
 /** Declared outside the factory: babel-jest rejects any identifier inside it, type parameters included, unless prefixed `mock`. */
@@ -78,7 +78,7 @@ function charge(overrides: Partial<ChargeSummary> & { id: string }): ChargeSumma
     dueDate: today,
     state: ChargeState.Pending,
     billingId: "b1",
-    billingType: BillingType.Once,
+    recurrence: BillingRecurrence.Once,
     installment: 1,
     installmentCount: 1,
     counterpartName: "Maria",
@@ -110,7 +110,7 @@ describe("FeedScreen", () => {
       page([
         item(charge({ id: "c1", proofState: ProofState.Pending })),
         item(charge({ id: "c2", description: "Netflix", counterpartName: "Netflix", amount: { amountCents: 2790, currency: "BRL" } }), Direction.Payable),
-        item(charge({ id: "c3", description: "Claude Team", counterpartName: "João", dueDate: "2020-01-01", billingType: BillingType.Indefinite, installment: null, installmentCount: null })),
+        item(charge({ id: "c3", description: "Claude Team", counterpartName: "João", dueDate: "2020-01-01", recurrence: BillingRecurrence.Indefinite, installment: null, installmentCount: null })),
         item(charge({ id: "c4", description: "Internet", counterpartName: "Pedro", dueDate: "2099-01-01", counterpartReachable: false })),
       ]),
     );
@@ -153,7 +153,7 @@ describe("FeedScreen", () => {
   });
 
   it("marks the owner's own bill without Pix as paid after confirming and reloads quietly", async () => {
-    const own = charge({ id: "own", description: "Aluguel", payer: ChargePayer.Owner, ownedByViewer: true, hasPix: false });
+    const own = charge({ id: "own", description: "Aluguel", ownedByViewer: true, hasPix: false });
     const timeline = jest
       .fn()
       .mockResolvedValueOnce(page([item(own, Direction.Payable)]))
@@ -171,7 +171,7 @@ describe("FeedScreen", () => {
   });
 
   it("declares the owner's own bill to a payee who confirms", async () => {
-    const own = charge({ id: "own", description: "Aluguel", payer: ChargePayer.Owner, ownedByViewer: true, hasPix: false, confirmationRequired: true });
+    const own = charge({ id: "own", description: "Aluguel", ownedByViewer: true, hasPix: false, confirmationRequired: true });
     const timeline = jest
       .fn()
       .mockResolvedValueOnce(page([item(own, Direction.Payable)]))

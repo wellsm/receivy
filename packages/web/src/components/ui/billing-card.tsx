@@ -56,7 +56,7 @@ export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProp
   const occurrence = occurrenceLine(billing);
   const canShare = billingShareAction(billing) !== null;
   // A conta a pagar has no link to share: its action opens the billing.
-  const payable = billing.direction === "payable";
+  const payable = billing.type === "payable";
 
   return (
     <article

@@ -1,7 +1,14 @@
-import { BillingType } from './billing';
-import { ChargePayer, ChargeState, type ChargeSummary, Direction, ProofKind, ProofState } from './contracts';
+import { BillingKind, BillingRecurrence } from './billing';
+import {
+  ownerPays,
+  ChargeState,
+  type ChargeSummary,
+  Direction,
+  ProofKind,
+  ProofState
+} from './contracts';
 
-export const enum BadgeTone {
+export enum BadgeTone {
   Danger = 'danger',
   Info = 'info',
   Success = 'success',
@@ -9,7 +16,7 @@ export const enum BadgeTone {
   Neutral = 'neutral'
 }
 
-export const enum ChargeActionKind {
+export enum ChargeActionKind {
   Remind = 'remind',
   MarkPaid = 'mark_paid',
   DeclarePayment = 'declare_payment'
@@ -59,21 +66,31 @@ export function feedDayLabel(date: string, today: string): string {
   const month = MONTHS[Number(date.slice(5, 7)) - 1];
   const sameYear = date.slice(0, 4) === today.slice(0, 4);
 
-  return sameYear ? `${day} de ${month}` : `${day} de ${month} de ${date.slice(0, 4)}`;
+  return sameYear
+    ? `${day} de ${month}`
+    : `${day} de ${month} de ${date.slice(0, 4)}`;
 }
 
 /** The "Registro" seal rides beside whatever else the card says. */
 function registroBadges(charge: ChargeSummary): ChargeBadge[] {
-  if (charge.settled !== true) {
+  if (charge.kind !== BillingKind.Record) {
     return [];
   }
 
   return [{ label: 'Registro', tone: BadgeTone.Neutral }];
 }
 
-export function chargeBadges(charge: ChargeSummary, today: string): ChargeBadge[] {
+export function chargeBadges(
+  charge: ChargeSummary,
+  today: string,
+  /** The viewer's side of the charge; without it the "Minha conta" badge cannot be told and is left out. */
+  direction?: Direction
+): ChargeBadge[] {
   if (charge.state === ChargeState.Cancelled) {
-    return [{ label: 'Cancelado', tone: BadgeTone.Neutral }, ...registroBadges(charge)];
+    return [
+      { label: 'Cancelado', tone: BadgeTone.Neutral },
+      ...registroBadges(charge)
+    ];
   }
 
   if (charge.state === ChargeState.Paid) {
@@ -87,10 +104,17 @@ export function chargeBadges(charge: ChargeSummary, today: string): ChargeBadge[
 
   const badges: ChargeBadge[] = [];
 
-  if (charge.billingType === BillingType.Indefinite) {
+  if (charge.recurrence === BillingRecurrence.Indefinite) {
     badges.push({ label: 'Recorrente', tone: BadgeTone.Neutral });
-  } else if (charge.installment !== null && charge.installmentCount !== null && charge.installmentCount > 1) {
-    badges.push({ label: `Parcela ${charge.installment} de ${charge.installmentCount}`, tone: BadgeTone.Neutral });
+  } else if (
+    charge.installment !== null &&
+    charge.installmentCount !== null &&
+    charge.installmentCount > 1
+  ) {
+    badges.push({
+      label: `Parcela ${charge.installment} de ${charge.installmentCount}`,
+      tone: BadgeTone.Neutral
+    });
   }
 
   if (charge.dueDate < today) {
@@ -101,12 +125,15 @@ export function chargeBadges(charge: ChargeSummary, today: string): ChargeBadge[
 
   if (charge.proofState === ProofState.Pending) {
     badges.push({
-      label: charge.proofKind === ProofKind.Declaration ? 'Pagamento informado' : 'Comprovante enviado',
+      label:
+        charge.proofKind === ProofKind.Declaration
+          ? 'Pagamento informado'
+          : 'Comprovante enviado',
       tone: BadgeTone.Info
     });
   }
 
-  if (charge.payer === ChargePayer.Owner && charge.ownedByViewer) {
+  if (direction && charge.ownedByViewer && ownerPays({ direction, ownedByViewer: true })) {
     badges.push({ label: 'Minha conta', tone: BadgeTone.Info });
   }
 
@@ -115,7 +142,10 @@ export function chargeBadges(charge: ChargeSummary, today: string): ChargeBadge[
   return badges;
 }
 
-export function chargeStateLabel(charge: ChargeSummary, direction: Direction): string {
+export function chargeStateLabel(
+  charge: ChargeSummary,
+  direction: Direction
+): string {
   if (charge.state === ChargeState.Cancelled) {
     return 'Cancelado';
   }
@@ -135,7 +165,10 @@ export function chargeStateLabel(charge: ChargeSummary, direction: Direction): s
  * The action a feed card runs in place, behind a confirmation. Null means the card only opens the
  * charge (shown as an arrow): settled charges, proofs to review and anything that needs the detail screen.
  */
-export function chargeAction(charge: ChargeSummary, direction: Direction): ChargeAction | null {
+export function chargeAction(
+  charge: ChargeSummary,
+  direction: Direction
+): ChargeAction | null {
   if (charge.state !== ChargeState.Pending) {
     return null;
   }
@@ -144,13 +177,17 @@ export function chargeAction(charge: ChargeSummary, direction: Direction): Charg
     return null;
   }
 
-  const ownBill = charge.payer === ChargePayer.Owner;
+  const ownBill = ownerPays({ direction, ownedByViewer: charge.ownedByViewer });
 
   if (direction === Direction.Receivable) {
     // The payee of a conta a pagar only confirms; reminders belong to whoever collects, and only
     // reach someone with an address on file.
     // A registro has nobody to remind either.
-    if (ownBill || charge.counterpartReachable === false || charge.settled === true) {
+    if (
+      ownBill ||
+      charge.counterpartReachable === false ||
+      charge.kind === BillingKind.Record
+    ) {
       return null;
     }
 

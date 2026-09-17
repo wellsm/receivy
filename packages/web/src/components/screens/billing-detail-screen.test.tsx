@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { BillingCategory, BillingFrequency, BillingState, BillingKind, BillingRecurrence, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
 
@@ -36,14 +36,14 @@ function charge(overrides: Partial<ChargeDetail> & { id: string; name: string })
     dueDate: "2026-11-15",
     state: ChargeState.Pending,
     billingId: "b1",
-    billingType: BillingType.Until,
+    recurrence: BillingRecurrence.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: name,
     proofState: null,
     direction: Direction.Receivable,
     recipient: { userId: "u1", name, email: null },
-    debtorUserId: "u1",
+    debtorId: "u1",
     pix: PIX,
     sharingState: SharingState.Ready,
     proof: null,
@@ -69,8 +69,8 @@ const secondCycle = [
 function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
   return {
     id: "b1",
-    type: BillingType.Until,
-    direction: Direction.Receivable,
+    recurrence: BillingRecurrence.Until,
+    type: Direction.Receivable,
     payee: null,
     pix: null,
     description: "Jantar de despedida",
@@ -358,7 +358,7 @@ it("shares an invite that already exists instead of issuing a new one", async ()
 });
 
 it("asks what to do with the pending charges before pausing a subscription", async () => {
-  await open(billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined }));
+  await open(billing({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined }));
   const user = setup();
 
   expect(screen.getByText("Recorrente mensal")).toBeInTheDocument();
@@ -376,7 +376,7 @@ it("asks what to do with the pending charges before pausing a subscription", asy
 });
 
 it("pauses right away when nothing is pending", async () => {
-  await open(billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: firstCycle }));
+  await open(billing({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: firstCycle }));
   const user = setup();
 
   await user.click(screen.getByRole("button", { name: "Pausar" }));
@@ -392,7 +392,7 @@ it("has no pause for a finite billing", async () => {
 });
 
 it("names the Pix key from the wallet while no charge has been generated", async () => {
-  const detail = billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
+  const detail = billing({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
   const wallet = [{ id: "pix-2", type: "pix", pixKeyType: "email", pixKey: "ana@example.com", label: "", isDefault: true, archivedAt: null, createdAt: "" }];
 
   await open(detail, (path) => (path === "/api/financial/payment-methods" ? Response.json({ paymentMethods: wallet }) : undefined));
@@ -435,12 +435,12 @@ it("ends with the simple confirmation when nothing is pending", async () => {
 
 it("shows a conta a pagar with its inline key and payee, without invite, link or reminders", async () => {
   const detail = billing({
-    direction: Direction.Payable,
+    type: Direction.Payable,
     payee: { userId: "u1", name: "Ana" },
     pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
     paymentMethodId: undefined,
     invite: { url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" },
-    charges: [charge({ id: "c6", name: "Ana", direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true })],
+    charges: [charge({ id: "c6", name: "Ana", direction: Direction.Payable, ownedByViewer: true })],
   });
   const calls = await open(detail);
   const user = setup();
@@ -465,7 +465,7 @@ it("shows a conta a pagar with its inline key and payee, without invite, link or
 });
 
 it("names a conta a pagar without payee or key as the owner's alone", async () => {
-  await open(billing({ direction: Direction.Payable, pix: null, paymentMethodId: undefined, charges: [charge({ id: "c6", name: "Você", direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true })] }));
+  await open(billing({ type: Direction.Payable, pix: null, paymentMethodId: undefined, charges: [charge({ id: "c6", name: "Você", direction: Direction.Payable, ownedByViewer: true })] }));
 
   expect(screen.getByText("Sem chave Pix")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Abrir cobrança de Só comigo" })).toBeInTheDocument();
@@ -607,14 +607,14 @@ it("heads a registro with its counterpart and hides the invite and the payment l
     id: "c8",
     name: "Empresa X",
     recipient: { userId: null, name: "Empresa X", email: null },
-    debtorUserId: null,
+    debtorId: null,
     pix: null,
     sharingState: SharingState.Closed,
-    settled: true,
+    kind: BillingKind.Record,
     counterpartLabel: "Empresa X",
   });
 
-  await open(billing({ settled: true, counterpartLabel: "Empresa X", paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] }, charges: [salary] }));
+  await open(billing({ kind: BillingKind.Record, counterpartLabel: "Empresa X", paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] }, charges: [salary] }));
 
   expect(screen.getByText("De Empresa X")).toBeInTheDocument();
   expect(screen.getByText("Registro")).toBeInTheDocument();
@@ -631,16 +631,15 @@ it("heads a registro a pagar with Para and names its rows after the counterpart"
     id: "c9",
     name: "Imobiliária",
     direction: Direction.Payable,
-    payer: ChargePayer.Owner,
     ownedByViewer: true,
     recipient: { userId: null, name: "Imobiliária", email: null },
-    debtorUserId: null,
+    debtorId: null,
     pix: null,
-    settled: true,
+    kind: BillingKind.Record,
     counterpartLabel: "Imobiliária",
   });
 
-  await open(billing({ direction: Direction.Payable, settled: true, counterpartLabel: "Imobiliária", paymentMethodId: undefined, charges: [rent] }));
+  await open(billing({ type: Direction.Payable, kind: BillingKind.Record, counterpartLabel: "Imobiliária", paymentMethodId: undefined, charges: [rent] }));
 
   expect(screen.getByText("Para Imobiliária")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeInTheDocument();

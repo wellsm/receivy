@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BillingDueRule, BillingFrequency, type BillingInput, BillingType, DEFAULT_BILLING_REMINDERS, SplitPartKind } from './billing';
+import { BillingDueRule, BillingFrequency, type BillingInput, BillingKind, BillingRecurrence, DEFAULT_BILLING_REMINDERS, SplitPartKind } from './billing';
 import {
   addCalendarDays,
   billingDates,
@@ -56,7 +56,7 @@ describe('billing calendar', () => {
 
   it('accepts end_of_month only on the last day of monthly or once billings', () => {
     const base = {
-      type: BillingType.Until,
+      recurrence: BillingRecurrence.Until,
       frequency: BillingFrequency.Monthly,
       totalCents: 1_000,
       startDate: '2026-09-30',
@@ -72,9 +72,9 @@ describe('billing calendar', () => {
       'Com final do mês, o vencimento deve ser o último dia do mês.'
     );
     expect(() =>
-      normalizeBillingInput({ ...base, type: BillingType.Indefinite, frequency: BillingFrequency.Yearly, endDate: undefined })
+      normalizeBillingInput({ ...base, recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Yearly, endDate: undefined })
     ).toThrow('Final do mês só vale para cobranças mensais.');
-    expect(normalizeBillingInput({ ...base, type: BillingType.Once, frequency: undefined, endDate: undefined }).dueRule).toBe(
+    expect(normalizeBillingInput({ ...base, recurrence: BillingRecurrence.Once, frequency: undefined, endDate: undefined }).dueRule).toBe(
       BillingDueRule.EndOfMonth
     );
   });
@@ -97,14 +97,14 @@ describe('billing calendar', () => {
   });
 
   it('expands finite billings into due dates and caps them at 120', () => {
-    expect(billingDueDates({ type: BillingType.Once, startDate: '2026-05-10' })).toEqual(['2026-05-10']);
+    expect(billingDueDates({ recurrence: BillingRecurrence.Once, startDate: '2026-05-10' })).toEqual(['2026-05-10']);
     expect(
-      billingDueDates({ type: BillingType.Until, frequency: BillingFrequency.Monthly, startDate: '2026-01-31', endDate: '2026-03-31' })
+      billingDueDates({ recurrence: BillingRecurrence.Until, frequency: BillingFrequency.Monthly, startDate: '2026-01-31', endDate: '2026-03-31' })
     ).toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
     expect(() =>
-      billingDueDates({ type: BillingType.Until, frequency: BillingFrequency.Monthly, startDate: '2026-01-01', endDate: '2040-01-01' })
+      billingDueDates({ recurrence: BillingRecurrence.Until, frequency: BillingFrequency.Monthly, startDate: '2026-01-01', endDate: '2040-01-01' })
     ).toThrow(/120/);
-    expect(() => billingDueDates({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-01-01' })).toThrow(
+    expect(() => billingDueDates({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-01-01' })).toThrow(
       /sem fim/i
     );
   });
@@ -130,7 +130,7 @@ describe('billing calendar', () => {
 
   it('normalizes input per type and rejects incompatible fields', () => {
     const once = normalizeBillingInput({
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 100,
       startDate: '2026-01-31',
       timezone: 'America/Sao_Paulo',
@@ -140,7 +140,7 @@ describe('billing calendar', () => {
     expect(once.frequency).toBeUndefined();
     expect(once.reminders).toBeUndefined();
     const until = normalizeBillingInput({
-      type: BillingType.Until,
+      recurrence: BillingRecurrence.Until,
       frequency: BillingFrequency.Monthly,
       totalCents: 100,
       startDate: '2026-01-31',
@@ -157,11 +157,11 @@ describe('billing calendar', () => {
       { offsetDays: 2, enabled: true }
     ]);
     expect(() =>
-      normalizeBillingInput({ type: BillingType.Until, totalCents: 100, startDate: '2026-01-31', timezone: 'UTC', split })
+      normalizeBillingInput({ recurrence: BillingRecurrence.Until, totalCents: 100, startDate: '2026-01-31', timezone: 'UTC', split })
     ).toThrow(/frequência/i);
     expect(() =>
       normalizeBillingInput({
-        type: BillingType.Until,
+        recurrence: BillingRecurrence.Until,
         frequency: BillingFrequency.Monthly,
         totalCents: 100,
         startDate: '2026-01-31',
@@ -171,7 +171,7 @@ describe('billing calendar', () => {
     ).toThrow(/data final/i);
     expect(() =>
       normalizeBillingInput({
-        type: BillingType.Indefinite,
+        recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
         totalCents: 100,
         startDate: '2026-01-31',
@@ -182,7 +182,7 @@ describe('billing calendar', () => {
     ).toThrow(/sem fim/i);
     expect(() =>
       normalizeBillingInput({
-        type: BillingType.Until,
+        recurrence: BillingRecurrence.Until,
         frequency: BillingFrequency.Monthly,
         totalCents: 100,
         startDate: '2026-03-31',
@@ -192,11 +192,11 @@ describe('billing calendar', () => {
       })
     ).toThrow(/anterior/i);
     expect(() =>
-      normalizeBillingInput({ type: BillingType.Once, totalCents: 100, startDate: '2026-01-31', timezone: 'Mars/Olympus', split })
+      normalizeBillingInput({ recurrence: BillingRecurrence.Once, totalCents: 100, startDate: '2026-01-31', timezone: 'Mars/Olympus', split })
     ).toThrow();
     expect(() =>
       normalizeBillingInput({
-        type: BillingType.Once,
+        recurrence: BillingRecurrence.Once,
         totalCents: 100,
         startDate: '2026-01-31',
         timezone: 'UTC',
@@ -210,11 +210,11 @@ describe('billing calendar', () => {
 describe('registros', () => {
   const now = new Date('2026-09-15T12:00:00Z');
   const registro: BillingInput = {
-    type: BillingType.Once,
+    recurrence: BillingRecurrence.Once,
     totalCents: 500_000,
     startDate: '2026-08-05',
     timezone: 'America/Sao_Paulo',
-    settled: true,
+    kind: BillingKind.Record,
     counterpartLabel: '  Empresa X  '
   };
 
@@ -222,8 +222,8 @@ describe('registros', () => {
     const normalized = normalizeBillingInput(registro, now);
 
     expect(normalized.split).toEqual({ mode: 'equal', parts: [{ kind: 'owner' }] });
-    expect(normalized.direction).toBe('receivable');
-    expect(normalized.settled).toBe(true);
+    expect(normalized.type).toBe('receivable');
+    expect(normalized.kind).toBe(BillingKind.Record);
     expect(normalized.counterpartLabel).toBe('Empresa X');
     expect(normalized.startDate).toBe('2026-08-05');
     expect(normalized.reminders).toBeUndefined();
@@ -231,7 +231,7 @@ describe('registros', () => {
 
   it('asks for the name by direction, 1 to 120 characters', () => {
     expect(() => normalizeBillingInput({ ...registro, counterpartLabel: '   ' }, now)).toThrow('Informe de quem é o valor.');
-    expect(() => normalizeBillingInput({ ...registro, direction: Direction.Payable, counterpartLabel: undefined }, now)).toThrow(
+    expect(() => normalizeBillingInput({ ...registro, type: Direction.Payable, counterpartLabel: undefined }, now)).toThrow(
       'Informe para quem é o valor.'
     );
     expect(() => normalizeBillingInput({ ...registro, counterpartLabel: 'x'.repeat(121) }, now)).toThrow('Informe de quem é o valor.');
@@ -242,32 +242,32 @@ describe('registros', () => {
     const message = 'Registro não tem participantes nem avisos.';
 
     expect(() => normalizeBillingInput({ ...registro, split }, now)).toThrow(message);
-    expect(() => normalizeBillingInput({ ...registro, direction: Direction.Payable, payeeUserId: 'ana' }, now)).toThrow(message);
+    expect(() => normalizeBillingInput({ ...registro, type: Direction.Payable, payeeUserId: 'ana' }, now)).toThrow(message);
     expect(() => normalizeBillingInput({ ...registro, paymentMethodId: 'pix-1' }, now)).toThrow(message);
     expect(() =>
-      normalizeBillingInput({ ...registro, direction: Direction.Payable, pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } }, now)
+      normalizeBillingInput({ ...registro, type: Direction.Payable, pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } }, now)
     ).toThrow(message);
     expect(() => normalizeBillingInput({ ...registro, reminders: [{ offsetDays: 0, enabled: true }] }, now)).toThrow(message);
   });
 
   it('starts a recorrente registro today or later, checked only when a clock is given', () => {
-    const monthly: BillingInput = { ...registro, type: BillingType.Indefinite, frequency: BillingFrequency.Monthly };
+    const monthly: BillingInput = { ...registro, recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly };
 
     expect(() => normalizeBillingInput(monthly, now)).toThrow('Registro recorrente começa hoje ou depois.');
-    expect(() => normalizeBillingInput({ ...monthly, type: BillingType.Until, endDate: '2026-12-05' }, now)).toThrow(
+    expect(() => normalizeBillingInput({ ...monthly, recurrence: BillingRecurrence.Until, endDate: '2026-12-05' }, now)).toThrow(
       'Registro recorrente começa hoje ou depois.'
     );
     expect(normalizeBillingInput({ ...monthly, startDate: '2026-09-15' }, now).startDate).toBe('2026-09-15');
     // Edits normalize without a clock, so an old recorrente registro stays editable.
-    expect(normalizeBillingInput(monthly).settled).toBe(true);
+    expect(normalizeBillingInput(monthly).kind).toBe(BillingKind.Record);
   });
 
   it('still refuses a conta a receber without a contact when it is not a registro', () => {
-    expect(() => normalizeBillingInput({ ...registro, settled: undefined, counterpartLabel: undefined })).toThrow(
+    expect(() => normalizeBillingInput({ ...registro, kind: undefined, counterpartLabel: undefined })).toThrow(
       'Selecione ao menos um contato.'
     );
     expect(() =>
-      normalizeBillingInput({ ...registro, settled: false, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } })
+      normalizeBillingInput({ ...registro, kind: BillingKind.Live, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } })
     ).toThrow('Selecione ao menos um contato.');
   });
 });

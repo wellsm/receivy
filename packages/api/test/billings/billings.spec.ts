@@ -8,7 +8,7 @@ import {
   BillingDueRule,
   BillingFrequency,
   BillingState,
-  BillingType,
+  BillingRecurrence,
   billingDueLabel,
   ChargeState,
   DEFAULT_BILLING_REMINDERS,
@@ -39,7 +39,7 @@ let sharesId: string;
 
 function once(overrides: Partial<BillingInput> = {}): BillingInput {
   return {
-    type: BillingType.Once,
+    recurrence: BillingRecurrence.Once,
     description: 'Jantar',
     totalCents: 9_000,
     startDate: '2026-10-31',
@@ -66,13 +66,13 @@ describe('billings on native PostgreSQL', () => {
 
   it('creates a once billing with one numbered charge, a live recipient, Pix snapshots and idempotent replay', async () => {
     const created = await BillingRepository.create(db, OWNER, 'once-key', once());
-    equal(created.type, 'once');
+    equal(created.recurrence, 'once');
     equal(created.installmentCount, 1);
     deepEqual(
       created.charges.map((charge) => [charge.amount.amountCents, charge.installment, charge.installmentCount]),
       [[6_001, 1, 1]]
     );
-    equal(created.charges[0]!.billingType, 'once');
+    equal(created.charges[0]!.recurrence, 'once');
     equal((await BillingRepository.create(db, OWNER, 'once-key', once())).id, created.id);
     await rejects(() => BillingRepository.create(db, OWNER, 'once-key', once({ totalCents: 9_001 })), ApiError);
     await rejects(() => BillingRepository.get(db, OTHER, created.id), HttpNotFoundError);
@@ -80,7 +80,7 @@ describe('billings on native PostgreSQL', () => {
     await ContactRepository.save(db, OWNER, { name: 'Bruno Editado', email: 'billing-edited@example.com' }, debtorContactId);
     const snapshot = await ChargeRepository.get(db, OWNER, created.charges[0]!.id);
     deepEqual(snapshot.recipient, { userId: debtorId, name: 'Bruno Editado', email: 'billing-edited@example.com', avatar: null });
-    equal(snapshot.debtorUserId, debtorId);
+    equal(snapshot.debtorId, debtorId);
     equal(snapshot.pix?.key, '52998224725');
     await ContactRepository.save(db, OWNER, { name: 'Bruno', email: 'billing-debtor@example.com' }, debtorContactId);
     equal(await db.events.count({ where: { eventable_id: created.charges[0]!.id, type: 'charge.created' } }), 1);
@@ -89,7 +89,7 @@ describe('billings on native PostgreSQL', () => {
   it('creates every occurrence of an until billing at once with exact per-occurrence cents and clamped days', async () => {
     const created = await BillingRepository.create(db, OWNER, 'until-key', {
       ...once({ description: 'Aluguel', totalCents: 1_001 }),
-      type: BillingType.Until,
+      recurrence: BillingRecurrence.Until,
       frequency: BillingFrequency.Monthly,
       startDate: '2026-01-31',
       endDate: '2026-03-31',
@@ -108,7 +108,7 @@ describe('billings on native PostgreSQL', () => {
       () =>
         BillingRepository.create(db, OWNER, 'until-too-long', {
           ...once(),
-          type: BillingType.Until,
+          recurrence: BillingRecurrence.Until,
           frequency: BillingFrequency.Monthly,
           startDate: '2026-01-01',
           endDate: '2040-01-01'
@@ -119,7 +119,7 @@ describe('billings on native PostgreSQL', () => {
       () =>
         BillingRepository.create(db, OWNER, 'until-backwards', {
           ...once(),
-          type: BillingType.Until,
+          recurrence: BillingRecurrence.Until,
           frequency: BillingFrequency.Monthly,
           startDate: '2026-03-01',
           endDate: '2026-01-01'
@@ -143,7 +143,7 @@ describe('billings on native PostgreSQL', () => {
       'month-end-until',
       {
         ...once({ description: 'Aluguel' }),
-        type: BillingType.Until,
+        recurrence: BillingRecurrence.Until,
         frequency: BillingFrequency.Monthly,
         startDate: '2026-09-30',
         endDate: '2026-11-30',
@@ -165,7 +165,7 @@ describe('billings on native PostgreSQL', () => {
           'month-end-yearly',
           {
             ...once(),
-            type: BillingType.Indefinite,
+            recurrence: BillingRecurrence.Indefinite,
             frequency: BillingFrequency.Yearly,
             startDate: '2026-09-30',
             dueRule: BillingDueRule.EndOfMonth
@@ -188,7 +188,7 @@ describe('billings on native PostgreSQL', () => {
       db,
       OWNER,
       'month-end-rent',
-      { ...once({ description: 'Aluguel' }), type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-09-15' },
+      { ...once({ description: 'Aluguel' }), recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-09-15' },
       date('2026-09-01')
     );
     equal(rent.dueRule, 'fixed');
@@ -230,7 +230,7 @@ describe('billings on native PostgreSQL', () => {
       'indefinite-key',
       {
         ...once({ description: 'Mensal', totalCents: 1_001 }),
-        type: BillingType.Indefinite,
+        recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
         startDate: '2026-01-31',
         split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: debtorId }, { kind: SplitPartKind.Owner }] }
@@ -246,7 +246,7 @@ describe('billings on native PostgreSQL', () => {
           db,
           OWNER,
           'indefinite-past',
-          { ...once(), type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2025-01-01' },
+          { ...once(), recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2025-01-01' },
           date('2026-01-01')
         ),
       RangeError
@@ -285,7 +285,7 @@ describe('billings on native PostgreSQL', () => {
       'invalid-key',
       {
         ...once(),
-        type: BillingType.Indefinite,
+        recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
         startDate: '2026-02-15',
         split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: archived.userId }] }
@@ -298,7 +298,7 @@ describe('billings on native PostgreSQL', () => {
       'valid-key',
       {
         ...once({ totalCents: 2_000 }),
-        type: BillingType.Indefinite,
+        recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
         startDate: '2026-02-15',
         split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: debtorId }] }
@@ -326,9 +326,9 @@ describe('billings on native PostgreSQL', () => {
   });
 
   it('lists the owner billings newest first with cursor and type filter', async () => {
-    const page = await BillingRepository.list(db, OWNER, { type: BillingType.Once });
+    const page = await BillingRepository.list(db, OWNER, { recurrence: BillingRecurrence.Once });
     ok(page.billings.length >= 2);
-    ok(page.billings.every((billing) => billing.type === 'once'));
+    ok(page.billings.every((billing) => billing.recurrence === 'once'));
     deepEqual(await BillingRepository.list(db, OTHER), { billings: [], nextCursor: null });
   });
 
@@ -498,7 +498,7 @@ describe('billings on native PostgreSQL', () => {
           totalCents: 3_000,
           split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: solo }] }
         }),
-        type: BillingType.Until,
+        recurrence: BillingRecurrence.Until,
         frequency: BillingFrequency.Monthly,
         startDate: '2026-01-31',
         endDate: '2026-03-31'
@@ -531,7 +531,7 @@ describe('billings on native PostgreSQL', () => {
           totalCents: 3_000,
           split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: solo }] }
         }),
-        type: BillingType.Until,
+        recurrence: BillingRecurrence.Until,
         frequency: BillingFrequency.Monthly,
         startDate: '2026-01-31',
         endDate: '2026-03-31'
@@ -717,7 +717,7 @@ describe('billings on native PostgreSQL', () => {
       'preview-key',
       {
         ...once({ totalCents: 1_001 }),
-        type: BillingType.Indefinite,
+        recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
         startDate: local,
         reminders: [],
@@ -728,7 +728,7 @@ describe('billings on native PostgreSQL', () => {
     // The occurrence due today is materialized at creation; later occurrences are not projected into the feed.
     equal(rule.charges.length, 1);
     equal(rule.charges[0]!.dueDate, local);
-    const timeline = await TimelineRepository.get(db, OWNER, { type: [BillingType.Indefinite], from: local });
+    const timeline = await TimelineRepository.get(db, OWNER, { recurrence: [BillingRecurrence.Indefinite], from: local });
     const fromRule = timeline.items.filter((item) => item.charge.billingId === rule.id);
     deepEqual(
       fromRule.map((item) => item.charge.dueDate),
@@ -786,7 +786,7 @@ describe('billings on native PostgreSQL', () => {
       'percentage-indefinite-key',
       {
         ...once({ totalCents: 10_001 }),
-        type: BillingType.Indefinite,
+        recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
         startDate: '2026-01-31',
         split

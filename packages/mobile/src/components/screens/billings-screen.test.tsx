@@ -15,8 +15,8 @@ type Overrides = Record<string, unknown>;
 function summary(overrides: Overrides = {}) {
   return {
     id: "b1",
-    type: "once" as const,
-    direction: "receivable" as const,
+    recurrence: "once" as const,
+    type: "receivable" as const,
     payeeName: null,
     description: "Churrasco",
     total: { amountCents: 12000, currency: "BRL" as const },
@@ -179,7 +179,7 @@ describe("BillingsScreen", () => {
   it("shows only active billings by default and switches state without asking the API again", async () => {
     const client = makeClient({
       billings: jest.fn().mockResolvedValue({
-        billings: [summary(), summary({ id: "b2", description: "Netflix", state: "ended", paidCount: 3 }), summary({ id: "b3", description: "Academia", type: "indefinite", state: "paused" })],
+        billings: [summary(), summary({ id: "b2", description: "Netflix", state: "ended", paidCount: 3 }), summary({ id: "b3", description: "Academia", recurrence: "indefinite", state: "paused" })],
         nextCursor: null,
       }),
     });
@@ -273,7 +273,7 @@ describe("BillingsScreen", () => {
     await screen.findByRole("button", { name: "Cobrança Churrasco" });
     await fireEvent.press(screen.getByRole("radio", { name: "A pagar" }));
 
-    await waitFor(() => expect(queries(client).at(-1)).toBe("direction=payable"));
+    await waitFor(() => expect(queries(client).at(-1)).toBe("type=payable"));
 
     await fireEvent.press(screen.getByRole("radio", { name: "Todas" }));
 
@@ -283,7 +283,7 @@ describe("BillingsScreen", () => {
   it("opens a conta a pagar instead of sharing a link", async () => {
     const onOpenBilling = jest.fn();
     const client = makeClient({
-      billings: jest.fn().mockResolvedValue({ billings: [summary({ direction: "payable", payeeName: "Ana", shareChargeId: "c9" })], nextCursor: null }),
+      billings: jest.fn().mockResolvedValue({ billings: [summary({ type: "payable", payeeName: "Ana", shareChargeId: "c9" })], nextCursor: null }),
     });
 
     await render(<BillingsScreen client={client} onOpenBilling={onOpenBilling} />);

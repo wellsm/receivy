@@ -5,8 +5,9 @@ import {
   BillingCategory,
   BillingFrequency,
   type BillingInput,
+  BillingKind,
   type BillingPatch,
-  BillingType,
+  BillingRecurrence,
   ChargeState,
   calendarDate,
   Direction,
@@ -48,13 +49,13 @@ let pixId: string;
 /** A registro a receber: the owner alone, the counterpart typed by hand, due in February. */
 function registro(key: string, overrides: Partial<BillingInput> = {}): BillingInput {
   return {
-    type: BillingType.Once,
+    recurrence: BillingRecurrence.Once,
     description: key,
     category: BillingCategory.Income,
     totalCents: 500_000,
     startDate: '2026-02-20',
     timezone: TZ,
-    settled: true,
+    kind: BillingKind.Record,
     counterpartLabel: 'Empresa X',
     ...overrides
   };
@@ -98,7 +99,7 @@ describe('registros on native PostgreSQL', () => {
     await refuse('registro-no-name', registro('Sem nome', { counterpartLabel: '  ' }), 'Informe de quem é o valor.');
     await refuse(
       'registro-no-name-payable',
-      registro('Sem nome', { direction: Direction.Payable, counterpartLabel: undefined }),
+      registro('Sem nome', { type: Direction.Payable, counterpartLabel: undefined }),
       'Informe para quem é o valor.'
     );
     await refuse(
@@ -106,23 +107,23 @@ describe('registros on native PostgreSQL', () => {
       registro('Com Ana', { split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: anaId }] } }),
       crowded
     );
-    await refuse('registro-payee', registro('Para Ana', { direction: Direction.Payable, payeeUserId: anaId }), crowded);
+    await refuse('registro-payee', registro('Para Ana', { type: Direction.Payable, payeeUserId: anaId }), crowded);
     await refuse('registro-wallet', registro('Com chave', { paymentMethodId: pixId }), crowded);
     await refuse(
       'registro-pix',
-      registro('Com Pix', { direction: Direction.Payable, pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } }),
+      registro('Com Pix', { type: Direction.Payable, pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } }),
       crowded
     );
     await refuse('registro-reminders', registro('Com lembrete', { reminders: [{ offsetDays: 0, enabled: true }] }), crowded);
     await refuse(
       'registro-monthly-past',
-      registro('Salário atrasado', { type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-03-01' }),
+      registro('Salário atrasado', { recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-03-01' }),
       'Registro recorrente começa hoje ou depois.'
     );
     await refuse(
       'registro-until-past',
       registro('Parcelas antigas', {
-        type: BillingType.Until,
+        recurrence: BillingRecurrence.Until,
         frequency: BillingFrequency.Monthly,
         startDate: '2026-02-01',
         endDate: '2026-06-01'
@@ -132,7 +133,7 @@ describe('registros on native PostgreSQL', () => {
     await refuse(
       'receivable-owner-only',
       {
-        type: BillingType.Once,
+        recurrence: BillingRecurrence.Once,
         totalCents: 1_000,
         startDate: '2026-03-10',
         timezone: TZ,
@@ -153,7 +154,7 @@ describe('registros on native PostgreSQL', () => {
       date('2026-03-05')
     );
 
-    equal(once.settled, true);
+    equal(once.kind, BillingKind.Record);
     equal(once.counterpartLabel, 'Empresa X');
     deepEqual(
       once.allocations.map((allocation) => allocation.kind),
@@ -174,7 +175,7 @@ describe('registros on native PostgreSQL', () => {
     equal(detail.direction, Direction.Receivable);
     equal(detail.counterpartName, 'Empresa X');
     equal(detail.recipient.name, 'Empresa X');
-    equal(detail.settled, true);
+    equal(detail.kind, BillingKind.Record);
     equal(detail.counterpartLabel, 'Empresa X');
     equal(detail.sharingState, SharingState.Closed);
     equal(detail.pix, null);
@@ -184,7 +185,7 @@ describe('registros on native PostgreSQL', () => {
       OWNER,
       'registro-past-payable',
       registro('Aluguel de fevereiro', {
-        direction: Direction.Payable,
+        type: Direction.Payable,
         counterpartLabel: 'Imobiliária',
         startDate: '2026-02-10',
         category: BillingCategory.Housing
@@ -216,12 +217,12 @@ describe('registros on native PostgreSQL', () => {
     equal(renamed.counterpartLabel, 'Empresa Y');
     equal(renamed.charges[0]!.counterpartName, 'Empresa Y');
     equal(
-      (await BillingRepository.patch(db, OWNER, once.id, { settled: true }, date('2026-03-06'))).settled,
-      true,
+      (await BillingRepository.patch(db, OWNER, once.id, { kind: BillingKind.Record }, date('2026-03-06'))).kind,
+      BillingKind.Record,
       'the stored value is accepted'
     );
 
-    await rejects(() => BillingRepository.patch(db, OWNER, once.id, { settled: false }, date('2026-03-06')), SettledLockedError);
+    await rejects(() => BillingRepository.patch(db, OWNER, once.id, { kind: BillingKind.Live }, date('2026-03-06')), SettledLockedError);
     await rejects(
       () => BillingRepository.patch(db, OWNER, once.id, { reminders: [{ offsetDays: 0, enabled: true }] }, date('2026-03-06')),
       SettledLockedError
@@ -236,7 +237,7 @@ describe('registros on native PostgreSQL', () => {
       OWNER,
       'registro-common',
       {
-        type: BillingType.Once,
+        recurrence: BillingRecurrence.Once,
         description: 'Jantar',
         totalCents: 2_000,
         startDate: '2026-03-10',
@@ -247,13 +248,13 @@ describe('registros on native PostgreSQL', () => {
       date('2026-03-05')
     );
 
-    equal(dinner.settled, false);
+    equal(dinner.kind, BillingKind.Live);
     equal(dinner.counterpartLabel, null);
     await rejects(
       () => BillingRepository.patch(db, OWNER, dinner.id, { counterpartLabel: 'Empresa X' }, date('2026-03-06')),
       SettledLockedError
     );
-    await rejects(() => BillingRepository.patch(db, OWNER, dinner.id, { settled: true }, date('2026-03-06')), SettledLockedError);
+    await rejects(() => BillingRepository.patch(db, OWNER, dinner.id, { kind: BillingKind.Record }, date('2026-03-06')), SettledLockedError);
   });
 
   it('lists a registro by its counterpart and counts it in the month it is due', async () => {
@@ -265,13 +266,13 @@ describe('registros on native PostgreSQL', () => {
       db,
       OTHER,
       'registro-timeline-rent',
-      registro('Aluguel', { direction: Direction.Payable, counterpartLabel: 'Imobiliária', startDate: today, totalCents: 120_000 }),
+      registro('Aluguel', { type: Direction.Payable, counterpartLabel: 'Imobiliária', startDate: today, totalCents: 120_000 }),
       now
     );
 
     const listed = (await BillingRepository.list(db, OTHER)).billings.find((billing) => billing.id === salary.id);
 
-    equal(listed?.settled, true);
+    equal(listed?.kind, BillingKind.Record);
     equal(listed?.counterpartLabel, 'Empresa X');
     equal(listed?.participantCount, 0);
 
@@ -285,7 +286,7 @@ describe('registros on native PostgreSQL', () => {
 
     equal(item?.direction, Direction.Receivable);
     equal(item?.charge.counterpartName, 'Empresa X');
-    equal(item?.charge.settled, true);
+    equal(item?.charge.kind, BillingKind.Record);
     equal(item?.charge.counterpartLabel, 'Empresa X');
   });
 
@@ -328,7 +329,7 @@ describe('registros on native PostgreSQL', () => {
       db,
       OWNER,
       'registro-cron-salary',
-      registro('Salário', { type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-05-10' }),
+      registro('Salário', { recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-05-10' }),
       date('2026-05-05')
     );
 
@@ -368,7 +369,7 @@ describe('registros on native PostgreSQL', () => {
       db,
       OWNER,
       'registro-locked',
-      registro('Salário travado', { type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-07-10' }),
+      registro('Salário travado', { recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-07-10' }),
       date('2026-07-05')
     );
 
@@ -447,7 +448,7 @@ describe('registros on native PostgreSQL', () => {
 
   it('replays the creation of a recorrente registro after the day has turned', async () => {
     const input = registro('Salário repetido', {
-      type: BillingType.Indefinite,
+      recurrence: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Monthly,
       startDate: '2026-08-10'
     });

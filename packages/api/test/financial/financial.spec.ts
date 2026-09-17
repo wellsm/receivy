@@ -1,7 +1,7 @@
 import { deepEqual, equal, notEqual, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpBadRequestError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import { BillingFrequency, BillingType, ChargeState, Direction, PixKeyType, SplitMode, SplitPartKind, shiftMonth } from '@receivy/common';
+import { BillingFrequency, BillingRecurrence, ChargeState, Direction, PixKeyType, SplitMode, SplitPartKind, shiftMonth } from '@receivy/common';
 import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { ApiError } from '../../src/common/errors';
@@ -79,7 +79,7 @@ describe('financial repositories on PostgreSQL', () => {
     const debtor = person.userId;
     const pix = await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '111.444.777-35', label: 'Despesa' });
     const input = {
-      type: BillingType.Once as const,
+      recurrence: BillingRecurrence.Once as const,
       totalCents: 9_000,
       startDate: '2026-10-31',
       timezone: 'America/Sao_Paulo',
@@ -151,7 +151,7 @@ describe('financial repositories on PostgreSQL', () => {
   it('serializes integral payment and preserves terminal charge state with audit', async () => {
     const person = await ContactRepository.save(db, OWNER, { name: 'Concorrente', email: 'concurrency@example.com' });
     const billing = await BillingRepository.create(db, OWNER, 'payment-concurrency', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 1_000,
       startDate: '2026-11-01',
       timezone: 'America/Sao_Paulo',
@@ -169,7 +169,7 @@ describe('financial repositories on PostgreSQL', () => {
     await rejects(() => ChargeRepository.cancel(db, OWNER, chargeId), ApiError);
 
     const cancellable = await BillingRepository.create(db, OWNER, 'charge-cancellation', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 750,
       startDate: '2026-11-02',
       timezone: 'America/Sao_Paulo',
@@ -188,7 +188,7 @@ describe('financial repositories on PostgreSQL', () => {
   it('returns one persisted result for simultaneous identical billing idempotency keys', async () => {
     const person = await ContactRepository.save(db, OWNER, { name: 'Idempotent race', email: 'idempotent-race@example.com' });
     const input = {
-      type: BillingType.Until as const,
+      recurrence: BillingRecurrence.Until as const,
       frequency: BillingFrequency.Monthly as const,
       totalCents: 101,
       startDate: '2026-11-01',
@@ -212,7 +212,7 @@ describe('financial repositories on PostgreSQL', () => {
   it('expires, rotates and revokes public capabilities without leaking private fields', async () => {
     const person = await ContactRepository.save(db, OWNER, { name: 'Público', email: 'public@example.com' });
     const billing = await BillingRepository.create(db, OWNER, 'public-capability', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 2_500,
       startDate: '2026-12-10',
       timezone: 'America/Sao_Paulo',
@@ -236,7 +236,7 @@ describe('financial repositories on PostgreSQL', () => {
   it('returns account-relative filtered timeline totals and a contact ledger', async () => {
     const person = await ContactRepository.save(db, OWNER, { name: 'Ledger', email: 'ledger@example.com' });
     const billing = await BillingRepository.create(db, OWNER, 'timeline-ledger', {
-      type: BillingType.Until,
+      recurrence: BillingRecurrence.Until,
       frequency: BillingFrequency.Monthly,
       totalCents: 6_001,
       // Both installments fall no later than this month: the feed stops at the end of the current month.
@@ -249,7 +249,7 @@ describe('financial repositories on PostgreSQL', () => {
     const ownerTimeline = await TimelineRepository.get(db, OWNER, {
       direction: [Direction.Receivable],
       status: [ChargeState.Pending],
-      type: [BillingType.Until],
+      recurrence: [BillingRecurrence.Until],
       from: '2026-09-01',
       to: '2026-12-31'
     });
@@ -268,7 +268,7 @@ describe('financial repositories on PostgreSQL', () => {
     const person = await ContactRepository.save(db, OWNER, { name: 'Settled', email: 'settled@example.com' });
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
     const billing = await BillingRepository.create(db, OWNER, 'timeline-settled', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 4_321,
       startDate: today,
       timezone: 'America/Sao_Paulo',
@@ -294,7 +294,7 @@ describe('financial repositories on PostgreSQL', () => {
     const nextMonth = shiftMonth(thisMonth, 1);
 
     const pastPaid = await BillingRepository.create(db, MONTH_OWNER, 'month-past-paid', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 1_100,
       startDate: `${pastMonth}-05`,
       timezone: 'America/Sao_Paulo',
@@ -303,7 +303,7 @@ describe('financial repositories on PostgreSQL', () => {
     await ChargeRepository.pay(db, MONTH_OWNER, pastPaid.charges[0]!.id);
 
     const pastOverdue = await BillingRepository.create(db, MONTH_OWNER, 'month-past-overdue', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 1_200,
       startDate: `${pastMonth}-06`,
       timezone: 'America/Sao_Paulo',
@@ -311,7 +311,7 @@ describe('financial repositories on PostgreSQL', () => {
     });
 
     const future = await BillingRepository.create(db, MONTH_OWNER, 'month-future', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 1_300,
       startDate: `${nextMonth}-07`,
       timezone: 'America/Sao_Paulo',
@@ -365,7 +365,7 @@ describe('financial repositories on PostgreSQL', () => {
       email: 'timeline-debtor@example.com'
     });
     const first = await BillingRepository.create(db, TIMELINE_OVERFLOW_OWNER, 'timeline-overflow-max', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: Number.MAX_SAFE_INTEGER,
       // Both due no later than this month, so the feed sums them.
       startDate: '2026-09-01',
@@ -373,7 +373,7 @@ describe('financial repositories on PostgreSQL', () => {
       split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: person.userId, amountCents: Number.MAX_SAFE_INTEGER }] }
     });
     await BillingRepository.create(db, TIMELINE_OVERFLOW_OWNER, 'timeline-overflow-two', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 2,
       startDate: '2026-09-02',
       timezone: 'America/Sao_Paulo',
@@ -395,14 +395,14 @@ describe('financial repositories on PostgreSQL', () => {
     await createUser(db, { id: LEDGER_OVERFLOW_OWNER, email: 'ledger-overflow@example.com', name: 'Ledger Overflow' });
     const person = await ContactRepository.save(db, LEDGER_OVERFLOW_OWNER, { name: 'Ledger debtor', email: 'ledger-debtor@example.com' });
     await BillingRepository.create(db, LEDGER_OVERFLOW_OWNER, 'ledger-overflow-max', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: Number.MAX_SAFE_INTEGER,
       startDate: '2027-02-01',
       timezone: 'America/Sao_Paulo',
       split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: person.userId, amountCents: Number.MAX_SAFE_INTEGER }] }
     });
     await BillingRepository.create(db, LEDGER_OVERFLOW_OWNER, 'ledger-overflow-two', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 2,
       startDate: '2027-02-02',
       timezone: 'America/Sao_Paulo',
@@ -428,14 +428,14 @@ describe('financial repositories on PostgreSQL', () => {
     });
     const viewer = await ContactRepository.save(db, LEDGER_NEGATIVE_COUNTERPART, { name: 'Viewer', email: 'negative-viewer@example.com' });
     await BillingRepository.create(db, LEDGER_NEGATIVE_COUNTERPART, 'ledger-negative-max', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: Number.MAX_SAFE_INTEGER,
       startDate: '2027-03-01',
       timezone: 'America/Sao_Paulo',
       split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: viewer.userId, amountCents: Number.MAX_SAFE_INTEGER }] }
     });
     await BillingRepository.create(db, LEDGER_NEGATIVE_COUNTERPART, 'ledger-negative-two', {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: 2,
       startDate: '2027-03-02',
       timezone: 'America/Sao_Paulo',

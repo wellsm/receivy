@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import {
   BillingFrequency,
   type BillingSplit,
-  BillingType,
+  BillingRecurrence,
   SplitMode,
   SplitPartKind
 } from '@receivy/common';
@@ -54,7 +54,7 @@ describe('timeline type filter', () => {
       OWNER,
       'timeline-type-once',
       {
-        type: BillingType.Once,
+        recurrence: BillingRecurrence.Once,
         totalCents: 5_000,
         description: 'Única',
         startDate: '2026-01-15',
@@ -69,7 +69,7 @@ describe('timeline type filter', () => {
       OWNER,
       'timeline-type-monthly',
       {
-        type: BillingType.Indefinite,
+        recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
         totalCents: 5_000,
         description: 'Mensal',
@@ -84,10 +84,10 @@ describe('timeline type filter', () => {
   after(async () => cleanupUsers(db, [OWNER]));
 
   /** Descriptions of the month's items, deduplicated so an extra occurrence cannot change the assertion. */
-  async function descriptions(type?: BillingType[]): Promise<string[]> {
+  async function descriptions(type?: BillingRecurrence[]): Promise<string[]> {
     const page = await TimelineRepository.get(db, OWNER, {
       month: MONTH,
-      ...(type ? { type } : {})
+      ...(type ? { recurrence: type } : {})
     });
 
     return [
@@ -100,19 +100,19 @@ describe('timeline type filter', () => {
   });
 
   it('keeps only the once billing', async () => {
-    deepEqual(await descriptions([BillingType.Once]), ['Única']);
+    deepEqual(await descriptions([BillingRecurrence.Once]), ['Única']);
   });
 
   it('keeps only the indefinite billing', async () => {
-    deepEqual(await descriptions([BillingType.Indefinite]), ['Mensal']);
+    deepEqual(await descriptions([BillingRecurrence.Indefinite]), ['Mensal']);
   });
 
   it('serves the type on the item even though the charge no longer stores it', async () => {
     const page = await TimelineRepository.get(db, OWNER, {
       month: MONTH,
-      type: [BillingType.Indefinite]
+      recurrence: [BillingRecurrence.Indefinite]
     });
 
-    equal(page.items[0]?.charge.billingType, BillingType.Indefinite);
+    equal(page.items[0]?.charge.recurrence, BillingRecurrence.Indefinite);
   });
 });

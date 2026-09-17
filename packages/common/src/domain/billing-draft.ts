@@ -1,9 +1,10 @@
 import {
   BillingDueRule,
   BillingFrequency,
+  BillingKind,
   type BillingInput,
   type BillingReminder,
-  BillingType,
+  BillingRecurrence,
   MAX_FINITE_OCCURRENCES,
   SplitPartKind
 } from './billing';
@@ -40,7 +41,7 @@ export type BillingDraft = {
   /** Conta a pagar: the contact who receives, or empty when the bill is the owner's alone. */
   payee: string;
   pixInline: PixDraft;
-  type: BillingType;
+  type: BillingRecurrence;
   selected: string[];
   owner: boolean;
   amount: string;
@@ -73,7 +74,7 @@ export function EMPTY_BILLING_DRAFT(timezone: string, today: string): BillingDra
     direction: Direction.Receivable,
     payee: '',
     pixInline: { type: PixKeyType.Email, key: '', label: '' },
-    type: BillingType.Once,
+    type: BillingRecurrence.Once,
     selected: [],
     owner: true,
     amount: '',
@@ -106,11 +107,11 @@ function dueRuleFor(draft: BillingDraft): BillingDueRule | undefined {
     return undefined;
   }
 
-  return draft.type === BillingType.Once || draft.frequency === BillingFrequency.Monthly ? BillingDueRule.EndOfMonth : undefined;
+  return draft.type === BillingRecurrence.Once || draft.frequency === BillingFrequency.Monthly ? BillingDueRule.EndOfMonth : undefined;
 }
 
 function endDateFor(draft: BillingDraft): string | undefined {
-  if (draft.type !== BillingType.Until) {
+  if (draft.type !== BillingRecurrence.Until) {
     return undefined;
   }
 
@@ -168,7 +169,7 @@ export type UntilInstallmentPreview = {
  * typed total. Tolerant like `previewBillingSplit`: null while the draft cannot price one yet, never throws.
  */
 export function untilInstallmentPreview(draft: BillingDraft): UntilInstallmentPreview | null {
-  if (draft.type !== BillingType.Until) {
+  if (draft.type !== BillingRecurrence.Until) {
     return null;
   }
 
@@ -256,11 +257,11 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
   const typedCents = parseBRLCents(draft.amount);
   // Parcelado: the typed amount is the total, ceiling-split across its due dates; the API still stores
   // totalCents per occurrence, so every other type sends the typed amount unchanged.
-  const totalCents = draft.type === BillingType.Until ? Math.ceil(typedCents / installmentCountFor(draft, endDate)) : typedCents;
+  const totalCents = draft.type === BillingRecurrence.Until ? Math.ceil(typedCents / installmentCountFor(draft, endDate)) : typedCents;
 
   const schedule = {
-    type: draft.type,
-    frequency: draft.type === BillingType.Once ? undefined : draft.frequency,
+    recurrence: draft.type,
+    frequency: draft.type === BillingRecurrence.Once ? undefined : draft.frequency,
     description: draft.description,
     totalCents,
     startDate: draft.start,
@@ -273,7 +274,7 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
   // A registro names who is on the other side and has nobody to split with, pay through or remind.
   if (draft.settled) {
     return normalizeBillingInput(
-      { ...schedule, direction: draft.direction, settled: true, counterpartLabel: draft.counterpartLabel ?? '' },
+      { ...schedule, type: draft.direction, kind: BillingKind.Record, counterpartLabel: draft.counterpartLabel ?? '' },
       now
     );
   }
@@ -293,7 +294,7 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
     return normalizeBillingInput(
       {
         ...base,
-        direction: Direction.Payable,
+        type: Direction.Payable,
         payeeUserId: draft.payee || undefined,
         pix: key ? { keyType: draft.pixInline.type, key, label: draft.pixInline.label.trim() || undefined } : undefined
       },
@@ -313,7 +314,7 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
   return normalizeBillingInput(
     {
       ...base,
-      direction: Direction.Receivable,
+      type: Direction.Receivable,
       paymentMethodId: draft.pix || undefined,
       split: buildSplit(draft, parties)
     },

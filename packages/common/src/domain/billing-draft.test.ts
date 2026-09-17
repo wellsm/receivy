@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BillingDueRule, BillingFrequency, BillingType } from './billing';
+import { BillingDueRule, BillingFrequency, BillingRecurrence } from './billing';
 import { BillingCategory } from './billing-category';
 import { type BillingDraft, buildBillingInput, EMPTY_BILLING_DRAFT, EMPTY_SPLIT_VALUES } from './billing-draft';
 import { Direction, PixKeyType, SplitMode } from './contracts';
@@ -8,7 +8,7 @@ const base: BillingDraft = {
   direction: Direction.Receivable,
   payee: '',
   pixInline: { type: PixKeyType.Email, key: '', label: '' },
-  type: BillingType.Once,
+  type: BillingRecurrence.Once,
   selected: ['p1'],
   owner: true,
   amount: '100,01',
@@ -29,7 +29,7 @@ const base: BillingDraft = {
 describe('billing draft review', () => {
   it('builds a once billing without calendar fields', () => {
     expect(buildBillingInput(base)).toEqual({
-      type: 'once',
+      recurrence: 'once',
       frequency: undefined,
       description: 'Internet',
       totalCents: 10001,
@@ -40,22 +40,22 @@ describe('billing draft review', () => {
       reminders: [{ offsetDays: -3, enabled: true }],
       category: 'other',
       split: { mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }, { kind: 'owner' }] },
-      direction: 'receivable',
+      type: 'receivable',
       payeeUserId: undefined,
       pix: undefined
     });
   });
 
   it('turns "N vezes" into the end date of the last occurrence', () => {
-    const input = buildBillingInput({ ...base, type: BillingType.Until, occurrences: '3' });
+    const input = buildBillingInput({ ...base, type: BillingRecurrence.Until, occurrences: '3' });
     expect(input.endDate).toBe('2026-03-31');
-    expect(buildBillingInput({ ...base, type: BillingType.Until, end: '2026-02-15' }).endDate).toBe('2026-02-15');
-    expect(() => buildBillingInput({ ...base, type: BillingType.Until })).toThrow(/data final/i);
+    expect(buildBillingInput({ ...base, type: BillingRecurrence.Until, end: '2026-02-15' }).endDate).toBe('2026-02-15');
+    expect(() => buildBillingInput({ ...base, type: BillingRecurrence.Until })).toThrow(/data final/i);
   });
 
   it('counts "N vezes" on month ends with an end_of_month rule', () => {
     expect(
-      buildBillingInput({ ...base, type: BillingType.Until, start: '2026-09-30', occurrences: '3', dueRule: BillingDueRule.EndOfMonth })
+      buildBillingInput({ ...base, type: BillingRecurrence.Until, start: '2026-09-30', occurrences: '3', dueRule: BillingDueRule.EndOfMonth })
     ).toMatchObject({
       endDate: '2026-11-30',
       dueRule: 'end_of_month'
@@ -64,7 +64,7 @@ describe('billing draft review', () => {
     expect(
       buildBillingInput({
         ...base,
-        type: BillingType.Indefinite,
+        type: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Yearly,
         start: '2026-09-30',
         dueRule: BillingDueRule.EndOfMonth
@@ -127,7 +127,7 @@ describe('billing draft review', () => {
   it('rejects empty selection, bad reminder text and non-integer occurrences', () => {
     expect(() => buildBillingInput({ ...base, selected: [] })).toThrow(/contato/i);
     expect(() => buildBillingInput({ ...base, reminders: [{ offsetDays: '-', enabled: true }] })).toThrow(/dias inteiros/i);
-    expect(() => buildBillingInput({ ...base, type: BillingType.Until, occurrences: '2,5' })).toThrow(/vezes/i);
+    expect(() => buildBillingInput({ ...base, type: BillingRecurrence.Until, occurrences: '2,5' })).toThrow(/vezes/i);
   });
 
   it('builds a shares split and keeps the category', () => {
@@ -158,20 +158,20 @@ describe('billing draft review', () => {
 
 describe('parcelado: the typed amount is the total, rounded up per installment', () => {
   it('rounds the total up when it does not split evenly', () => {
-    const input = buildBillingInput({ ...base, type: BillingType.Until, amount: '100,00', occurrences: '3' });
+    const input = buildBillingInput({ ...base, type: BillingRecurrence.Until, amount: '100,00', occurrences: '3' });
 
     expect(input.totalCents).toBe(3334);
   });
 
   it('splits evenly when the total divides without a remainder', () => {
-    const input = buildBillingInput({ ...base, type: BillingType.Until, amount: '1.200,00', occurrences: '12' });
+    const input = buildBillingInput({ ...base, type: BillingRecurrence.Until, amount: '1.200,00', occurrences: '12' });
 
     expect(input.totalCents).toBe(10000);
   });
 
   it('counts the installments from an explicit end date the same way as from "N vezes"', () => {
-    const byEnd = buildBillingInput({ ...base, type: BillingType.Until, amount: '100,00', end: '2026-03-31' });
-    const byCount = buildBillingInput({ ...base, type: BillingType.Until, amount: '100,00', occurrences: '3' });
+    const byEnd = buildBillingInput({ ...base, type: BillingRecurrence.Until, amount: '100,00', end: '2026-03-31' });
+    const byCount = buildBillingInput({ ...base, type: BillingRecurrence.Until, amount: '100,00', occurrences: '3' });
 
     expect(byEnd.totalCents).toBe(byCount.totalCents);
   });
@@ -239,7 +239,7 @@ describe('conta a pagar draft', () => {
   it('needs no contact, drops the wallet key and normalizes the typed Pix', () => {
     const input = buildBillingInput(payable);
 
-    expect(input.direction).toBe('payable');
+    expect(input.type).toBe('payable');
     expect(input.payeeUserId).toBe('p9');
     expect(input.paymentMethodId).toBeUndefined();
     expect(input.pix).toEqual({ keyType: 'cpf', key: '52998224725', label: 'Aluguel' });
@@ -311,8 +311,8 @@ describe('registro draft', () => {
     });
 
     expect(input).toMatchObject({
-      direction: 'receivable',
-      settled: true,
+      type: 'receivable',
+      kind: 'record',
       counterpartLabel: 'Empresa X',
       split: { mode: 'equal', parts: [{ kind: 'owner' }] }
     });
@@ -323,7 +323,7 @@ describe('registro draft', () => {
   });
 
   it('checks the start of a recorrente registro only with a clock', () => {
-    const monthly: BillingDraft = { ...base, settled: true, counterpartLabel: 'Empresa X', type: BillingType.Indefinite };
+    const monthly: BillingDraft = { ...base, settled: true, counterpartLabel: 'Empresa X', type: BillingRecurrence.Indefinite };
 
     expect(() => buildBillingInput(monthly, new Date('2026-09-15T12:00:00Z'))).toThrow('Registro recorrente começa hoje ou depois.');
     expect(buildBillingInput(monthly).startDate).toBe('2026-01-31');

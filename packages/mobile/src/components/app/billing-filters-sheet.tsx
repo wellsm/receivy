@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
-import { BILLING_CATEGORIES, type BillingCategory, BillingState, BillingType, Direction } from "@receivy/common";
+import { BILLING_CATEGORIES, type BillingCategory, BillingState, BillingRecurrence, Direction } from "@receivy/common";
 
 export type BillingFiltersValue = {
   state: BillingState;
-  type: BillingType | "";
+  recurrence: BillingRecurrence | "";
   category: BillingCategory | "";
-  /** Empty lists both sides; otherwise it becomes `direction=` on the list query. */
-  direction: Direction | "";
+  /** Empty lists both sides; otherwise it becomes `type=` on the list query. */
+  type: Direction | "";
 };
 
-export const DEFAULT_BILLING_FILTERS: BillingFiltersValue = { state: BillingState.Active, type: "", category: "", direction: "" };
+export const DEFAULT_BILLING_FILTERS: BillingFiltersValue = { state: BillingState.Active, recurrence: "", category: "", type: "" };
 
 const STATES: { value: BillingState; label: string }[] = [
   { value: BillingState.Active, label: "Ativas" },
@@ -18,11 +18,11 @@ const STATES: { value: BillingState; label: string }[] = [
   { value: BillingState.Ended, label: "Encerradas" },
 ];
 
-const TYPES: { value: BillingType | ""; label: string }[] = [
+const TYPES: { value: BillingRecurrence | ""; label: string }[] = [
   { value: "", label: "Todas" },
-  { value: BillingType.Once, label: "Única" },
-  { value: BillingType.Until, label: "Parcelada" },
-  { value: BillingType.Indefinite, label: "Sem fim" },
+  { value: BillingRecurrence.Once, label: "Única" },
+  { value: BillingRecurrence.Until, label: "Parcelada" },
+  { value: BillingRecurrence.Indefinite, label: "Sem fim" },
 ];
 
 const CATEGORIES: { value: BillingCategory | ""; label: string }[] = [{ value: "", label: "Todas" }, ...BILLING_CATEGORIES];
@@ -41,16 +41,16 @@ export function activeBillingChips(value: BillingFiltersValue): { key: keyof Bil
     chips.push({ key: "state", label: STATES.find((option) => option.value === value.state)?.label ?? value.state });
   }
 
-  if (value.type) {
-    chips.push({ key: "type", label: TYPES.find((option) => option.value === value.type)?.label ?? value.type });
+  if (value.recurrence) {
+    chips.push({ key: "recurrence", label: TYPES.find((option) => option.value === value.recurrence)?.label ?? value.recurrence });
   }
 
   if (value.category) {
     chips.push({ key: "category", label: CATEGORIES.find((option) => option.value === value.category)?.label ?? value.category });
   }
 
-  if (value.direction) {
-    chips.push({ key: "direction", label: DIRECTIONS.find((option) => option.value === value.direction)?.label ?? value.direction });
+  if (value.type) {
+    chips.push({ key: "type", label: DIRECTIONS.find((option) => option.value === value.type)?.label ?? value.type });
   }
 
   return chips;
@@ -110,9 +110,9 @@ export function BillingFiltersSheet({ value, onApply, onClose }: BillingFiltersS
         </Text>
 
         <ScrollView contentContainerClassName="gap-5" showsVerticalScrollIndicator={false}>
-          <ChipGroup group="Direção" options={DIRECTIONS} selected={draft.direction} onSelect={(direction) => setDraft({ ...draft, direction })} />
+          <ChipGroup group="Direção" options={DIRECTIONS} selected={draft.type} onSelect={(type) => setDraft({ ...draft, type })} />
           <ChipGroup group="Estado" options={STATES} selected={draft.state} onSelect={(state) => setDraft({ ...draft, state })} />
-          <ChipGroup group="Tipo" options={TYPES} selected={draft.type} onSelect={(type) => setDraft({ ...draft, type })} />
+          <ChipGroup group="Tipo" options={TYPES} selected={draft.recurrence} onSelect={(recurrence) => setDraft({ ...draft, recurrence })} />
           <ChipGroup group="Categoria" options={CATEGORIES} selected={draft.category} onSelect={(category) => setDraft({ ...draft, category })} />
         </ScrollView>
 

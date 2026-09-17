@@ -3,7 +3,7 @@ import { HttpForbiddenError, HttpNotFoundError, HttpUnauthorizedError } from '@e
 import {
   type BillingSplit,
   BillingState,
-  BillingType,
+  BillingRecurrence,
   ChargeState,
   type InviteAcceptResult,
   planBillingCharges,
@@ -186,7 +186,7 @@ export namespace InviteRepository {
 
     const next = withParticipant(split, userId);
     const charges =
-      billingRecurrence(billing) === BillingType.Indefinite
+      billingRecurrence(billing) === BillingRecurrence.Indefinite
         ? []
         : (
             await tx.charges.findMany({

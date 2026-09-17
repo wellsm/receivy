@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Alert } from "react-native";
-import { BillingType, ChargeState, Direction, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import { BillingRecurrence, ChargeState, Direction, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { ProofViewerScreen } from "@/components/screens/proof-viewer-screen";
 
 jest.mock("expo-router", () => {
@@ -28,13 +28,13 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
     dueDate: "2026-09-10",
     state: ChargeState.Pending,
     billingId: "b1",
-    billingType: BillingType.Once,
+    recurrence: BillingRecurrence.Once,
     installment: 1,
     installmentCount: 1,
     counterpartName: "Ana",
     proofState: ProofState.Pending,
     recipient: { userId: "u1", name: "Ana", email: "ana@example.com" },
-    debtorUserId: "u1",
+    debtorId: "u1",
     pix: null,
     sharingState: SharingState.Ready,
     proof: null,

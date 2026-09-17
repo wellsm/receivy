@@ -1,7 +1,7 @@
-import { BillingType } from './billing';
+import { BillingKind, BillingRecurrence } from './billing';
 import {
   type ChargeDetail,
-  ChargePayer,
+  ownerPays,
   type ChargeProof,
   ChargeState,
   type ChargeSummary,
@@ -39,11 +39,11 @@ function daysBetween(from: string, to: string): number {
 
 /** "Parcela 2 de 3", "Recorrente" or "À vista": how this charge relates to its billing. */
 export function chargeTypeLabel(charge: ChargeDetail): string {
-  if (charge.billingType === BillingType.Until) {
+  if (charge.recurrence === BillingRecurrence.Until) {
     return `Parcela ${charge.installment ?? '?'} de ${charge.installmentCount ?? '?'}`;
   }
 
-  if (charge.billingType === BillingType.Indefinite) {
+  if (charge.recurrence === BillingRecurrence.Indefinite) {
     return 'Recorrente';
   }
 
@@ -155,13 +155,13 @@ export function canDeclarePayment(charge: ChargeDetail): boolean {
     return false;
   }
 
-  return charge.payer !== ChargePayer.Owner || charge.confirmationRequired === true;
+  return !ownerPays(charge) || charge.confirmationRequired === true;
 }
 
 /** A debtor may send a file only while nothing is under review; a rejected one can be replaced. */
 export function canUploadProof(charge: ChargeDetail): boolean {
   // A registro has nothing to prove: it was settled by the owner.
-  if (charge.settled === true || charge.direction !== Direction.Payable || charge.state !== ChargeState.Pending) {
+  if (charge.kind === BillingKind.Record || charge.direction !== Direction.Payable || charge.state !== ChargeState.Pending) {
     return false;
   }
 
@@ -204,10 +204,10 @@ export function canReopenCharge(charge: ChargeDetail): boolean {
 /** Reminders and public links belong to the creditor of a conta a receber only; a conta a pagar and a registro have neither. */
 export function canRemind(charge: ChargeDetail): boolean {
   return (
-    charge.settled !== true &&
+    charge.kind !== BillingKind.Record &&
     charge.state === ChargeState.Pending &&
     charge.direction === Direction.Receivable &&
-    charge.payer !== ChargePayer.Owner &&
+    !ownerPays(charge) &&
     !!charge.pix &&
     charge.counterpartReachable !== false &&
     // A file under review is the debtor's move already made; nagging now would be noise.
@@ -222,10 +222,10 @@ export function chargeShareText(charge: Pick<ChargeSummary, 'description' | 'amo
 
 export function canShare(charge: ChargeDetail): boolean {
   return (
-    charge.settled !== true &&
+    charge.kind !== BillingKind.Record &&
     charge.state === ChargeState.Pending &&
     charge.direction === Direction.Receivable &&
-    charge.payer !== ChargePayer.Owner &&
+    !ownerPays(charge) &&
     !!charge.pix
   );
 }
@@ -236,25 +236,25 @@ export function canCancelCharge(charge: ChargeDetail): boolean {
     charge.state === ChargeState.Pending &&
     charge.ownedByViewer !== false &&
     charge.direction === Direction.Receivable &&
-    charge.payer !== ChargePayer.Owner
+    !ownerPays(charge)
   );
 }
 
 /** Only the creditor of a conta a receber pauses the automatic notices of a pending charge; a registro has none to pause, and neither does a counterpart nobody can reach. */
 export function canSilenceCharge(charge: ChargeDetail): boolean {
   return (
-    charge.settled !== true &&
+    charge.kind !== BillingKind.Record &&
     charge.state === ChargeState.Pending &&
     charge.ownedByViewer !== false &&
     charge.direction === Direction.Receivable &&
-    charge.payer !== ChargePayer.Owner &&
+    !ownerPays(charge) &&
     charge.counterpartReachable !== false
   );
 }
 
 /** "Vai pagar para você" / "Vai receber de você" / "Só você": the line under the counterpart's name. */
 export function counterpartRoleLabel(charge: ChargeDetail): string {
-  if (charge.payer === ChargePayer.Owner) {
+  if (ownerPays(charge)) {
     if (charge.direction === Direction.Payable) {
       return charge.recipient.name && charge.counterpartName !== 'Você' ? 'Vai receber de você' : 'Conta só sua';
     }

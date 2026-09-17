@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { BillingFrequency, BillingState, type BillingSummary, BillingType } from './billing';
+import { BillingFrequency, BillingKind, BillingState, type BillingSummary, BillingRecurrence } from './billing';
 import { billingBadges, billingDueLabel, billingShareAction, billingSummaryLine } from './billing-card';
 import { BillingCategory } from './billing-category';
 import { Direction, SplitMode } from './contracts';
 
 const base: BillingSummary = {
   id: 'b1',
-  direction: Direction.Receivable,
+  type: Direction.Receivable,
   payeeName: null,
-  type: BillingType.Once,
+  recurrence: BillingRecurrence.Once,
   description: 'Aluguel',
   total: { amountCents: 100_000, currency: 'BRL' },
   startDate: '2026-09-10',
@@ -69,7 +69,7 @@ describe('billingBadges', () => {
   it('badges an until billing paid 1 of 4 installments', () => {
     const summary: BillingSummary = {
       ...base,
-      type: BillingType.Until,
+      recurrence: BillingRecurrence.Until,
       installmentCount: 4,
       paidCount: 1,
       chargeCount: 4,
@@ -85,7 +85,7 @@ describe('billingBadges', () => {
   it('badges a fully paid until billing with the installment count', () => {
     const summary: BillingSummary = {
       ...base,
-      type: BillingType.Until,
+      recurrence: BillingRecurrence.Until,
       installmentCount: 4,
       paidCount: 4,
       chargeCount: 4,
@@ -101,7 +101,7 @@ describe('billingBadges', () => {
   it('badges a paused indefinite billing', () => {
     const summary: BillingSummary = {
       ...base,
-      type: BillingType.Indefinite,
+      recurrence: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Monthly,
       state: BillingState.Paused
     };
@@ -116,7 +116,7 @@ describe('billingBadges', () => {
   it('badges an indefinite yearly billing awaiting a proof', () => {
     const summary: BillingSummary = {
       ...base,
-      type: BillingType.Indefinite,
+      recurrence: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Yearly,
       proofsPending: 1
     };
@@ -190,20 +190,20 @@ describe('billingSummaryLine', () => {
 
 describe('billingBadges on a conta a pagar', () => {
   it('shows the direction and the payee instead of the participant count', () => {
-    const labels = billingBadges({ ...base, direction: Direction.Payable, payeeName: 'Imobiliária' }).map((badge) => badge.label);
+    const labels = billingBadges({ ...base, type: Direction.Payable, payeeName: 'Imobiliária' }).map((badge) => badge.label);
 
     expect(labels).toEqual(['Única', 'A pagar', 'Imobiliária']);
-    expect(billingBadges({ ...base, direction: Direction.Payable, payeeName: null }).map((badge) => badge.label)).toContain('Só comigo');
+    expect(billingBadges({ ...base, type: Direction.Payable, payeeName: null }).map((badge) => badge.label)).toContain('Só comigo');
   });
 });
 
 describe('billingBadges on a registro', () => {
   it('names the counterpart instead of the people or the payee and marks it as a registro', () => {
     expect(
-      billingBadges({ ...base, settled: true, counterpartLabel: 'Empresa X', participantCount: 0 }).map((badge) => badge.label)
+      billingBadges({ ...base, kind: BillingKind.Record, counterpartLabel: 'Empresa X', participantCount: 0 }).map((badge) => badge.label)
     ).toEqual(['Única', 'Registro', 'Empresa X']);
     expect(
-      billingBadges({ ...base, direction: Direction.Payable, settled: true, counterpartLabel: 'Clínica Sorriso' }).map(
+      billingBadges({ ...base, type: Direction.Payable, kind: BillingKind.Record, counterpartLabel: 'Clínica Sorriso' }).map(
         (badge) => badge.label
       )
     ).toEqual(['Única', 'Registro', 'A pagar', 'Clínica Sorriso']);

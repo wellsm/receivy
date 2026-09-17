@@ -3,7 +3,7 @@ import type { BillingCategory } from './billing-category';
 import type { ChargeDetail, Direction, Money, PixKeyType, PixSnapshot, SplitMode } from './contracts';
 import type { BillingSplit } from './split';
 
-export const enum BillingType {
+export const enum BillingRecurrence {
   Once = 'once',
   Until = 'until',
   Indefinite = 'indefinite'
@@ -61,7 +61,7 @@ export const DEFAULT_BILLING_REMINDERS: BillingReminder[] = [{ offsetDays: 0, en
 export const MAX_FINITE_OCCURRENCES = 120;
 
 export type BillingInput = {
-  type: BillingType;
+  recurrence: BillingRecurrence;
   frequency?: BillingFrequency;
   description?: string;
   totalCents: number;
@@ -76,18 +76,18 @@ export type BillingInput = {
   split?: BillingSplit;
   category?: BillingCategory;
   /** 'receivable' (default): the owner collects. 'payable': the owner pays a contact or only tracks the bill. */
-  direction?: Direction;
+  type?: Direction;
   /** Conta a pagar only: the contact who receives; empty means the bill is the owner's alone. */
   payeeUserId?: string;
   /** Conta a pagar only: where the owner pays. */
   pix?: BillingPixInput;
-  /** Registro: the owner already received or paid it. Every charge settles on its due date and nobody is notified. */
-  settled?: boolean;
+  /** 'record' is a registro: the owner already received or paid it, every charge settles on its due date and nobody is notified. */
+  kind?: BillingKind;
   /** Registro only: who the money came from (a receber) or went to (a pagar), 1 to 120 characters. */
   counterpartLabel?: string;
 };
 
-export type NormalizedBillingInput = BillingInput & { description: string; split: BillingSplit; direction: Direction };
+export type NormalizedBillingInput = BillingInput & { description: string; split: BillingSplit; type: Direction };
 
 export type BillingPatch = {
   description?: string;
@@ -111,7 +111,7 @@ export type BillingPatch = {
   applyTo?: EditScope;
   category?: BillingCategory;
   /** Never changes after creation: a value other than the stored one answers 409 SETTLED_LOCKED. */
-  settled?: boolean;
+  kind?: BillingKind;
   /** Registro only: renames the counterpart. On any other conta it answers 409 SETTLED_LOCKED. */
   counterpartLabel?: string;
 };
@@ -129,7 +129,7 @@ export type BillingAllocation = {
 
 export type BillingPreview = {
   billingId: string;
-  direction: Direction;
+  type: Direction;
   description: string;
   amount: Money;
   occurrenceDate: string;
@@ -139,12 +139,12 @@ export type BillingPreview = {
 // Explicit fields: EZ4 0.52 response reflection drops Omit/intersection members.
 export type BillingSummary = {
   id: string;
-  type: BillingType;
-  direction: Direction;
+  recurrence: BillingRecurrence;
+  type: Direction;
   /** Conta a pagar: who receives, or null when the bill is the owner's alone. */
   payeeName: string | null;
-  /** Registro: the owner alone, already settled. The API always sends it; absent on older payloads, read as false. */
-  settled?: boolean;
+  /** 'record' is a registro: the owner alone, already settled. The API always sends it; absent reads as 'live'. */
+  kind?: BillingKind;
   /** Registro only: the counterpart typed by the owner; null on every other conta. */
   counterpartLabel?: string | null;
   frequency?: BillingFrequency;
@@ -170,11 +170,11 @@ export type BillingSummary = {
 
 export type BillingDetail = {
   id: string;
-  type: BillingType;
-  direction: Direction;
+  recurrence: BillingRecurrence;
+  type: Direction;
   payee: BillingPayee | null;
-  /** Registro: the owner alone, already settled. The API always sends it; absent on older payloads, read as false. */
-  settled?: boolean;
+  /** 'record' is a registro: the owner alone, already settled. The API always sends it; absent reads as 'live'. */
+  kind?: BillingKind;
   /** Registro only: the counterpart typed by the owner; null on every other conta. */
   counterpartLabel?: string | null;
   /** Inline key of a conta a pagar; null on a conta a receber, which uses paymentMethodId. */
@@ -226,7 +226,7 @@ export type PublicInviteView =
       creditorFirstName: string;
       description: string;
       amount: Money;
-      type: BillingType;
+      recurrence: BillingRecurrence;
       participantCount: number;
       category: BillingCategory;
     };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type BillingDetail, BillingDueRule, BillingFrequency, BillingState, BillingType, SplitPartKind } from './billing';
+import { type BillingDetail, BillingDueRule, BillingFrequency, BillingState, BillingRecurrence, SplitPartKind } from './billing';
 import { BillingCategory } from './billing-category';
 import { editableMonthCharges, editScopeExplanation, patchTouchesCharges, pendingChargesOf, shouldAskEditScope } from './billing-scope';
 import { type ChargeDetail, ChargeState, Direction, ProofKind, ProofMime, ProofState, SharingState, SplitMode } from './contracts';
@@ -11,14 +11,14 @@ function charge(overrides: Partial<ChargeDetail> & { id: string }): ChargeDetail
     dueDate: '2026-09-20',
     state: ChargeState.Pending,
     billingId: 'b1',
-    billingType: BillingType.Indefinite,
+    recurrence: BillingRecurrence.Indefinite,
     installment: null,
     installmentCount: null,
     counterpartName: 'Ana',
     proofState: null,
     direction: Direction.Receivable,
     recipient: { userId: 'u1', name: 'Ana', email: null },
-    debtorUserId: 'u1',
+    debtorId: 'u1',
     pix: null,
     sharingState: SharingState.Ready,
     proof: null,
@@ -31,9 +31,9 @@ function charge(overrides: Partial<ChargeDetail> & { id: string }): ChargeDetail
 
 const recurring: BillingDetail = {
   id: 'b1',
-  type: BillingType.Indefinite,
+  recurrence: BillingRecurrence.Indefinite,
   frequency: BillingFrequency.Monthly,
-  direction: Direction.Receivable,
+  type: Direction.Receivable,
   payee: null,
   pix: null,
   description: 'Aluguel',
@@ -105,7 +105,7 @@ describe('billing scope helpers', () => {
       false
     );
     expect(patchTouchesCharges(recurring, { startDate: '2026-09-25' })).toBe(true);
-    expect(patchTouchesCharges({ ...recurring, type: BillingType.Once }, { totalCents: 1 })).toBe(false);
+    expect(patchTouchesCharges({ ...recurring, recurrence: BillingRecurrence.Once }, { totalCents: 1 })).toBe(false);
   });
 
   it('asks only when a charge-carried field changes and this month still has editable charges', () => {

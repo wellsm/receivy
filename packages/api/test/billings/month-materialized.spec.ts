@@ -5,7 +5,7 @@ import {
   BillingFrequency,
   type BillingInput,
   BillingState,
-  BillingType,
+  BillingRecurrence,
   Direction,
   EditScope,
   PendingChargesAction,
@@ -37,7 +37,7 @@ let carlaId: string;
 
 function recurring(key: string, startDate: string, userIds: string[], overrides: Partial<BillingInput> = {}): BillingInput {
   return {
-    type: BillingType.Indefinite,
+    recurrence: BillingRecurrence.Indefinite,
     frequency: BillingFrequency.Monthly,
     description: key,
     totalCents: 10_000,
@@ -115,7 +115,7 @@ describe('month materialized: pending charges and current month edits', () => {
       db,
       OWNER,
       'month-installments',
-      { ...recurring('Curso', '2026-03-05', [anaId]), type: BillingType.Until, endDate: '2026-05-05' },
+      { ...recurring('Curso', '2026-03-05', [anaId]), recurrence: BillingRecurrence.Until, endDate: '2026-05-05' },
       date('2026-03-05'),
       undefined,
       context
@@ -172,7 +172,7 @@ describe('month materialized: pending charges and current month edits', () => {
       db,
       OWNER,
       'month-end-keep',
-      { ...recurring('Curso', '2026-03-20', [anaId]), type: BillingType.Until, endDate: '2026-05-20' },
+      { ...recurring('Curso', '2026-03-20', [anaId]), recurrence: BillingRecurrence.Until, endDate: '2026-05-20' },
       date('2026-03-05')
     );
 
@@ -336,7 +336,7 @@ describe('month materialized: pending charges and current month edits', () => {
       db,
       OWNER,
       'month-finite-scope',
-      { ...recurring('Curso', '2026-03-20', [anaId]), type: BillingType.Until, endDate: '2026-04-20' },
+      { ...recurring('Curso', '2026-03-20', [anaId]), recurrence: BillingRecurrence.Until, endDate: '2026-04-20' },
       date('2026-03-05')
     );
 
@@ -477,9 +477,9 @@ describe('month materialized: pending charges and current month edits', () => {
       OWNER,
       'month-payable-clear-payee',
       {
-        type: BillingType.Indefinite,
+        recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
-        direction: Direction.Payable,
+        type: Direction.Payable,
         description: 'Aluguel',
         totalCents: 10_000,
         startDate: '2026-03-20',

@@ -486,7 +486,7 @@ paths:
               - 'active'
               - 'paused'
               - 'ended'
-        - name: direction
+        - name: type
           in: query
           required: false
           schema:
@@ -919,7 +919,7 @@ paths:
           schema:
             type: string
             maxLength: 64
-        - name: type
+        - name: recurrence
           in: query
           required: false
           schema:
@@ -1457,7 +1457,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        type:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
@@ -1556,7 +1556,7 @@ components:
           required:
             - mode
             - parts
-        direction:
+        type:
           enum: 
             - 'receivable'
             - 'payable'
@@ -1597,13 +1597,15 @@ components:
             - 'leisure'
             - 'income'
             - 'other'
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
           maxLength: 200
       required:
-        - type
+        - recurrence
         - totalCents
         - startDate
         - timezone
@@ -1751,8 +1753,10 @@ components:
             - 'leisure'
             - 'income'
             - 'other'
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
           maxLength: 200
@@ -2633,12 +2637,12 @@ components:
       properties:
         id:
           type: string
-        type:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
             - 'indefinite'
-        direction:
+        type:
           enum: 
             - 'receivable'
             - 'payable'
@@ -2664,8 +2668,10 @@ components:
           required:
             - userId
             - name
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         pix:
@@ -2960,7 +2966,7 @@ components:
                   - 'cancelled'
               billingId:
                 type: string
-              billingType:
+              recurrence:
                 enum: 
                   - 'once'
                   - 'until'
@@ -2987,10 +2993,6 @@ components:
                   - 'pending'
                   - 'accepted'
                   - 'rejected'
-              payer:
-                enum: 
-                  - 'person'
-                  - 'owner'
               ownedByViewer:
                 type: boolean
               hasPix:
@@ -3005,8 +3007,10 @@ components:
                 type: boolean
               notify:
                 type: boolean
-              settled:
-                type: boolean
+              kind:
+                enum: 
+                  - 'live'
+                  - 'record'
               counterpartLabel:
                 type: string
               direction:
@@ -3036,7 +3040,7 @@ components:
                       - version
                 required:
                   - name
-              debtorUserId:
+              debtorId:
                 type: string
               pix:
                 type: object
@@ -3119,7 +3123,7 @@ components:
               - dueDate
               - state
               - billingId
-              - billingType
+              - recurrence
               - counterpartName
               - direction
               - recipient
@@ -3133,7 +3137,7 @@ components:
             properties:
               billingId:
                 type: string
-              direction:
+              type:
                 enum: 
                   - 'receivable'
                   - 'payable'
@@ -3157,7 +3161,7 @@ components:
                 type: string
             required:
               - billingId
-              - direction
+              - type
               - description
               - amount
               - occurrenceDate
@@ -3247,8 +3251,8 @@ components:
               - displayName
       required:
         - id
+        - recurrence
         - type
-        - direction
         - description
         - total
         - startDate
@@ -3276,19 +3280,21 @@ components:
             properties:
               id:
                 type: string
-              type:
+              recurrence:
                 enum: 
                   - 'once'
                   - 'until'
                   - 'indefinite'
-              direction:
+              type:
                 enum: 
                   - 'receivable'
                   - 'payable'
               payeeName:
                 type: string
-              settled:
-                type: boolean
+              kind:
+                enum: 
+                  - 'live'
+                  - 'record'
               counterpartLabel:
                 type: string
               frequency:
@@ -3354,8 +3360,8 @@ components:
                 type: string
             required:
               - id
+              - recurrence
               - type
-              - direction
               - description
               - total
               - startDate
@@ -3376,12 +3382,12 @@ components:
       properties:
         id:
           type: string
-        type:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
             - 'indefinite'
-        direction:
+        type:
           enum: 
             - 'receivable'
             - 'payable'
@@ -3407,8 +3413,10 @@ components:
           required:
             - userId
             - name
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         pix:
@@ -3703,7 +3711,7 @@ components:
                   - 'cancelled'
               billingId:
                 type: string
-              billingType:
+              recurrence:
                 enum: 
                   - 'once'
                   - 'until'
@@ -3730,10 +3738,6 @@ components:
                   - 'pending'
                   - 'accepted'
                   - 'rejected'
-              payer:
-                enum: 
-                  - 'person'
-                  - 'owner'
               ownedByViewer:
                 type: boolean
               hasPix:
@@ -3748,8 +3752,10 @@ components:
                 type: boolean
               notify:
                 type: boolean
-              settled:
-                type: boolean
+              kind:
+                enum: 
+                  - 'live'
+                  - 'record'
               counterpartLabel:
                 type: string
               direction:
@@ -3779,7 +3785,7 @@ components:
                       - version
                 required:
                   - name
-              debtorUserId:
+              debtorId:
                 type: string
               pix:
                 type: object
@@ -3862,7 +3868,7 @@ components:
               - dueDate
               - state
               - billingId
-              - billingType
+              - recurrence
               - counterpartName
               - direction
               - recipient
@@ -3876,7 +3882,7 @@ components:
             properties:
               billingId:
                 type: string
-              direction:
+              type:
                 enum: 
                   - 'receivable'
                   - 'payable'
@@ -3900,7 +3906,7 @@ components:
                 type: string
             required:
               - billingId
-              - direction
+              - type
               - description
               - amount
               - occurrenceDate
@@ -3990,8 +3996,8 @@ components:
               - displayName
       required:
         - id
+        - recurrence
         - type
-        - direction
         - description
         - total
         - startDate
@@ -4019,7 +4025,7 @@ components:
             properties:
               billingId:
                 type: string
-              direction:
+              type:
                 enum: 
                   - 'receivable'
                   - 'payable'
@@ -4043,7 +4049,7 @@ components:
                 type: string
             required:
               - billingId
-              - direction
+              - type
               - description
               - amount
               - occurrenceDate
@@ -4055,12 +4061,12 @@ components:
       properties:
         id:
           type: string
-        type:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
             - 'indefinite'
-        direction:
+        type:
           enum: 
             - 'receivable'
             - 'payable'
@@ -4086,8 +4092,10 @@ components:
           required:
             - userId
             - name
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         pix:
@@ -4382,7 +4390,7 @@ components:
                   - 'cancelled'
               billingId:
                 type: string
-              billingType:
+              recurrence:
                 enum: 
                   - 'once'
                   - 'until'
@@ -4409,10 +4417,6 @@ components:
                   - 'pending'
                   - 'accepted'
                   - 'rejected'
-              payer:
-                enum: 
-                  - 'person'
-                  - 'owner'
               ownedByViewer:
                 type: boolean
               hasPix:
@@ -4427,8 +4431,10 @@ components:
                 type: boolean
               notify:
                 type: boolean
-              settled:
-                type: boolean
+              kind:
+                enum: 
+                  - 'live'
+                  - 'record'
               counterpartLabel:
                 type: string
               direction:
@@ -4458,7 +4464,7 @@ components:
                       - version
                 required:
                   - name
-              debtorUserId:
+              debtorId:
                 type: string
               pix:
                 type: object
@@ -4541,7 +4547,7 @@ components:
               - dueDate
               - state
               - billingId
-              - billingType
+              - recurrence
               - counterpartName
               - direction
               - recipient
@@ -4555,7 +4561,7 @@ components:
             properties:
               billingId:
                 type: string
-              direction:
+              type:
                 enum: 
                   - 'receivable'
                   - 'payable'
@@ -4579,7 +4585,7 @@ components:
                 type: string
             required:
               - billingId
-              - direction
+              - type
               - description
               - amount
               - occurrenceDate
@@ -4669,8 +4675,8 @@ components:
               - displayName
       required:
         - id
+        - recurrence
         - type
-        - direction
         - description
         - total
         - startDate
@@ -4692,12 +4698,12 @@ components:
       properties:
         id:
           type: string
-        type:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
             - 'indefinite'
-        direction:
+        type:
           enum: 
             - 'receivable'
             - 'payable'
@@ -4723,8 +4729,10 @@ components:
           required:
             - userId
             - name
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         pix:
@@ -5019,7 +5027,7 @@ components:
                   - 'cancelled'
               billingId:
                 type: string
-              billingType:
+              recurrence:
                 enum: 
                   - 'once'
                   - 'until'
@@ -5046,10 +5054,6 @@ components:
                   - 'pending'
                   - 'accepted'
                   - 'rejected'
-              payer:
-                enum: 
-                  - 'person'
-                  - 'owner'
               ownedByViewer:
                 type: boolean
               hasPix:
@@ -5064,8 +5068,10 @@ components:
                 type: boolean
               notify:
                 type: boolean
-              settled:
-                type: boolean
+              kind:
+                enum: 
+                  - 'live'
+                  - 'record'
               counterpartLabel:
                 type: string
               direction:
@@ -5095,7 +5101,7 @@ components:
                       - version
                 required:
                   - name
-              debtorUserId:
+              debtorId:
                 type: string
               pix:
                 type: object
@@ -5178,7 +5184,7 @@ components:
               - dueDate
               - state
               - billingId
-              - billingType
+              - recurrence
               - counterpartName
               - direction
               - recipient
@@ -5192,7 +5198,7 @@ components:
             properties:
               billingId:
                 type: string
-              direction:
+              type:
                 enum: 
                   - 'receivable'
                   - 'payable'
@@ -5216,7 +5222,7 @@ components:
                 type: string
             required:
               - billingId
-              - direction
+              - type
               - description
               - amount
               - occurrenceDate
@@ -5306,8 +5312,8 @@ components:
               - displayName
       required:
         - id
+        - recurrence
         - type
-        - direction
         - description
         - total
         - startDate
@@ -5329,12 +5335,12 @@ components:
       properties:
         id:
           type: string
-        type:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
             - 'indefinite'
-        direction:
+        type:
           enum: 
             - 'receivable'
             - 'payable'
@@ -5360,8 +5366,10 @@ components:
           required:
             - userId
             - name
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         pix:
@@ -5656,7 +5664,7 @@ components:
                   - 'cancelled'
               billingId:
                 type: string
-              billingType:
+              recurrence:
                 enum: 
                   - 'once'
                   - 'until'
@@ -5683,10 +5691,6 @@ components:
                   - 'pending'
                   - 'accepted'
                   - 'rejected'
-              payer:
-                enum: 
-                  - 'person'
-                  - 'owner'
               ownedByViewer:
                 type: boolean
               hasPix:
@@ -5701,8 +5705,10 @@ components:
                 type: boolean
               notify:
                 type: boolean
-              settled:
-                type: boolean
+              kind:
+                enum: 
+                  - 'live'
+                  - 'record'
               counterpartLabel:
                 type: string
               direction:
@@ -5732,7 +5738,7 @@ components:
                       - version
                 required:
                   - name
-              debtorUserId:
+              debtorId:
                 type: string
               pix:
                 type: object
@@ -5815,7 +5821,7 @@ components:
               - dueDate
               - state
               - billingId
-              - billingType
+              - recurrence
               - counterpartName
               - direction
               - recipient
@@ -5829,7 +5835,7 @@ components:
             properties:
               billingId:
                 type: string
-              direction:
+              type:
                 enum: 
                   - 'receivable'
                   - 'payable'
@@ -5853,7 +5859,7 @@ components:
                 type: string
             required:
               - billingId
-              - direction
+              - type
               - description
               - amount
               - occurrenceDate
@@ -5943,8 +5949,8 @@ components:
               - displayName
       required:
         - id
+        - recurrence
         - type
-        - direction
         - description
         - total
         - startDate
@@ -5961,8 +5967,55 @@ components:
         - guests
         - linkableContacts
     listChargesHandler:
-      type: object
-      additionalProperties: true
+      type: array
+      items:
+        type: object
+        additionalProperties: false
+        properties:
+          id:
+            type: string
+          description:
+            type: string
+          installment:
+            type: number
+          installment_count:
+            type: number
+          state:
+            type: string
+          due_date:
+            type: string
+          amount_cents:
+            type: number
+          billing:
+            type: object
+            additionalProperties: false
+            properties:
+              type:
+                type: string
+              direction:
+                enum: 
+                  - 'receivable'
+                  - 'payable'
+            required:
+              - type
+              - direction
+          debtor:
+            type: object
+            additionalProperties: false
+            properties:
+              name:
+                type: string
+              email:
+                type: string
+              phone:
+                type: string
+        required:
+          - id
+          - description
+          - state
+          - due_date
+          - amount_cents
+          - billing
     getChargeHandler:
       type: object
       additionalProperties: false
@@ -5992,7 +6045,7 @@ components:
             - 'cancelled'
         billingId:
           type: string
-        billingType:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
@@ -6019,10 +6072,6 @@ components:
             - 'pending'
             - 'accepted'
             - 'rejected'
-        payer:
-          enum: 
-            - 'person'
-            - 'owner'
         ownedByViewer:
           type: boolean
         hasPix:
@@ -6037,8 +6086,10 @@ components:
           type: boolean
         notify:
           type: boolean
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         direction:
@@ -6068,7 +6119,7 @@ components:
                 - version
           required:
             - name
-        debtorUserId:
+        debtorId:
           type: string
         pix:
           type: object
@@ -6151,7 +6202,7 @@ components:
         - dueDate
         - state
         - billingId
-        - billingType
+        - recurrence
         - counterpartName
         - direction
         - recipient
@@ -6186,7 +6237,7 @@ components:
             - 'cancelled'
         billingId:
           type: string
-        billingType:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
@@ -6213,10 +6264,6 @@ components:
             - 'pending'
             - 'accepted'
             - 'rejected'
-        payer:
-          enum: 
-            - 'person'
-            - 'owner'
         ownedByViewer:
           type: boolean
         hasPix:
@@ -6231,8 +6278,10 @@ components:
           type: boolean
         notify:
           type: boolean
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         direction:
@@ -6262,7 +6311,7 @@ components:
                 - version
           required:
             - name
-        debtorUserId:
+        debtorId:
           type: string
         pix:
           type: object
@@ -6345,7 +6394,7 @@ components:
         - dueDate
         - state
         - billingId
-        - billingType
+        - recurrence
         - counterpartName
         - direction
         - recipient
@@ -6380,7 +6429,7 @@ components:
             - 'cancelled'
         billingId:
           type: string
-        billingType:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
@@ -6407,10 +6456,6 @@ components:
             - 'pending'
             - 'accepted'
             - 'rejected'
-        payer:
-          enum: 
-            - 'person'
-            - 'owner'
         ownedByViewer:
           type: boolean
         hasPix:
@@ -6425,8 +6470,10 @@ components:
           type: boolean
         notify:
           type: boolean
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         direction:
@@ -6456,7 +6503,7 @@ components:
                 - version
           required:
             - name
-        debtorUserId:
+        debtorId:
           type: string
         pix:
           type: object
@@ -6539,7 +6586,7 @@ components:
         - dueDate
         - state
         - billingId
-        - billingType
+        - recurrence
         - counterpartName
         - direction
         - recipient
@@ -6574,7 +6621,7 @@ components:
             - 'cancelled'
         billingId:
           type: string
-        billingType:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
@@ -6601,10 +6648,6 @@ components:
             - 'pending'
             - 'accepted'
             - 'rejected'
-        payer:
-          enum: 
-            - 'person'
-            - 'owner'
         ownedByViewer:
           type: boolean
         hasPix:
@@ -6619,8 +6662,10 @@ components:
           type: boolean
         notify:
           type: boolean
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         direction:
@@ -6650,7 +6695,7 @@ components:
                 - version
           required:
             - name
-        debtorUserId:
+        debtorId:
           type: string
         pix:
           type: object
@@ -6733,7 +6778,7 @@ components:
         - dueDate
         - state
         - billingId
-        - billingType
+        - recurrence
         - counterpartName
         - direction
         - recipient
@@ -6768,7 +6813,7 @@ components:
             - 'cancelled'
         billingId:
           type: string
-        billingType:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
@@ -6795,10 +6840,6 @@ components:
             - 'pending'
             - 'accepted'
             - 'rejected'
-        payer:
-          enum: 
-            - 'person'
-            - 'owner'
         ownedByViewer:
           type: boolean
         hasPix:
@@ -6813,8 +6854,10 @@ components:
           type: boolean
         notify:
           type: boolean
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         direction:
@@ -6844,7 +6887,7 @@ components:
                 - version
           required:
             - name
-        debtorUserId:
+        debtorId:
           type: string
         pix:
           type: object
@@ -6927,7 +6970,7 @@ components:
         - dueDate
         - state
         - billingId
-        - billingType
+        - recurrence
         - counterpartName
         - direction
         - recipient
@@ -7053,7 +7096,7 @@ components:
             required:
               - amountCents
               - currency
-          type:
+          recurrence:
             enum: 
               - 'once'
               - 'until'
@@ -7079,7 +7122,7 @@ components:
           - creditorFirstName
           - description
           - amount
-          - type
+          - recurrence
           - participantCount
           - category
     acceptInviteHandler:
@@ -7144,7 +7187,7 @@ components:
                       - 'cancelled'
                   billingId:
                     type: string
-                  billingType:
+                  recurrence:
                     enum: 
                       - 'once'
                       - 'until'
@@ -7171,10 +7214,6 @@ components:
                       - 'pending'
                       - 'accepted'
                       - 'rejected'
-                  payer:
-                    enum: 
-                      - 'person'
-                      - 'owner'
                   ownedByViewer:
                     type: boolean
                   hasPix:
@@ -7189,8 +7228,10 @@ components:
                     type: boolean
                   notify:
                     type: boolean
-                  settled:
-                    type: boolean
+                  kind:
+                    enum: 
+                      - 'live'
+                      - 'record'
                   counterpartLabel:
                     type: string
                 required:
@@ -7200,7 +7241,7 @@ components:
                   - dueDate
                   - state
                   - billingId
-                  - billingType
+                  - recurrence
                   - counterpartName
             required:
               - kind
@@ -7429,7 +7470,7 @@ components:
                   - 'cancelled'
               billingId:
                 type: string
-              billingType:
+              recurrence:
                 enum: 
                   - 'once'
                   - 'until'
@@ -7456,10 +7497,6 @@ components:
                   - 'pending'
                   - 'accepted'
                   - 'rejected'
-              payer:
-                enum: 
-                  - 'person'
-                  - 'owner'
               ownedByViewer:
                 type: boolean
               hasPix:
@@ -7474,8 +7511,10 @@ components:
                 type: boolean
               notify:
                 type: boolean
-              settled:
-                type: boolean
+              kind:
+                enum: 
+                  - 'live'
+                  - 'record'
               counterpartLabel:
                 type: string
               direction:
@@ -7505,7 +7544,7 @@ components:
                       - version
                 required:
                   - name
-              debtorUserId:
+              debtorId:
                 type: string
               pix:
                 type: object
@@ -7588,7 +7627,7 @@ components:
               - dueDate
               - state
               - billingId
-              - billingType
+              - recurrence
               - counterpartName
               - direction
               - recipient
@@ -7643,7 +7682,7 @@ components:
             - 'cancelled'
         billingId:
           type: string
-        billingType:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
@@ -7670,10 +7709,6 @@ components:
             - 'pending'
             - 'accepted'
             - 'rejected'
-        payer:
-          enum: 
-            - 'person'
-            - 'owner'
         ownedByViewer:
           type: boolean
         hasPix:
@@ -7688,8 +7723,10 @@ components:
           type: boolean
         notify:
           type: boolean
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         direction:
@@ -7719,7 +7756,7 @@ components:
                 - version
           required:
             - name
-        debtorUserId:
+        debtorId:
           type: string
         pix:
           type: object
@@ -7802,7 +7839,7 @@ components:
         - dueDate
         - state
         - billingId
-        - billingType
+        - recurrence
         - counterpartName
         - direction
         - recipient
@@ -7837,7 +7874,7 @@ components:
             - 'cancelled'
         billingId:
           type: string
-        billingType:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
@@ -7864,10 +7901,6 @@ components:
             - 'pending'
             - 'accepted'
             - 'rejected'
-        payer:
-          enum: 
-            - 'person'
-            - 'owner'
         ownedByViewer:
           type: boolean
         hasPix:
@@ -7882,8 +7915,10 @@ components:
           type: boolean
         notify:
           type: boolean
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         direction:
@@ -7913,7 +7948,7 @@ components:
                 - version
           required:
             - name
-        debtorUserId:
+        debtorId:
           type: string
         pix:
           type: object
@@ -7996,7 +8031,7 @@ components:
         - dueDate
         - state
         - billingId
-        - billingType
+        - recurrence
         - counterpartName
         - direction
         - recipient
@@ -8119,7 +8154,7 @@ components:
             - 'cancelled'
         billingId:
           type: string
-        billingType:
+        recurrence:
           enum: 
             - 'once'
             - 'until'
@@ -8146,10 +8181,6 @@ components:
             - 'pending'
             - 'accepted'
             - 'rejected'
-        payer:
-          enum: 
-            - 'person'
-            - 'owner'
         ownedByViewer:
           type: boolean
         hasPix:
@@ -8164,8 +8195,10 @@ components:
           type: boolean
         notify:
           type: boolean
-        settled:
-          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
         counterpartLabel:
           type: string
         direction:
@@ -8195,7 +8228,7 @@ components:
                 - version
           required:
             - name
-        debtorUserId:
+        debtorId:
           type: string
         pix:
           type: object
@@ -8278,7 +8311,7 @@ components:
         - dueDate
         - state
         - billingId
-        - billingType
+        - recurrence
         - counterpartName
         - direction
         - recipient

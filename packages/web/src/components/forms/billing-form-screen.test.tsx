@@ -1,4 +1,4 @@
-import { addCalendarDays, BillingCategory, BillingFrequency, BillingState, BillingType, calendarDate, ChargeState, Direction, EMPTY_BILLING_DRAFT, endOfMonth, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { addCalendarDays, BillingCategory, BillingFrequency, BillingKind, BillingState, BillingRecurrence, calendarDate, ChargeState, Direction, EMPTY_BILLING_DRAFT, endOfMonth, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
@@ -363,7 +363,7 @@ it("lands the due date on the last day of the picked month with Final do mês", 
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   const post = sent.find(entry => entry.init.method === "POST");
-  expect(JSON.parse(String(post?.init.body))).toMatchObject({ type: "once", startDate: next.value, dueRule: "end_of_month" });
+  expect(JSON.parse(String(post?.init.body))).toMatchObject({ recurrence: "once", startDate: next.value, dueRule: "end_of_month" });
 });
 
 it("offers Final do mês only while the billing is once or monthly", async () => {
@@ -489,7 +489,7 @@ it("creates the billing in one step, with category, shares and an idempotency ke
   const post = sent.find(entry => entry.init.method === "POST");
   expect(post?.path).toBe("/api/financial/billings");
   expect(JSON.parse(String(post?.init.body))).toMatchObject({
-    type: "once",
+    recurrence: "once",
     totalCents: 10_000,
     category: "food",
     description: "Alimentação",
@@ -655,8 +655,8 @@ it("records a registro with the name typed in De quem and nobody to split with o
   const body = JSON.parse(String(post?.init.body));
 
   expect(body).toMatchObject({
-    direction: "receivable",
-    settled: true,
+    type: "receivable",
+    kind: "record",
     counterpartLabel: "Empresa X",
     totalCents: 500_000,
     split: { mode: "equal", parts: [{ kind: "owner" }] },
@@ -763,7 +763,7 @@ it("creates a conta a pagar without contacts, with a payee and a typed Pix key",
 
   const post = sent.find(entry => entry.init.method === "POST");
   expect(JSON.parse(String(post?.init.body))).toMatchObject({
-    direction: "payable",
+    type: "payable",
     totalCents: 10_000,
     payeeUserId: "u1",
     pix: { keyType: "phone", key: "+5511987654321" },
@@ -783,7 +783,7 @@ it("removes the payee with its chip and creates a conta a pagar that is the owne
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   const body = JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body));
-  expect(body.direction).toBe("payable");
+  expect(body.type).toBe("payable");
   expect(body.payeeUserId).toBeUndefined();
   expect(body.pix).toBeUndefined();
 });
@@ -813,8 +813,8 @@ it("shows the inline key error of a conta a pagar without leaving the form", asy
 
 const onceBilling: BillingDetail = {
   id: "b1",
-  type: BillingType.Once,
-  direction: Direction.Receivable,
+  recurrence: BillingRecurrence.Once,
+  type: Direction.Receivable,
   payee: null,
   pix: null,
   description: "Jantar",
@@ -862,7 +862,7 @@ it("freezes a finite billing and patches only category, Pix and reminders", asyn
   });
 });
 
-const untilBilling: BillingDetail = { ...onceBilling, id: "b5", type: BillingType.Until, endDate: "2026-12-31", installmentCount: 3, total: { amountCents: 3_334, currency: "BRL" } };
+const untilBilling: BillingDetail = { ...onceBilling, id: "b5", recurrence: BillingRecurrence.Until, endDate: "2026-12-31", installmentCount: 3, total: { amountCents: 3_334, currency: "BRL" } };
 
 it("seeds the amount of a parcelado billing as its total, per-installment × installments", async () => {
   api();
@@ -871,7 +871,7 @@ it("seeds the amount of a parcelado billing as its total, per-installment × ins
   expect(await screen.findByLabelText("Valor total")).toHaveValue("100,02");
 });
 
-const payableBilling: BillingDetail = { ...onceBilling, id: "b3", direction: Direction.Payable, paymentMethodId: undefined, payee: { userId: "u1", name: "Ana" }, pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" } };
+const payableBilling: BillingDetail = { ...onceBilling, id: "b3", type: Direction.Payable, paymentMethodId: undefined, payee: { userId: "u1", name: "Ana" }, pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" } };
 
 it("seeds a conta a pagar with its payee and inline key and patches them back", async () => {
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(payableBilling) : undefined));
@@ -897,7 +897,7 @@ it("seeds a conta a pagar with its payee and inline key and patches them back", 
   expect(JSON.parse(String(patch?.init.body)).paymentMethodId).toBeUndefined();
 });
 
-const indefiniteBilling: BillingDetail = { ...onceBilling, id: "b2", type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, nextDueDate: null };
+const indefiniteBilling: BillingDetail = { ...onceBilling, id: "b2", recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, nextDueDate: null };
 
 it("keeps the schedule read-only while editing an open-ended billing", async () => {
   api();
@@ -938,14 +938,14 @@ const monthCharge: ChargeDetail = {
   dueDate: "2026-09-20",
   state: ChargeState.Pending,
   billingId: "b2",
-  billingType: BillingType.Indefinite,
+  recurrence: BillingRecurrence.Indefinite,
   installment: null,
   installmentCount: null,
   counterpartName: "Ana",
   proofState: null,
   direction: Direction.Receivable,
   recipient: { userId: "u1", name: "Ana", email: null },
-  debtorUserId: "u1",
+  debtorId: "u1",
   pix: null,
   sharingState: SharingState.Ready,
   proof: null,
@@ -1035,7 +1035,7 @@ it("keeps the registro switch locked on edit and patches only the new name", asy
   const registroBilling: BillingDetail = {
     ...onceBilling,
     id: "b4",
-    settled: true,
+    kind: BillingKind.Record,
     counterpartLabel: "Empresa X",
     paymentMethodId: undefined,
     reminders: [],

@@ -1,6 +1,6 @@
 "use client";
 
-import { billingCategoryLabel, calendarDate, chargeShareText, chargeStateTag, formatMoney, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod, type PixSnapshot } from "@receivy/common";
+import { billingCategoryLabel, BillingKind, calendarDate, chargeShareText, chargeStateTag, formatMoney, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod, type PixSnapshot } from "@receivy/common";
 import { Bell, BellOff, Check, CircleDashed, CirclePause, CirclePlay, CircleStop, KeyRound, Pencil, Receipt, RotateCcw, Share2, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -116,11 +116,11 @@ function firstRowIds(charges: ChargeDetail[]): Set<string> {
   const ids = new Set<string>();
 
   for (const charge of charges) {
-    if (!charge.debtorUserId || seen.has(charge.debtorUserId)) {
+    if (!charge.debtorId || seen.has(charge.debtorId)) {
       continue;
     }
 
-    seen.add(charge.debtorUserId);
+    seen.add(charge.debtorId);
     ids.add(charge.id);
   }
 
@@ -145,14 +145,14 @@ function cycleTotals(cycle: Cycle): {
 }
 
 function cycleTitle(billing: BillingDetail, cycle: Cycle): string {
-  if (billing.type === "until") {
+  if (billing.recurrence === "until") {
     const installment = cycle.charges[0]?.installment ?? cycle.index;
     const count = billing.installmentCount ?? cycle.charges[0]?.installmentCount ?? cycle.index;
 
     return `Parcela ${installment} de ${count}`;
   }
 
-  if (billing.type === "indefinite") {
+  if (billing.recurrence === "indefinite") {
     return `Ocorrência ${dateText(cycle.dueDate)}`;
   }
 
@@ -172,13 +172,13 @@ function cycleState(cycle: Cycle): "open" | "done" | "cancelled" {
 function typeTag(billing: BillingDetail, current: Cycle | null): string {
   const monthEnd = billing.dueRule === "end_of_month" ? " · final do mês" : "";
 
-  if (billing.type === "until") {
+  if (billing.recurrence === "until") {
     const installment = current?.charges[0]?.installment ?? current?.index ?? 1;
 
     return `Parcelado (${installment}/${billing.installmentCount ?? "?"})${monthEnd}`;
   }
 
-  if (billing.type === "indefinite") {
+  if (billing.recurrence === "indefinite") {
     return billing.frequency === "yearly" ? "Recorrente anual" : `Recorrente mensal${monthEnd}`;
   }
 
@@ -189,7 +189,7 @@ function typeTag(billing: BillingDetail, current: Cycle | null): string {
 function counterpartHeadline(billing: BillingDetail): string {
   const name = billing.counterpartLabel ?? "";
 
-  if (billing.direction === "payable") {
+  if (billing.type === "payable") {
     return `Para ${name}`;
   }
 
@@ -420,9 +420,9 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   const progress = goal ? Math.min(100, Math.floor((totals.paid / goal) * 100)) : 0;
   const pending = current?.charges.filter((charge) => charge.state === "pending") ?? [];
   // A conta a pagar carries its own key; a conta a receber points at the wallet.
-  const payable = billing.direction === "payable";
+  const payable = billing.type === "payable";
   // A registro: the owner alone, already settled, with the counterpart typed as free text.
-  const settled = billing.settled === true;
+  const settled = billing.kind === BillingKind.Record;
   const pix = payable ? billing.pix : (billing.charges.find((charge) => charge.pix)?.pix ?? pixFromWallet(methods, billing.paymentMethodId));
   const ended = billing.state === "ended";
   const currency = billing.total.currency;
@@ -460,11 +460,11 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
 
   /** The participant behind a row while the billing still splits with them; a conta a pagar has none. */
   function participantOf(detail: BillingDetail, charge: ChargeDetail): BillingAllocation | undefined {
-    if (detail.direction === "payable") {
+    if (detail.type === "payable") {
       return undefined;
     }
 
-    return detail.allocations.find((allocation) => allocation.kind === SplitPartKind.User && allocation.userId === charge.debtorUserId);
+    return detail.allocations.find((allocation) => allocation.kind === SplitPartKind.User && allocation.userId === charge.debtorId);
   }
 
   /** Silencing asks first; turning the notices back on does not. */
@@ -565,14 +565,14 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                 <ActionTile
                   label="Editar"
                   icon={Pencil}
-                  hint={payable ? "Categoria, Pix e lembretes" : billing.type === "indefinite" ? "Valor e pessoas do próximo ciclo" : "Categoria e Pix"}
+                  hint={payable ? "Categoria, Pix e lembretes" : billing.recurrence === "indefinite" ? "Valor e pessoas do próximo ciclo" : "Categoria e Pix"}
                   disabled={busy}
                   onClick={() => router.push(`/billings/${billing.id}/edit`)}
                 />
                 {billing.state === "active" && !payable && !settled && (
                   <ActionTile label="Convidar" icon={UserPlus} hint="Compartilha um convite para entrar na cobrança" disabled={busy} onClick={() => void inviteSomeone(billing)} />
                 )}
-                {billing.type === "indefinite" && (
+                {billing.recurrence === "indefinite" && (
                   <ActionTile
                     label={billing.state === "active" ? "Pausar" : "Retomar"}
                     icon={billing.state === "active" ? CirclePause : CirclePlay}
@@ -647,9 +647,9 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                 <h2 className="m-0 text-lg font-semibold text-primary-strong">{payable || settled ? "Cobranças" : "Participantes"}</h2>
                 <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-primary-strong">{current?.charges.length ?? 0}</span>
               </div>
-              {current && billing.type !== "once" && (
+              {current && billing.recurrence !== "once" && (
                 <span className="text-[11px] text-muted">
-                  {billing.type === "until" ? `Ciclo ${current.charges[0]?.installment ?? current.index} de ${billing.installmentCount ?? "?"}` : `Ciclo ${current.index}`}
+                  {billing.recurrence === "until" ? `Ciclo ${current.charges[0]?.installment ?? current.index} de ${billing.installmentCount ?? "?"}` : `Ciclo ${current.index}`}
                 </span>
               )}
             </div>
@@ -803,7 +803,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
               </span>
             </div>
 
-            {billing.type === "indefinite" &&
+            {billing.recurrence === "indefinite" &&
               billing.previews.map((preview) => (
                 <div key={preview.occurrenceDate} className="flex items-center justify-between rounded-xl border border-dashed border-outline/40 bg-surface/70 p-3.5">
                   <div className="flex items-center gap-3">

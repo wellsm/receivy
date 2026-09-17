@@ -1,4 +1,4 @@
-import { BillingType, SplitPartKind } from './billing';
+import { BillingRecurrence, SplitPartKind } from './billing';
 import { type BillingDraft, untilInstallmentPreview } from './billing-draft';
 import { SplitMode } from './contracts';
 import { parseBRLCents, parsePercentageBasisPoints } from './financial-form';
@@ -99,7 +99,7 @@ function remainderHint(draft: BillingDraft, totalCents: number): string {
  * parcelado types its total; this is the per-installment amount `buildBillingInput` sends and splits.
  */
 export function draftTotalCents(draft: BillingDraft): number {
-  if (draft.type === BillingType.Until) {
+  if (draft.type === BillingRecurrence.Until) {
     return untilInstallmentPreview(draft)?.perInstallmentCents ?? 0;
   }
 
@@ -114,7 +114,7 @@ export function draftTotalCents(draft: BillingDraft): number {
 export function previewBillingSplit(draft: BillingDraft): BillingSplitPreview {
   let totalCents: number;
 
-  if (draft.type === BillingType.Until) {
+  if (draft.type === BillingRecurrence.Until) {
     const preview = untilInstallmentPreview(draft);
 
     if (!preview) {

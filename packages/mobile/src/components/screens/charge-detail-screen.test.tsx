@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Alert, Share } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { BillingType, ChargePayer, ChargeState, Direction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import { BillingKind, BillingRecurrence, ChargeState, Direction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { ChargeDetailScreen } from "@/components/screens/charge-detail-screen";
 
 jest.mock("expo-router", () => {
@@ -25,13 +25,13 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
     dueDate: "2026-09-10",
     state: ChargeState.Pending,
     billingId: "b1",
-    billingType: BillingType.Until,
+    recurrence: BillingRecurrence.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: "Ana",
     proofState: null,
     recipient: { userId: "u1", name: "Ana", email: "ana@example.com" },
-    debtorUserId: "u1",
+    debtorId: "u1",
     pix: { keyType: PixKeyType.Email, key: "pix@example.com", label: "Principal" },
     sharingState: SharingState.Ready,
     proof: null,
@@ -306,7 +306,7 @@ describe("ChargeDetailScreen", () => {
 
   it("lets the owner of a conta a pagar copy the key, send the proof and mark it paid", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
-    const own = charge({ direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorUserId: null });
+    const own = charge({ direction: Direction.Payable, ownedByViewer: true, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorId: null });
     const client = {
       charge: jest.fn().mockResolvedValue(own),
       cancel: jest.fn(),
@@ -342,7 +342,7 @@ describe("ChargeDetailScreen", () => {
 
   it("gives the payee of a conta a pagar only the proof and the paid mark", async () => {
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, payer: ChargePayer.Owner, ownedByViewer: false, counterpartName: "Bruno", proofState: ProofState.Pending, proof: proof({ sentByViewer: false }) })),
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, ownedByViewer: false, counterpartName: "Bruno", proofState: ProofState.Pending, proof: proof({ sentByViewer: false }) })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn(),
@@ -500,9 +500,9 @@ describe("ChargeDetailScreen", () => {
           ownedByViewer: true,
           counterpartName: "Empresa X",
           recipient: { userId: null, name: "Empresa X", email: null },
-          debtorUserId: null,
+          debtorId: null,
           sharingState: SharingState.Closed,
-          settled: true,
+          kind: BillingKind.Record,
           counterpartLabel: "Empresa X",
         }),
       ),

@@ -1,7 +1,7 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { Order } from '@ez4/database';
-import { BillingFrequency, type BillingSplit, BillingState, BillingType, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
+import { BillingFrequency, type BillingSplit, BillingState, BillingRecurrence, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
 import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { EventRepository } from '../../src/common/repositories/events';
@@ -70,7 +70,7 @@ let earlyId: string;
 
 function monthly(key: string, startDate: string, overrides: Record<string, unknown> = {}) {
   return {
-    type: BillingType.Indefinite as const,
+    recurrence: BillingRecurrence.Indefinite as const,
     frequency: BillingFrequency.Monthly as const,
     description: key,
     totalCents: 4_000,
@@ -178,7 +178,7 @@ describe('daily cron: materialization and reminder plan', () => {
       db,
       OWNER,
       'cron-once',
-      { ...monthly('Única', '2026-02-15'), type: BillingType.Once, frequency: undefined },
+      { ...monthly('Única', '2026-02-15'), recurrence: BillingRecurrence.Once, frequency: undefined },
       date('2026-01-01'),
       undefined,
       context

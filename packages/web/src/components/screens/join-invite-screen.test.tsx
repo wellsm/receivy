@@ -1,4 +1,4 @@
-import { BillingCategory, BillingType, type PublicInviteView } from "@receivy/common";
+import { BillingCategory, BillingRecurrence, type PublicInviteView } from "@receivy/common";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
@@ -20,7 +20,7 @@ const view: PublicInviteView = {
   creditorFirstName: "Lucas",
   description: "Churrasco",
   amount: { amountCents: 12_000, currency: "BRL" },
-  type: BillingType.Once,
+  recurrence: BillingRecurrence.Once,
   participantCount: 3,
   category: BillingCategory.Food,
   expired: false,

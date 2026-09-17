@@ -4,8 +4,9 @@ import type {
   BillingCategory,
   BillingDueRule,
   BillingFrequency,
+  BillingKind,
   BillingState,
-  BillingType,
+  BillingRecurrence,
   Direction,
   EditScope,
   PendingChargesAction,
@@ -42,7 +43,7 @@ export declare class ReminderBody {
 }
 
 export declare class BillingBody implements Http.JsonBody {
-  type: BillingType;
+  recurrence: BillingRecurrence;
   frequency?: BillingFrequency;
   description?: String.Max<500>;
   totalCents: Integer.Min<1>;
@@ -52,14 +53,14 @@ export declare class BillingBody implements Http.JsonBody {
   timezone: String.Max<100>;
   paymentMethodId?: String.UUID;
   reminders?: ReminderBody[];
-  /** Required on a conta a receber; a conta a pagar (direction 'payable') has no participants. */
+  /** Required on a conta a receber; a conta a pagar (type payable) has no participants. */
   split?: SplitBody;
-  direction?: Direction;
+  type?: Direction;
   payeeUserId?: String.UUID;
   pix?: PixBody;
   category?: BillingCategory;
   /** Registro: already received or paid; the owner alone, no participants, Pix or reminders. */
-  settled?: boolean;
+  kind?: BillingKind;
   /** Registro only; trimmed to 1–120 characters by the domain, which answers the pt-BR message. */
   counterpartLabel?: String.Max<200>;
 }
@@ -81,6 +82,6 @@ export declare class PatchBody implements Http.JsonBody {
   pendingCharges?: PendingChargesAction;
   applyTo?: EditScope;
   category?: BillingCategory;
-  settled?: boolean;
+  kind?: BillingKind;
   counterpartLabel?: String.Max<200>;
 }

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import type { BillingSplit } from '@receivy/common';
-import { BillingType, ChargeState, normalizeContact, SplitMode, SplitPartKind, UserStatus } from '@receivy/common';
+import { BillingRecurrence, ChargeState, normalizeContact, SplitMode, SplitPartKind, UserStatus } from '@receivy/common';
 import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ApiError } from '../../src/common/errors';
 import { DUPLICATE_CONTACT_MESSAGE, EMAIL_TAKEN_MESSAGE, LINKED_CONTACT_MESSAGE } from '../../src/contacts/errors';
@@ -170,7 +170,7 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
         db,
         contacts,
         `nickname-charge-${suffix}`,
-        { type: BillingType.Once, description: 'Rateio', totalCents: 3000, startDate: '2026-12-20', timezone: 'America/Sao_Paulo', split },
+        { recurrence: BillingRecurrence.Once, description: 'Rateio', totalCents: 3000, startDate: '2026-12-20', timezone: 'America/Sao_Paulo', split },
         new Date('2026-03-10T12:00:00Z')
       );
     }
@@ -278,7 +278,7 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
         paged,
         key,
         {
-          type: BillingType.Once,
+          recurrence: BillingRecurrence.Once,
           description: 'Rateio',
           totalCents: 11_000,
           startDate: '2026-12-20',

@@ -62,7 +62,7 @@ export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProp
   const badges = billingBadges(billing);
   const occurrence = occurrenceLine(billing);
   const canShare = billingShareAction(billing) !== null;
-  const payable = billing.direction === Direction.Payable;
+  const payable = billing.type === Direction.Payable;
 
   return (
     <Pressable

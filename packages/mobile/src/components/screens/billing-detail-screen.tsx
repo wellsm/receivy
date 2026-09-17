@@ -4,6 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Share, Text, View } from "react-native";
 import {
   billingCategoryLabel,
+  BillingKind,
   BillingState,
   calendarDate,
   chargeShareText,
@@ -144,11 +145,11 @@ function firstRowIds(charges: ChargeDetail[]): Set<string> {
   const ids = new Set<string>();
 
   for (const charge of charges) {
-    if (!charge.debtorUserId || seen.has(charge.debtorUserId)) {
+    if (!charge.debtorId || seen.has(charge.debtorId)) {
       continue;
     }
 
-    seen.add(charge.debtorUserId);
+    seen.add(charge.debtorId);
     ids.add(charge.id);
   }
 
@@ -168,14 +169,14 @@ function cycleTotals(cycle: Cycle): { paid: number; goal: number; paidCount: num
 }
 
 function cycleTitle(billing: BillingDetail, cycle: Cycle): string {
-  if (billing.type === "until") {
+  if (billing.recurrence === "until") {
     const installment = cycle.charges[0]?.installment ?? cycle.index;
     const count = billing.installmentCount ?? cycle.charges[0]?.installmentCount ?? cycle.index;
 
     return `Parcela ${installment} de ${count}`;
   }
 
-  if (billing.type === "indefinite") {
+  if (billing.recurrence === "indefinite") {
     return `Ocorrência ${dateText(cycle.dueDate)}`;
   }
 
@@ -195,13 +196,13 @@ function cycleState(cycle: Cycle): "open" | "done" | "cancelled" {
 function typeTag(billing: BillingDetail, current: Cycle | null): string {
   const monthEnd = billing.dueRule === "end_of_month" ? " · final do mês" : "";
 
-  if (billing.type === "until") {
+  if (billing.recurrence === "until") {
     const installment = current?.charges[0]?.installment ?? current?.index ?? 1;
 
     return `Parcelado (${installment}/${billing.installmentCount ?? "?"})${monthEnd}`;
   }
 
-  if (billing.type === "indefinite") {
+  if (billing.recurrence === "indefinite") {
     return billing.frequency === "yearly" ? "Recorrente anual" : `Recorrente mensal${monthEnd}`;
   }
 
@@ -212,7 +213,7 @@ function typeTag(billing: BillingDetail, current: Cycle | null): string {
 function counterpartHeadline(billing: BillingDetail): string {
   const name = billing.counterpartLabel ?? "";
 
-  if (billing.direction === "payable") {
+  if (billing.type === "payable") {
     return `Para ${name}`;
   }
 
@@ -475,9 +476,9 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   const goal = totals.goal || billing.total.amountCents;
   const progress = goal ? Math.min(100, Math.floor((totals.paid / goal) * 100)) : 0;
   const pending = current?.charges.filter((charge) => charge.state === "pending") ?? [];
-  const payable = billing.direction === "payable";
+  const payable = billing.type === "payable";
   // A registro: the owner alone, already settled, with the counterpart typed as free text.
-  const settled = billing.settled === true;
+  const settled = billing.kind === BillingKind.Record;
   // A conta a pagar carries its own key; a conta a receber points at one of the wallet.
   const pix = payable ? billing.pix : (billing.charges.find((charge) => charge.pix)?.pix ?? pixFromWallet(methods, billing.paymentMethodId));
   const ended = billing.state === "ended";
@@ -506,11 +507,11 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
 
   /** The participant behind a row while the billing still splits with them; a conta a pagar has none. */
   function participantOf(detail: BillingDetail, charge: ChargeDetail): BillingAllocation | undefined {
-    if (detail.direction === "payable") {
+    if (detail.type === "payable") {
       return undefined;
     }
 
-    return detail.allocations.find((allocation) => allocation.kind === SplitPartKind.User && allocation.userId === charge.debtorUserId);
+    return detail.allocations.find((allocation) => allocation.kind === SplitPartKind.User && allocation.userId === charge.debtorId);
   }
 
   return (
@@ -593,14 +594,14 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
               <ActionTile
                 label="Editar"
                 icon={ICONS.edit}
-                hint={payable ? "Categoria, Pix e lembretes" : billing.type === "indefinite" ? "Valor e pessoas do próximo ciclo" : "Categoria e Pix"}
+                hint={payable ? "Categoria, Pix e lembretes" : billing.recurrence === "indefinite" ? "Valor e pessoas do próximo ciclo" : "Categoria e Pix"}
                 disabled={busy}
                 onPress={() => onEdit?.(billing)}
               />
               {!payable && !settled && billing.state === "active" && (
                 <ActionTile label="Convidar" icon={ICONS.group} hint="Compartilha um convite para entrar na conta" disabled={busy} onPress={() => void inviteSomeone(billing)} />
               )}
-              {billing.type === "indefinite" && (
+              {billing.recurrence === "indefinite" && (
                 <ActionTile
                   label={billing.state === "active" ? "Pausar" : "Retomar"}
                   icon={billing.state === "active" ? ICONS.pause : ICONS.play}
@@ -696,9 +697,9 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
               <Text className="text-lg font-semibold text-primary-strong">{payable || settled ? "Cobranças" : "Participantes"}</Text>
               <Text className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-primary-strong">{current?.charges.length ?? 0}</Text>
             </View>
-            {current && billing.type !== "once" && (
+            {current && billing.recurrence !== "once" && (
               <Text className="text-[11px] text-muted">
-                {billing.type === "until" ? `Ciclo ${current.charges[0]?.installment ?? current.index} de ${billing.installmentCount ?? "?"}` : `Ciclo ${current.index}`}
+                {billing.recurrence === "until" ? `Ciclo ${current.charges[0]?.installment ?? current.index} de ${billing.installmentCount ?? "?"}` : `Ciclo ${current.index}`}
               </Text>
             )}
           </View>
@@ -855,7 +856,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             </Text>
           </View>
 
-          {billing.type === "indefinite" &&
+          {billing.recurrence === "indefinite" &&
             billing.previews.map((preview) => (
               <View key={preview.occurrenceDate} className="flex-row items-center justify-between rounded-xl border border-dashed border-outline/40 bg-surface/70 p-3.5">
                 <View className="flex-row items-center gap-3">

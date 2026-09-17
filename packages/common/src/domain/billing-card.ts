@@ -1,4 +1,4 @@
-import { BillingFrequency, BillingState, type BillingSummary, BillingType } from './billing';
+import { BillingFrequency, BillingKind, BillingState, type BillingSummary, BillingRecurrence } from './billing';
 import { dayDiff } from './calendar-labels';
 import { Direction, SplitMode } from './contracts';
 import { BadgeTone } from './feed';
@@ -44,9 +44,9 @@ export function billingDueLabel(billing: BillingSummary, today: string): string 
 export function billingBadges(billing: BillingSummary): BillingBadge[] {
   const badges: BillingBadge[] = [];
 
-  if (billing.type === BillingType.Once) {
+  if (billing.recurrence === BillingRecurrence.Once) {
     badges.push({ label: 'Única', tone: BadgeTone.Neutral });
-  } else if (billing.type === BillingType.Until) {
+  } else if (billing.recurrence === BillingRecurrence.Until) {
     if (billing.paidCount < (billing.installmentCount ?? 0)) {
       badges.push({ label: `Parcela ${billing.paidCount + 1} de ${billing.installmentCount}`, tone: BadgeTone.Info });
     } else {
@@ -69,10 +69,10 @@ export function billingBadges(billing: BillingSummary): BillingBadge[] {
   }
 
   // A registro names its counterpart instead of the people or the payee.
-  if (billing.settled === true) {
+  if (billing.kind === BillingKind.Record) {
     badges.push({ label: 'Registro', tone: BadgeTone.Neutral });
 
-    if (billing.direction === Direction.Payable) {
+    if (billing.type === Direction.Payable) {
       badges.push({ label: 'A pagar', tone: BadgeTone.Warning });
     }
 
@@ -83,7 +83,7 @@ export function billingBadges(billing: BillingSummary): BillingBadge[] {
     return badges;
   }
 
-  if (billing.direction === Direction.Payable) {
+  if (billing.type === Direction.Payable) {
     badges.push({ label: 'A pagar', tone: BadgeTone.Warning });
     badges.push({ label: billing.payeeName ?? 'Só comigo', tone: BadgeTone.Neutral });
 

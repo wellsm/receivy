@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  BillingKind,
   calendarDate,
   canAcceptProof,
   canCancelCharge,
@@ -18,6 +19,7 @@ import {
   chargeTypeLabel,
   counterpartRoleLabel,
   formatMoney,
+  ownerPays,
   ProofKind,
   type ChargeDetail,
   type PublicLink,
@@ -323,9 +325,10 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   const state = chargeStateTag(charge, today);
   const status = chargeStatusLine(charge, today);
   const guidance = payableGuidance(charge);
-  const ownBill = charge.payer === "owner";
+  const ownBill = ownerPays(charge);
+  const record = charge.kind === BillingKind.Record;
   // The creditor of a conta a receber with contacts: a registro publishes no link.
-  const creditor = receivable && !ownBill && !charge.settled;
+  const creditor = receivable && !ownBill && !record;
   const markable = canMarkPaid(charge);
   const reopenable = canReopenCharge(charge);
   const shareable = canShare(charge);
@@ -360,7 +363,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
                 {ownBill && charge.ownedByViewer && <span className="rounded-full bg-info-soft px-2.5 py-1 text-[11px] font-semibold text-info">Minha conta</span>}
               </div>
               <div className="flex items-center gap-1.5">
-                {charge.settled && <StatusTag label="Registro" tone="neutral" compact />}
+                {record && <StatusTag label="Registro" tone="neutral" compact />}
                 {charge.notify === false && <StatusTag label="Sem avisos" tone="neutral" compact />}
                 <StatusTag label={state.label} tone={state.tone} compact />
               </div>
@@ -402,7 +405,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
                   <ActionTile label="Comprovante" icon={Eye} tone="primary" hint="Abre o comprovante enviado" disabled={busy} onClick={() => router.push(`/charges/${id}/proof`)} />
                 )}
                 {reopenable && <ActionTile label="Reabrir" icon={RotateCcw} hint="Desfaz o pagamento e volta a cobrança para pendente" disabled={busy} onClick={() => setConfirmReopen(true)} />}
-                {charge.settled && markable && <ActionTile label="Marcar como pago" icon={Check} tone="primary" disabled={busy} onClick={() => setConfirmPaid("pay")} />}
+                {record && markable && <ActionTile label="Marcar como pago" icon={Check} tone="primary" disabled={busy} onClick={() => setConfirmPaid("pay")} />}
                 {shareable && <ActionTile label="Compartilhar" icon={Share2} hint="Envia o link público de pagamento" disabled={busy} onClick={() => void shareLink()} />}
                 {remindable && <ActionTile label="Lembrar" icon={Bell} hint="Envia um lembrete de pagamento" disabled={busy} onClick={() => setConfirmRemind(true)} />}
                 {cancellable && <ActionTile label="Cancelar" icon={CircleStop} tone="danger" hint="Encerra a cobrança sem pagamento" disabled={busy} onClick={() => setConfirmCancel(true)} />}
@@ -430,7 +433,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
 
         <div className="flex min-w-0 flex-col gap-4">
           {/* A registro has no proof: "Marcar como pago" moved to the quick actions. */}
-          {!charge.settled && (
+          {!record && (
             <ProofCard
               charge={charge}
               busy={busy}

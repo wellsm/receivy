@@ -1,5 +1,5 @@
 import { DatabaseTester } from '@ez4/local-database/test';
-import { BillingType, SplitMode, SplitPartKind, UserStatus } from '@receivy/common';
+import { BillingRecurrence, SplitMode, SplitPartKind, UserStatus } from '@receivy/common';
 import { BillingRepository } from '../../src/billings/repositories/billing';
 import type { Db, DbClient } from '../../src/database';
 import type { NoticeContext } from '../../src/notifications/services/send';
@@ -78,7 +78,7 @@ export async function createOnceCharge(
     ownerId,
     key,
     {
-      type: BillingType.Once,
+      recurrence: BillingRecurrence.Once,
       totalCents: input.amountCents,
       startDate: input.dueDate,
       timezone: 'America/Sao_Paulo',

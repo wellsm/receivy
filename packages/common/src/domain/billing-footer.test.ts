@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BillingFrequency, BillingType } from './billing';
+import { BillingFrequency, BillingRecurrence } from './billing';
 import { type BillingDraft, EMPTY_BILLING_DRAFT, EMPTY_SPLIT_VALUES } from './billing-draft';
 import { billingDraftSummary, billingDraftSummaryText } from './billing-footer';
 import { Direction, PixKeyType, SplitMode } from './contracts';
@@ -25,7 +25,7 @@ describe('billing draft summary', () => {
   it('counts every installment of a parcelado', () => {
     const draft: BillingDraft = {
       ...base,
-      type: BillingType.Until,
+      type: BillingRecurrence.Until,
       selected: ['p1'],
       frequency: BillingFrequency.Monthly,
       occurrences: '3'
@@ -38,7 +38,7 @@ describe('billing draft summary', () => {
   });
 
   it('counts only one occurrence of a recorrente sem fim', () => {
-    const draft: BillingDraft = { ...base, type: BillingType.Indefinite, frequency: BillingFrequency.Monthly };
+    const draft: BillingDraft = { ...base, type: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly };
     const summary = billingDraftSummary(draft, TODAY);
 
     expect(summary).toEqual({ charges: 2, people: 2, occurrences: null, totalCents: 10000, perOccurrenceCents: 10000 });
@@ -87,7 +87,7 @@ describe('billing draft summary', () => {
       direction: Direction.Payable,
       payee: '',
       selected: [],
-      type: BillingType.Indefinite,
+      type: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Monthly
     };
     const summary = billingDraftSummary(draft, TODAY);
@@ -99,7 +99,7 @@ describe('billing draft summary', () => {
   it('returns null while the draft is not valid yet', () => {
     expect(billingDraftSummary({ ...base, selected: [] }, TODAY)).toBeNull();
     expect(billingDraftSummary({ ...base, amount: '' }, TODAY)).toBeNull();
-    expect(billingDraftSummary({ ...base, type: BillingType.Until, end: '', occurrences: '' }, TODAY)).toBeNull();
+    expect(billingDraftSummary({ ...base, type: BillingRecurrence.Until, end: '', occurrences: '' }, TODAY)).toBeNull();
   });
 
   it('splits unevenly but keeps the same totals as resolveBillingSplit', () => {

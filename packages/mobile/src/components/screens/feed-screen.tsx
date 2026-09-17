@@ -199,7 +199,7 @@ type ChargeRowProps = {
 };
 
 function ChargeRow({ charge, direction, today, reminded, onOpen, onRemind, onMarkPaid, onDeclare }: ChargeRowProps) {
-  const badges = chargeBadges(charge, today);
+  const badges = chargeBadges(charge, today, direction);
   const action = chargeAction(charge, direction);
   const settled = charge.state !== ChargeState.Pending;
   const payable = direction === Direction.Payable;

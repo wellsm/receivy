@@ -1,4 +1,4 @@
-import { BillingType, type NormalizedBillingInput, SplitPartKind } from './billing';
+import { BillingKind, BillingRecurrence, type NormalizedBillingInput, SplitPartKind } from './billing';
 import { billingDueDates } from './billing-calendar';
 import { type BillingDraft, buildBillingInput } from './billing-draft';
 import { type PlannedCharge, planBillingCharges } from './billing-plan';
@@ -17,11 +17,11 @@ export type BillingDraftSummary = {
 
 /** Participants who actually get a charge: the owner part never counts, nor does an amount rounded to zero. */
 function summaryPeople(input: NormalizedBillingInput, allocations: ResolvedAllocation[]): number {
-  if (input.settled) {
+  if (input.kind === BillingKind.Record) {
     return 0;
   }
 
-  if (input.direction === Direction.Payable) {
+  if (input.type === Direction.Payable) {
     return input.payeeUserId ? 1 : 0;
   }
 
@@ -43,11 +43,11 @@ export function billingDraftSummary(draft: BillingDraft, today: Date): BillingDr
     // `buildBillingInput` always returns `normalizeBillingInput`'s result; its declared type is
     // widened to `BillingInput` because it also doubles as the request body sent over the wire.
     const input = buildBillingInput(draft, today) as NormalizedBillingInput;
-    const payer = input.direction === Direction.Payable ? ChargePayer.Owner : ChargePayer.Person;
+    const payer = input.type === Direction.Payable ? ChargePayer.Owner : ChargePayer.Person;
     const payeeUserId = input.payeeUserId ?? null;
-    const settled = input.settled === true;
+    const settled = input.kind === BillingKind.Record;
 
-    if (input.type === BillingType.Indefinite) {
+    if (input.recurrence === BillingRecurrence.Indefinite) {
       const plan = planBillingCharges({
         description: input.description,
         totalCents: input.totalCents,

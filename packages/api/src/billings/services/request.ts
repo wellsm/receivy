@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { BillingCategory, BillingDueRule, type NormalizedBillingInput } from '@receivy/common';
+import { BillingCategory, BillingDueRule, BillingKind, type NormalizedBillingInput } from '@receivy/common';
 
 /** Canonical hash of a create request so an Idempotency-Key replay with a different body is refused. */
 export function billingRequestFingerprint(input: NormalizedBillingInput): string {
   const canonical = JSON.stringify(
     {
-      type: input.type,
+      type: input.recurrence,
       frequency: input.frequency ?? null,
       description: input.description,
       category: input.category ?? BillingCategory.Other,
@@ -18,11 +18,11 @@ export function billingRequestFingerprint(input: NormalizedBillingInput): string
       paymentMethodId: input.paymentMethodId ?? null,
       reminders: input.reminders ?? null,
       split: input.split,
-      direction: input.direction,
+      direction: input.type,
       payeeUserId: input.payeeUserId ?? null,
       pix: input.pix ?? null,
       // Only a registro adds its fields, so replays of older requests keep their fingerprint.
-      ...(input.settled ? { settled: true, counterpartLabel: input.counterpartLabel } : {})
+      ...(input.kind === BillingKind.Record ? { settled: true, counterpartLabel: input.counterpartLabel } : {})
     },
     (_key, value: unknown) =>
       value && typeof value === 'object' && !Array.isArray(value)

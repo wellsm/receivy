@@ -1,4 +1,4 @@
-import { addCalendarDays, BillingCategory, BillingFrequency, BillingState, BillingType, calendarDate, ChargeState, Direction, EMPTY_BILLING_DRAFT, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, UserStatus, type BillingDetail, type ChargeDetail, type Contact } from "@receivy/common";
+import { addCalendarDays, BillingCategory, BillingFrequency, BillingKind, BillingState, BillingRecurrence, calendarDate, ChargeState, Direction, EMPTY_BILLING_DRAFT, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, UserStatus, type BillingDetail, type ChargeDetail, type Contact } from "@receivy/common";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { FinancialRequestError } from "@/financial/client";
 import { clearDraft, patchDraft, saveDraft, takeDraft } from "@/financial/draft-store";
@@ -157,8 +157,8 @@ async function fillQuickBilling() {
 
 const onceBilling: BillingDetail = {
   id: "b1",
-  type: BillingType.Once,
-  direction: Direction.Receivable,
+  recurrence: BillingRecurrence.Once,
+  type: Direction.Receivable,
   payee: null,
   pix: null,
   description: "Jantar",
@@ -182,11 +182,11 @@ const onceBilling: BillingDetail = {
   linkableContacts: [],
 };
 
-const untilBilling: BillingDetail = { ...onceBilling, id: "b5", type: BillingType.Until, endDate: "2026-12-31", installmentCount: 3, total: { amountCents: 3_334, currency: "BRL" } };
+const untilBilling: BillingDetail = { ...onceBilling, id: "b5", recurrence: BillingRecurrence.Until, endDate: "2026-12-31", installmentCount: 3, total: { amountCents: 3_334, currency: "BRL" } };
 
 const payableBilling: BillingDetail = {
   ...onceBilling,
-  direction: Direction.Payable,
+  type: Direction.Payable,
   payee: { userId: "u1", name: "Ana" },
   pix: { keyType: PixKeyType.Phone, key: "+5511987654321", label: "Inter" },
   paymentMethodId: undefined,
@@ -236,7 +236,7 @@ describe("BillingFormScreen", () => {
     expect(create).toBeDisabled();
 
     expect(client.createBilling.mock.calls[0][0]).toMatchObject({
-      type: "once",
+      recurrence: "once",
       totalCents: 10_000,
       description: "Mercado QA",
       category: "groceries",
@@ -340,7 +340,7 @@ describe("BillingFormScreen", () => {
     const silencedBilling: BillingDetail = {
       ...onceBilling,
       id: "b7",
-      type: BillingType.Indefinite,
+      recurrence: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Monthly,
       allocations: [{ kind: SplitPartKind.User, userId: "u3", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, notify: false }],
       split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u3" }] },
@@ -370,7 +370,7 @@ describe("BillingFormScreen", () => {
     const silencedBilling: BillingDetail = {
       ...onceBilling,
       id: "b3",
-      type: BillingType.Indefinite,
+      recurrence: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Monthly,
       allocations: [{ kind: SplitPartKind.User, userId: "u1", splitMode: SplitMode.Equal, amount: { amountCents: 9_000, currency: "BRL" }, order: 0, notify: false }],
     };
@@ -409,8 +409,8 @@ describe("BillingFormScreen", () => {
     const input = client.createBilling.mock.calls[0][0];
 
     expect(input).toMatchObject({
-      direction: "receivable",
-      settled: true,
+      type: "receivable",
+      kind: "record",
       counterpartLabel: "Empresa X",
       totalCents: 500_000,
       split: { mode: "equal", parts: [{ kind: "owner" }] },
@@ -437,7 +437,7 @@ describe("BillingFormScreen", () => {
     const registroBilling: BillingDetail = {
       ...onceBilling,
       id: "b4",
-      settled: true,
+      kind: BillingKind.Record,
       counterpartLabel: "Empresa X",
       paymentMethodId: undefined,
       reminders: [],
@@ -471,7 +471,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
 
-    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ type: "until", endDate: "2026-03-31" });
+    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ recurrence: "until", endDate: "2026-03-31" });
   });
 
   it("shows the per-installment helper below the typed total and posts the rounded-up per-installment amount", async () => {
@@ -929,14 +929,14 @@ describe("BillingFormScreen", () => {
     dueDate: "2026-09-20",
     state: ChargeState.Pending,
     billingId: "b2",
-    billingType: BillingType.Indefinite,
+    recurrence: BillingRecurrence.Indefinite,
     installment: null,
     installmentCount: null,
     counterpartName: "Ana",
     proofState: null,
     direction: Direction.Receivable,
     recipient: { userId: "u1", name: "Ana", email: null },
-    debtorUserId: "u1",
+    debtorId: "u1",
     pix: null,
     sharingState: SharingState.Ready,
     proof: null,
@@ -945,7 +945,7 @@ describe("BillingFormScreen", () => {
     createdAt: "2026-09-01T00:00:00Z",
   };
 
-  const recurringWithCharge: BillingDetail = { ...onceBilling, id: "b2", type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, startDate: "2026-09-20", nextDueDate: "2026-09-20", charges: [monthCharge] };
+  const recurringWithCharge: BillingDetail = { ...onceBilling, id: "b2", recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: "2026-09-20", nextDueDate: "2026-09-20", charges: [monthCharge] };
 
   // Only Date is faked: RNTL keeps its real timers for waitFor.
   function onSeptemberTenth() {
@@ -1034,7 +1034,7 @@ describe("BillingFormScreen", () => {
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
 
     expect(client.createBilling.mock.calls[0][0]).toMatchObject({
-      direction: "payable",
+      type: "payable",
       payeeUserId: "u1",
       totalCents: 10_000,
       description: "Aluguel",

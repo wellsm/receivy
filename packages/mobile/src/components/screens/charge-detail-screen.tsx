@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, ScrollView, Share, Text, View } from "react-native";
 import {
+  BillingKind,
   calendarDate,
   canAcceptProof,
   canCancelCharge,
@@ -21,6 +22,7 @@ import {
   ChargeTone,
   counterpartRoleLabel,
   formatMoney,
+  ownerPays,
   ProofKind,
   type ChargeDetail,
 } from "@receivy/common";
@@ -366,9 +368,9 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   const state = chargeStateTag(charge, today);
   const status = chargeStatusLine(charge, today);
   const guidance = payableGuidance(charge);
-  const ownBill = charge.payer === "owner" && charge.ownedByViewer === true;
+  const ownBill = ownerPays(charge) && charge.ownedByViewer === true;
   // Who could publish a link once a key exists: the creditor of a conta a receber with contacts, never a registro.
-  const sharer = receivable && pending && charge.payer !== "owner" && !charge.settled;
+  const sharer = receivable && pending && !ownerPays(charge) && charge.kind !== BillingKind.Record;
   const settleable = canMarkPaid(charge);
   const reopenable = !!client.reopen && canReopenCharge(charge);
   const share = canShare(charge);
@@ -381,7 +383,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   const proofsEnabled = !!client.startProofUpload;
   const viewable = proof?.kind === ProofKind.File;
   // A debtor sends the proof; the payee of a conta a pagar only reviews the one the owner sent.
-  const proofTile = proofsEnabled && !charge.settled && (!receivable || (charge.payer === "owner" && viewable));
+  const proofTile = proofsEnabled && charge.kind !== BillingKind.Record && (!receivable || (ownerPays(charge) && viewable));
   const name = charge.counterpartName || charge.recipient.name;
 
   // The sticky footer either sends a file or opens the one already sent; a declaration has nothing to view.
@@ -413,7 +415,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
               {ownBill && <Text className="rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-semibold text-muted">Minha conta</Text>}
             </View>
             <View className="flex-row items-center gap-1.5">
-              {charge.settled && <StatusTag label="Registro" tone={ChargeTone.Neutral} compact />}
+              {charge.kind === BillingKind.Record && <StatusTag label="Registro" tone={ChargeTone.Neutral} compact />}
               {quiet && <StatusTag label="Sem avisos" tone={ChargeTone.Neutral} compact />}
               <StatusTag label={state.label} tone={state.tone} compact />
             </View>
@@ -427,7 +429,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
             <InitialsAvatar
               name={name}
               size={40}
-              avatar={charge.counterpartAvatar ?? (charge.ownedByViewer && !charge.debtorUserId ? charge.recipient.avatar : null)}
+              avatar={charge.counterpartAvatar ?? (charge.ownedByViewer && !charge.debtorId ? charge.recipient.avatar : null)}
             />
             <View className="flex-1">
               <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
@@ -459,7 +461,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
           <View className="gap-2.5">
             <View className="flex-row gap-2">
               {reopenable && <ActionTile label="Reabrir" icon={ICONS.edit} hint="Desfaz o pagamento e volta a cobrança para pendente" disabled={busy} onPress={confirmReopen} />}
-              {charge.settled && settleable && <ActionTile label="Marcar como pago" icon={ICONS.check} tone="primary" disabled={busy} onPress={() => confirmPaid(false)} />}
+              {charge.kind === BillingKind.Record && settleable && <ActionTile label="Marcar como pago" icon={ICONS.check} tone="primary" disabled={busy} onPress={() => confirmPaid(false)} />}
               {!receivable && charge.pix && (
                 <ActionTile
                   label="Copiar Chave Pix"
@@ -517,7 +519,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
         )}
 
         {/* A registro has no proof: "Marcar como pago" moved to the quick actions. */}
-        {proofsEnabled && !charge.settled && (
+        {proofsEnabled && charge.kind !== BillingKind.Record && (
           <ProofCard
             charge={charge}
             busy={busy}

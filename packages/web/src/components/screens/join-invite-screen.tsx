@@ -1,6 +1,6 @@
 "use client";
 
-import { billingCategoryLabel, formatMoney, type BillingType, type InviteAcceptResult, type PublicInviteView } from "@receivy/common";
+import { billingCategoryLabel, formatMoney, type BillingRecurrence, type InviteAcceptResult, type PublicInviteView } from "@receivy/common";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -12,7 +12,7 @@ type JoinInviteScreenProps = { token: string; view: PublicInviteView; authentica
 const EXPIRED = "Convite expirado. Peça um novo link.";
 const CONTACT_NOTICE = "Você entrou como contato; o criador ajusta a divisão.";
 const AWAITING_NOTICE = "Você entrou. O dono da conta vai confirmar sua participação e a cobrança aparece no seu feed.";
-const TYPE_LABELS: Record<BillingType, string> = { once: "À vista", until: "Parcelado", indefinite: "Sem fim" };
+const TYPE_LABELS: Record<BillingRecurrence, string> = { once: "À vista", until: "Parcelado", indefinite: "Sem fim" };
 
 const PAGE = "min-h-screen bg-canvas px-4 pb-16 pt-7";
 const COLUMN = "mx-auto flex w-full max-w-md flex-col gap-6 md:max-w-2xl";
@@ -105,7 +105,7 @@ export function JoinInviteScreen({ token, view, authenticated }: JoinInviteScree
             </div>
             <div>
               <dt className="text-xs text-muted">Modalidade</dt>
-              <dd className="m-0 mt-1 font-bold text-ink">{TYPE_LABELS[view.type]}</dd>
+              <dd className="m-0 mt-1 font-bold text-ink">{TYPE_LABELS[view.recurrence]}</dd>
             </div>
           </dl>
 

@@ -27,7 +27,8 @@ import {
   untilInstallmentPreview,
   BillingDueRule,
   BillingFrequency,
-  BillingType,
+  BillingKind,
+  BillingRecurrence,
   Direction,
   EditScope,
   PixKeyType,
@@ -81,10 +82,10 @@ const DIRECTIONS: { value: Direction; label: string }[] = [
   { value: Direction.Payable, label: "Vou pagar" },
 ];
 
-const TYPES: { value: BillingType; label: string }[] = [
-  { value: BillingType.Once, label: "À vista" },
-  { value: BillingType.Until, label: "Parcelado" },
-  { value: BillingType.Indefinite, label: "Recorrente" },
+const TYPES: { value: BillingRecurrence; label: string }[] = [
+  { value: BillingRecurrence.Once, label: "À vista" },
+  { value: BillingRecurrence.Until, label: "Parcelado" },
+  { value: BillingRecurrence.Indefinite, label: "Recorrente" },
 ];
 
 /** "Já recebi" / "Já paguei" and the name field of a registro, by direction. */
@@ -95,7 +96,7 @@ const SETTLED_LABELS: Record<Direction, { toggle: string; field: string }> = {
 const SETTLED_HELP = "Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento.";
 const SETTLED_LOCKED = "Não dá para mudar depois de criada.";
 
-const AMOUNT_LABELS: Record<BillingType, string> = {
+const AMOUNT_LABELS: Record<BillingRecurrence, string> = {
   once: "Valor total",
   until: "Valor total",
   indefinite: "Valor por ocorrência",
@@ -190,14 +191,14 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
   const parts = billing.split.parts;
 
   return {
-    direction: billing.direction,
+    direction: billing.type,
     payee: billing.payee?.userId ?? "",
     pixInline: pixDraftFromBilling(billing),
-    type: billing.type,
+    type: billing.recurrence,
     selected: parts.flatMap(part => (part.kind === "user" ? [part.userId] : [])),
     owner: parts.some(part => part.kind === "owner") || billing.split.mode === "fixed",
     // Parcelado: the form shows the total, so saving it unchanged rebuilds the same per-installment amount.
-    amount: moneyText(billing.type === BillingType.Until ? billing.total.amountCents * (billing.installmentCount ?? 1) : billing.total.amountCents),
+    amount: moneyText(billing.recurrence === BillingRecurrence.Until ? billing.total.amountCents * (billing.installmentCount ?? 1) : billing.total.amountCents),
     description: billing.description,
     frequency: billing.frequency ?? BillingFrequency.Monthly,
     start: billing.startDate,
@@ -211,7 +212,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     category: billing.category,
     reminders: billing.reminders.map(reminder => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
     notify: notifyFromBilling(billing),
-    settled: billing.settled === true,
+    settled: billing.kind === BillingKind.Record,
     counterpartLabel: billing.counterpartLabel ?? "",
   };
 }
@@ -260,7 +261,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
   const editing = Boolean(billing);
   const locked = Boolean(attempt);
-  const frozen = editing && billing?.type !== "indefinite";
+  const frozen = editing && billing?.recurrence !== "indefinite";
   const payable = draft.direction === "payable";
   // A registro has nobody to split with or pay through: participants, payee, split and Pix leave the form.
   const settled = draft.settled === true;
@@ -270,7 +271,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   // read-only in every edit — otherwise Salvar would silently drop the change.
   const scheduled = editing;
   // An assinatura may move its next due date; generated occurrences keep theirs.
-  const dueLocked = scheduled && billing?.type !== "indefinite";
+  const dueLocked = scheduled && billing?.recurrence !== "indefinite";
 
   useEffect(() => {
     // Reading the side-trip draft empties the storage, and StrictMode runs this
@@ -411,10 +412,10 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
   function patchBody(input: BillingInput): BillingPatch {
     // A registro only renames its counterpart (and, while recorrente, moves its schedule and amount).
-    if (input.settled) {
+    if (input.kind === BillingKind.Record) {
       const named = { counterpartLabel: input.counterpartLabel, category: input.category };
 
-      if (billing && billing.type !== "indefinite") {
+      if (billing && billing.recurrence !== "indefinite") {
         return named;
       }
 
@@ -422,7 +423,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     }
 
     const editable =
-      input.direction === "payable"
+      input.type === "payable"
         ? {
             ...(input.pix ? { pix: input.pix } : { clearPix: true }),
             ...(input.payeeUserId ? { payeeUserId: input.payeeUserId } : { clearPayee: true }),
@@ -436,11 +437,11 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
             category: input.category,
           };
 
-    if (billing && billing.type !== "indefinite") {
+    if (billing && billing.recurrence !== "indefinite") {
       return editable;
     }
 
-    const split = input.direction === "payable" ? {} : { split: input.split };
+    const split = input.type === "payable" ? {} : { split: input.split };
 
     return { description: input.description, totalCents: input.totalCents, startDate: input.startDate, dueRule: input.dueRule ?? BillingDueRule.Fixed, ...split, ...editable };
   }

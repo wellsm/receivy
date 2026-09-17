@@ -1,4 +1,4 @@
-import { BillingKind, type BillingType, type Direction } from '@receivy/common';
+import { BillingKind, type BillingRecurrence, type Direction } from '@receivy/common';
 
 /**
  * Readers of the billing columns block 8 renamed. They live outside the repository so the charge side can read
@@ -6,7 +6,7 @@ import { BillingKind, type BillingType, type Direction } from '@receivy/common';
  */
 
 /** How the billing repeats. */
-export function billingRecurrence(row: { recurrence: BillingType }): BillingType {
+export function billingRecurrence(row: { recurrence: BillingRecurrence }): BillingRecurrence {
   return row.recurrence;
 }
 

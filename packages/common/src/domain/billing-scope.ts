@@ -1,4 +1,4 @@
-import { type BillingDetail, BillingDueRule, type BillingPatch, type BillingPixInput, BillingType } from './billing';
+import { type BillingDetail, BillingDueRule, type BillingPatch, type BillingPixInput, BillingRecurrence } from './billing';
 import { endOfMonth } from './billing-calendar';
 import { type ChargeDetail, ChargeState, type PixSnapshot, ProofState } from './contracts';
 import type { BillingSplit } from './split';
@@ -57,7 +57,7 @@ function pixKey(pix: BillingPixInput | PixSnapshot | null | undefined): string {
 
 /** True when a recorrente patch changes what its charges carry: text, amount, split, Pix, payee or due day. */
 export function patchTouchesCharges(billing: BillingDetail, patch: BillingPatch): boolean {
-  if (billing.type !== BillingType.Indefinite) {
+  if (billing.recurrence !== BillingRecurrence.Indefinite) {
     return false;
   }
 

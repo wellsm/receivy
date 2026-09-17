@@ -1,9 +1,9 @@
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import {
-  type BillingType,
+  BillingKind,
+  type BillingRecurrence,
   type ChargeDetail,
-  ChargePayer,
   type ChargeProof,
   ChargeState,
   Direction,
@@ -17,7 +17,7 @@ import {
   UserStatus,
   zonedInstant
 } from '@receivy/common';
-import { billingRecurrence, billingRegistered } from '../../billings/utils/columns';
+import { billingKind, billingRecurrence } from '../../billings/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import { ContactRepository } from '../../contacts/repositories/contact';
@@ -280,17 +280,12 @@ export namespace ChargeRepository {
     return debtorId !== undefined && debtorId === ownerOf(row);
   }
 
-  /** The contract still says who pays as an enum; it is derived from the axis now. */
-  export function payer(row: Axis): ChargePayer {
-    return ownerPays(row) ? ChargePayer.Owner : ChargePayer.Person;
-  }
-
   export function owns(row: Axis, userId: string): boolean {
     return ownerOf(row) === userId;
   }
 
   /** The billing behind a charge: its type, whether it is a registro, and the counterpart it names. */
-  export type SettledBilling = { settled: boolean; counterpartLabel: string | null; type: BillingType };
+  export type SettledBilling = { kind: BillingKind; counterpartLabel: string | null; recurrence: BillingRecurrence };
 
   export async function settledBilling(db: DbClient, row: Pick<Row, 'billing_id'>): Promise<SettledBilling> {
     const billing = await db.billings.findOne({
@@ -303,7 +298,7 @@ export namespace ChargeRepository {
       throw new HttpNotFoundError();
     }
 
-    return { settled: billingRegistered(billing), counterpartLabel: billing.counterpart_label ?? null, type: billingRecurrence(billing) };
+    return { kind: billingKind(billing), counterpartLabel: billing.counterpart_label ?? null, recurrence: billingRecurrence(billing) };
   }
 
   /** Direction is derived, never stored: whoever sits in `creditor_id` collects, anyone else on the charge pays. */
@@ -340,7 +335,6 @@ export namespace ChargeRepository {
 
   export async function dto(db: DbClient, row: Row, userId: string): Promise<ChargeDetail> {
     const direction = ChargeRepository.direction(row, userId);
-    const payer = ChargeRepository.payer(row);
     const payment = paymentOf(row);
     const hasPix = !!payment;
     const proof = await currentProof(db, row.id);
@@ -355,7 +349,7 @@ export namespace ChargeRepository {
       dueDate: row.due_date,
       state: row.state,
       billingId: row.billing_id,
-      billingType: record.type,
+      recurrence: record.recurrence,
       installment: row.installment ?? null,
       installmentCount: row.installment_count ?? null,
       counterpartName: await counterpartName(db, row, userId),
@@ -366,17 +360,16 @@ export namespace ChargeRepository {
       confirmationRequired: await confirmationRequired(db, row),
       // Only the creditor sees the switch: whoever owes reads every charge the same.
       notify: !owns(row, userId) || row.notify,
-      settled: record.settled,
+      kind: record.kind,
       counterpartLabel: record.counterpartLabel,
-      payer,
       ownedByViewer: owns(row, userId),
       hasPix,
       direction,
       recipient: await recipientOf(db, row),
-      debtorUserId: counterpartId(row) ?? null,
+      debtorId: counterpartId(row) ?? null,
       // A conta a pagar never publishes a link: the owner already holds the Pix key they typed.
       sharingState:
-        row.state !== ChargeState.Pending || payer === ChargePayer.Owner || record.settled
+        row.state !== ChargeState.Pending || ownerPays(row) || record.kind === BillingKind.Record
           ? SharingState.Closed
           : hasPix
             ? SharingState.Ready

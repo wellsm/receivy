@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import { Alert, Share } from "react-native";
-import { BillingCategory, BillingFrequency, BillingState, BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, SplitMode, SplitPartKind, type BillingAllocation, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { BillingCategory, BillingFrequency, BillingState, BillingKind, BillingRecurrence, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, SplitMode, SplitPartKind, type BillingAllocation, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
 
 jest.mock("expo-router", () => {
@@ -24,14 +24,14 @@ function charge(overrides: Partial<ChargeDetail> & { id: string; name: string })
     dueDate: "2026-11-15",
     state: ChargeState.Pending,
     billingId: "b1",
-    billingType: BillingType.Until,
+    recurrence: BillingRecurrence.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: name,
     proofState: null,
     direction: Direction.Receivable,
     recipient: { userId: "u1", name, email: null },
-    debtorUserId: "u1",
+    debtorId: "u1",
     pix: PIX,
     sharingState: SharingState.Ready,
     proof: null,
@@ -57,8 +57,8 @@ const secondCycle = [
 function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
   return {
     id: "b1",
-    type: BillingType.Until,
-    direction: Direction.Receivable,
+    recurrence: BillingRecurrence.Until,
+    type: Direction.Receivable,
     payee: null,
     pix: null,
     description: "Jantar de despedida",
@@ -350,7 +350,7 @@ describe("BillingDetailScreen", () => {
   });
 
   it("asks what to do with the pending charges before pausing a subscription", async () => {
-    const detail = billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined });
+    const detail = billing({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined });
     const client = makeClient(detail, { patchBilling: jest.fn().mockResolvedValue({ ...detail, state: BillingState.Paused }) });
 
     await open(client);
@@ -370,7 +370,7 @@ describe("BillingDetailScreen", () => {
   });
 
   it("pauses right away when nothing is pending", async () => {
-    const detail = billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: firstCycle });
+    const detail = billing({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: firstCycle });
     const client = makeClient(detail, { patchBilling: jest.fn().mockResolvedValue({ ...detail, state: BillingState.Paused }) });
 
     await open(client);
@@ -381,7 +381,7 @@ describe("BillingDetailScreen", () => {
   });
 
   it("names the Pix key from the wallet while no charge has been generated", async () => {
-    const detail = billing({ type: BillingType.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
+    const detail = billing({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
     const wallet = [{ id: "pix-2", type: "pix", pixKeyType: "email", pixKey: "ana@example.com", label: "Nubank", isDefault: true, archivedAt: null, createdAt: "" }];
 
     await open(makeClient(detail, { paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: wallet }) }));
@@ -436,9 +436,9 @@ describe("BillingDetailScreen", () => {
   });
 
   it("shows a conta a pagar with its own key and without invites or links", async () => {
-    const own = charge({ id: "c7", name: "Ana", direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, counterpartName: "Ana", pix: null });
+    const own = charge({ id: "c7", name: "Ana", direction: Direction.Payable, ownedByViewer: true, counterpartName: "Ana", pix: null });
     const detail = billing({
-      direction: Direction.Payable,
+      type: Direction.Payable,
       payee: { userId: "u1", name: "Ana" },
       pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
       paymentMethodId: undefined,
@@ -462,8 +462,8 @@ describe("BillingDetailScreen", () => {
   });
 
   it("names the owner's own bill and falls back to no key on a conta a pagar", async () => {
-    const own = charge({ id: "c7", name: "Você", direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, counterpartName: "Você", pix: null });
-    const detail = billing({ direction: Direction.Payable, payee: null, pix: null, paymentMethodId: undefined, charges: [own] });
+    const own = charge({ id: "c7", name: "Você", direction: Direction.Payable, ownedByViewer: true, counterpartName: "Você", pix: null });
+    const detail = billing({ type: Direction.Payable, payee: null, pix: null, paymentMethodId: undefined, charges: [own] });
 
     await open(makeClient(detail));
 
@@ -515,13 +515,13 @@ describe("BillingDetailScreen", () => {
       id: "c8",
       name: "Empresa X",
       recipient: { userId: null, name: "Empresa X", email: null },
-      debtorUserId: null,
+      debtorId: null,
       pix: null,
       sharingState: SharingState.Closed,
-      settled: true,
+      kind: BillingKind.Record,
       counterpartLabel: "Empresa X",
     });
-    const detail = billing({ settled: true, counterpartLabel: "Empresa X", paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] }, charges: [salary] });
+    const detail = billing({ kind: BillingKind.Record, counterpartLabel: "Empresa X", paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] }, charges: [salary] });
 
     await open(makeClient(detail));
 
@@ -540,16 +540,15 @@ describe("BillingDetailScreen", () => {
       id: "c9",
       name: "Imobiliária",
       direction: Direction.Payable,
-      payer: ChargePayer.Owner,
       ownedByViewer: true,
       recipient: { userId: null, name: "Imobiliária", email: null },
-      debtorUserId: null,
+      debtorId: null,
       pix: null,
-      settled: true,
+      kind: BillingKind.Record,
       counterpartLabel: "Imobiliária",
     });
 
-    await open(makeClient(billing({ direction: Direction.Payable, settled: true, counterpartLabel: "Imobiliária", paymentMethodId: undefined, charges: [rent] })));
+    await open(makeClient(billing({ type: Direction.Payable, kind: BillingKind.Record, counterpartLabel: "Imobiliária", paymentMethodId: undefined, charges: [rent] })));
 
     expect(screen.getByText("Para Imobiliária")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeOnTheScreen();

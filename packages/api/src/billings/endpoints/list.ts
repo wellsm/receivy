@@ -10,7 +10,7 @@ declare class ListRequest implements Http.Request {
   identity: SessionIdentity;
   query: {
     state?: BillingState;
-    direction?: Direction;
+    type?: Direction;
     cursor?: String.Max<500>;
     search?: String.Max<80>;
   };

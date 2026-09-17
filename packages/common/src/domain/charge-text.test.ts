@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BillingType } from './billing';
+import { BillingKind, BillingRecurrence } from './billing';
 import {
   canAcceptProof,
   canCancelCharge,
@@ -23,7 +23,6 @@ import {
 } from './charge-text';
 import {
   type ChargeDetail,
-  ChargePayer,
   type ChargeProof,
   ChargeState,
   Direction,
@@ -43,13 +42,13 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
     dueDate: '2026-09-10',
     state: ChargeState.Pending,
     billingId: 'b1',
-    billingType: BillingType.Until,
+    recurrence: BillingRecurrence.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: 'Ana',
     proofState: null,
     recipient: { userId: 'ana', name: 'Ana', email: null },
-    debtorUserId: 'ana',
+    debtorId: 'ana',
     pix: null,
     sharingState: SharingState.Ready,
     proof: null,
@@ -76,8 +75,8 @@ function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
 describe('charge text', () => {
   it('names the installment, the recurrence or the single payment', () => {
     expect(chargeTypeLabel(charge())).toBe('Parcela 2 de 3');
-    expect(chargeTypeLabel(charge({ billingType: BillingType.Indefinite }))).toBe('Recorrente');
-    expect(chargeTypeLabel(charge({ billingType: BillingType.Once }))).toBe('À vista');
+    expect(chargeTypeLabel(charge({ recurrence: BillingRecurrence.Indefinite }))).toBe('Recorrente');
+    expect(chargeTypeLabel(charge({ recurrence: BillingRecurrence.Once }))).toBe('À vista');
   });
 
   it('describes the due date relative to today', () => {
@@ -142,8 +141,8 @@ describe('charge text', () => {
 
 describe('action gates on a conta a pagar', () => {
   const pix = { keyType: PixKeyType.Email, key: 'pay@example.com', label: 'Pix' };
-  const owner = charge({ direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, pix, counterpartName: 'Ana' });
-  const payee = charge({ direction: Direction.Receivable, payer: ChargePayer.Owner, ownedByViewer: false, pix, counterpartName: 'Lucas' });
+  const owner = charge({ direction: Direction.Payable, ownedByViewer: true, pix, counterpartName: 'Ana' });
+  const payee = charge({ direction: Direction.Receivable, ownedByViewer: false, pix, counterpartName: 'Lucas' });
   const creditor = charge({ direction: Direction.Receivable, ownedByViewer: true, pix });
 
   it('lets the owner settle their own bill but never remind, share or cancel a single charge', () => {
@@ -194,7 +193,7 @@ describe('payment declarations', () => {
   });
 
   it('asks the owner of a conta a pagar to declare only when the payee can confirm', () => {
-    const own = charge({ payer: ChargePayer.Owner, ownedByViewer: true });
+    const own = charge({ ownedByViewer: true });
 
     expect(canDeclarePayment({ ...own, confirmationRequired: true })).toBe(true);
     expect(canDeclarePayment({ ...own, confirmationRequired: false })).toBe(false);
@@ -236,7 +235,7 @@ describe('silenced charges', () => {
     expect(canSilenceCharge({ ...creditor, state: ChargeState.Paid })).toBe(false);
     expect(canSilenceCharge({ ...creditor, ownedByViewer: false })).toBe(false);
     expect(canSilenceCharge(charge({ direction: Direction.Payable }))).toBe(false);
-    expect(canSilenceCharge(charge({ direction: Direction.Receivable, payer: ChargePayer.Owner, ownedByViewer: false }))).toBe(false);
+    expect(canSilenceCharge(charge({ direction: Direction.Receivable, ownedByViewer: false }))).toBe(false);
     expect(canSilenceCharge({ ...creditor, counterpartReachable: false })).toBe(false);
   });
 });
@@ -247,30 +246,29 @@ describe('registros', () => {
     direction: Direction.Receivable,
     ownedByViewer: true,
     pix,
-    debtorUserId: null,
-    settled: true,
+    debtorId: null,
+    kind: BillingKind.Record,
     counterpartLabel: 'Empresa X'
   });
   const paid = charge({
     direction: Direction.Payable,
-    payer: ChargePayer.Owner,
     ownedByViewer: true,
-    debtorUserId: null,
+    debtorId: null,
     confirmationRequired: false,
-    settled: true
+    kind: BillingKind.Record
   });
 
   it('never reminds, shares, silences or takes a proof, and still settles and reopens by hand', () => {
     expect(canRemind(received)).toBe(false);
-    expect(canRemind({ ...received, settled: false })).toBe(true);
+    expect(canRemind({ ...received, kind: BillingKind.Live })).toBe(true);
     expect(canShare(received)).toBe(false);
-    expect(canShare({ ...received, settled: false })).toBe(true);
+    expect(canShare({ ...received, kind: BillingKind.Live })).toBe(true);
     expect(canSilenceCharge(received)).toBe(false);
-    expect(canSilenceCharge({ ...received, settled: false })).toBe(true);
+    expect(canSilenceCharge({ ...received, kind: BillingKind.Live })).toBe(true);
     expect(canMarkPaid(received)).toBe(true);
     expect(canReopenCharge({ ...received, state: ChargeState.Paid })).toBe(true);
     expect(canUploadProof(paid)).toBe(false);
-    expect(canUploadProof({ ...paid, settled: false })).toBe(true);
+    expect(canUploadProof({ ...paid, kind: BillingKind.Live })).toBe(true);
     expect(canMarkPaid(paid)).toBe(true);
   });
 });

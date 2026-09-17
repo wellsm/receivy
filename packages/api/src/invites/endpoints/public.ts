@@ -1,7 +1,7 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import type { BillingCategory, BillingType } from '@receivy/common';
+import type { BillingCategory, BillingRecurrence } from '@receivy/common';
 import { throttlePublicRead } from '../../common/utils/throttle';
 import type { InviteProvider } from '../provider';
 import { publicInviteView, resolveInvite } from '../services/links';
@@ -23,7 +23,7 @@ declare class PublicInviteResponse implements Http.Response {
         creditorFirstName: string;
         description: string;
         amount: { amountCents: number; currency: 'BRL' };
-        type: BillingType;
+        recurrence: BillingRecurrence;
         participantCount: number;
         category: BillingCategory;
       };

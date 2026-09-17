@@ -1,7 +1,7 @@
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import {
   type BillingPlan,
-  type BillingType,
+  type BillingRecurrence,
   ChargePayer,
   ChargeState,
   calendarDate,
@@ -32,7 +32,7 @@ export type PayableMaterialization = {
   pix?: { keyType: PaymentMethod['pixKeyType']; key: string; label?: string } | null;
 };
 
-export type ChargeBillingRef = { id: string; type: BillingType };
+export type ChargeBillingRef = { id: string; type: BillingRecurrence };
 
 /** All billing mutations share this lock order: owner → billing → people → Pix. */
 export async function lockOwner(db: DbClient, ownerId: string): Promise<void> {

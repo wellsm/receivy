@@ -48,7 +48,7 @@ function listQuery(search: string, direction: Direction | "", cursor?: string): 
   }
 
   if (direction) {
-    query.set("direction", direction);
+    query.set("type", direction);
   }
 
   if (cursor) {
@@ -122,7 +122,7 @@ export function BillingsScreen() {
     const chargeId = billing.shareChargeId;
 
     // A conta a pagar has no public link: its action only opens the billing.
-    if (billing.direction === "payable" || billingShareAction(billing) !== "share" || !chargeId) {
+    if (billing.type === "payable" || billingShareAction(billing) !== "share" || !chargeId) {
       router.push(`/billings/${billing.id}`);
       return;
     }

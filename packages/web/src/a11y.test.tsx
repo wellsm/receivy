@@ -2,7 +2,7 @@ import axe from "axe-core";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BillingCategory, BillingType } from "@receivy/common";
+import { BillingCategory, BillingRecurrence, DEFAULT_FEED_FILTERS } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { LoginScreen } from "@/components/screens/login-screen";
 import { CodeScreen } from "@/components/screens/code-screen";
@@ -32,11 +32,10 @@ async function expectNoViolations(container: HTMLElement) {
   expect(summary).toEqual([]);
 }
 
-const summary = { receivable: { amountCents: 0, currency: "BRL" }, payable: { amountCents: 0, currency: "BRL" }, overdue: { amountCents: 0, currency: "BRL" }, pending: { amountCents: 0, currency: "BRL" }, proofsToReview: 0, receivableCount: 0, payableCount: 0, receivedTotal: { amountCents: 0, currency: "BRL" }, paidTotal: { amountCents: 0, currency: "BRL" } };
 const user = { id: "user", email: "fixture@example.com", name: "Ana", phone: null, avatar: null, status: "active", locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
 const contact = { id: "contact-1", userId: "user-1", name: "Ana Souza", nickname: "Ana", displayName: "Ana", email: "ana@example.com", phone: null, status: "pending", archivedAt: null, createdAt: "2026-09-01", lastBilledAt: null, activeCharges: 1 };
 const pixMethod = { id: "pix-1", label: "Nubank", pixKey: "52998224725", pixKeyType: "cpf", isDefault: true, archivedAt: null };
-const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 12_000, currency: "BRL" as const }, type: BillingType.Once, participantCount: 3, category: BillingCategory.Food, expired: false };
+const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 12_000, currency: "BRL" as const }, recurrence: BillingRecurrence.Once, participantCount: 3, category: BillingCategory.Food, expired: false };
 
 describe("accessibility of the main web screens", () => {
   it("email login form has labelled fields, reachable submit and no axe violations", async () => {
@@ -70,11 +69,10 @@ describe("accessibility of the main web screens", () => {
     await expectNoViolations(container);
   });
 
-  it("feed (empty) has no axe violations and names every filter group", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ summary, items: [], nextCursor: null }));
-    const { container } = render(<FeedScreen />);
-    await screen.findByText("Sua timeline começa aqui");
-    for (const name of ["Direção", "Status", "Modalidade", "Período"]) expect(screen.getByRole("combobox", { name })).toBeEnabled();
+  it("feed (empty) has no axe violations and names the month carousel", async () => {
+    const { container } = render(<FeedScreen charges={[]} month="2026-09" viewerEmail="ana@example.com" filters={DEFAULT_FEED_FILTERS} />);
+    expect(screen.getByText("Sua timeline começa aqui")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Mês" })).toBeInTheDocument();
     await expectNoViolations(container);
   });
 

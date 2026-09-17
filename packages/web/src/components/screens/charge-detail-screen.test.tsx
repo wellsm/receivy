@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BillingType, ChargePayer, ChargeState, chargeShareText, Direction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import { BillingKind, BillingRecurrence, ChargeState, chargeShareText, Direction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ChargeDetailScreen } from "@/components/screens/charge-detail-screen";
 
@@ -19,13 +19,13 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
     dueDate: "2026-09-10",
     state: ChargeState.Pending,
     billingId: "b1",
-    billingType: BillingType.Until,
+    recurrence: BillingRecurrence.Until,
     installment: 2,
     installmentCount: 3,
     counterpartName: "Ana",
     proofState: null,
     recipient: { userId: "u1", name: "Ana", email: null },
-    debtorUserId: "u1",
+    debtorId: "u1",
     pix: { keyType: PixKeyType.Email, key: "pix@example.com", label: "Principal" },
     sharingState: SharingState.Ready,
     proof: null,
@@ -192,10 +192,10 @@ describe("ChargeDetailScreen", () => {
   });
 
   it("lets the owner of a conta a pagar copy the key, send the proof and mark it paid, with nothing to share", async () => {
-    const paid = charge({ direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, hasPix: true, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z" });
+    const paid = charge({ direction: Direction.Payable, ownedByViewer: true, hasPix: true, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z" });
     const pay = vi.fn(() => Response.json(paid));
 
-    serve(charge({ direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, hasPix: true }), { "POST /api/financial/charges/charge/pay": pay });
+    serve(charge({ direction: Direction.Payable, ownedByViewer: true, hasPix: true }), { "POST /api/financial/charges/charge/pay": pay });
 
     render(<ChargeDetailScreen id="charge" />);
 
@@ -221,7 +221,7 @@ describe("ChargeDetailScreen", () => {
   });
 
   it("names a conta a pagar without payee as the owner's alone", async () => {
-    serve(charge({ direction: Direction.Payable, payer: ChargePayer.Owner, ownedByViewer: true, hasPix: false, pix: null, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorUserId: null }));
+    serve(charge({ direction: Direction.Payable, ownedByViewer: true, hasPix: false, pix: null, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorId: null }));
 
     render(<ChargeDetailScreen id="charge" />);
 
@@ -232,7 +232,7 @@ describe("ChargeDetailScreen", () => {
   });
 
   it("gives the payee of a conta a pagar only Marcar pago and the proof", async () => {
-    const pending = charge({ direction: Direction.Receivable, payer: ChargePayer.Owner, ownedByViewer: false, hasPix: true, proofState: ProofState.Pending, proof: proof() });
+    const pending = charge({ direction: Direction.Receivable, ownedByViewer: false, hasPix: true, proofState: ProofState.Pending, proof: proof() });
     const review = vi.fn(() => Response.json({ ...pending, state: "paid", proofState: "accepted", proof: proof({ state: ProofState.Accepted }) }));
 
     serve(pending, { "POST /api/financial/charges/charge/proof/review": review });
@@ -480,9 +480,9 @@ describe("ChargeDetailScreen", () => {
         ownedByViewer: true,
         counterpartName: "Empresa X",
         recipient: { userId: null, name: "Empresa X", email: null },
-        debtorUserId: null,
+        debtorId: null,
         sharingState: SharingState.Closed,
-        settled: true,
+        kind: BillingKind.Record,
         counterpartLabel: "Empresa X",
       }),
     );

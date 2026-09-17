@@ -13,11 +13,11 @@ describe("BillingFiltersSheet", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Direção A pagar" }));
     await fireEvent.press(screen.getByRole("button", { name: "Aplicar" }));
 
-    expect(onApply).toHaveBeenCalledWith({ ...DEFAULT_BILLING_FILTERS, direction: "payable" });
+    expect(onApply).toHaveBeenCalledWith({ ...DEFAULT_BILLING_FILTERS, type: "payable" });
   });
 
   it("lists the direction as a removable chip only when it narrows the list", () => {
     expect(activeBillingChips(DEFAULT_BILLING_FILTERS)).toEqual([]);
-    expect(activeBillingChips({ ...DEFAULT_BILLING_FILTERS, direction: Direction.Receivable })).toEqual([{ key: "direction", label: "A receber" }]);
+    expect(activeBillingChips({ ...DEFAULT_BILLING_FILTERS, type: Direction.Receivable })).toEqual([{ key: "type", label: "A receber" }]);
   });
 });

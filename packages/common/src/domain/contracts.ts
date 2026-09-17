@@ -1,5 +1,5 @@
 import type { UserAvatar } from './avatar';
-import type { BillingType } from './billing';
+import type { BillingKind, BillingRecurrence } from './billing';
 import type { Contact } from './contacts';
 
 export type Money = {
@@ -37,9 +37,23 @@ export enum SplitMode {
   Shares = 'shares'
 }
 
+/** Who pays, as the charge plan sees it: a contact, or the owner of a conta a pagar. Not part of any payload: read `ownerPays`. */
 export enum ChargePayer {
   Person = 'person',
   Owner = 'owner'
+}
+
+/**
+ * Whether the owner of the billing is the one paying this charge, from the viewer's side of it: the owner of a
+ * conta a pagar sees it as payable, and its payee sees it as receivable. Without `ownedByViewer` there is no
+ * telling which side the viewer is on, and the answer is the old default: a contact pays.
+ */
+export function ownerPays(charge: { direction: Direction; ownedByViewer?: boolean }): boolean {
+  if (charge.ownedByViewer === undefined) {
+    return false;
+  }
+
+  return charge.ownedByViewer ? charge.direction === Direction.Payable : charge.direction === Direction.Receivable;
 }
 
 export enum SharingState {
@@ -56,7 +70,8 @@ export type ChargeSummary = {
   dueDate: string;
   state: ChargeState;
   billingId: string;
-  billingType: BillingType;
+  /** How the billing behind the charge repeats. */
+  recurrence: BillingRecurrence;
   installment: number | null;
   installmentCount: number | null;
   /** Who is on the other side: the debtor for a receivable, the creditor for a payable. */
@@ -65,8 +80,6 @@ export type ChargeSummary = {
   counterpartAvatar?: UserAvatar | null;
   /** State of the most recent proof on this charge, if any. */
   proofState: ProofState | null;
-  /** Who pays: a contact (default) or the billing owner on a conta a pagar. Omitted by older payloads means 'person'. */
-  payer?: ChargePayer;
   /** True when the viewer owns the billing behind this charge; owner powers key on this, never on direction. */
   ownedByViewer?: boolean;
   /** A Pix key is attached; without one the owner marks their own bill paid straight from the feed. */
@@ -79,8 +92,8 @@ export type ChargeSummary = {
   confirmationRequired?: boolean;
   /** The automatic notices of this charge are on. The API always sends it; only the creditor ever reads false. */
   notify?: boolean;
-  /** The charge belongs to a registro: settled on its due date, never reminded, shared or proven. The API always sends it. */
-  settled?: boolean;
+  /** The billing behind the charge: 'record' is a registro, settled on its due date, never reminded, shared or proven. Absent reads as 'live'. */
+  kind?: BillingKind;
   /** Registro only: the counterpart typed by the owner, the same text `counterpartName` carries; null otherwise. */
   counterpartLabel?: string | null;
 };
@@ -172,8 +185,8 @@ export type PixSnapshot = {
 export type ChargeDetail = ChargeSummary & {
   direction: Direction;
   recipient: ChargeCounterpart;
-  /** The person who owes (or, on a conta a pagar, who receives); null when the bill is the owner's alone. */
-  debtorUserId: string | null;
+  /** The person on the other side of the owner: who owes, or on a conta a pagar who receives; null when the bill is the owner's alone. */
+  debtorId: string | null;
   pix: PixSnapshot | null;
   sharingState: SharingState;
   proof: ChargeProof | null;

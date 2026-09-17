@@ -1,7 +1,7 @@
 import { Order } from '@ez4/database';
 import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import {
-  type BillingType,
+  type BillingRecurrence,
   ChargeState,
   type ChargeSummary,
   type ContactLedger,
@@ -102,7 +102,7 @@ function itemSetWhere(month: string, today: string) {
 function visibleWhere(userId: string, filters: TimelineRepository.Filters, withCursor: boolean, today: string, month: string) {
   const directions = filters.direction ?? [];
   const statuses = filters.status ?? [];
-  const types = filters.type ?? [];
+  const types = filters.recurrence ?? [];
   const access = directions.length ? { OR: directions.map((value) => directionWhere(userId, value)) } : accessWhere(userId);
   const cursor = withCursor ? cursorDate(filters.cursor) : undefined;
   return {
@@ -140,7 +140,7 @@ export namespace TimelineRepository {
     cursor?: string;
     direction?: Direction[];
     status?: Status[];
-    type?: BillingType[];
+    recurrence?: BillingRecurrence[];
     from?: string;
     to?: string;
     /** `YYYY-MM`; defaults to the current month. */
@@ -181,19 +181,18 @@ export namespace TimelineRepository {
           dueDate: row.due_date,
           state: row.state,
           billingId: row.billing_id,
-          billingType: record.type,
+          recurrence: record.recurrence,
           installment: row.installment ?? null,
           installmentCount: row.installment_count ?? null,
           counterpartName: await ChargeRepository.counterpartName(db, row, userId),
           counterpartAvatar: await ChargeRepository.counterpartAvatar(db, row, userId),
           proofState: visibleProofState(proofs.get(row.id) ?? null),
-          payer: ChargeRepository.payer(row),
           ownedByViewer: ChargeRepository.owns(row, userId),
           hasPix: !!ChargeRepository.paymentOf(row),
           proofKind: ChargeRepository.proofKind(proofs.get(row.id) ?? null),
           confirmationRequired: await ChargeRepository.confirmationRequired(db, row),
           notify: !ChargeRepository.owns(row, userId) || row.notify,
-          settled: record.settled,
+          kind: record.kind,
           counterpartLabel: record.counterpartLabel
         }
       });

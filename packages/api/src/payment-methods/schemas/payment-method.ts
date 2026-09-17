@@ -5,6 +5,8 @@ import type { PixKeyType } from '@receivy/common';
 export interface PaymentMethodSchema extends Database.Schema {
   id: String.UUID;
   owner_id: String.UUID;
+  /** Block 9: a key the owner keeps about a contact ("how I pay this person"); null is the owner's own key. */
+  contact_id?: String.UUID;
   type: 'pix';
   pix_key_type: PixKeyType;
   pix_key: String.Max<254>;

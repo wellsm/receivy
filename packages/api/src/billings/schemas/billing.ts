@@ -28,6 +28,8 @@ export interface BillingSchema extends Database.Schema {
   /** 'end_of_month' lands every occurrence on the last day of its month. Defaults to 'fixed' in the database. */
   due_rule: BillingDueRule;
   payment_method_id?: String.UUID;
+  /** Who receives (contacts.id); null when the owner receives. Block 9: replaces `type`, `pix_*` and `counterpart_label`. */
+  contact_id?: String.UUID;
   /** 'payable' is the owner's own bill; 'receivable' means the owner collects from contacts. */
   type: Direction;
   /** Conta a pagar only: the key typed on the billing (it belongs to whoever receives, not to a wallet). */

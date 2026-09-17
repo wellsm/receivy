@@ -389,7 +389,6 @@ describe('registros on native PostgreSQL', () => {
     await refuse('paymentMethodId', { paymentMethodId: pixId });
     await refuse('reminders', { reminders: [{ offsetDays: 0, enabled: true }] });
     await refuse('clearPaymentMethod', { clearPaymentMethod: true });
-    await refuse('clearPix', { clearPix: true });
   });
 
   it('refuses to create or accept an invite on a registro', async () => {

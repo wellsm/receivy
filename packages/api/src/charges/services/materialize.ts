@@ -35,7 +35,11 @@ export type PayableMaterialization = {
 
 export type ChargeBillingRef = { id: string; type: BillingRecurrence };
 
-/** All billing mutations share this lock order: owner → billing → people → Pix. */
+/**
+ * All billing mutations start here and keep the same lock order: owner → billing (when it already
+ * exists) → people → Pix. A creation has no billing row to lock yet: it files the contact's key and
+ * takes the people before inserting one.
+ */
 export async function lockOwner(db: DbClient, ownerId: string): Promise<void> {
   await lockAccountReferences(db, 'write');
 

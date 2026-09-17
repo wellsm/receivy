@@ -68,7 +68,6 @@ export function patchTouchesCharges(billing: BillingDetail, patch: BillingPatch)
     patch.paymentMethodId !== undefined && patch.paymentMethodId !== billing.paymentMethodId,
     Boolean(patch.clearPaymentMethod) && Boolean(billing.paymentMethodId),
     patch.pix !== undefined && pixKey(patch.pix) !== pixKey(billing.pix),
-    Boolean(patch.clearPix) && Boolean(billing.pix),
     patch.contactId !== undefined && patch.contactId !== billing.contact?.id,
     patch.startDate !== undefined && patch.startDate !== billing.startDate,
     patch.dueRule !== undefined && patch.dueRule !== (billing.dueRule ?? BillingDueRule.Fixed)

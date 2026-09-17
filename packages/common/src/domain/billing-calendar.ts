@@ -245,6 +245,11 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     throw new RangeError('Registro recorrente começa hoje ou depois.');
   }
 
+  // A registro is one charge for the whole total: it names the single person who paid the owner.
+  if (settled && !contactId && (input.split?.parts.filter((part) => part.kind === SplitPartKind.User).length ?? 0) > 1) {
+    throw new RangeError('Registro a receber tem um pagador só.');
+  }
+
   const split: BillingSplit = splitOf(input, direction);
 
   resolveBillingSplit(input.totalCents, split);

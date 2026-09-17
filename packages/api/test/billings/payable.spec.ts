@@ -18,6 +18,7 @@ import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { ApiError } from '../../src/common/errors';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { createInvite } from '../../src/invites/services/links';
+import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { ProofDeclarationForbiddenError } from '../../src/proofs/errors';
 import { ProofRepository } from '../../src/proofs/repositories/proof';
 import type { ProofStorage } from '../../src/proofs/services/storage';
@@ -230,12 +231,17 @@ describe('contas a pagar on native PostgreSQL', () => {
     });
 
     deepEqual(patched.pix, { keyType: PixKeyType.Cpf, key: '52998224725', label: 'Nova' });
-    // Both keys are filed under the contact: dropping the one it points at falls back to that scope's default.
-    deepEqual(await BillingRepository.patch(db, OWNER, created.id, { clearPix: true }).then((billing) => billing.pix), {
-      keyType: PixKeyType.Email,
-      key: 'imobiliaria@example.com',
-      label: 'Imobiliária'
+
+    // A key is removed where it lives, under the contact: the billing follows whatever is left there.
+    await PaymentMethodRepository.archive(db, OWNER, patched.paymentMethodId!);
+
+    equal((await BillingRepository.get(db, OWNER, created.id)).pix, null);
+
+    const repointed = await BillingRepository.patch(db, OWNER, created.id, {
+      pix: { keyType: PixKeyType.Email, key: 'Imobiliaria@Example.com' }
     });
+
+    deepEqual(repointed.pix, { keyType: PixKeyType.Email, key: 'imobiliaria@example.com', label: 'Imobiliária' });
     await rejects(
       () => BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: 'a1111111-1111-4111-8111-111111111111' }),
       HttpNotFoundError

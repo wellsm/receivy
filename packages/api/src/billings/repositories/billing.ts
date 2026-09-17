@@ -690,7 +690,6 @@ function touchesCharges(patch: BillingPatch): boolean {
     patch.paymentMethodId !== undefined ||
     patch.clearPaymentMethod !== undefined ||
     patch.pix !== undefined ||
-    patch.clearPix !== undefined ||
     patch.contactId !== undefined ||
     patch.startDate !== undefined ||
     patch.dueRule !== undefined
@@ -723,7 +722,7 @@ async function rewriteMonthCharges(
   }
 
   const rescheduled = patch.startDate !== undefined || patch.dueRule !== undefined;
-  const pixTouched = patch.paymentMethodId !== undefined || patch.clearPaymentMethod || patch.pix !== undefined || patch.clearPix;
+  const pixTouched = patch.paymentMethodId !== undefined || patch.clearPaymentMethod || patch.pix !== undefined;
 
   // Monthly and yearly rules have one occurrence per month: only a reschedule looks for a new day inside
   // the month; otherwise the stale start_date/due_rule from an earlier NextMonth edit must not leak in.
@@ -853,8 +852,7 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
     patch.pix !== undefined ||
     patch.contactId !== undefined ||
     patch.reminders !== undefined ||
-    patch.clearPaymentMethod !== undefined ||
-    patch.clearPix !== undefined;
+    patch.clearPaymentMethod !== undefined;
 
   if (settled && crowded) {
     throw new SettledLockedError();
@@ -887,7 +885,7 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
   }
 
   // A key always belongs to whoever receives, so it needs a contact: the stored one, or the patched one.
-  if (!patch.contactId && !row.contact_id && (patch.pix !== undefined || patch.clearPix)) {
+  if (!patch.contactId && !row.contact_id && patch.pix !== undefined) {
     throw new ReceivableHasNoPayeeError();
   }
 
@@ -1471,7 +1469,7 @@ export namespace BillingRepository {
       const totalCents = patch.totalCents ?? row.total_cents;
       const split = patch.split ?? (await splitFor(tx, row)).split;
       const description = patch.description === undefined ? row.description : patch.description.normalize('NFC').trim() || 'Conta';
-      const pixPatched = patch.pix !== undefined || patch.clearPix;
+      const pixPatched = patch.pix !== undefined;
       const normalized =
         patch.reminders !== undefined || patch.pix !== undefined
           ? normalizeBillingInput({
@@ -1492,7 +1490,7 @@ export namespace BillingRepository {
       const keyed = contactId && normalized?.pix ? await contactKey(tx, ownerId, contactId, normalized.pix) : undefined;
       // A key belongs to the contact it was filed under: moving to another one drops the key the billing pointed at.
       const kept = contactPatched ? undefined : row.payment_method_id;
-      const paymentMethodId = patch.clearPaymentMethod || patch.clearPix ? undefined : (keyed ?? patch.paymentMethodId ?? kept);
+      const paymentMethodId = patch.clearPaymentMethod ? undefined : (keyed ?? patch.paymentMethodId ?? kept);
 
       if (contactId && !keyed && paymentMethodId) {
         await assertContactKey(tx, ownerId, contactId, paymentMethodId);

@@ -235,6 +235,15 @@ describe('registros', () => {
     expect(normalized.split.parts).toEqual([{ kind: SplitPartKind.Owner }]);
   });
 
+  it('takes one payer and refuses a second one', () => {
+    const one = normalizeBillingInput(registro, now);
+    const crowd = { mode: SplitMode.Equal, parts: [...split.parts, { kind: SplitPartKind.User, userId: 'bruno' }] } satisfies BillingSplit;
+    const two: BillingInput = { ...registro, split: crowd };
+
+    expect(one.split.parts).toHaveLength(1);
+    expect(() => normalizeBillingInput(two, now)).toThrow('Registro a receber tem um pagador só.');
+  });
+
   it('refuses a wallet key, a typed Pix and reminders', () => {
     const message = 'Registro não tem avisos nem Pix.';
 

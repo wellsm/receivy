@@ -92,7 +92,6 @@ export type BillingPatch = {
   paymentMethodId?: string;
   clearPaymentMethod?: boolean;
   pix?: BillingPixInput;
-  clearPix?: boolean;
   /** Block 9: who receives (a contact of the owner), replacing the current one. */
   contactId?: string;
   /** Recorrente only: the next due date; occurrences already generated keep theirs. */

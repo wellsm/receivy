@@ -69,7 +69,6 @@ export declare class PatchBody implements Http.JsonBody {
   paymentMethodId?: String.UUID;
   clearPaymentMethod?: boolean;
   pix?: PixBody;
-  clearPix?: boolean;
   /** Block 9: who receives (a contact of the owner), replacing the current one. */
   contactId?: String.UUID;
   startDate?: String.Date;

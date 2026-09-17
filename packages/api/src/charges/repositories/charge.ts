@@ -165,12 +165,8 @@ export namespace ChargeRepository {
         billing: {
           recurrence: true,
           direction: true,
-        },
-        debtor: {
-          name: true,
-          email: true,
-          phone: true,
         }
+        // `debtor` comes back with the relation in the next deploy; the field is optional in the contract.
       },
       where: {
         AND: [

@@ -43,7 +43,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
     Database.UseTable<{
       name: 'payment_methods';
       schema: PaymentMethodSchema;
-      relations: { 'owner_id@owner': 'users:id' };
+      relations: { 'owner_id@owner': 'users:id'; 'contact_id@contact': 'contacts:id' };
       indexes: {
         id: Index.Primary;
         'owner_id:pix_key_type:pix_key': Index.Unique;
@@ -56,6 +56,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
       relations: {
         'owner_id@owner': 'users:id';
         'payment_method_id@payment_method': 'payment_methods:id';
+        'contact_id@contact': 'contacts:id';
       };
       indexes: {
         id: Index.Primary;

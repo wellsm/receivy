@@ -2,7 +2,6 @@ import { Order } from '@ez4/database';
 import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import {
   type BillingType,
-  ChargePayer,
   ChargeState,
   type ChargeSummary,
   type ContactLedger,
@@ -42,7 +41,7 @@ async function actor(db: DbClient, userId: string) {
 }
 
 function accessWhere(userId: string) {
-  return { OR: [{ owner_id: userId }, { creditor_id: userId }, { debtor_id: userId }, { debtor_user_id: userId }] };
+  return { OR: [{ owner_id: userId }, { creditor_id: userId }, { debtor_id: userId }] };
 }
 
 function cursorDate(cursor?: string): { dueDate: string; id: string } | undefined {
@@ -59,14 +58,8 @@ function cursorDate(cursor?: string): { dueDate: string; id: string } | undefine
  * Direction is derived from which side of the row the viewer sits on and who pays: the owner of a
  * conta a receber collects and the owner of a conta a pagar pays; the counterpart is the inverse.
  */
-function directionWhere(userId: string, direction: Direction) {
-  // Rows from before the flip keep the owner in creditor_id and say who pays in `payer`; the rest sit on the money's axis.
-  const flipped = { OR: [{ payer: ChargePayer.Person }, { payer: { isNull: true } }] };
-  const unflipped = { payer: ChargePayer.Owner };
-
-  return direction === Direction.Receivable
-    ? { OR: [{ AND: [{ creditor_id: userId }, flipped] }, { AND: [{ debtor_user_id: userId }, unflipped] }] }
-    : { OR: [{ debtor_id: userId }, { AND: [{ debtor_user_id: userId }, flipped] }, { AND: [{ creditor_id: userId }, unflipped] }] };
+function directionWhere(userId: string, direction: Direction): { creditor_id?: string; debtor_id?: string } {
+  return direction === Direction.Receivable ? { creditor_id: userId } : { debtor_id: userId };
 }
 
 /** `overdue` is not stored: it is a pending charge the due date already passed. */
@@ -117,7 +110,7 @@ function visibleWhere(userId: string, filters: TimelineRepository.Filters, withC
       access,
       ...(statuses.length ? [{ OR: statuses.map((status) => statusWhere(status, today)) }] : []),
       // The type lives on the billing: EZ4 turns a relation filter into a correlated EXISTS on its primary key.
-      ...(types.length ? [{ billing: { type: { isIn: types } } }] : []),
+      ...(types.length ? [{ billing: { recurrence: { isIn: types } } }] : []),
       ...(filters.from ? [{ due_date: { gte: filters.from } }] : []),
       ...(filters.to ? [{ due_date: { lte: filters.to } }] : []),
       itemSetWhere(month, today),
@@ -235,10 +228,7 @@ export namespace TimelineRepository {
     const baseWhere = {
       OR: [
         { creditor_id: userId, debtor_id: otherId },
-        { creditor_id: otherId, debtor_id: userId },
-        // Rows from before the flip: the owner in creditor_id, the counterpart in debtor_user_id.
-        { creditor_id: userId, debtor_user_id: otherId },
-        { creditor_id: otherId, debtor_user_id: userId }
+        { creditor_id: otherId, debtor_id: userId }
       ]
     };
     const pageWhere = { AND: [baseWhere, ...(cursor ? [{ id: { gt: cursor } }] : [])] };

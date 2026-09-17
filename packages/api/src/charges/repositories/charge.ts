@@ -79,9 +79,6 @@ export namespace ChargeRepository {
     owner_id: true,
     creditor_id: true,
     debtor_id: true,
-    // @deprecated Read only to interpret rows from before the flip; both go with the block 8 backfill.
-    debtor_user_id: true,
-    payer: true,
     billing_id: true,
     description: true,
     amount_cents: true,
@@ -111,15 +108,12 @@ export namespace ChargeRepository {
 
   export type Row = {
     id: string;
-    /** The billing owner, whichever side of the money they are on; undefined only until the block 8 backfill runs. */
-    owner_id?: string;
-    /** Who receives; undefined on a conta a pagar without a payee. Read it through `creditorOf`. */
+    /** The billing owner, whichever side of the money they are on. */
+    owner_id: string;
+    /** Who receives; undefined on a conta a pagar without a payee. */
     creditor_id?: string;
-    /** Who pays; undefined on a registro with nobody on the other side. Read it through `debtorOf`. */
+    /** Who pays; undefined on a registro with nobody on the other side. */
     debtor_id?: string;
-    /** @deprecated Rows from before the flip: the counterpart, and which side pays. Never read them directly. */
-    debtor_user_id?: string;
-    payer?: ChargePayer;
     billing_id: string;
     description: string;
     amount_cents: number;
@@ -169,7 +163,7 @@ export namespace ChargeRepository {
         due_date: true,
         amount_cents: true,
         billing: {
-          type: true,
+          recurrence: true,
           direction: true,
         },
         debtor: {
@@ -183,7 +177,7 @@ export namespace ChargeRepository {
           {
             OR: [
               { creditor_id: userId },
-              { debtor_user_id: userId }
+              { debtor_id: userId }
             ]
           },
           { 
@@ -196,7 +190,8 @@ export namespace ChargeRepository {
       }
     });
 
-    return records;
+    // billings.type became recurrence (block 8); the contract of this bench still says `type`.
+    return records.map((record) => ({ ...record, billing: { type: record.billing.recurrence, direction: record.billing.direction } }));
   }
 
   /** The stored proof state as anyone may see it: a reserved slot (`uploading`) is nobody's business yet. */
@@ -256,29 +251,21 @@ export namespace ChargeRepository {
   }
 
   /** The columns that say who is who on a charge. */
-  export type Axis = Pick<Row, 'owner_id' | 'creditor_id' | 'debtor_id' | 'debtor_user_id' | 'payer'>;
-
-  /**
-   * A row from before the flip: the owner sat in `creditor_id` whichever way the money went, the counterpart in
-   * `debtor_user_id`, and `payer` said which side paid. The backfill rewrites them and clears `payer`.
-   */
-  function unflipped(row: Axis): boolean {
-    return row.payer === ChargePayer.Owner;
-  }
+  export type Axis = Pick<Row, 'owner_id' | 'creditor_id' | 'debtor_id'>;
 
   /** The owner of the billing behind the charge: every owner power keys on this, never on direction. */
   export function ownerOf(row: Axis): string {
-    return row.owner_id ?? row.creditor_id!;
+    return row.owner_id;
   }
 
   /** Who receives; undefined on a conta a pagar without a payee. */
   export function creditorOf(row: Axis): string | undefined {
-    return unflipped(row) ? row.debtor_user_id : row.creditor_id;
+    return row.creditor_id;
   }
 
   /** Who pays; undefined on a registro with nobody on the other side. */
   export function debtorOf(row: Axis): string | undefined {
-    return unflipped(row) ? row.creditor_id : (row.debtor_id ?? row.debtor_user_id);
+    return row.debtor_id;
   }
 
   /** The person on the other side of the owner, whichever side of the money they are on; undefined when there is none. */
@@ -307,7 +294,7 @@ export namespace ChargeRepository {
 
   export async function settledBilling(db: DbClient, row: Pick<Row, 'billing_id'>): Promise<SettledBilling> {
     const billing = await db.billings.findOne({
-      select: { settled: true, kind: true, counterpart_label: true, type: true, recurrence: true },
+      select: { kind: true, counterpart_label: true, recurrence: true },
       where: { id: row.billing_id }
     });
 

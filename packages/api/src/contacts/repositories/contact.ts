@@ -42,16 +42,12 @@ async function lastBilledDates(db: DbClient, ownerId: string, userIds: string[])
 
 /** Pending charges between the owner and each person of the page, on either side of the money. */
 async function pendingCharges(db: DbClient, ownerId: string, userIds: string[]): Promise<Map<string, number>> {
-  // The same reading as ChargeRepository.counterpartId: rows from before the flip keep the counterpart in
-  // debtor_user_id; on the money's axis it is whichever side is not the owner.
+  // The same reading as ChargeRepository.counterpartId: whichever side of the money is not the owner.
   const rows = await db.rawQuery(
     `SELECT p.user_id, COUNT(*) AS active FROM (
-      SELECT CASE
-        WHEN c.payer = 'owner' THEN c.debtor_user_id
-        WHEN COALESCE(c.debtor_id, c.debtor_user_id) = COALESCE(c.owner_id, c.creditor_id) THEN c.creditor_id
-        ELSE COALESCE(c.debtor_id, c.debtor_user_id) END AS user_id
+      SELECT CASE WHEN c.debtor_id = c.owner_id THEN c.creditor_id ELSE c.debtor_id END AS user_id
       FROM charges c
-      WHERE COALESCE(c.owner_id, c.creditor_id) = :ownerId::uuid AND c.state = 'pending'
+      WHERE c.owner_id = :ownerId::uuid AND c.state = 'pending'
     ) p WHERE p.user_id = ANY(string_to_array(:ids::text, ',')::uuid[])
     GROUP BY p.user_id`,
     { ownerId, ids: userIds.join(',') }
@@ -376,17 +372,10 @@ export namespace ContactRepository {
       contactId: contact.id
     });
     // A placeholder sits on either side of the money once it is a payee; the owner is never one.
-    await tx.rawQuery(
-      `UPDATE charges SET debtor_user_id = :to::uuid, updated_at = :now::timestamptz WHERE debtor_user_id = :from::uuid`,
-      params
-    );
     await tx.rawQuery(`UPDATE charges SET debtor_id = :to::uuid, updated_at = :now::timestamptz WHERE debtor_id = :from::uuid`, params);
     await tx.rawQuery(`UPDATE charges SET creditor_id = :to::uuid, updated_at = :now::timestamptz WHERE creditor_id = :from::uuid`, params);
+    // The payee of a conta a pagar is an allocation too, so the line above already reaches them.
     await tx.rawQuery(`UPDATE allocations SET user_id = :to::uuid WHERE user_id = :from::uuid`, params);
-    await tx.rawQuery(
-      `UPDATE billings SET payee_user_id = :to::uuid, updated_at = :now::timestamptz WHERE payee_user_id = :from::uuid`,
-      params
-    );
     await tx.rawQuery(`UPDATE proofs SET sender_user_id = :to::uuid WHERE sender_user_id = :from::uuid`, params);
     await tx.rawQuery(`UPDATE events SET actor_user_id = :to::uuid WHERE actor_user_id = :from::uuid`, params);
     await tx.users.deleteOne({ where: { id: placeholder.id } });

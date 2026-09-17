@@ -32,16 +32,15 @@ export type InviteLinkContext = { secret: string; webOrigin: string };
 export type InviteRow = LinkRow & { billing_id: string };
 
 /** The narrowest billing shape createInvite/revokeInvite need, so this module never depends on billings/repository. */
-const OWNED_BILLING_SELECT = { id: true, state: true, direction: true, settled: true, kind: true } as const;
+const OWNED_BILLING_SELECT = { id: true, state: true, direction: true, kind: true } as const;
 
-type OwnedBillingRow = { id: string; state: BillingState; direction?: Direction; settled?: boolean; kind?: BillingKind };
+type OwnedBillingRow = { id: string; state: BillingState; direction?: Direction; kind: BillingKind };
 
 /** The narrowest billing shape a public invite preview needs. */
 const PUBLIC_BILLING_SELECT = {
   id: true,
   description: true,
   total_cents: true,
-  type: true,
   recurrence: true,
   category: true,
   state: true
@@ -51,8 +50,7 @@ type PublicBillingRow = {
   id: string;
   description: string;
   total_cents: number;
-  type: BillingType;
-  recurrence?: BillingType;
+  recurrence: BillingType;
   category: BillingCategory;
   state: BillingState;
 };

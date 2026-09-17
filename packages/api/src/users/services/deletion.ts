@@ -61,7 +61,6 @@ export async function eraseAccount(
           { owner_id: userId },
           { creditor_id: userId },
           { debtor_id: userId },
-          { debtor_user_id: userId },
           // An empty list would be a where clause with nothing in it: the arm only goes in when there is one.
           ...(proofChargeIds.length ? [{ id: { isIn: proofChargeIds } }] : [])
         ]

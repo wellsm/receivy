@@ -15,12 +15,10 @@ import type {
 export interface BillingSchema extends Database.Schema {
   id: String.UUID;
   owner_id: String.UUID;
-  /** @deprecated How the billing repeats moved to `recurrence`; still written until the block 8 backfill runs, then dropped. */
-  type: BillingType;
-  /** How the billing repeats. Null only until the block 8 backfill runs. */
-  recurrence?: BillingType;
-  /** A live billing or a registro. Null only until the block 8 backfill runs. */
-  kind?: BillingKind;
+  /** How the billing repeats. */
+  recurrence: BillingType;
+  /** A live billing or a registro. */
+  kind: BillingKind;
   frequency?: BillingFrequency;
   description: String.Max<500>;
   category: BillingCategory;
@@ -32,16 +30,12 @@ export interface BillingSchema extends Database.Schema {
   payment_method_id?: String.UUID;
   /** 'payable' is the owner's own bill; null (legacy) or 'receivable' means the owner collects from contacts. */
   direction: Direction;
-  /** @deprecated The payee is the one User part of the split since block 8; no longer written, read only until the backfill runs. */
-  payee_user_id?: String.UUID;
   /** Conta a pagar only: the key typed on the billing (it belongs to whoever receives, not to a wallet). */
   pix_key_type?: PixKeyType;
   pix_key?: String.Max<254>;
   pix_label?: String.Max<120>;
   /** Registro only: who the money came from or went to, typed by the owner. */
   counterpart_label?: String.Max<120>;
-  /** @deprecated Became `kind`; no longer written, read only until the block 8 backfill runs. */
-  settled?: boolean;
   /** JSON array of { offsetDays, enabled }; null falls back to the owner's notification preferences. */
   reminders?: String.Max<2000>;
   state: BillingState;

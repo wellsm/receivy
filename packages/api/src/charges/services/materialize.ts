@@ -132,7 +132,7 @@ async function quietDebtors(db: DbClient, billingId: string, ownerId: string): P
 
 /** How the billing behind new charges settles: a registro pays each charge due by today, in its own timezone. */
 async function settlementOf(db: DbClient, billingId: string, now: string): Promise<{ settled: boolean; timezone: string; today: string }> {
-  const row = await db.billings.findOne({ select: { kind: true, settled: true, owner_id: true }, where: { id: billingId } });
+  const row = await db.billings.findOne({ select: { kind: true, owner_id: true }, where: { id: billingId } });
 
   if (!row) {
     throw new HttpNotFoundError();
@@ -153,7 +153,8 @@ async function recordCreation(db: DbClient, ownerId: string, row: ChargeReposito
     eventableType: EventableType.Charge,
     eventableId: row.id,
     actorId: ownerId,
-    payload: { billingId: row.billing_id, ...(row.debtor_user_id ? { debtorUserId: row.debtor_user_id } : {}) },
+    // The payload keeps its key: it is history already written. The value is the person on the other side.
+    payload: { billingId: row.billing_id, ...(ChargeRepository.counterpartId(row) ? { debtorUserId: ChargeRepository.counterpartId(row) } : {}) },
     at: now
   });
 }
@@ -197,9 +198,9 @@ export async function persistChargePlan(
       select: ChargeRepository.SELECT,
       data: {
         id: crypto.randomUUID(),
-        owner_id: ownerId,
+        owner: { id: ownerId },
         ...(creditorId ? { creditor: { id: creditorId } } : {}),
-        ...(debtorId ? { debtor_id: debtorId } : {}),
+        ...(debtorId ? { debtor: { id: debtorId } } : {}),
         billing: { id: billing.id },
         description: item.description,
         amount_cents: item.amountCents,

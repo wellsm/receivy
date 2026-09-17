@@ -57,8 +57,6 @@ export async function pushPaymentNotice(
         owner_id: true,
         creditor_id: true,
         debtor_id: true,
-        debtor_user_id: true,
-        payer: true,
         description: true,
         amount_cents: true
       },

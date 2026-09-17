@@ -114,7 +114,7 @@ export namespace NotificationRepository {
         throw new ChargeClosedError();
       }
 
-      const billing = await tx.billings.findOne({ select: { kind: true, settled: true }, where: { id: row.billing_id } });
+      const billing = await tx.billings.findOne({ select: { kind: true }, where: { id: row.billing_id } });
 
       // A registro has nobody to remind: the owner settled it on purpose.
       if (billing && billingRegistered(billing)) {

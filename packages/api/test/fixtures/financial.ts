@@ -40,7 +40,7 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
   const billingIds = billings.records.map((row) => row.id);
   const charges = await client.charges.findMany({
     select: { id: true },
-    where: { OR: [{ owner_id: { isIn: userIds } }, { creditor_id: { isIn: userIds } }, { debtor_id: { isIn: userIds } }, { debtor_user_id: { isIn: userIds } }] }
+    where: { OR: [{ owner_id: { isIn: userIds } }, { creditor_id: { isIn: userIds } }, { debtor_id: { isIn: userIds } }] }
   });
   const chargeIds = charges.records.map((row) => row.id);
   if (chargeIds.length) {

@@ -80,14 +80,14 @@ function billingPix(row: Pick<BillingRepository.Row, 'pix_key_type' | 'pix_key' 
   return row.pix_key_type && row.pix_key ? { keyType: row.pix_key_type, key: row.pix_key, label: row.pix_label ?? 'Pix' } : null;
 }
 
-/** The payee of a conta a pagar: the one User part of its split since block 8, `payee_user_id` on rows from before. */
-function payeeIdOf(row: Pick<BillingRepository.Row, 'payee_user_id'>, split: BillingSplit): string | undefined {
-  return userIds(split)[0] ?? row.payee_user_id;
+/** The payee of a conta a pagar: the one User part of its split. */
+function payeeIdOf(split: BillingSplit): string | undefined {
+  return userIds(split)[0];
 }
 
 /** The contact who receives a conta a pagar; archived contacts still name it, the bill stays theirs. */
-async function payeeOf(db: DbClient, row: Pick<BillingRepository.Row, 'payee_user_id'>, split: BillingSplit): Promise<BillingPayee | null> {
-  const payeeUserId = payeeIdOf(row, split);
+async function payeeOf(db: DbClient, split: BillingSplit): Promise<BillingPayee | null> {
+  const payeeUserId = payeeIdOf(split);
 
   if (!payeeUserId) {
     return null;
@@ -341,7 +341,7 @@ async function summaryDto(db: DbClient, row: BillingRepository.Row, now: Date, a
 
   // Only a conta a pagar names a payee, and it sits in the split now: the list reads it for those rows alone.
   const payee =
-    BillingRepository.direction(row) === Direction.Payable ? await payeeOf(db, row, (await BillingRepository.splitFor(db, row)).split) : null;
+    BillingRepository.direction(row) === Direction.Payable ? await payeeOf(db, (await BillingRepository.splitFor(db, row)).split) : null;
 
   return summary(row, nextDueDate, counters, installmentCountFor(row), payee);
 }
@@ -361,7 +361,7 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
   return {
     id: row.id,
     direction: BillingRepository.direction(row),
-    payee: await payeeOf(db, row, split),
+    payee: await payeeOf(db, split),
     settled: billingRegistered(row),
     counterpartLabel: row.counterpart_label ?? null,
     pix: billingPix(row),
@@ -460,7 +460,7 @@ function notifyFor(part: SplitParty, before: Map<string, boolean>): boolean {
 /** A participant's switch lands on their pending charges of the billing; paid and cancelled ones keep theirs. */
 async function setPendingChargesNotify(db: DbClient, billingId: string, userId: string, notify: boolean, now: string): Promise<void> {
   await db.charges.updateMany({
-    where: { billing_id: billingId, OR: [{ debtor_id: userId }, { debtor_user_id: userId }], state: ChargeState.Pending },
+    where: { billing_id: billingId, debtor_id: userId, state: ChargeState.Pending },
     data: { notify, updated_at: now }
   });
 }
@@ -499,7 +499,7 @@ async function notifyChange(
 
   const { records } = await db.charges.findMany({
     select: { notify: true },
-    where: { billing_id: billingId, OR: [{ debtor_id: part.userId }, { debtor_user_id: part.userId }], state: ChargeState.Pending }
+    where: { billing_id: billingId, debtor_id: part.userId, state: ChargeState.Pending }
   });
 
   if (!records.some((row) => row.notify !== notify)) {
@@ -540,7 +540,7 @@ async function searchBillingIds(
   const paging = cursor ? 'AND (b.created_at < :createdAt OR (b.created_at = :createdAt AND b.id > :cursorId))' : '';
   const rows = await db.rawQuery(
     `SELECT b.id FROM billings b WHERE b.owner_id = :ownerId::uuid
-    AND (:type::text IS NULL OR b.type = :type::text)
+    AND (:type::text IS NULL OR b.recurrence = :type::text)
     AND (:state::text IS NULL OR b.state = :state::text)
     AND (:category::text IS NULL OR b.category = :category::text)
     AND (:direction::text IS NULL OR COALESCE(b.direction, 'receivable') = :direction::text)
@@ -682,7 +682,7 @@ async function rewriteMonthCharges(
     dueDates: [dueDate],
     numbered: false,
     payer,
-    payeeUserId: payeeIdOf(row, split) ?? null,
+    payeeUserId: payeeIdOf(split) ?? null,
     settled: billingRegistered(row)
   });
   const existing: MonthCharge[] = editable.map((charge) => ({
@@ -889,7 +889,7 @@ function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): Bill
     split: direction === Direction.Payable ? undefined : split,
     category: row.category,
     direction,
-    payeeUserId: payeeIdOf(row, split),
+    payeeUserId: payeeIdOf(split),
     pix: pix ? { keyType: pix.keyType, key: pix.key, label: pix.label } : undefined,
     settled: billingRegistered(row),
     counterpartLabel: row.counterpart_label
@@ -945,8 +945,6 @@ export namespace BillingRepository {
   export const SELECT = {
     id: true,
     owner_id: true,
-    // @deprecated `type` and `settled` are read only for rows from before block 8; `recurrence` and `kind` replace them.
-    type: true,
     recurrence: true,
     kind: true,
     frequency: true,
@@ -958,12 +956,10 @@ export namespace BillingRepository {
     due_rule: true,
     payment_method_id: true,
     direction: true,
-    payee_user_id: true,
     pix_key_type: true,
     pix_key: true,
     pix_label: true,
     counterpart_label: true,
-    settled: true,
     reminders: true,
     state: true,
     split_mode: true,
@@ -991,10 +987,8 @@ export namespace BillingRepository {
   export type Row = {
     id: string;
     owner_id: string;
-    /** @deprecated Read through `billingRecurrence`; still written until the column goes. */
-    type: BillingType;
-    recurrence?: BillingType;
-    kind?: BillingKind;
+    recurrence: BillingType;
+    kind: BillingKind;
     frequency?: BillingFrequency;
     description: string;
     category: BillingCategory;
@@ -1006,15 +1000,11 @@ export namespace BillingRepository {
     payment_method_id?: string;
     /** Null on rows written before contas a pagar existed: the owner collects. */
     direction?: Direction;
-    /** @deprecated Read through `payeeIdOf`; no longer written. */
-    payee_user_id?: string;
     pix_key_type?: PixKeyType;
     pix_key?: string;
     pix_label?: string;
     /** Registro only: the counterpart typed by the owner. */
     counterpart_label?: string;
-    /** @deprecated Read through `billingRegistered`; no longer written. */
-    settled?: boolean;
     reminders?: string;
     state: BillingState;
     /** Null only until the block 3 backfill runs; reads as 'equal'. */
@@ -1234,8 +1224,6 @@ export namespace BillingRepository {
         data: {
           id,
           owner: { id: ownerId },
-          // `type` is still NOT NULL, so both carry the recurrence until the column goes.
-          type: input.type,
           recurrence: input.type,
           kind: input.settled ? BillingKind.Record : BillingKind.Live,
           frequency: input.frequency ?? sqlNull,
@@ -1323,7 +1311,7 @@ export namespace BillingRepository {
       where: {
         AND: [
           { owner_id: ownerId },
-          ...(filters.type ? [{ type: filters.type }] : []),
+          ...(filters.type ? [{ recurrence: filters.type }] : []),
           ...(filters.state ? [{ state: filters.state }] : []),
           // Legacy rows carry no direction and are receivable.
           ...(filters.direction === Direction.Payable
@@ -1425,7 +1413,7 @@ export namespace BillingRepository {
       const totalCents = patch.totalCents ?? row.total_cents;
       const split = patch.split ?? (await splitFor(tx, row)).split;
       const paymentMethodId = patch.clearPaymentMethod ? undefined : (patch.paymentMethodId ?? row.payment_method_id);
-      const payeeUserId = patch.clearPayee ? undefined : (patch.payeeUserId ?? payeeIdOf(row, split));
+      const payeeUserId = patch.clearPayee ? undefined : (patch.payeeUserId ?? payeeIdOf(split));
       const description = patch.description === undefined ? row.description : patch.description.normalize('NFC').trim() || 'Conta';
       const counterpartLabel =
         patch.counterpartLabel === undefined ? undefined : normalizeCounterpartLabel(patch.counterpartLabel, direction(row));
@@ -1487,8 +1475,6 @@ export namespace BillingRepository {
           category: patch.category ?? row.category,
           total_cents: totalCents,
           payment_method: { id: paymentMethodId ?? sqlNull },
-          // Rows from before block 8 still name the payee in the column: clearing has to reach it too.
-          ...(patch.clearPayee ? { payee_user: { id: sqlNull } } : {}),
           pix_key_type: pix?.keyType ?? sqlNull,
           pix_key: pix?.key ?? sqlNull,
           pix_label: pix?.label ?? sqlNull,
@@ -1546,7 +1532,7 @@ export namespace BillingRepository {
   export async function materializeDueBillings(db: DbClient, notice?: NoticeContext, now = new Date()): Promise<number> {
     const { records } = await db.billings.findMany({
       select: { id: true },
-      where: { type: BillingType.Indefinite, state: BillingState.Active },
+      where: { recurrence: BillingType.Indefinite, state: BillingState.Active },
       order: { id: Order.Asc }
     });
 
@@ -1573,8 +1559,7 @@ export namespace BillingRepository {
   export async function settleRegistered(db: DbClient, now = new Date()): Promise<number> {
     const { records } = await db.billings.findMany({
       select: { id: true, owner_id: true },
-      // Rows from before block 8 still say it with `settled`.
-      where: { OR: [{ kind: BillingKind.Record }, { settled: true }] },
+      where: { kind: BillingKind.Record },
       order: { id: Order.Asc }
     });
     const instant = now.toISOString();
@@ -1668,7 +1653,7 @@ export namespace BillingRepository {
         if (!exists) {
           const { split } = await splitFor(tx, row);
           const payable = payableOf(row);
-          const payeeUserId = payeeIdOf(row, split);
+          const payeeUserId = payeeIdOf(split);
           const counterparts = payable ? (payeeUserId ? [payeeUserId] : []) : userIds(split);
           const context = await prepareChargeMaterialization(tx, row.owner_id, counterparts, row.payment_method_id, payable);
           const plan = planBillingCharges({

@@ -30,7 +30,7 @@ const sqlNull = null as unknown as undefined;
 async function nearestPendingCharge(db: DbClient, billingId: string, userId: string): Promise<string | null> {
   const { records } = await db.charges.findMany({
     select: { id: true },
-    where: { billing_id: billingId, OR: [{ debtor_id: userId }, { debtor_user_id: userId }], state: ChargeState.Pending },
+    where: { billing_id: billingId, debtor_id: userId, state: ChargeState.Pending },
     order: { due_date: Order.Asc },
     take: 1
   });

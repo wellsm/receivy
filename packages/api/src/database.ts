@@ -56,13 +56,12 @@ export declare class Db extends Database.Service<PostgresEngine> {
       relations: {
         'owner_id@owner': 'users:id';
         'payment_method_id@payment_method': 'payment_methods:id';
-        'payee_user_id@payee_user': 'users:id';
       };
       indexes: {
         id: Index.Primary;
         'owner_id:idempotency_key': Index.Unique;
         owner_id: Index.Secondary;
-        'state:type': Index.Secondary;
+        'state:recurrence': Index.Secondary;
       };
     }>,
     Database.UseTable<{
@@ -83,8 +82,9 @@ export declare class Db extends Database.Service<PostgresEngine> {
       name: 'charges';
       schema: ChargeSchema;
       relations: {
+        'owner_id@owner': 'users:id';
         'creditor_id@creditor': 'users:id';
-        'debtor_user_id@debtor': 'users:id';
+        'debtor_id@debtor': 'users:id';
         'billing_id@billing': 'billings:id';
       };
       indexes: {
@@ -92,11 +92,9 @@ export declare class Db extends Database.Service<PostgresEngine> {
         owner_id: Index.Secondary;
         creditor_id: Index.Secondary;
         debtor_id: Index.Secondary;
-        debtor_user_id: Index.Secondary;
         billing_id: Index.Secondary;
         // One charge per pair and date. On a conta a pagar the debtor is always the owner, so the payee has to be in it.
         'billing_id:creditor_id:debtor_id:due_date': Index.Unique;
-        'billing_id:debtor_user_id:due_date': Index.Unique;
       };
     }>,
     Database.UseTable<{

@@ -87,7 +87,7 @@ export async function sendChargeNotice(
     return { channels: [] };
   }
 
-  const billing = await db.billings.findOne({ select: { kind: true, settled: true }, where: { id: charge.billing_id } });
+  const billing = await db.billings.findOne({ select: { kind: true }, where: { id: charge.billing_id } });
 
   // A registro was already received or paid: nobody hears about it, not even through the manual reminder.
   if (billing && billingRegistered(billing)) {
@@ -247,7 +247,7 @@ export async function followUpCharge(
     return { channels: [] };
   }
 
-  const billing = await db.billings.findOne({ select: { kind: true, settled: true }, where: { id: charge.billing_id } });
+  const billing = await db.billings.findOne({ select: { kind: true }, where: { id: charge.billing_id } });
 
   if (billing && billingRegistered(billing)) {
     return { channels: [] };
@@ -271,7 +271,7 @@ export async function followUpCharge(
 export async function announceCharges(db: DbClient, context: NoticeContext, chargeIds: string[], now = Date.now()): Promise<void> {
   for (const chargeId of chargeIds) {
     const charge = await db.charges.findOne({
-      select: { owner_id: true, creditor_id: true, debtor_id: true, debtor_user_id: true, payer: true, due_date: true, billing_id: true, notify: true },
+      select: { owner_id: true, creditor_id: true, debtor_id: true, due_date: true, billing_id: true, notify: true },
       where: { id: chargeId }
     });
 
@@ -286,7 +286,7 @@ export async function announceCharges(db: DbClient, context: NoticeContext, char
     }
 
     const billing = await db.billings.findOne({
-      select: { owner_id: true, reminders: true, settled: true, kind: true },
+      select: { owner_id: true, reminders: true, kind: true },
       where: { id: charge.billing_id }
     });
 
@@ -336,7 +336,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
   });
   // One query for the sweep: the proof moved to its own table and this loop must not go charge by charge.
   const proofs = await proofsByCharge(db, records.map((charge) => charge.id));
-  const billings = new Map<string, { timezone: string; reminders?: string; settled?: boolean; kind?: BillingKind }>();
+  const billings = new Map<string, { timezone: string; reminders?: string; kind: BillingKind }>();
 
   let planned = 0;
 
@@ -353,7 +353,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
 
     if (!billing) {
       const row = await db.billings.findOne({
-        select: { owner_id: true, reminders: true, settled: true, kind: true },
+        select: { owner_id: true, reminders: true, kind: true },
         where: { id: charge.billing_id }
       });
 

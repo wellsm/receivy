@@ -169,13 +169,15 @@ export namespace PaymentMethodRepository {
   export async function upsertContactKey(db: DbClient, ownerId: string, contactId: string, pix: PixSnapshot): Promise<string> {
     const value = normalized({ pixKeyType: pix.keyType, pixKey: pix.key, label: pix.label });
     await assertContact(db, ownerId, contactId);
+    // Unscoped, like `save`'s duplicate check: the same key can only ever belong to one scope of the owner.
     const existing = await db.payment_methods.findOne({
-      select: { id: true, archived_at: true },
-      where: { owner_id: ownerId, contact_id: contactId, pix_key_type: pix.keyType, pix_key: value.key }
+      select: { id: true, contact_id: true, archived_at: true },
+      where: { owner_id: ownerId, pix_key_type: pix.keyType, pix_key: value.key }
     });
     const now = new Date().toISOString();
 
     if (existing) {
+      if ((existing.contact_id ?? null) !== contactId) throw new PixKeyTakenError();
       if (existing.archived_at) {
         await db.payment_methods.updateOne({ select: { id: true }, where: { id: existing.id }, data: { archived_at: sqlNull, updated_at: now } });
       }

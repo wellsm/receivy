@@ -3,6 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import { HttpNotFoundError } from '@ez4/gateway';
 import { PixKeyType } from '@receivy/common';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
+import { PixKeyTakenError } from '../../src/payment-methods/errors';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
 
@@ -53,6 +54,13 @@ describe('contact keys', () => {
     await rejects(
       () => PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'x@example.com', contactId: crypto.randomUUID() }),
       HttpNotFoundError
+    );
+  });
+
+  it('refuses to file under a contact a key the owner already holds elsewhere', async () => {
+    await rejects(
+      () => PaymentMethodRepository.upsertContactKey(db, OWNER, padaria, { keyType: PixKeyType.Email, key: 'dona@example.com', label: 'Dona' }),
+      PixKeyTakenError
     );
   });
 });

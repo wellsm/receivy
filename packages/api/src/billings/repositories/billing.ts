@@ -1213,14 +1213,10 @@ export namespace BillingRepository {
         throw new RangeError('O início não pode estar no passado.');
       }
 
-      // The normalized split already carries the payee of a conta a pagar as its one User part; the
-      // typed inline `pix` no longer materializes the charge, the receiving contact's default key does.
-      const payeeUserId = input.type === Direction.Payable ? payeeIdOf(input.split) : undefined;
-      const payeeContact = payeeUserId
-        ? await tx.contacts.findOne({ select: { id: true }, where: { owner_id: ownerId, user_id: payeeUserId } })
-        : undefined;
+      // The normalized split already carries the payee of a conta a pagar as its one User part.
+      // Task 6 rewrites this from `input.contactId`; until then no contact to resolve here.
       const payable: PayableMaterialization | undefined =
-        input.type === Direction.Payable ? { payer: ChargePayer.Owner, contactId: payeeContact?.id } : undefined;
+        input.type === Direction.Payable ? { payer: ChargePayer.Owner } : undefined;
       const context = await prepareChargeMaterialization(tx, ownerId, userIds(input.split), input.paymentMethodId, payable);
       const id = crypto.randomUUID();
       const instant = now.toISOString();

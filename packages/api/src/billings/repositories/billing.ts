@@ -14,6 +14,7 @@ import {
   type BillingPreview,
   type BillingReminder,
   type BillingSplit,
+  BillingKind,
   BillingState,
   type BillingSummary,
   type BillingsPage,
@@ -57,6 +58,7 @@ import type { DbClient } from '../../database';
 import { activeInvite, type InviteLinkContext } from '../../invites/services/links';
 import { announceCharges, type NoticeContext } from '../../notifications/services/send';
 import { AvatarRepository } from '../../users/repositories/avatar';
+import { billingRecurrence, billingRegistered } from '../utils/columns';
 import {
   BillingEndedError,
   BillingNotPausableError,
@@ -126,7 +128,7 @@ function calendarRule(row: BillingRepository.Row) {
 }
 
 async function previewsFor(db: DbClient, row: BillingRepository.Row, reminders: BillingReminder[], now: Date): Promise<BillingPreview[]> {
-  if (row.type !== BillingType.Indefinite || row.state !== BillingState.Active) {
+  if (billingRecurrence(row) !== BillingType.Indefinite || row.state !== BillingState.Active) {
     return [];
   }
 
@@ -138,7 +140,7 @@ async function previewsFor(db: DbClient, row: BillingRepository.Row, reminders: 
   const direction = BillingRepository.direction(row);
   // A conta a pagar and a registro are owed in full; a conta a receber only projects what contacts owe.
   const projected =
-    direction === Direction.Payable || row.settled === true
+    direction === Direction.Payable || billingRegistered(row)
       ? row.total_cents
       : resolveBillingSplit(row.total_cents, (await BillingRepository.splitFor(db, row)).split)
           .filter((allocation) => allocation.kind === SplitPartKind.User)
@@ -157,7 +159,7 @@ async function previewsFor(db: DbClient, row: BillingRepository.Row, reminders: 
 }
 
 async function nextMaterialization(db: DbClient, row: BillingRepository.Row, reminders: BillingReminder[]): Promise<string | null> {
-  if (row.type !== BillingType.Indefinite || row.state !== BillingState.Active) {
+  if (billingRecurrence(row) !== BillingType.Indefinite || row.state !== BillingState.Active) {
     return null;
   }
 
@@ -183,9 +185,9 @@ function summary(
     id: row.id,
     direction: BillingRepository.direction(row),
     payeeName: payee?.name ?? null,
-    settled: row.settled === true,
+    settled: billingRegistered(row),
     counterpartLabel: row.counterpart_label ?? null,
-    type: row.type,
+    type: billingRecurrence(row),
     frequency: row.frequency,
     description: row.description,
     total: { amountCents: row.total_cents, currency: 'BRL' },
@@ -307,12 +309,12 @@ async function summaryAggregates(db: DbClient, rows: BillingRepository.Row[], no
 }
 
 function installmentCountFor(row: BillingRepository.Row): number | undefined {
-  if (row.type === BillingType.Indefinite) {
+  if (billingRecurrence(row) === BillingType.Indefinite) {
     return undefined;
   }
 
   return billingDueDates({
-    type: row.type,
+    type: billingRecurrence(row),
     frequency: row.frequency,
     startDate: row.start_date,
     endDate: row.end_date,
@@ -324,7 +326,9 @@ async function summaryDto(db: DbClient, row: BillingRepository.Row, now: Date, a
   const { earliestPendingDue, ...counters } = aggregate;
   const nextDueDate =
     earliestPendingDue ??
-    (row.type === BillingType.Indefinite ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null) : null);
+    (billingRecurrence(row) === BillingType.Indefinite
+      ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null)
+      : null);
 
   return summary(row, nextDueDate, counters, installmentCountFor(row), await payeeOf(db, row));
 }
@@ -345,10 +349,10 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
     id: row.id,
     direction: BillingRepository.direction(row),
     payee: await payeeOf(db, row),
-    settled: row.settled === true,
+    settled: billingRegistered(row),
     counterpartLabel: row.counterpart_label ?? null,
     pix: billingPix(row),
-    type: row.type,
+    type: billingRecurrence(row),
     frequency: row.frequency,
     description: row.description,
     total: { amountCents: row.total_cents, currency: 'BRL' },
@@ -666,7 +670,7 @@ async function rewriteMonthCharges(
     numbered: false,
     payer,
     payeeUserId: row.payee_user_id ?? null,
-    settled: row.settled === true
+    settled: billingRegistered(row)
   });
   const existing: MonthCharge[] = editable.map((charge) => ({
     id: charge.id,
@@ -764,7 +768,7 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
     throw new BillingEndedError();
   }
 
-  const settled = row.settled === true;
+  const settled = billingRegistered(row);
 
   // A registro stays a registro, and only a registro has a free-text counterpart.
   if (patch.settled !== undefined && patch.settled !== settled) {
@@ -796,11 +800,11 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
     throw new PendingChargesWithoutStateError();
   }
 
-  if (patch.applyTo !== undefined && row.type !== BillingType.Indefinite) {
+  if (patch.applyTo !== undefined && billingRecurrence(row) !== BillingType.Indefinite) {
     throw new EditScopeNotRecurringError();
   }
 
-  if (patch.state === BillingState.Paused && row.type !== BillingType.Indefinite) {
+  if (patch.state === BillingState.Paused && billingRecurrence(row) !== BillingType.Indefinite) {
     throw new BillingNotPausableError();
   }
 
@@ -817,7 +821,7 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
 
   const payeeChanged = patch.payeeUserId !== undefined || patch.clearPayee;
   const frozen =
-    row.type !== BillingType.Indefinite &&
+    billingRecurrence(row) !== BillingType.Indefinite &&
     (patch.description !== undefined ||
       patch.totalCents !== undefined ||
       patch.split !== undefined ||
@@ -859,7 +863,7 @@ function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): Bill
   const pix = billingPix(row);
 
   return {
-    type: row.type,
+    type: billingRecurrence(row),
     frequency: row.frequency,
     description: row.description,
     totalCents: row.total_cents,
@@ -873,14 +877,14 @@ function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): Bill
     direction,
     payeeUserId: row.payee_user_id,
     pix: pix ? { keyType: pix.keyType, key: pix.key, label: pix.label } : undefined,
-    settled: row.settled === true,
+    settled: billingRegistered(row),
     counterpartLabel: row.counterpart_label
   };
 }
 
 /** Occurrences already past their materialization date, oldest first. */
 function dueOccurrences(row: BillingRepository.Row, now: Date, limit: number): string[] {
-  if (row.state !== BillingState.Active || row.type !== BillingType.Indefinite) {
+  if (row.state !== BillingState.Active || billingRecurrence(row) !== BillingType.Indefinite) {
     return [];
   }
 
@@ -927,7 +931,10 @@ export namespace BillingRepository {
   export const SELECT = {
     id: true,
     owner_id: true,
+    // @deprecated `type` and `settled` are read only for rows from before block 8; `recurrence` and `kind` replace them.
     type: true,
+    recurrence: true,
+    kind: true,
     frequency: true,
     description: true,
     category: true,
@@ -970,7 +977,10 @@ export namespace BillingRepository {
   export type Row = {
     id: string;
     owner_id: string;
+    /** @deprecated Read through `billingRecurrence`; still written until the column goes. */
     type: BillingType;
+    recurrence?: BillingType;
+    kind?: BillingKind;
     frequency?: BillingFrequency;
     description: string;
     category: BillingCategory;
@@ -988,7 +998,7 @@ export namespace BillingRepository {
     pix_label?: string;
     /** Registro only: the counterpart typed by the owner. */
     counterpart_label?: string;
-    /** True only on a registro; null reads as false. */
+    /** @deprecated Read through `billingRegistered`; no longer written. */
     settled?: boolean;
     reminders?: string;
     state: BillingState;
@@ -1209,7 +1219,10 @@ export namespace BillingRepository {
         data: {
           id,
           owner: { id: ownerId },
+          // `type` is still NOT NULL, so both carry the recurrence until the column goes.
           type: input.type,
+          recurrence: input.type,
+          kind: input.settled ? BillingKind.Record : BillingKind.Live,
           frequency: input.frequency ?? sqlNull,
           description: input.description,
           category: input.category ?? BillingCategory.Other,
@@ -1223,7 +1236,7 @@ export namespace BillingRepository {
           pix_key_type: input.pix?.keyType ?? sqlNull,
           pix_key: input.pix?.key ?? sqlNull,
           pix_label: input.pix?.label ?? sqlNull,
-          ...(input.settled ? { settled: true, counterpart_label: input.counterpartLabel } : {}),
+          ...(input.settled ? { counterpart_label: input.counterpartLabel } : {}),
           reminders: input.reminders ? JSON.stringify(input.reminders) : sqlNull,
           state: BillingState.Active,
           split_mode: input.split.mode,
@@ -1327,7 +1340,7 @@ export namespace BillingRepository {
   export async function preview(db: DbClient, ownerId: string, id: string, now = new Date()): Promise<{ previews: BillingPreview[] }> {
     const row = await billingRow(db, ownerId, id);
 
-    if (row.type !== BillingType.Indefinite) {
+    if (billingRecurrence(row) !== BillingType.Indefinite) {
       throw new BillingPreviewUnavailableError();
     }
 
@@ -1540,7 +1553,8 @@ export namespace BillingRepository {
   export async function settleRegistered(db: DbClient, now = new Date()): Promise<number> {
     const { records } = await db.billings.findMany({
       select: { id: true, owner_id: true },
-      where: { settled: true },
+      // Rows from before block 8 still say it with `settled`.
+      where: { OR: [{ kind: BillingKind.Record }, { settled: true }] },
       order: { id: Order.Asc }
     });
     const instant = now.toISOString();
@@ -1644,7 +1658,7 @@ export namespace BillingRepository {
             numbered: false,
             payer: context.payer,
             payeeUserId: row.payee_user_id ?? null,
-            settled: row.settled === true
+            settled: billingRegistered(row)
           });
 
           const persisted = await persistChargePlan(tx, row.owner_id, plan, { id: row.id, type: BillingType.Indefinite }, context, instant);

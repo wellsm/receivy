@@ -4,6 +4,7 @@ import type {
   BillingCategory,
   BillingDueRule,
   BillingFrequency,
+  BillingKind,
   BillingState,
   BillingType,
   Direction,
@@ -14,7 +15,12 @@ import type {
 export interface BillingSchema extends Database.Schema {
   id: String.UUID;
   owner_id: String.UUID;
+  /** @deprecated How the billing repeats moved to `recurrence`; still written until the block 8 backfill runs, then dropped. */
   type: BillingType;
+  /** How the billing repeats. Null only until the block 8 backfill runs. */
+  recurrence?: BillingType;
+  /** A live billing or a registro. Null only until the block 8 backfill runs. */
+  kind?: BillingKind;
   frequency?: BillingFrequency;
   description: String.Max<500>;
   category: BillingCategory;
@@ -34,7 +40,7 @@ export interface BillingSchema extends Database.Schema {
   pix_label?: String.Max<120>;
   /** Registro only: who the money came from or went to, typed by the owner. */
   counterpart_label?: String.Max<120>;
-  /** True only on a registro: every charge settles on its due date and nobody is notified. Null reads as false. */
+  /** @deprecated Became `kind`; no longer written, read only until the block 8 backfill runs. */
   settled?: boolean;
   /** JSON array of { offsetDays, enabled }; null falls back to the owner's notification preferences. */
   reminders?: String.Max<2000>;

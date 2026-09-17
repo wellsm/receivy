@@ -1,5 +1,6 @@
 import type { Client } from '@ez4/scheduler';
-import { addCalendarDays, ChargeState } from '@receivy/common';
+import { addCalendarDays, type BillingKind, ChargeState } from '@receivy/common';
+import { billingRegistered } from '../../billings/utils/columns';
 import { effectiveReminders } from '../../billings/services/reminders';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { currentProof, proofsByCharge } from '../../proofs/repositories/proof-row';
@@ -86,10 +87,10 @@ export async function sendChargeNotice(
     return { channels: [] };
   }
 
-  const billing = await db.billings.findOne({ select: { settled: true }, where: { id: charge.billing_id } });
+  const billing = await db.billings.findOne({ select: { kind: true, settled: true }, where: { id: charge.billing_id } });
 
   // A registro was already received or paid: nobody hears about it, not even through the manual reminder.
-  if (billing?.settled) {
+  if (billing && billingRegistered(billing)) {
     await EventRepository.record(db, {
       type: 'notice.skipped',
       eventableType: EventableType.Charge,
@@ -246,9 +247,9 @@ export async function followUpCharge(
     return { channels: [] };
   }
 
-  const billing = await db.billings.findOne({ select: { settled: true }, where: { id: charge.billing_id } });
+  const billing = await db.billings.findOne({ select: { kind: true, settled: true }, where: { id: charge.billing_id } });
 
-  if (billing?.settled) {
+  if (billing && billingRegistered(billing)) {
     return { channels: [] };
   }
 
@@ -285,7 +286,7 @@ export async function announceCharges(db: DbClient, context: NoticeContext, char
     }
 
     const billing = await db.billings.findOne({
-      select: { owner_id: true, reminders: true, settled: true },
+      select: { owner_id: true, reminders: true, settled: true, kind: true },
       where: { id: charge.billing_id }
     });
 
@@ -294,7 +295,7 @@ export async function announceCharges(db: DbClient, context: NoticeContext, char
     }
 
     // A registro has nobody to greet.
-    if (billing.settled) {
+    if (billingRegistered(billing)) {
       continue;
     }
 
@@ -335,7 +336,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
   });
   // One query for the sweep: the proof moved to its own table and this loop must not go charge by charge.
   const proofs = await proofsByCharge(db, records.map((charge) => charge.id));
-  const billings = new Map<string, { timezone: string; reminders?: string; settled?: boolean }>();
+  const billings = new Map<string, { timezone: string; reminders?: string; settled?: boolean; kind?: BillingKind }>();
 
   let planned = 0;
 
@@ -352,7 +353,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
 
     if (!billing) {
       const row = await db.billings.findOne({
-        select: { owner_id: true, reminders: true, settled: true },
+        select: { owner_id: true, reminders: true, settled: true, kind: true },
         where: { id: charge.billing_id }
       });
 
@@ -371,7 +372,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
       billings.set(charge.billing_id, billing);
     }
 
-    if (billing.settled) {
+    if (billingRegistered(billing)) {
       continue;
     }
 

@@ -2,12 +2,14 @@ import { HttpNotFoundError } from '@ez4/gateway';
 import {
   type BillingCategory,
   type BillingInvite,
+  type BillingKind,
   BillingState,
   type BillingType,
   Direction,
   type PublicInviteView
 } from '@receivy/common';
 import { SettledLockedError } from '../../billings/errors';
+import { billingRecurrence, billingRegistered } from '../../billings/utils/columns';
 import { lockOwner } from '../../charges/services/materialize';
 import type { DbClient } from '../../database';
 import { type LinkRow, LinkRepository } from '../../public/repositories/link';
@@ -30,9 +32,9 @@ export type InviteLinkContext = { secret: string; webOrigin: string };
 export type InviteRow = LinkRow & { billing_id: string };
 
 /** The narrowest billing shape createInvite/revokeInvite need, so this module never depends on billings/repository. */
-const OWNED_BILLING_SELECT = { id: true, state: true, direction: true, settled: true } as const;
+const OWNED_BILLING_SELECT = { id: true, state: true, direction: true, settled: true, kind: true } as const;
 
-type OwnedBillingRow = { id: string; state: BillingState; direction?: Direction; settled?: boolean };
+type OwnedBillingRow = { id: string; state: BillingState; direction?: Direction; settled?: boolean; kind?: BillingKind };
 
 /** The narrowest billing shape a public invite preview needs. */
 const PUBLIC_BILLING_SELECT = {
@@ -40,6 +42,7 @@ const PUBLIC_BILLING_SELECT = {
   description: true,
   total_cents: true,
   type: true,
+  recurrence: true,
   category: true,
   state: true
 } as const;
@@ -49,6 +52,7 @@ type PublicBillingRow = {
   description: string;
   total_cents: number;
   type: BillingType;
+  recurrence?: BillingType;
   category: BillingCategory;
   state: BillingState;
 };
@@ -115,7 +119,7 @@ export async function createInvite(
     }
 
     // A registro belongs to the owner alone: nobody joins it.
-    if (billing.settled) {
+    if (billingRegistered(billing)) {
       throw new SettledLockedError();
     }
 
@@ -225,7 +229,7 @@ export async function publicInviteView(db: DbClient, invite: InviteRow, now = ne
     creditorFirstName: user?.name?.trim().split(/\s+/)[0] || 'Pessoa',
     description: billing.description,
     amount: { amountCents: billing.total_cents, currency: 'BRL' },
-    type: billing.type,
+    type: billingRecurrence(billing),
     participantCount: owner
       ? await db.allocations.count({ where: { billing_id: billing.id, user_id: { not: owner.owner_id } } })
       : 0,

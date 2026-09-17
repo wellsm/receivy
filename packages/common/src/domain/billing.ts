@@ -14,6 +14,12 @@ export const enum BillingFrequency {
   Yearly = 'yearly'
 }
 
+/** `live` reminds, shares and takes proofs; `record` is a registro: settled on its due date, nobody hears about it. */
+export const enum BillingKind {
+  Live = 'live',
+  Record = 'record'
+}
+
 export const enum BillingState {
   Active = 'active',
   Paused = 'paused',

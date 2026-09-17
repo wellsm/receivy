@@ -14,6 +14,7 @@ import {
 import { SettledLockedError } from '../../billings/errors';
 import { BillingRepository } from '../../billings/repositories/billing';
 import { BillingGuestState } from '../../billings/schemas/billing-guest';
+import { billingRecurrence, billingRegistered } from '../../billings/utils/columns';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { lockOwner, persistChargePlan, prepareChargeMaterialization } from '../../charges/services/materialize';
 import { ContactRepository } from '../../contacts/repositories/contact';
@@ -131,7 +132,7 @@ async function reshapeOccurrences(
       db,
       billing.owner_id,
       { ...plan, charges: mine },
-      { id: billing.id, type: billing.type },
+      { id: billing.id, type: billingRecurrence(billing) },
       context,
       now
     );
@@ -185,7 +186,7 @@ export namespace InviteRepository {
 
     const next = withParticipant(split, userId);
     const charges =
-      billing.type === BillingType.Indefinite
+      billingRecurrence(billing) === BillingType.Indefinite
         ? []
         : (
             await tx.charges.findMany({
@@ -247,7 +248,7 @@ export namespace InviteRepository {
       }
 
       // An invite made before registros refused them still cannot put anyone into one.
-      if (billing.settled) {
+      if (billingRegistered(billing)) {
         throw new SettledLockedError();
       }
 

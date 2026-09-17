@@ -17,6 +17,7 @@ import {
   UserStatus,
   zonedInstant
 } from '@receivy/common';
+import { billingRecurrence, billingRegistered } from '../../billings/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import { ContactRepository } from '../../contacts/repositories/contact';
@@ -306,7 +307,7 @@ export namespace ChargeRepository {
 
   export async function settledBilling(db: DbClient, row: Pick<Row, 'billing_id'>): Promise<SettledBilling> {
     const billing = await db.billings.findOne({
-      select: { settled: true, counterpart_label: true, type: true },
+      select: { settled: true, kind: true, counterpart_label: true, type: true, recurrence: true },
       where: { id: row.billing_id }
     });
 
@@ -315,7 +316,7 @@ export namespace ChargeRepository {
       throw new HttpNotFoundError();
     }
 
-    return { settled: billing.settled === true, counterpartLabel: billing.counterpart_label ?? null, type: billing.type };
+    return { settled: billingRegistered(billing), counterpartLabel: billing.counterpart_label ?? null, type: billingRecurrence(billing) };
   }
 
   /** Direction is derived, never stored: whoever sits in `creditor_id` collects, anyone else on the charge pays. */

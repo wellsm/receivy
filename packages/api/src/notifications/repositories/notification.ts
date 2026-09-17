@@ -1,5 +1,6 @@
 import { HttpBadRequestError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import { ChargeState, DevicePlatform, type DeviceRegistration, Direction, type NotificationDevice } from '@receivy/common';
+import { billingRegistered } from '../../billings/utils/columns';
 import { ChargeClosedError, ChargeInReviewError, SettledNoRemindersError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { currentProof } from '../../proofs/repositories/proof-row';
@@ -113,10 +114,10 @@ export namespace NotificationRepository {
         throw new ChargeClosedError();
       }
 
-      const billing = await tx.billings.findOne({ select: { settled: true }, where: { id: row.billing_id } });
+      const billing = await tx.billings.findOne({ select: { kind: true, settled: true }, where: { id: row.billing_id } });
 
       // A registro has nobody to remind: the owner settled it on purpose.
-      if (billing?.settled) {
+      if (billing && billingRegistered(billing)) {
         throw new SettledNoRemindersError();
       }
 

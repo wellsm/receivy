@@ -8,6 +8,7 @@ import {
   type PaymentMethod,
   UserStatus
 } from '@receivy/common';
+import { billingRegistered } from '../../billings/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
@@ -131,7 +132,7 @@ async function quietDebtors(db: DbClient, billingId: string, ownerId: string): P
 
 /** How the billing behind new charges settles: a registro pays each charge due by today, in its own timezone. */
 async function settlementOf(db: DbClient, billingId: string, now: string): Promise<{ settled: boolean; timezone: string; today: string }> {
-  const row = await db.billings.findOne({ select: { settled: true, owner_id: true }, where: { id: billingId } });
+  const row = await db.billings.findOne({ select: { kind: true, settled: true, owner_id: true }, where: { id: billingId } });
 
   if (!row) {
     throw new HttpNotFoundError();
@@ -143,7 +144,7 @@ async function settlementOf(db: DbClient, billingId: string, now: string): Promi
     throw new HttpNotFoundError();
   }
 
-  return { settled: row.settled === true, timezone: owner.timezone, today: calendarDate(new Date(now), owner.timezone) };
+  return { settled: billingRegistered(row), timezone: owner.timezone, today: calendarDate(new Date(now), owner.timezone) };
 }
 
 async function recordCreation(db: DbClient, ownerId: string, row: ChargeRepository.Row, now: string): Promise<void> {

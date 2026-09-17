@@ -16,14 +16,22 @@
 --     (their own key) is never re-filed as a contact-scoped key: the unique index
 --     `payment_methods_owner_id_pix_key_type_pix_key_uk` is on `(owner_id, pix_key_type, pix_key)` alone
 --     (no `contact_id`), so a second row would violate it, and the app now answers 409 for that case
---     anyway. `payment_method_id` is pointed at the existing owner-owned row instead (`pixSnapshot`
---     accepts an explicit id regardless of scope). Counted by `keys_pointing_at_owner_key` below.
+--     anyway. `payment_method_id` is pointed at the existing owner-owned row instead. Counted by
+--     `keys_pointing_at_owner_key` below. ACT ON THESE: the app reads an explicit `payment_method_id`
+--     only inside the billing's own scope, so a conta a pagar pointing at an owner-scoped key answers
+--     "Chave Pix indisponível." on any edit that re-materializes its charges. The owner re-types the key
+--     on that billing in the app (it is then filed under the contact) or archives the owner-scoped row.
 --   * Two payables of the same owner filed under different contacts but carrying the same typed key
 --     can only ever own one `payment_methods` row between them (same unique index as above). Step 3
 --     picks one canonical row deterministically (earliest billing `created_at`, then billing `id`) and
 --     points BOTH billings' `payment_method_id` at it — the other billing's `contact_id` and this row's
---     `contact_id` then disagree. Counted by `keys_shared_across_contacts` below; the owner repoints the
---     odd one out later by editing that billing's `pix` in the app.
+--     `contact_id` then disagree. Counted by `keys_shared_across_contacts` below. ACT ON THESE too, for
+--     the same reason as above: the "losing" billing's key is out of its scope and reads as unavailable
+--     until the owner re-types it on that billing.
+--   * A typed key whose only matching `payment_methods` row is archived is never pointed at: step 3
+--     leaves `payment_method_id` NULL (the unique index is not partial, so no second row can be
+--     inserted for that key either). Those billings stay in `keyed_without_method`, which is a hard
+--     stop; `keyed_billings_matching_archived_key` below says how many of them are this case.
 --   * A registro label that matches more than one contact of the same owner (two contacts that happen
 --     to share a `users.name`) resolves to exactly one of them, deterministically (earliest contact
 --     `created_at`, then contact `id`) — never to both. Counted by `ambiguous_registro_labels` below.
@@ -31,22 +39,40 @@
 --     new pending user with that name (a namesake) — there is no contact linking an owner to
 --     themselves, so this is expected, not a bug.
 --
--- Run the whole thing inside BEGIN/ROLLBACK first and read the eight sanity counters at the end. The
+-- Run the whole thing inside BEGIN/ROLLBACK first and read the ten sanity counters at the end. The
 -- first four must be zero; each has a listing query below it (run by hand) and a one-line cause. The
--- last four are informational counts to hand the owner, not failures — each also has a listing query.
+-- last six are informational counts to hand the owner, not failures — each also has a listing query.
 
 BEGIN;
 
+-- 0. Step 5 deletes the payee allocations step 1 reads, so a payable that carried more than one of them
+--    can no longer be spotted once the script has run. Record them up front; the counter at the end
+--    reads this temp table, which lives (and dies) with this transaction.
+CREATE TEMP TABLE bloco9_multi_payee ON COMMIT DROP AS
+SELECT b.id AS billing_id, b.owner_id, b.description, count(*) AS payees
+FROM billings b
+JOIN allocations a ON a.billing_id = b.id AND a.user_id <> b.owner_id
+WHERE b.type = 'payable'
+GROUP BY b.id, b.owner_id, b.description
+HAVING count(*) > 1;
+
 -- 1. Conta a pagar: the payee sits in the split as the one non-owner part. Point contact_id at the
---    owner's agenda entry for that user.
+--    owner's agenda entry for that user. A legacy payable may hold more than one non-owner part (the
+--    old shape allowed a split); `DISTINCT ON` picks exactly one — lowest `sort_order`, tie-broken by
+--    allocation id — instead of whichever row the planner happened to join first. The others are
+--    counted by `payables_with_multiple_payees` below and dropped by step 5 like any payee part.
+WITH payees AS (
+  SELECT DISTINCT ON (a.billing_id) a.billing_id, c.id AS contact_id
+  FROM allocations a
+  JOIN billings b ON b.id = a.billing_id
+  JOIN contacts c ON c.user_id = a.user_id AND c.owner_id = b.owner_id
+  WHERE b.type = 'payable' AND a.user_id <> b.owner_id AND b.contact_id IS NULL
+  ORDER BY a.billing_id, a.sort_order ASC, a.id ASC
+)
 UPDATE billings b
-SET contact_id = c.id
-FROM allocations a
-JOIN contacts c ON c.user_id = a.user_id
-WHERE a.billing_id = b.id
-  AND c.owner_id = b.owner_id
-  AND b.type = 'payable'
-  AND a.user_id <> b.owner_id
+SET contact_id = p.contact_id
+FROM payees p
+WHERE p.billing_id = b.id
   AND b.contact_id IS NULL;
 
 -- 2. Registro labels become contacts without e-mail (a pending user + agenda entry), one per
@@ -155,20 +181,32 @@ WHERE NOT EXISTS (
 )
 ORDER BY k.owner_id, k.pix_key_type, k.pix_key, k.billing_created_at ASC, k.billing_id ASC;
 
+--    An archived key is never pointed at: the billing keeps `payment_method_id` NULL and shows up in
+--    `keyed_without_method` (a hard stop) with `keyed_billings_matching_archived_key` explaining why.
+--    The `NOT EXISTS` guard above deliberately stays blind to `archived_at`: the unique index is not
+--    partial, so an archived row still owns that (owner, type, key) and a second insert would fail.
 UPDATE billings b
 SET payment_method_id = p.id
 FROM payment_methods p
 WHERE p.owner_id = b.owner_id AND p.pix_key_type = b.pix_key_type AND p.pix_key = b.pix_key
+  AND p.archived_at IS NULL
   AND b.pix_key IS NOT NULL AND b.payment_method_id IS NULL;
 
 -- 4. Only one default per contact scope (the DISTINCT ON above may leave a second key for the same
 --    contact). Tie-broken by id too: every row this script inserts in one run shares the same `now()`.
+--    Only scopes that actually hold two or more defaults are touched, so a re-run never demotes a
+--    default the app or the owner elected after the first run.
 UPDATE payment_methods p
 SET is_default = false
 WHERE p.contact_id IS NOT NULL
+  AND p.is_default
+  AND 1 < (
+    SELECT count(*) FROM payment_methods d
+    WHERE d.owner_id = p.owner_id AND d.contact_id = p.contact_id AND d.is_default
+  )
   AND p.id <> (
-    SELECT id FROM payment_methods q
-    WHERE q.owner_id = p.owner_id AND q.contact_id = p.contact_id AND q.archived_at IS NULL
+    SELECT q.id FROM payment_methods q
+    WHERE q.owner_id = p.owner_id AND q.contact_id = p.contact_id AND q.is_default
     ORDER BY q.created_at ASC, q.id ASC LIMIT 1
   );
 
@@ -191,12 +229,20 @@ WHERE b.type = 'payable'
 -- Must be zero:
 --
 --   SELECT id, owner_id, description FROM billings WHERE type = 'payable' AND contact_id IS NULL;
---   -- payable_without_contact: the payee's user has no agenda entry (contacts row) under this owner.
---   -- Create the contact (or fix the allocation's user_id), then re-run.
+--   -- payable_without_contact: this bill names nobody who receives. There is no "conta a pagar without
+--   -- a contact" in the new model: a bill that is the owner's alone is a conta a pagar to a contact
+--   -- without an account — "Luz", "Aluguel", "Padaria". For each row the owner creates a contact for
+--   -- whoever receives (a contact needs no e-mail: name alone is enough) and links it to the billing,
+--   -- by hand here or by editing the billing in the app; then re-run. The alternative is to accept the
+--   -- row as it is, and at D3 it reads as a conta a receber (type is derived: contact_id IS NULL means
+--   -- receivable), which flips its direction in the feed and its totals.
 --
 --   SELECT id, owner_id, description FROM billings WHERE pix_key IS NOT NULL AND payment_method_id IS NULL;
 --   -- keyed_without_method: step 3 only looks at billings that already have a contact_id — this is
 --   -- almost always downstream of a payable_without_contact row above. Fix that first, then re-run.
+--   -- The other cause is a key whose only payment_methods row is archived (see
+--   -- `keyed_billings_matching_archived_key`): un-archive it in the app, or re-type the key on the
+--   -- billing, then re-run.
 --
 --   SELECT id, owner_id, description FROM billings
 --     WHERE kind = 'record' AND type = 'payable' AND counterpart_label IS NOT NULL AND contact_id IS NULL;
@@ -233,6 +279,22 @@ WHERE b.type = 'payable'
 --     GROUP BY c.owner_id, u.name HAVING count(*) > 1;
 --   -- ambiguous_registro_labels (contacts sharing a name under the same owner; not every group here
 --   -- necessarily has a registro pointed at it — cross-check against counterpart_label by hand)
+--
+--   SELECT * FROM bloco9_multi_payee;  -- inside this transaction, before COMMIT/ROLLBACK; standalone:
+--   SELECT b.id, b.owner_id, b.description, count(*) AS payees FROM billings b
+--     JOIN allocations a ON a.billing_id = b.id AND a.user_id <> b.owner_id
+--     WHERE b.type = 'payable' GROUP BY b.id, b.owner_id, b.description HAVING count(*) > 1;
+--   -- payables_with_multiple_payees: step 1 kept the lowest `sort_order` as the receiving contact and
+--   -- step 5 dropped the rest. The owner checks these bills named the right person. Only the first run
+--   -- ever reports them: by the second there are no payee allocations left to count.
+--
+--   SELECT b.id, b.owner_id, b.description FROM billings b
+--     WHERE b.pix_key IS NOT NULL AND b.payment_method_id IS NULL
+--       AND EXISTS (SELECT 1 FROM payment_methods p WHERE p.owner_id = b.owner_id
+--                     AND p.pix_key_type = b.pix_key_type AND p.pix_key = b.pix_key
+--                     AND p.archived_at IS NOT NULL);
+--   -- keyed_billings_matching_archived_key: the only row holding this key is archived, so step 3 left
+--   -- the billing without a method on purpose. These are a subset of keyed_without_method above.
 SELECT
   (SELECT count(*) FROM billings WHERE type = 'payable' AND contact_id IS NULL) AS payable_without_contact,
   (SELECT count(*) FROM billings WHERE pix_key IS NOT NULL AND payment_method_id IS NULL) AS keyed_without_method,
@@ -264,6 +326,15 @@ SELECT
      SELECT count(*) FROM contacts c JOIN users u ON u.id = c.user_id
      WHERE c.owner_id = registro_labels.owner_id AND u.name = registro_labels.label
    ) > 1
-  ) AS ambiguous_registro_labels;
+  ) AS ambiguous_registro_labels,
+  (SELECT count(*) FROM bloco9_multi_payee) AS payables_with_multiple_payees,
+  (SELECT count(*) FROM billings b
+     WHERE b.pix_key IS NOT NULL AND b.payment_method_id IS NULL
+       AND EXISTS (
+         SELECT 1 FROM payment_methods p
+         WHERE p.owner_id = b.owner_id AND p.pix_key_type = b.pix_key_type AND p.pix_key = b.pix_key
+           AND p.archived_at IS NOT NULL
+       )
+  ) AS keyed_billings_matching_archived_key;
 
 COMMIT;

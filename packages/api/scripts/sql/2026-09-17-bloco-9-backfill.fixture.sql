@@ -29,6 +29,19 @@
 --     `ambiguous_registro_labels`). Both contacts share the same `created_at` (both inserted under this
 --     one fixture transaction's `now()`), so the tie-break falls to `contacts.id`: João #1's id sorts
 --     first and must win.
+--   * Mercado (pending user + contact) — payee of B11, whose typed key matches an ARCHIVED owner key:
+--     step 3 must leave `payment_method_id` NULL instead of pointing at the dead row
+--     (`keyed_billings_matching_archived_key`).
+--   * B10 — conta a pagar with TWO non-owner allocations (Loja X at sort_order 1, Loja Y at 2): step 1
+--     must pick Loja X deterministically, never "whichever row the join produced first"
+--     (`payables_with_multiple_payees`).
+--   * Two extra contact-scoped key pairs standing for keys elected after a first run of the script:
+--     Loja X holds two keys both flagged `is_default` (step 4 must keep the earlier one and demote the
+--     later); Fiado Ltda holds two keys where the LATER one is the only default (the owner elected it
+--     in the app) — step 4 must leave that scope alone, which is the whole point of the re-run guard.
+--
+-- Expected counters on this fixture (in order): 0, 1, 0, 0, 1, 1, 1, 1, 1, 1 — `keyed_without_method`
+-- is 1 on purpose: B11's only matching key is archived, and that is a hard stop the operator resolves.
 
 BEGIN;
 
@@ -197,5 +210,62 @@ INSERT INTO billings (
   'Empréstimo de volta', 'other', 4000, '2026-09-17', 'fixed',
   NULL, 'receivable', 'João', 'active', 'fixture-b9', 'fixture-hash-b9', now(), now()
 );
+
+-- Mercado: the contact behind B11
+INSERT INTO users (id, name, status, locale, timezone, country, currency, created_at, updated_at) VALUES
+  ('11111111-1111-1111-1111-111111111200', 'Mercado', 'pending', 'pt-BR', 'America/Sao_Paulo', 'BR', 'BRL', now(), now());
+
+INSERT INTO contacts (id, owner_id, user_id, created_at, updated_at) VALUES
+  ('11111111-1111-1111-1111-111111111201', '11111111-1111-1111-1111-111111111101', '11111111-1111-1111-1111-111111111200', now(), now());
+
+-- An archived owner key holding the exact key B11 typed: the unique index still owns that key, so
+-- step 3 can neither insert a contact-scoped twin nor point B11 at the dead row.
+INSERT INTO payment_methods (id, owner_id, contact_id, type, pix_key_type, pix_key, label, is_default, archived_at, created_at, updated_at) VALUES
+  ('11111111-1111-1111-1111-111111111202', '11111111-1111-1111-1111-111111111101', NULL, 'pix', 'email', 'arquivada@example.com', 'Chave antiga', false, now(), now(), now());
+
+-- Contact-scoped keys as if elected after a first run: Loja X with two defaults (step 4 demotes the
+-- later), Fiado Ltda with the later key as the only default (step 4 must not touch it).
+INSERT INTO payment_methods (id, owner_id, contact_id, type, pix_key_type, pix_key, label, is_default, created_at, updated_at) VALUES
+  ('11111111-1111-1111-1111-111111111203', '11111111-1111-1111-1111-111111111101', '11111111-1111-1111-1111-111111111141', 'pix', 'email', 'lojax-a@example.com', 'Loja X A', true, '2026-08-01 09:00:00+00', now()),
+  ('11111111-1111-1111-1111-111111111204', '11111111-1111-1111-1111-111111111101', '11111111-1111-1111-1111-111111111141', 'pix', 'email', 'lojax-b@example.com', 'Loja X B', true, '2026-08-02 09:00:00+00', now()),
+  ('11111111-1111-1111-1111-111111111205', '11111111-1111-1111-1111-111111111101', '11111111-1111-1111-1111-111111111105', 'pix', 'email', 'fiado-a@example.com', 'Fiado A', false, '2026-08-01 09:00:00+00', now()),
+  ('11111111-1111-1111-1111-111111111206', '11111111-1111-1111-1111-111111111101', '11111111-1111-1111-1111-111111111105', 'pix', 'email', 'fiado-b@example.com', 'Fiado B', true, '2026-08-02 09:00:00+00', now());
+
+-- B10: conta a pagar with two non-owner allocations — Loja X (sort_order 1) must win step 1.
+INSERT INTO billings (
+  id, owner_id, recurrence, kind, description, category, total_cents, start_date, due_rule,
+  contact_id, type, state, split_mode, idempotency_key, request_hash, created_at, updated_at
+) VALUES (
+  '11111111-1111-1111-1111-111111111210', '11111111-1111-1111-1111-111111111101', 'once', 'live',
+  'Rateio antigo', 'other', 20000, '2026-09-18', 'fixed',
+  NULL, 'payable', 'active', 'fixed', 'fixture-b10', 'fixture-hash-b10', now(), now()
+);
+
+INSERT INTO allocations (id, billing_id, user_id, sort_order, notify, created_at) VALUES
+  ('11111111-1111-1111-1111-111111111220', '11111111-1111-1111-1111-111111111210', '11111111-1111-1111-1111-111111111101', 0, true, now()),
+  ('11111111-1111-1111-1111-111111111221', '11111111-1111-1111-1111-111111111210', '11111111-1111-1111-1111-111111111140', 1, true, now()),
+  ('11111111-1111-1111-1111-111111111222', '11111111-1111-1111-1111-111111111210', '11111111-1111-1111-1111-111111111142', 2, true, now());
+
+INSERT INTO charges (id, owner_id, creditor_id, debtor_id, billing_id, description, amount_cents, due_date, state, notify, created_at, updated_at) VALUES
+  ('11111111-1111-1111-1111-111111111230', '11111111-1111-1111-1111-111111111101', '11111111-1111-1111-1111-111111111140', '11111111-1111-1111-1111-111111111101', '11111111-1111-1111-1111-111111111210', 'Rateio antigo', 20000, '2026-09-18', 'pending', true, now(), now());
+
+-- B11: conta a pagar whose typed key only ever matches the archived owner key above.
+INSERT INTO billings (
+  id, owner_id, recurrence, kind, description, category, total_cents, start_date, due_rule,
+  contact_id, type, pix_key_type, pix_key, pix_label, state, split_mode, idempotency_key, request_hash,
+  created_at, updated_at
+) VALUES (
+  '11111111-1111-1111-1111-111111111211', '11111111-1111-1111-1111-111111111101', 'once', 'live',
+  'Compra do mês', 'groceries', 30000, '2026-09-19', 'fixed',
+  NULL, 'payable', 'email', 'arquivada@example.com', 'Chave do mercado', 'active', 'fixed',
+  'fixture-b11', 'fixture-hash-b11', now(), now()
+);
+
+INSERT INTO allocations (id, billing_id, user_id, sort_order, notify, created_at) VALUES
+  ('11111111-1111-1111-1111-111111111223', '11111111-1111-1111-1111-111111111211', '11111111-1111-1111-1111-111111111101', 0, true, now()),
+  ('11111111-1111-1111-1111-111111111224', '11111111-1111-1111-1111-111111111211', '11111111-1111-1111-1111-111111111200', 1, true, now());
+
+INSERT INTO charges (id, owner_id, creditor_id, debtor_id, billing_id, description, amount_cents, due_date, state, notify, created_at, updated_at) VALUES
+  ('11111111-1111-1111-1111-111111111231', '11111111-1111-1111-1111-111111111101', '11111111-1111-1111-1111-111111111200', '11111111-1111-1111-1111-111111111101', '11111111-1111-1111-1111-111111111211', 'Compra do mês', 30000, '2026-09-19', 'pending', true, now(), now());
 
 COMMIT;

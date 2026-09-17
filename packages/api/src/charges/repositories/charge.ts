@@ -164,7 +164,7 @@ export namespace ChargeRepository {
         amount_cents: true,
         billing: {
           recurrence: true,
-          direction: true,
+          type: true,
         },
         debtor: {
           name: true,
@@ -190,8 +190,8 @@ export namespace ChargeRepository {
       }
     });
 
-    // billings.type became recurrence (block 8); the contract of this bench still says `type`.
-    return records.map((record) => ({ ...record, billing: { type: record.billing.recurrence, direction: record.billing.direction } }));
+    // Block 8 renamed billings.type to recurrence and direction to type; the contract of this bench keeps the old names.
+    return records.map((record) => ({ ...record, billing: { type: record.billing.recurrence, direction: record.billing.type } }));
   }
 
   /** The stored proof state as anyone may see it: a reserved slot (`uploading`) is nobody's business yet. */

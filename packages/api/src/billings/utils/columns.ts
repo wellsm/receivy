@@ -1,4 +1,4 @@
-import { BillingKind, type BillingType, Direction } from '@receivy/common';
+import { BillingKind, type BillingType, type Direction } from '@receivy/common';
 
 /**
  * Readers of the billing columns block 8 renamed. They live outside the repository so the charge side can read
@@ -15,12 +15,9 @@ export function billingKind(row: { kind: BillingKind }): BillingKind {
   return row.kind;
 }
 
-/**
- * Which way the money goes. `type` since block 8; `direction` still carries it until the backfill runs and the
- * column goes. Rows from before contas a pagar existed carry neither: the owner collects.
- */
-export function billingDirection(row: { type?: Direction; direction?: Direction }): Direction {
-  return row.type ?? row.direction ?? Direction.Receivable;
+/** Which way the money goes: 'payable' is the owner's own bill, 'receivable' means the owner collects. */
+export function billingDirection(row: { type: Direction }): Direction {
+  return row.type;
 }
 
 /** A registro: every charge settles on its due date and nobody is notified. */

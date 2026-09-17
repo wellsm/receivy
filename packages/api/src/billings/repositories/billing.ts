@@ -100,7 +100,7 @@ async function payeeOf(db: DbClient, split: BillingSplit): Promise<BillingPayee 
 
 /** What `prepareChargeMaterialization` needs to know about a conta a pagar, or undefined for a conta a receber. */
 function payableOf(
-  row: Pick<BillingRepository.Row, 'direction' | 'pix_key_type' | 'pix_key' | 'pix_label'>
+  row: Pick<BillingRepository.Row, 'type' | 'pix_key_type' | 'pix_key' | 'pix_label'>
 ): PayableMaterialization | undefined {
   return BillingRepository.direction(row) === Direction.Payable ? { payer: ChargePayer.Owner, pix: billingPix(row) } : undefined;
 }
@@ -263,7 +263,7 @@ async function summaryAggregates(db: DbClient, rows: BillingRepository.Row[], no
       JOIN billings b ON b.id = p.billing_id
       JOIN allocations a ON a.billing_id = p.billing_id AND a.user_id <> b.owner_id
       -- The payee of a conta a pagar sits in its split since block 8; the card keeps counting participants only.
-      WHERE COALESCE(b.type, b.direction, 'receivable') <> 'payable'
+      WHERE b.type <> 'payable'
       GROUP BY p.billing_id
     ),
     proofs AS (
@@ -543,7 +543,7 @@ async function searchBillingIds(
     AND (:type::text IS NULL OR b.recurrence = :type::text)
     AND (:state::text IS NULL OR b.state = :state::text)
     AND (:category::text IS NULL OR b.category = :category::text)
-    AND (:direction::text IS NULL OR COALESCE(b.type, b.direction, 'receivable') = :direction::text)
+    AND (:direction::text IS NULL OR b.type = :direction::text)
     AND position(:query::text in lower(b.description)) > 0
     ${paging}
     ORDER BY b.created_at DESC, b.id ASC LIMIT ${PAGE_SIZE + 1}`,
@@ -955,8 +955,6 @@ export namespace BillingRepository {
     end_date: true,
     due_rule: true,
     payment_method_id: true,
-    // @deprecated `direction` is read only for rows from before the block 8 backfill; `type` replaces it.
-    direction: true,
     type: true,
     pix_key_type: true,
     pix_key: true,
@@ -1000,9 +998,8 @@ export namespace BillingRepository {
     due_rule: BillingDueRule;
     timezone: string;
     payment_method_id?: string;
-    /** @deprecated Read through `direction()`; still written until the column goes. */
-    direction?: Direction;
-    type?: Direction;
+    /** Which way the money goes; the contract still calls it `direction`. */
+    type: Direction;
     pix_key_type?: PixKeyType;
     pix_key?: string;
     pix_label?: string;
@@ -1028,7 +1025,7 @@ export namespace BillingRepository {
   };
 
   /** Which way the money goes; see `billingDirection`. */
-  export function direction(row: Pick<Row, 'direction' | 'type'>): Direction {
+  export function direction(row: Pick<Row, 'type'>): Direction {
     return billingDirection(row);
   }
 
@@ -1237,8 +1234,6 @@ export namespace BillingRepository {
           end_date: input.endDate ?? sqlNull,
           due_rule: input.dueRule ?? BillingDueRule.Fixed,
           ...(input.paymentMethodId ? { payment_method: { id: input.paymentMethodId } } : {}),
-          // `direction` is still NOT NULL, so both carry it until the column goes.
-          direction: input.direction,
           type: input.direction,
           pix_key_type: input.pix?.keyType ?? sqlNull,
           pix_key: input.pix?.key ?? sqlNull,
@@ -1318,12 +1313,7 @@ export namespace BillingRepository {
           { owner_id: ownerId },
           ...(filters.type ? [{ recurrence: filters.type }] : []),
           ...(filters.state ? [{ state: filters.state }] : []),
-          // Legacy rows carry no direction and are receivable.
-          ...(filters.direction === Direction.Payable
-            ? [{ direction: Direction.Payable as const }]
-            : filters.direction === Direction.Receivable
-              ? [{ OR: [{ direction: Direction.Receivable as const }, { direction: { isNull: true } }] }]
-              : []),
+          ...(filters.direction ? [{ type: filters.direction }] : []),
           ...(matchingIds ? [{ id: { isIn: matchingIds } }] : []),
           ...(cursor ? [{ OR: [{ created_at: { lt: cursor.createdAt } }, { created_at: cursor.createdAt, id: { gt: cursor.id } }] }] : [])
         ]

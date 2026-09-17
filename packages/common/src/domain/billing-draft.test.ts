@@ -248,7 +248,7 @@ describe('conta a pagar draft', () => {
 
   it('refuses a conta a pagar that names nobody to receive it', () => {
     expect(() => buildBillingInput({ ...payable, payee: '', pixInline: { type: PixKeyType.Email, key: '', label: '' } })).toThrow(
-      'Selecione ao menos um contato.'
+      'Escolha quem recebe.'
     );
   });
 
@@ -302,6 +302,7 @@ describe('registro draft', () => {
   it('sends the receiving contact alone, without the wallet key, typed Pix or reminders', () => {
     const input = buildBillingInput({
       ...base,
+      direction: Direction.Payable,
       settled: true,
       payee: 'p9',
       pix: 'pix-1',
@@ -326,8 +327,12 @@ describe('registro draft', () => {
     expect(input.contactId).toBeUndefined();
   });
 
+  it('refuses a registro a pagar that names nobody to receive it', () => {
+    expect(() => buildBillingInput({ ...base, direction: Direction.Payable, settled: true, payee: '' })).toThrow('Escolha quem recebe.');
+  });
+
   it('checks the start of a recorrente registro only with a clock', () => {
-    const monthly: BillingDraft = { ...base, settled: true, payee: 'p9', type: BillingRecurrence.Indefinite };
+    const monthly: BillingDraft = { ...base, direction: Direction.Payable, settled: true, payee: 'p9', type: BillingRecurrence.Indefinite };
 
     expect(() => buildBillingInput(monthly, new Date('2026-09-15T12:00:00Z'))).toThrow('Registro recorrente começa hoje ou depois.');
     expect(buildBillingInput(monthly).startDate).toBe('2026-01-31');

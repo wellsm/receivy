@@ -8,8 +8,9 @@ import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 type ContactPickerSheetProps = {
   selected: string[];
-  /** Receives the account id (`contact.userId`): the draft seats people by account, not by agenda entry. */
-  onToggle: (userId: string) => void;
+  /** Which id `selected` carries: the account (`userId`) for split participants, the agenda entry (`id`) for the receiving contact. */
+  by?: "id" | "userId";
+  onToggle: (contact: Contact) => void;
   onSeen: (contacts: Contact[]) => void;
   onClose: () => void;
   /** Absent when the form cannot navigate to the contact form. */
@@ -21,7 +22,7 @@ type ContactPickerSheetProps = {
 const LOAD_ERROR = "Não foi possível carregar os contatos.";
 
 /** The whole agenda in a dialog: server-side search plus cursor paging, multi selection. */
-export function ContactPickerSheet({ selected, onToggle, onSeen, onClose, onNew, returnFocusTo }: ContactPickerSheetProps) {
+export function ContactPickerSheet({ selected, by = "userId", onToggle, onSeen, onClose, onNew, returnFocusTo }: ContactPickerSheetProps) {
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -128,12 +129,12 @@ export function ContactPickerSheet({ selected, onToggle, onSeen, onClose, onNew,
         {!loading && !error && !contacts.length && <p className="m-0 py-6 text-muted">Nenhum contato encontrado.</p>}
         <ul className="m-0 flex list-none flex-col gap-2 overflow-y-auto p-0">
           {contacts.map(contact => {
-            const checked = selected.includes(contact.userId);
+            const checked = selected.includes(contact[by]);
 
             return (
               <li key={contact.id}>
                 <label className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border px-4 ${checked ? "border-primary bg-primary-soft/40" : "border-outline bg-surface"}`}>
-                  <input type="checkbox" className="sr-only" checked={checked} onChange={() => onToggle(contact.userId)} />
+                  <input type="checkbox" className="sr-only" checked={checked} onChange={() => onToggle(contact)} />
                   <InitialsAvatar name={contact.displayName} size={36} avatar={contact.avatar} />
                   <span className="flex-1 font-semibold text-ink">{contact.displayName}</span>
                   {checked && <Check size={18} aria-hidden="true" className="text-primary" />}

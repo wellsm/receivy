@@ -87,6 +87,15 @@ async function pickAna(user: ReturnType<typeof userEvent.setup>) {
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
 }
 
+/** The counterpart seat opens its own dialog: Escolher (or Trocar), tick Ana, close it. */
+async function seatAna(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: /Escolher|Trocar/ }));
+
+  const panel = screen.getByRole("dialog", { name: "Contatos" });
+  await user.click(await within(panel).findByRole("checkbox", { name: "Ana" }));
+  await user.click(within(panel).getByRole("button", { name: "Concluir" }));
+}
+
 it("starts with only me on the split and adds contacts through the agenda dialog", async () => {
   const sent = api();
   const { user } = renderForm();
@@ -635,7 +644,7 @@ it("never sends a stale Não notificar for a participant the agenda no longer sh
   expect(JSON.parse(String(patch?.init.body)).split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u3" }] });
 });
 
-it("records a registro with the name typed in De quem and nobody to split with or pay through", async () => {
+it("records a registro naming the single contact who paid it, with nobody to split with or pay through", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
   const { user } = renderForm();
 
@@ -645,9 +654,10 @@ it("records a registro with the name typed in De quem and nobody to split with o
   expect(screen.queryByText("Participantes")).not.toBeInTheDocument();
   expect(screen.queryByText("Divisão da Conta")).not.toBeInTheDocument();
   expect(screen.queryByText("Receber via Pix")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("De quem")).toHaveAttribute("placeholder", "Ex.: Empresa X");
+  expect(screen.getByText("De quem")).toBeInTheDocument();
+  expect(screen.getByText("Escolha quem pagou.")).toBeInTheDocument();
 
-  await user.type(screen.getByLabelText("De quem"), "Empresa X");
+  await seatAna(user);
   await user.type(screen.getByLabelText("Valor total"), "5000,00");
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
@@ -657,27 +667,42 @@ it("records a registro with the name typed in De quem and nobody to split with o
   expect(body).toMatchObject({
     type: "receivable",
     kind: "record",
-    counterpartLabel: "Empresa X",
     totalCents: 500_000,
-    split: { mode: "equal", parts: [{ kind: "owner" }] },
+    split: { mode: "equal", parts: [{ kind: "user", userId: "u1" }] },
   });
+  expect(body.counterpartLabel).toBeUndefined();
   expect(body.reminders).toBeUndefined();
   expect(body.paymentMethodId).toBeUndefined();
 });
 
-it("names a registro a pagar Para quem and keeps a recorrente from starting before today", async () => {
-  api();
+it("seats a registro a pagar under Para quem and keeps a recorrente from starting before today", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("switch", { name: "Já recebi" }));
   await user.click(screen.getByRole("radio", { name: "Vou pagar" }));
 
   expect(screen.getByRole("switch", { name: "Já paguei" })).toBeChecked();
-  expect(screen.getByLabelText("Para quem")).toBeInTheDocument();
-  expect(screen.queryByText("Para quem (opcional)")).not.toBeInTheDocument();
+  expect(screen.getByText("Para quem")).toBeInTheDocument();
   expect(screen.queryByText("Chave Pix (opcional)")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Vencimento")).not.toHaveAttribute("min");
 
+  await seatAna(user);
+  await user.type(screen.getByLabelText("Valor total"), "5000,00");
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toMatchObject({
+    type: "payable",
+    kind: "record",
+    contactId: "c1",
+  });
+});
+
+it("keeps a recorrente registro from starting before today", async () => {
+  api();
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("switch", { name: "Já recebi" }));
   await user.click(screen.getByRole("radio", { name: "Recorrente" }));
 
   expect(screen.getByLabelText("Vencimento")).toHaveAttribute("min", today());
@@ -721,7 +746,7 @@ it("opens the form of a registro a receber even without a key", async () => {
   await user.click(screen.getByRole("switch", { name: "Já recebi" }));
 
   expect(screen.queryByText("Cadastre uma chave Pix")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("De quem")).toBeInTheDocument();
+  expect(screen.getByText("De quem")).toBeInTheDocument();
 });
 
 it("never gates the form once a key exists", async () => {
@@ -733,7 +758,7 @@ it("never gates the form once a key exists", async () => {
   expect(routerMock.push).not.toHaveBeenCalled();
 });
 
-it("creates a conta a pagar without contacts, with a payee and a typed Pix key", async () => {
+it("creates a conta a pagar without participants, naming the contact who receives and a typed Pix key", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
   const { user } = renderForm();
 
@@ -742,14 +767,10 @@ it("creates a conta a pagar without contacts, with a payee and a typed Pix key",
   expect(screen.queryByText("Participantes")).not.toBeInTheDocument();
   expect(screen.queryByText("Divisão da Conta")).not.toBeInTheDocument();
   expect(screen.queryByText("Receber via Pix")).not.toBeInTheDocument();
-  expect(screen.getByText("Para quem (opcional)")).toBeInTheDocument();
+  expect(screen.getByText("Para quem")).toBeInTheDocument();
   expect(screen.getByText("Chave Pix (opcional)")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Escolher" }));
-
-  const panel = screen.getByRole("dialog", { name: "Contatos" });
-  await user.click(await within(panel).findByRole("checkbox", { name: "Ana" }));
-  await user.click(within(panel).getByRole("button", { name: "Concluir" }));
+  await seatAna(user);
 
   expect(screen.getByRole("button", { name: "Ana" })).toHaveAttribute("aria-pressed", "true");
 
@@ -762,30 +783,31 @@ it("creates a conta a pagar without contacts, with a payee and a typed Pix key",
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   const post = sent.find(entry => entry.init.method === "POST");
-  expect(JSON.parse(String(post?.init.body))).toMatchObject({
+  const body = JSON.parse(String(post?.init.body));
+
+  expect(body).toMatchObject({
     type: "payable",
     totalCents: 10_000,
-    payeeUserId: "u1",
+    contactId: "c1",
     pix: { keyType: "phone", key: "+5511987654321" },
   });
+  expect(body.payeeUserId).toBeUndefined();
 });
 
-it("removes the payee with its chip and creates a conta a pagar that is the owner's alone", async () => {
+it("refuses a conta a pagar whose receiving chip was removed", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
-  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), direction: Direction.Payable, payee: "u1", amount: "50,00" }, "/billings/new");
+  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), direction: Direction.Payable, payee: "c1", amount: "50,00" }, "/billings/new");
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("button", { name: "Ana" }));
 
   expect(screen.queryByRole("button", { name: "Ana" })).not.toBeInTheDocument();
-  expect(screen.getByText("Sem destinatário, a conta fica só com você.")).toBeInTheDocument();
+  expect(screen.getByText("Escolha quem recebe.")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
-  const body = JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body));
-  expect(body.type).toBe("payable");
-  expect(body.payeeUserId).toBeUndefined();
-  expect(body.pix).toBeUndefined();
+  expect(screen.getByRole("alert")).toHaveTextContent("Escolha quem recebe.");
+  expect(sent.some(entry => entry.init.method === "POST")).toBe(false);
 });
 
 it("never gates a conta a pagar on a wallet key", async () => {
@@ -804,6 +826,7 @@ it("shows the inline key error of a conta a pagar without leaving the form", asy
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
+  await seatAna(user);
   await user.type(screen.getByLabelText("E-mail Pix"), "nao-e-email");
   await user.type(screen.getByLabelText("Valor total"), "100,00");
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
@@ -815,6 +838,7 @@ const onceBilling: BillingDetail = {
   id: "b1",
   recurrence: BillingRecurrence.Once,
   type: Direction.Receivable,
+  contact: null,
   payee: null,
   pix: null,
   description: "Jantar",
@@ -871,9 +895,16 @@ it("seeds the amount of a parcelado billing as its total, per-installment × ins
   expect(await screen.findByLabelText("Valor total")).toHaveValue("100,02");
 });
 
-const payableBilling: BillingDetail = { ...onceBilling, id: "b3", type: Direction.Payable, paymentMethodId: undefined, payee: { userId: "u1", name: "Ana" }, pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" } };
+const payableBilling: BillingDetail = {
+  ...onceBilling,
+  id: "b3",
+  type: Direction.Payable,
+  paymentMethodId: undefined,
+  contact: { id: "c1", userId: "u1", name: "Ana", avatar: null },
+  pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
+};
 
-it("seeds a conta a pagar with its payee and inline key and patches them back", async () => {
+it("seeds a conta a pagar with its receiving contact and inline key and patches the key back", async () => {
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(payableBilling) : undefined));
   const { user } = renderForm(payableBilling);
 
@@ -887,14 +918,37 @@ it("seeds a conta a pagar with its payee and inline key and patches them back", 
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
   const patch = sent.find(entry => entry.init.method === "PATCH");
+  const body = JSON.parse(String(patch?.init.body));
+
   expect(patch?.path).toBe("/api/financial/billings/b3");
-  expect(JSON.parse(String(patch?.init.body))).toMatchObject({
+  expect(body).toMatchObject({
     pix: { keyType: "email", key: "ana@example.com", label: "Nubank" },
-    payeeUserId: "u1",
     reminders: [{ offsetDays: -3, enabled: true }],
     category: "other",
   });
-  expect(JSON.parse(String(patch?.init.body)).paymentMethodId).toBeUndefined();
+  // The seat did not move, so the patch leaves the receiving contact alone.
+  expect(body.contactId).toBeUndefined();
+  expect(body.payeeUserId).toBeUndefined();
+  expect(body.paymentMethodId).toBeUndefined();
+});
+
+it("patches the receiving contact of a conta a pagar once the seat moves", async () => {
+  const openPayable: BillingDetail = { ...payableBilling, id: "b7", recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, nextDueDate: null };
+  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(openPayable) : undefined));
+  const { user } = renderForm(openPayable);
+
+  await user.click(await screen.findByRole("button", { name: "Trocar" }));
+
+  const panel = screen.getByRole("dialog", { name: "Contatos" });
+  await user.type(within(panel).getByLabelText("Buscar contatos"), "ma");
+  await user.click(await within(panel).findByRole("checkbox", { name: "Bruno Lima" }));
+  await user.click(within(panel).getByRole("button", { name: "Concluir" }));
+
+  expect(screen.getByRole("button", { name: "Bruno Lima" })).toHaveAttribute("aria-pressed", "true");
+
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  expect(JSON.parse(String(sent.find(entry => entry.init.method === "PATCH")?.init.body))).toMatchObject({ contactId: "c2" });
 });
 
 const indefiniteBilling: BillingDetail = { ...onceBilling, id: "b2", recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, nextDueDate: null };
@@ -1031,15 +1085,14 @@ it("seeds Não notificar from the allocations and sends the new value on edit", 
   expect(JSON.parse(String(patch?.init.body)).split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", notify: true }] });
 });
 
-it("keeps the registro switch locked on edit and patches only the new name", async () => {
+it("keeps the registro switch locked on edit and never moves its counterpart", async () => {
   const registroBilling: BillingDetail = {
     ...onceBilling,
     id: "b4",
     kind: BillingKind.Record,
-    counterpartLabel: "Empresa X",
     paymentMethodId: undefined,
     reminders: [],
-    split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] },
+    split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
   };
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(registroBilling) : undefined));
   const { user } = renderForm(registroBilling);
@@ -1049,15 +1102,16 @@ it("keeps the registro switch locked on edit and patches only the new name", asy
   expect(toggle).toBeChecked();
   expect(toggle).toBeDisabled();
   expect(screen.getByText("Não dá para mudar depois de criada.")).toBeInTheDocument();
-  expect(screen.getByLabelText("De quem")).toHaveValue("Empresa X");
+  expect(screen.getByText("De quem")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Ana" })).toBeInTheDocument();
+  // The API answers 409 for a counterpart change on a registro, so the form never offers it.
+  expect(screen.queryByRole("button", { name: /Escolher|Trocar/ })).not.toBeInTheDocument();
 
-  await user.clear(screen.getByLabelText("De quem"));
-  await user.type(screen.getByLabelText("De quem"), "Empresa Y");
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
   const patch = sent.find(entry => entry.init.method === "PATCH");
   expect(patch?.path).toBe("/api/financial/billings/b4");
-  expect(JSON.parse(String(patch?.init.body))).toEqual({ counterpartLabel: "Empresa Y", category: "other" });
+  expect(JSON.parse(String(patch?.init.body))).toEqual({ category: "other" });
 });
 
 /** `a` comes strictly before `b` in the rendered document. */

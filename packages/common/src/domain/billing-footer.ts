@@ -28,6 +28,9 @@ function summaryPeople(input: NormalizedBillingInput, allocations: ResolvedAlloc
   return allocations.filter((allocation) => allocation.kind === SplitPartKind.User && allocation.amountCents > 0).length;
 }
 
+/** Stands in for the contact a conta a pagar has not picked yet, so the footer can still price the draft. */
+const SEAT_PREVIEW = 'seat-preview';
+
 function sumCents(charges: PlannedCharge[]): number {
   return charges.reduce((total, charge) => total + charge.amountCents, 0);
 }
@@ -39,13 +42,18 @@ function sumCents(charges: PlannedCharge[]): number {
  * not valid yet, same as a form that has nothing to submit.
  */
 export function billingDraftSummary(draft: BillingDraft, today: Date): BillingDraftSummary | null {
+  // A conta a pagar cannot be saved before it names who receives, but the footer prices it while the
+  // seat is still empty: the plan is the same whoever sits there, one charge per due date on the owner.
+  const seatless = draft.direction === Direction.Payable && !draft.payee;
+
   try {
     // `buildBillingInput` always returns `normalizeBillingInput`'s result; its declared type is
     // widened to `BillingInput` because it also doubles as the request body sent over the wire.
-    const input = buildBillingInput(draft, today) as NormalizedBillingInput;
+    const input = buildBillingInput(seatless ? { ...draft, payee: SEAT_PREVIEW } : draft, today) as NormalizedBillingInput;
     const payer = input.type === Direction.Payable ? ChargePayer.Owner : ChargePayer.Person;
     // The receiving contact stands for the person on the other side: one charge per due date, as the API plans it.
-    const payeeUserId = input.contactId ?? null;
+    const payeeUserId = seatless ? null : (input.contactId ?? null);
+    const people = (allocations: ResolvedAllocation[]) => (seatless ? 0 : summaryPeople(input, allocations));
     const settled = input.kind === BillingKind.Record;
 
     if (input.recurrence === BillingRecurrence.Indefinite) {
@@ -63,7 +71,7 @@ export function billingDraftSummary(draft: BillingDraft, today: Date): BillingDr
 
       return {
         charges: plan.charges.length,
-        people: summaryPeople(input, plan.allocations),
+        people: people(plan.allocations),
         occurrences: null,
         totalCents: perOccurrenceCents,
         perOccurrenceCents
@@ -85,7 +93,7 @@ export function billingDraftSummary(draft: BillingDraft, today: Date): BillingDr
 
     return {
       charges: plan.charges.length,
-      people: summaryPeople(input, plan.allocations),
+      people: people(plan.allocations),
       occurrences: dueDates.length,
       totalCents: sumCents(plan.charges),
       perOccurrenceCents

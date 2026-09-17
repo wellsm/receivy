@@ -33,8 +33,8 @@ it("returns null and does not throw when the stored payload is corrupt", () => {
 it("unions the selected contacts without dropping the stored draft", () => {
   saveDraft(draft(), "/billings/new");
 
-  patchDraft({ selected: ["u2"] });
-  patchDraft({ selected: ["u2"] });
+  patchDraft({ contact: { id: "c2", userId: "u2" } });
+  patchDraft({ contact: { id: "c2", userId: "u2" } });
 
   const stored = takeDraft();
 
@@ -43,16 +43,24 @@ it("unions the selected contacts without dropping the stored draft", () => {
   expect(stored?.returnTo).toBe("/billings/new");
 });
 
-it("hands a new contact to the payee when the parked draft is a conta a pagar", () => {
+it("seats a new contact by its agenda entry when the parked draft is a conta a pagar", () => {
   saveDraft({ ...draft(), direction: Direction.Payable, selected: [] }, "/billings/new");
 
-  patchDraft({ selected: ["u2"] });
+  patchDraft({ contact: { id: "c2", userId: "u2" } });
 
   const stored = takeDraft();
 
-  expect(stored?.draft.payee).toBe("u2");
+  expect(stored?.draft.payee).toBe("c2");
   expect(stored?.draft.selected).toEqual([]);
   expect(stored?.draft.amount).toBe("100,00");
+});
+
+it("replaces the single payer of a parked registro a receber instead of unioning it", () => {
+  saveDraft({ ...draft(), settled: true }, "/billings/new");
+
+  patchDraft({ contact: { id: "c2", userId: "u2" } });
+
+  expect(takeDraft()?.draft.selected).toEqual(["u2"]);
 });
 
 it("replaces the Pix key and keeps everything else", () => {

@@ -71,6 +71,7 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
     id: "b1",
     recurrence: BillingRecurrence.Until,
     type: Direction.Receivable,
+    contact: null,
     payee: null,
     pix: null,
     description: "Jantar de despedida",
@@ -433,10 +434,10 @@ it("ends with the simple confirmation when nothing is pending", async () => {
   expect(patchBodies()).toEqual([{ state: "ended" }]);
 });
 
-it("shows a conta a pagar with its inline key and payee, without invite, link or reminders", async () => {
+it("shows a conta a pagar with its inline key and receiving contact, without invite, link or reminders", async () => {
   const detail = billing({
     type: Direction.Payable,
-    payee: { userId: "u1", name: "Ana" },
+    contact: { id: "c1", userId: "u1", name: "Ana", avatar: null },
     pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
     paymentMethodId: undefined,
     invite: { url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" },
@@ -464,7 +465,7 @@ it("shows a conta a pagar with its inline key and payee, without invite, link or
   expect(calls).not.toContain("GET /api/financial/payment-methods/pix-1");
 });
 
-it("names a conta a pagar without payee or key as the owner's alone", async () => {
+it("names a conta a pagar without a contact or key as the owner's alone", async () => {
   await open(billing({ type: Direction.Payable, pix: null, paymentMethodId: undefined, charges: [charge({ id: "c6", name: "Você", direction: Direction.Payable, ownedByViewer: true })] }));
 
   expect(screen.getByText("Sem chave Pix")).toBeInTheDocument();
@@ -614,7 +615,7 @@ it("heads a registro with its counterpart and hides the invite and the payment l
     counterpartLabel: "Empresa X",
   });
 
-  await open(billing({ kind: BillingKind.Record, counterpartLabel: "Empresa X", paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] }, charges: [salary] }));
+  await open(billing({ kind: BillingKind.Record, paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] }, charges: [salary] }));
 
   expect(screen.getByText("De Empresa X")).toBeInTheDocument();
   expect(screen.getByText("Registro")).toBeInTheDocument();
@@ -639,7 +640,7 @@ it("heads a registro a pagar with Para and names its rows after the counterpart"
     counterpartLabel: "Imobiliária",
   });
 
-  await open(billing({ type: Direction.Payable, kind: BillingKind.Record, counterpartLabel: "Imobiliária", paymentMethodId: undefined, charges: [rent] }));
+  await open(billing({ type: Direction.Payable, kind: BillingKind.Record, contact: { id: "c2", userId: "u2", name: "Imobiliária", avatar: null }, paymentMethodId: undefined, charges: [rent] }));
 
   expect(screen.getByText("Para Imobiliária")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeInTheDocument();

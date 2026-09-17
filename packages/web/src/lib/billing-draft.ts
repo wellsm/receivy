@@ -55,11 +55,21 @@ export function takeDraft(): StoredDraft | null {
   return stored;
 }
 
+/** A conta a receber splits between everyone; a registro a receber has a single payer, so the newcomer takes the seat. */
+function selectedWith(draft: BillingDraft, userId: string): string[] {
+  if (draft.settled) {
+    return [userId];
+  }
+
+  return [...new Set([...draft.selected, userId])];
+}
+
 /**
  * Merges the result of a side trip (a new contact, a new Pix key) into the draft.
- * A conta a pagar has no participants: the contact created on the way becomes its payee.
+ * A conta a pagar has no participants: the contact created on the way takes the receiving seat,
+ * which holds the agenda entry itself (`contact.id`), not the account behind it.
  */
-export function patchDraft(patch: { selected?: string[]; pix?: string }): void {
+export function patchDraft(patch: { contact?: { id: string; userId: string }; pix?: string }): void {
   const stored = read();
 
   if (!stored) {
@@ -69,13 +79,13 @@ export function patchDraft(patch: { selected?: string[]; pix?: string }): void {
   const pix = patch.pix === undefined ? {} : { pix: patch.pix };
 
   if (stored.draft.direction === "payable") {
-    const payee = patch.selected?.[0];
+    const payee = patch.contact ? { payee: patch.contact.id } : {};
 
-    write({ returnTo: stored.returnTo, draft: { ...stored.draft, ...(payee ? { payee } : {}), ...pix } });
+    write({ returnTo: stored.returnTo, draft: { ...stored.draft, ...payee, ...pix } });
     return;
   }
 
-  const selected = patch.selected ? [...new Set([...stored.draft.selected, ...patch.selected])] : stored.draft.selected;
+  const selected = patch.contact ? selectedWith(stored.draft, patch.contact.userId) : stored.draft.selected;
 
   write({ returnTo: stored.returnTo, draft: { ...stored.draft, selected, ...pix } });
 }

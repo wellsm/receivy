@@ -59,8 +59,11 @@ describe('billing draft summary', () => {
     expect(billingDraftSummaryText(summary!)).toBe('Gera 1 cobrança · 1 pessoa');
   });
 
-  it('answers nothing for a conta a pagar that names nobody to receive it', () => {
-    expect(billingDraftSummary({ ...base, direction: Direction.Payable, payee: '', selected: [] }, TODAY)).toBeNull();
+  it('prices a conta a pagar whose receiving seat is still empty, counting nobody', () => {
+    const summary = billingDraftSummary({ ...base, direction: Direction.Payable, payee: '', selected: [] }, TODAY);
+
+    expect(summary).toEqual({ charges: 1, people: 0, occurrences: 1, totalCents: 10000, perOccurrenceCents: 10000 });
+    expect(billingDraftSummaryText(summary!)).toBe('Gera 1 cobrança');
   });
 
   it('counts nobody on a registro, whichever direction it names', () => {

@@ -38,7 +38,7 @@ export type PixDraft = { type: PixKeyType; key: string; label: string };
 export type BillingDraft = {
   /** 'receivable' collects from contacts; 'payable' is the owner's own bill, optionally owed to one contact. */
   direction: Direction;
-  /** Conta a pagar: the receiving contact (contacts.id), or empty when the bill is the owner's alone. */
+  /** Conta a pagar: the contact who receives (contacts.id). Empty only while the seat is still being picked. */
   payee: string;
   pixInline: PixDraft;
   type: BillingRecurrence;
@@ -64,8 +64,6 @@ export type BillingDraft = {
   notify?: Record<string, boolean>;
   /** "Já recebi" / "Já paguei": the draft is a registro. Absent on drafts stored before registros existed. */
   settled?: boolean;
-  /** Registro only: the name typed in "De quem" / "Para quem". */
-  counterpartLabel?: string;
 };
 
 /** Fresh draft for a new billing form. Returns a new object on every call. */
@@ -251,13 +249,22 @@ function buildSplit(draft: BillingDraft, parties: SplitParty[]): BillingInput['s
   };
 }
 
-/** Who is on the other side of a registro: the receiving contact, or the people who pay the owner. */
+/** Who is on the other side of a registro: the contact who receives it, or the single person who paid the owner. */
 function counterpartOf(draft: BillingDraft): Pick<BillingInput, 'contactId' | 'split'> {
-  if (draft.payee) {
-    return { contactId: draft.payee };
+  if (draft.direction === Direction.Payable) {
+    return { contactId: payeeOf(draft) };
   }
 
   return { split: { mode: SplitMode.Equal, parts: draft.selected.map((userId) => ({ kind: SplitPartKind.User, userId })) } };
+}
+
+/** A conta a pagar always names who receives it: the key it carries is filed under that contact. */
+function payeeOf(draft: BillingDraft): string {
+  if (!draft.payee) {
+    throw new RangeError('Escolha quem recebe.');
+  }
+
+  return draft.payee;
 }
 
 /** Shared pure review boundary; raw text stays in each platform's local UI. `now` is passed only on creation. */
@@ -294,13 +301,14 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
   };
 
   if (draft.direction === Direction.Payable) {
+    const contactId = payeeOf(draft);
     // The key is kept as typed (masked); the field spec turns it into the canonical form before validation.
     const key = pixKeyField(draft.pixInline.type).unformat(draft.pixInline.key).trim();
 
     return normalizeBillingInput(
       {
         ...base,
-        contactId: draft.payee || undefined,
+        contactId,
         pix: key ? { keyType: draft.pixInline.type, key, label: draft.pixInline.label.trim() || undefined } : undefined
       },
       now

@@ -124,9 +124,10 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
         return;
       }
 
-      // Came from the billing form: hand the new contact back to the draft, which seats people by account.
+      // Came from the billing form: hand the new contact back to the draft, which seats participants by
+      // account and the one who receives by agenda entry.
       if (returnTo) {
-        patchDraft({ selected: [saved.userId] });
+        patchDraft({ contact: { id: saved.id, userId: saved.userId } });
         router.push(returnTo);
         return;
       }

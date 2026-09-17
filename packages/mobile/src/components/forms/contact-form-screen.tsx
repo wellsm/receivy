@@ -107,19 +107,37 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const loadKeys = useCallback(() => {
-    if (!contactId) {
-      return Promise.resolve();
-    }
+  /** `live` tells a late answer the screen it was meant for is gone, like the sibling effect below. */
+  const loadKeys = useCallback(
+    (live: () => boolean = () => true) => {
+      if (!contactId) {
+        return Promise.resolve();
+      }
 
-    return financial
-      .paymentMethods(contactId)
-      .then((page) => setKeys(page.paymentMethods.filter((method) => !method.archivedAt)))
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : KEYS_ERROR));
-  }, [contactId, financial]);
+      return financial
+        .paymentMethods(contactId)
+        .then((page) => {
+          if (live()) {
+            setKeys(page.paymentMethods.filter((method) => !method.archivedAt));
+          }
+        })
+        .catch((reason: unknown) => {
+          if (live()) {
+            setError(reason instanceof Error ? reason.message : KEYS_ERROR);
+          }
+        });
+    },
+    [contactId, financial],
+  );
 
   useEffect(() => {
-    void loadKeys();
+    let live = true;
+
+    void loadKeys(() => live);
+
+    return () => {
+      live = false;
+    };
   }, [loadKeys]);
 
   useEffect(() => {
@@ -172,19 +190,27 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
     return { paymentMethod: { pixKeyType: pixType, pixKey: key, ...(label ? { label } : {}) } };
   }
 
+  /**
+   * The failure has to be readable, and the dialog covers the form's alert: a
+   * refused action closes it and leaves the reason standing on the form, with the
+   * key untouched. Only a change worth showing reloads the list.
+   */
   async function act(action: () => Promise<unknown>) {
     setBusy(true);
     setError("");
 
     try {
       await action();
-      setArchiving(null);
-      await loadKeys();
     } catch (reason) {
+      setArchiving(null);
       setError(reason instanceof Error ? reason.message : KEYS_UPDATE_ERROR);
-    } finally {
       setBusy(false);
+      return;
     }
+
+    setArchiving(null);
+    await loadKeys();
+    setBusy(false);
   }
 
   async function save() {
@@ -385,21 +411,29 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Cancelar"
+                  accessibilityState={{ disabled: busy }}
+                  disabled={busy}
                   onPress={() => setArchiving(null)}
-                  className="h-11 flex-1 items-center justify-center rounded-xl border border-outline/50"
+                  className={`h-11 flex-1 items-center justify-center rounded-xl border border-outline/50 ${busy ? "opacity-50" : ""}`}
                 >
                   <Text className="text-sm font-semibold text-ink">Cancelar</Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Arquivar chave Pix"
-                  accessibilityState={{ disabled: busy }}
+                  accessibilityState={{ disabled: busy, busy }}
                   disabled={busy}
                   onPress={() => void act(() => financial.archivePaymentMethod(archiving.id))}
-                  className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-danger-solid"
+                  className={`h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-danger-solid ${busy ? "opacity-50" : ""}`}
                 >
-                  <Image source={trashMark} tintColor="white" style={{ width: 16, height: 16 }} />
-                  <Text className="text-sm font-semibold text-on-danger">Arquivar</Text>
+                  {busy ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <>
+                      <Image source={trashMark} tintColor="white" style={{ width: 16, height: 16 }} />
+                      <Text className="text-sm font-semibold text-on-danger">Arquivar</Text>
+                    </>
+                  )}
                 </Pressable>
               </View>
             </View>

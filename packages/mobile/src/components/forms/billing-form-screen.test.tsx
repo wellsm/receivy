@@ -5,7 +5,7 @@ import { clearDraft, patchDraft, saveDraft, takeDraft } from "@/financial/draft-
 import { BillingFormScreen } from "@/components/forms/billing-form-screen";
 
 let mockKeys = 0;
-let mockFocus: (() => void | (() => void))[] = [];
+let mockFocus: { callback: () => void | (() => void); cleanup: void | (() => void) }[] = [];
 let mockRemoveListeners: (() => void)[] = [];
 
 jest.mock("expo-crypto", () => ({ randomUUID: () => `key-${++mockKeys}` }));
@@ -39,13 +39,13 @@ jest.mock("expo-router", () => {
   return {
     useFocusEffect: (callback: () => void | (() => void)) => {
       react.useEffect(() => {
-        mockFocus.push(callback);
+        const entry = { callback, cleanup: callback() };
 
-        const cleanup = callback();
+        mockFocus.push(entry);
 
         return () => {
-          mockFocus = mockFocus.filter((known) => known !== callback);
-          cleanup?.();
+          mockFocus = mockFocus.filter((known) => known !== entry);
+          entry.cleanup?.();
         };
       }, [callback]);
     },
@@ -63,11 +63,16 @@ jest.mock("expo-router", () => {
   };
 });
 
-/** Replays the screen's focus effects, the way expo-router does on `router.back()`. */
+/**
+ * Replays the screen's focus effects, the way expo-router does on `router.back()`:
+ * the blur that started the side trip cleans each one up before the focus runs it
+ * again, so a request left behind can no longer land on the screen.
+ */
 async function refocus() {
   await act(async () => {
-    for (const callback of [...mockFocus]) {
-      callback();
+    for (const entry of [...mockFocus]) {
+      entry.cleanup?.();
+      entry.cleanup = entry.callback();
     }
   });
 }
@@ -1203,6 +1208,62 @@ describe("BillingFormScreen", () => {
     expect(onEditContact).toHaveBeenCalledWith("p1");
     expect(takeDraft()).toMatchObject({ payee: "p1", amount: "100,00" });
     expect(client.createBilling).not.toHaveBeenCalled();
+  });
+
+  it("shows the key the contact's form registered while the side trip was on top", async () => {
+    // The contact starts with no key and the side trip registers one, the way the contact form would.
+    const registered: Record<string, unknown[]> = { p1: [] };
+    const client = financialApi({
+      paymentMethods: jest.fn((contactId?: string) => Promise.resolve({ paymentMethods: contactId ? (registered[contactId] ?? []) : [nubank] })),
+    });
+    const onEditContact = jest.fn();
+
+    await quickForm(client, contactsApi(), { onEditContact });
+    await chooseToPay();
+    await seatAna();
+
+    expect(await screen.findByText("Este contato ainda não tem chave Pix. Cadastre no contato.")).toBeOnTheScreen();
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
+    await fireEvent.press(screen.getByRole("button", { name: "Cadastrar chave" }));
+
+    expect(onEditContact).toHaveBeenCalledWith("p1");
+
+    registered.p1 = [anaKey];
+    await refocus();
+
+    expect(await screen.findByText("E-mail: ana@example.com")).toBeOnTheScreen();
+    expect(screen.queryByText("Este contato ainda não tem chave Pix. Cadastre no contato.")).toBeNull();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ contactId: "p1", paymentMethodId: "pix-ana" });
+  });
+
+  it("never pays a conta a receber through a key of the contact it stopped paying", async () => {
+    const { client } = await quickForm();
+
+    await chooseToPay();
+    await seatAna();
+
+    await waitFor(() => expect(screen.getByText("E-mail: ana@example.com")).toBeOnTheScreen());
+
+    await fireEvent.press(screen.getByRole("button", { name: "Vou receber" }));
+    await screen.findByText("Participantes");
+    await pickAna();
+
+    // Back on the owner's own wallet, which the fresh form had already preselected.
+    expect(screen.getByText("Receber via Pix")).toBeOnTheScreen();
+    expect(screen.getByText("Chave padrão")).toBeOnTheScreen();
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Jantar");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0].paymentMethodId).toBe("pix-1");
   });
 
   it("sends a conta a pagar with no key at all when the contact has none", async () => {

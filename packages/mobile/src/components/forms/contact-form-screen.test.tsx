@@ -278,6 +278,25 @@ describe("ContactFormScreen", () => {
     expect(screen.queryByRole("header", { name: "Arquivar chave Pix?" })).toBeNull();
   });
 
+  it("closes the dialog and says why an archive failed", async () => {
+    const financial = financialApi([nubank, itau]);
+
+    financial.archivePaymentMethod.mockRejectedValue(new Error("Não foi possível arquivar a chave."));
+
+    await render(<ContactFormScreen contactId="p1" client={contactsApi()} financial={financial} />);
+
+    expect(await screen.findByText("Itaú")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getAllByLabelText("Arquivar")[1]!);
+    await fireEvent.press(screen.getByLabelText("Arquivar chave Pix"));
+
+    expect(await screen.findByText("Não foi possível arquivar a chave.")).toBeOnTheScreen();
+    expect(screen.queryByRole("header", { name: "Arquivar chave Pix?" })).toBeNull();
+    expect(financial.archivePaymentMethod).toHaveBeenCalledTimes(1);
+    // The list is only worth reloading when something actually changed.
+    expect(financial.paymentMethods).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the key when the archive confirmation is cancelled", async () => {
     const financial = financialApi([nubank, itau]);
 

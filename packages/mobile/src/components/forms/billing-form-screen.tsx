@@ -480,19 +480,9 @@ export function BillingFormScreen({
       void client
         .paymentMethods(seatedPayee)
         .then((page) => {
-          if (!live) {
-            return;
+          if (live) {
+            setPayeeKeys({ contactId: seatedPayee, methods: page.paymentMethods.filter((method) => !method.archivedAt) });
           }
-
-          const keys = page.paymentMethods.filter((method) => !method.archivedAt);
-
-          setPayeeKeys({ contactId: seatedPayee, methods: keys });
-          // A key of the contact the seat just left cannot pay this one: fall back to their
-          // default. A seeded edit already points at one of these, and keeps it.
-          setDraft((current) => ({
-            ...current,
-            pix: keys.some((method) => method.id === current.pix) ? current.pix : (keys.find((method) => method.isDefault)?.id ?? keys[0]?.id ?? ""),
-          }));
         })
         .catch(() => {
           if (live) {
@@ -545,6 +535,16 @@ export function BillingFormScreen({
 
   function clearSeat() {
     update(payable ? { payee: "" } : { selected: [] });
+  }
+
+  /**
+   * Each direction is paid through other keys: a conta a pagar through the seated
+   * contact's, a conta a receber through the owner's wallet. Carrying the chosen
+   * key across the flip would pay the wrong side, so it starts over — the wallet
+   * default for a conta a receber, the seat's own for a conta a pagar.
+   */
+  function pickDirection(direction: Direction) {
+    update({ direction, pix: direction === Direction.Payable ? "" : (wallet.find((method) => method.isDefault)?.id ?? "") });
   }
 
   const remember = useCallback((seen: Contact[]) => {
@@ -689,7 +689,7 @@ export function BillingFormScreen({
       const notify = draft.notify && Object.fromEntries(Object.entries(draft.notify).filter(([userId]) => notifiableIds.has(userId)));
       // Only a creation checks that a recorrente registro starts today or later.
       const next: Attempt = {
-        input: buildBillingInput({ ...draft, notify }, billing ? undefined : new Date()),
+        input: buildBillingInput({ ...draft, notify, pix: payingKey() }, billing ? undefined : new Date()),
         key: Crypto.randomUUID(),
         uncertain: false,
       };
@@ -846,7 +846,31 @@ export function BillingFormScreen({
   const payeeLoaded = payeeKeys.contactId === seatedPayee;
   // The same selector serves both directions, over whichever keys pay this conta.
   const methods = payable ? (payeeLoaded ? payeeKeys.methods : []) : wallet;
-  const selectedPix = methods.find((method) => method.id === draft.pix) ?? null;
+
+  /**
+   * The key that actually pays this conta. A conta a pagar can only use one of the
+   * seated contact's, so a key left over from another of them — a seat that moved,
+   * a draft restored from a side trip — never travels: their default takes over as
+   * soon as their keys land, and until then only a seeded edit keeps what it has.
+   */
+  function payingKey(): string {
+    if (!payable || settled) {
+      return draft.pix;
+    }
+
+    if (!payeeLoaded) {
+      return payeeKeys.contactId ? "" : draft.pix;
+    }
+
+    if (payeeKeys.methods.some((method) => method.id === draft.pix)) {
+      return draft.pix;
+    }
+
+    return payeeKeys.methods.find((method) => method.isDefault)?.id ?? payeeKeys.methods[0]?.id ?? "";
+  }
+
+  const payingPix = payingKey();
+  const selectedPix = methods.find((method) => method.id === payingPix) ?? null;
   // One registered key has nothing to switch to; the sheet only opens with a real choice.
   const switchable = methods.length > 1 || (methods.length === 1 && !selectedPix);
   const pixTitle = payable ? "Pagar via Pix" : "Receber via Pix";
@@ -887,7 +911,7 @@ export function BillingFormScreen({
               name={option.label}
               active={draft.direction === option.value}
               disabled={locked || editing}
-              onPress={() => update({ direction: option.value })}
+              onPress={() => pickDirection(option.value)}
             />
           ))}
         </View>
@@ -1316,29 +1340,29 @@ export function BillingFormScreen({
                 </Pressable>
               </View>
             ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Trocar chave Pix"
-              accessibilityState={{ disabled: locked || !switchable }}
-              disabled={locked || !switchable}
-              onPress={() => setPixOpen(true)}
-              className="flex-row items-center justify-between rounded-2xl border border-outline bg-surface px-3.5 py-3"
-            >
-              <View className="flex-1 flex-row items-center gap-3">
-                <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
-                  <Image source={selectedPix ? PIX_ICONS[selectedPix.pixKeyType] : keyMark} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Trocar chave Pix"
+                accessibilityState={{ disabled: locked || !switchable }}
+                disabled={locked || !switchable}
+                onPress={() => setPixOpen(true)}
+                className="flex-row items-center justify-between rounded-2xl border border-outline bg-surface px-3.5 py-3"
+              >
+                <View className="flex-1 flex-row items-center gap-3">
+                  <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
+                    <Image source={selectedPix ? PIX_ICONS[selectedPix.pixKeyType] : keyMark} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="font-sans text-[13.5px] font-semibold text-ink" numberOfLines={1}>
+                      {selectedPix ? `${PIX_TYPE_LABELS[selectedPix.pixKeyType]}: ${abbreviate(selectedPix.pixKey)}` : "Selecionar chave Pix"}
+                    </Text>
+                    <Text className="text-[11px] text-muted" numberOfLines={1}>
+                      {selectedPix ? (selectedPix.isDefault ? "Chave padrão" : "Chave secundária") : methods.length ? "Toque para escolher" : "Nenhuma chave cadastrada"}
+                    </Text>
+                  </View>
                 </View>
-                <View className="flex-1">
-                  <Text className="font-sans text-[13.5px] font-semibold text-ink" numberOfLines={1}>
-                    {selectedPix ? `${PIX_TYPE_LABELS[selectedPix.pixKeyType]}: ${abbreviate(selectedPix.pixKey)}` : "Selecionar chave Pix"}
-                  </Text>
-                  <Text className="text-[11px] text-muted" numberOfLines={1}>
-                    {selectedPix ? (selectedPix.isDefault ? "Chave padrão" : "Chave secundária") : methods.length ? "Toque para escolher" : "Nenhuma chave cadastrada"}
-                  </Text>
-                </View>
-              </View>
-              {switchable && <Image source={chevronMark} tintColor={colors.muted} style={{ width: 16, height: 16, transform: [{ rotate: "90deg" }] }} />}
-            </Pressable>
+                {switchable && <Image source={chevronMark} tintColor={colors.muted} style={{ width: 16, height: 16, transform: [{ rotate: "90deg" }] }} />}
+              </Pressable>
             )}
           </View>
         )}
@@ -1352,7 +1376,7 @@ export function BillingFormScreen({
                 </Text>
                 <ScrollView contentContainerClassName="gap-2" showsVerticalScrollIndicator={false}>
                   {methods.map((method) => {
-                    const active = draft.pix === method.id;
+                    const active = payingPix === method.id;
 
                     return (
                       <Pressable

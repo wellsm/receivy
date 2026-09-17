@@ -99,10 +99,8 @@ async function payeeOf(db: DbClient, split: BillingSplit): Promise<BillingPayee 
 }
 
 /** What `prepareChargeMaterialization` needs to know about a conta a pagar, or undefined for a conta a receber. */
-function payableOf(
-  row: Pick<BillingRepository.Row, 'type' | 'pix_key_type' | 'pix_key' | 'pix_label'>
-): PayableMaterialization | undefined {
-  return BillingRepository.direction(row) === Direction.Payable ? { payer: ChargePayer.Owner, pix: billingPix(row) } : undefined;
+function payableOf(row: Pick<BillingRepository.Row, 'type' | 'contact_id'>): PayableMaterialization | undefined {
+  return BillingRepository.direction(row) === Direction.Payable ? { payer: ChargePayer.Owner, contactId: row.contact_id } : undefined;
 }
 
 /** Card counters a list entry carries beyond the stored billing row. */
@@ -955,6 +953,7 @@ export namespace BillingRepository {
     end_date: true,
     due_rule: true,
     payment_method_id: true,
+    contact_id: true,
     type: true,
     pix_key_type: true,
     pix_key: true,
@@ -998,6 +997,7 @@ export namespace BillingRepository {
     due_rule: BillingDueRule;
     timezone: string;
     payment_method_id?: string;
+    contact_id?: string;
     /** Which way the money goes; the contract still calls it `direction`. */
     type: Direction;
     pix_key_type?: PixKeyType;
@@ -1213,9 +1213,14 @@ export namespace BillingRepository {
         throw new RangeError('O início não pode estar no passado.');
       }
 
+      // The normalized split already carries the payee of a conta a pagar as its one User part; the
+      // typed inline `pix` no longer materializes the charge, the receiving contact's default key does.
+      const payeeUserId = input.type === Direction.Payable ? payeeIdOf(input.split) : undefined;
+      const payeeContact = payeeUserId
+        ? await tx.contacts.findOne({ select: { id: true }, where: { owner_id: ownerId, user_id: payeeUserId } })
+        : undefined;
       const payable: PayableMaterialization | undefined =
-        input.type === Direction.Payable ? { payer: ChargePayer.Owner, pix: input.pix } : undefined;
-      // The normalized split already carries the payee of a conta a pagar as its one User part.
+        input.type === Direction.Payable ? { payer: ChargePayer.Owner, contactId: payeeContact?.id } : undefined;
       const context = await prepareChargeMaterialization(tx, ownerId, userIds(input.split), input.paymentMethodId, payable);
       const id = crypto.randomUUID();
       const instant = now.toISOString();
@@ -1423,7 +1428,7 @@ export namespace BillingRepository {
           : undefined;
       const reminders = patch.reminders === undefined ? undefined : normalized?.reminders;
       const pix = patch.clearPix ? null : patch.pix !== undefined ? (normalized?.pix ?? null) : billingPix(row);
-      const payable = payableOf({ ...row, pix_key_type: pix?.keyType, pix_key: pix?.key, pix_label: pix?.label });
+      const payable = payableOf(row);
 
       // Only newly introduced recipients/Pix need revalidation; materializeNextOccurrence re-checks the stored
       // split at occurrence time, so an already-persisted split must not block unrelated edits (e.g. ending

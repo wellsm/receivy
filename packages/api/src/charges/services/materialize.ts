@@ -26,10 +26,11 @@ export type ChargeMaterializationContext = {
   payer: ChargePayer;
 };
 
-/** How a conta a pagar materializes: the key typed on the billing replaces any wallet lookup. */
+/** How a conta a pagar materializes: the owner pays, the receiving contact's default key is the Pix. */
 export type PayableMaterialization = {
   payer: ChargePayer.Owner;
-  pix?: { keyType: PaymentMethod['pixKeyType']; key: string; label?: string } | null;
+  /** The receiving contact; absent when the bill is the owner's alone (no Pix on the charge). */
+  contactId?: string;
 };
 
 export type ChargeBillingRef = { id: string; type: BillingRecurrence };
@@ -68,7 +69,13 @@ async function recipientSnapshots(db: DbClient, ownerId: string, userIds: string
   return result;
 }
 
-async function pixSnapshot(db: DbClient, ownerId: string, paymentMethodId?: string): Promise<ChargeMaterializationContext['pix']> {
+/** An explicit method wins; otherwise the default of the scope: the contact's keys, or the owner's own. */
+export async function pixSnapshot(
+  db: DbClient,
+  ownerId: string,
+  paymentMethodId?: string,
+  contactId?: string
+): Promise<ChargeMaterializationContext['pix']> {
   if (paymentMethodId) {
     const row = await db.payment_methods.findOne({
       select: { pix_key_type: true, pix_key: true, label: true, archived_at: true },
@@ -85,7 +92,7 @@ async function pixSnapshot(db: DbClient, ownerId: string, paymentMethodId?: stri
 
   const { records } = await db.payment_methods.findMany({
     select: { pix_key_type: true, pix_key: true, label: true },
-    where: { owner_id: ownerId, is_default: true, archived_at: { isNull: true } },
+    where: { owner_id: ownerId, contact_id: contactId ? contactId : { isNull: true }, is_default: true, archived_at: { isNull: true } },
     take: 1
   });
 
@@ -105,7 +112,8 @@ export async function prepareChargeMaterialization(
   const recipients = await recipientSnapshots(db, ownerId, userIds);
 
   if (payable) {
-    const pix = payable.pix ? { keyType: payable.pix.keyType, key: payable.pix.key, label: payable.pix.label ?? 'Pix' } : null;
+    // A conta a pagar without a contact is the owner's alone: no key, no notice.
+    const pix = payable.contactId ? await pixSnapshot(db, ownerId, paymentMethodId, payable.contactId) : null;
 
     return { recipients, pix, payer: ChargePayer.Owner };
   }

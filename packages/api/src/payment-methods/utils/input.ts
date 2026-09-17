@@ -7,10 +7,11 @@ export declare class PaymentMethodBody implements Http.JsonBody {
   pixKeyType: PixKeyType;
   pixKey: String.Max<254>;
   label?: String.Max<120>;
+  contactId?: String.UUID;
 }
 
 export function paymentMethodInput(body: PaymentMethodBody): PaymentMethodInput {
-  return { pixKeyType: body.pixKeyType, pixKey: body.pixKey, label: body.label };
+  return { pixKeyType: body.pixKeyType, pixKey: body.pixKey, label: body.label, contactId: body.contactId };
 }
 
 export async function safe<T>(operation: () => Promise<T>): Promise<T> {

@@ -156,6 +156,8 @@ export type PaymentMethod = {
   pixKey: string;
   label: string;
   isDefault: boolean;
+  /** Block 9: the contact this key pays; null is one of the owner's own keys. */
+  contactId: string | null;
   archivedAt: string | null;
   createdAt: string;
 };
@@ -164,6 +166,8 @@ export type PaymentMethodInput = {
   pixKeyType: PixKeyType;
   pixKey: string;
   label?: string;
+  /** Block 9: file the key under this contact of the owner; absent means the owner's own key. */
+  contactId?: string;
 };
 
 export type PaymentMethodsPage = { paymentMethods: PaymentMethod[] };

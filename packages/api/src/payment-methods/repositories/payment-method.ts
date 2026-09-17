@@ -1,14 +1,17 @@
 import { Order } from '@ez4/database';
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
-import type { PaymentMethod, PaymentMethodInput } from '@receivy/common';
+import type { PaymentMethod, PaymentMethodInput, PixSnapshot } from '@receivy/common';
 import type { DbClient } from '../../database';
 import { PixKeyTakenError } from '../errors';
 import { normalizePixKey } from '../services/validation';
 
-const SELECT = { id: true, pix_key_type: true, pix_key: true, label: true, is_default: true, archived_at: true, created_at: true } as const;
+const sqlNull = null as unknown as undefined;
+
+const SELECT = { id: true, contact_id: true, pix_key_type: true, pix_key: true, label: true, is_default: true, archived_at: true, created_at: true } as const;
 
 type Row = {
   id: string;
+  contact_id?: string;
   pix_key_type: PaymentMethod['pixKeyType'];
   pix_key: string;
   label: string;
@@ -25,6 +28,7 @@ function dto(row: Row): PaymentMethod {
     pixKey: row.pix_key,
     label: row.label,
     isDefault: row.is_default,
+    contactId: row.contact_id ?? null,
     archivedAt: row.archived_at ?? null,
     createdAt: row.created_at
   };
@@ -42,11 +46,22 @@ function normalized(input: PaymentMethodInput) {
   return { key, label };
 }
 
+/** The default is one per scope: the owner's own keys, or the keys of one contact. */
+function scopeWhere(ownerId: string, contactId?: string) {
+  return { owner_id: ownerId, contact_id: contactId ? contactId : { isNull: true } } as const;
+}
+
+/** The contact must be the owner's and alive; a key filed under someone else's agenda entry is a 404. */
+async function assertContact(db: DbClient, ownerId: string, contactId: string): Promise<void> {
+  const contact = await db.contacts.findOne({ select: { id: true }, where: { id: contactId, owner_id: ownerId, archived_at: { isNull: true } } });
+  if (!contact) throw new HttpNotFoundError();
+}
+
 export namespace PaymentMethodRepository {
-  export async function list(db: DbClient, ownerId: string, archived = false): Promise<PaymentMethod[]> {
+  export async function list(db: DbClient, ownerId: string, archived = false, contactId?: string): Promise<PaymentMethod[]> {
     const { records } = await db.payment_methods.findMany({
       select: SELECT,
-      where: { owner_id: ownerId, archived_at: { isNull: !archived } },
+      where: { ...scopeWhere(ownerId, contactId), archived_at: { isNull: !archived } },
       order: { created_at: Order.Asc }
     });
     return records.map(dto);
@@ -56,6 +71,7 @@ export namespace PaymentMethodRepository {
     const value = normalized(input);
     return db.transaction(async (tx) => {
       await lockOwner(tx, ownerId);
+      if (input.contactId) await assertContact(tx, ownerId, input.contactId);
       const existing = id ? await tx.payment_methods.findOne({ select: SELECT, where: { id, owner_id: ownerId }, lock: true }) : undefined;
       if (id && (!existing || existing.archived_at)) throw new HttpNotFoundError();
       const duplicate = await tx.payment_methods.findOne({
@@ -77,7 +93,7 @@ export namespace PaymentMethodRepository {
       }
       const anyActive = await tx.payment_methods.findMany({
         select: { id: true },
-        where: { owner_id: ownerId, archived_at: { isNull: true } },
+        where: { ...scopeWhere(ownerId, input.contactId), archived_at: { isNull: true } },
         take: 1
       });
       const row = await tx.payment_methods.insertOne({
@@ -85,6 +101,7 @@ export namespace PaymentMethodRepository {
         data: {
           id: crypto.randomUUID(),
           owner: { id: ownerId },
+          ...(input.contactId ? { contact: { id: input.contactId } } : {}),
           type: 'pix',
           pix_key_type: input.pixKeyType,
           pix_key: value.key,
@@ -105,7 +122,7 @@ export namespace PaymentMethodRepository {
       if (!target || target.archived_at) throw new HttpNotFoundError();
       await tx.payment_methods.updateMany({
         select: { id: true },
-        where: { owner_id: ownerId, is_default: true },
+        where: { ...scopeWhere(ownerId, target.contact_id), is_default: true },
         data: { is_default: false }
       });
       const changed = await tx.payment_methods.updateOne({
@@ -135,7 +152,7 @@ export namespace PaymentMethodRepository {
       if (target.is_default) {
         const replacement = await tx.payment_methods.findMany({
           select: { id: true },
-          where: { owner_id: ownerId, archived_at: { isNull: true } },
+          where: { ...scopeWhere(ownerId, target.contact_id), archived_at: { isNull: true } },
           take: 1
         });
         if (replacement.records[0])
@@ -146,5 +163,45 @@ export namespace PaymentMethodRepository {
           });
       }
     });
+  }
+
+  /** The key typed on a conta a pagar, filed under its receiving contact. Same key twice answers the same id. */
+  export async function upsertContactKey(db: DbClient, ownerId: string, contactId: string, pix: PixSnapshot): Promise<string> {
+    const value = normalized({ pixKeyType: pix.keyType, pixKey: pix.key, label: pix.label });
+    await assertContact(db, ownerId, contactId);
+    const existing = await db.payment_methods.findOne({
+      select: { id: true, archived_at: true },
+      where: { owner_id: ownerId, contact_id: contactId, pix_key_type: pix.keyType, pix_key: value.key }
+    });
+    const now = new Date().toISOString();
+
+    if (existing) {
+      if (existing.archived_at) {
+        await db.payment_methods.updateOne({ select: { id: true }, where: { id: existing.id }, data: { archived_at: sqlNull, updated_at: now } });
+      }
+      return existing.id;
+    }
+
+    const others = await db.payment_methods.findMany({
+      select: { id: true },
+      where: { ...scopeWhere(ownerId, contactId), archived_at: { isNull: true } },
+      take: 1
+    });
+    const inserted = await db.payment_methods.insertOne({
+      select: { id: true },
+      data: {
+        id: crypto.randomUUID(),
+        owner: { id: ownerId },
+        contact: { id: contactId },
+        type: 'pix',
+        pix_key_type: pix.keyType,
+        pix_key: value.key,
+        label: value.label,
+        is_default: others.records.length === 0,
+        created_at: now,
+        updated_at: now
+      }
+    });
+    return inserted.id;
   }
 }

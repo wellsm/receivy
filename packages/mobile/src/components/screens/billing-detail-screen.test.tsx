@@ -59,6 +59,7 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
     id: "b1",
     recurrence: BillingRecurrence.Until,
     type: Direction.Receivable,
+    contact: null,
     payee: null,
     pix: null,
     description: "Jantar de despedida",
@@ -439,7 +440,7 @@ describe("BillingDetailScreen", () => {
     const own = charge({ id: "c7", name: "Ana", direction: Direction.Payable, ownedByViewer: true, counterpartName: "Ana", pix: null });
     const detail = billing({
       type: Direction.Payable,
-      payee: { userId: "u1", name: "Ana" },
+      contact: { id: "c1", userId: "u1", name: "Ana", avatar: null },
       pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
       paymentMethodId: undefined,
       charges: [own],
@@ -463,7 +464,7 @@ describe("BillingDetailScreen", () => {
 
   it("names the owner's own bill and falls back to no key on a conta a pagar", async () => {
     const own = charge({ id: "c7", name: "Você", direction: Direction.Payable, ownedByViewer: true, counterpartName: "Você", pix: null });
-    const detail = billing({ type: Direction.Payable, payee: null, pix: null, paymentMethodId: undefined, charges: [own] });
+    const detail = billing({ type: Direction.Payable, contact: null, pix: null, paymentMethodId: undefined, charges: [own] });
 
     await open(makeClient(detail));
 
@@ -521,7 +522,7 @@ describe("BillingDetailScreen", () => {
       kind: BillingKind.Record,
       counterpartLabel: "Empresa X",
     });
-    const detail = billing({ kind: BillingKind.Record, counterpartLabel: "Empresa X", paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] }, charges: [salary] });
+    const detail = billing({ kind: BillingKind.Record, paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] }, charges: [salary] });
 
     await open(makeClient(detail));
 
@@ -548,7 +549,7 @@ describe("BillingDetailScreen", () => {
       counterpartLabel: "Imobiliária",
     });
 
-    await open(makeClient(billing({ type: Direction.Payable, kind: BillingKind.Record, counterpartLabel: "Imobiliária", paymentMethodId: undefined, charges: [rent] })));
+    await open(makeClient(billing({ type: Direction.Payable, kind: BillingKind.Record, contact: { id: "c2", userId: "u2", name: "Imobiliária", avatar: null }, paymentMethodId: undefined, charges: [rent] })));
 
     expect(screen.getByText("Para Imobiliária")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeOnTheScreen();

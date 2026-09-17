@@ -129,10 +129,10 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
     try {
       const saved = await client.save(input, contactId);
 
-      // Came from the billing form: hand the contact back to the parked draft,
-      // which seats people by the account behind the agenda entry.
+      // Came from the billing form: hand the contact back to the parked draft, which seats
+      // participants by the account behind the agenda entry and the one who receives by the entry.
       if (returnTo === "new-billing") {
-        patchDraft({ selected: [saved.userId] });
+        patchDraft({ contact: { id: saved.id, userId: saved.userId } });
       }
 
       onSaved?.(saved);

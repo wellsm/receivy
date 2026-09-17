@@ -143,6 +143,13 @@ async function pickAna() {
   await waitFor(() => expect(screen.queryByLabelText("Buscar contatos")).toBeNull());
 }
 
+/** The counterpart seat has its own sheet, and picking closes it. */
+async function seatAna() {
+  await fireEvent.press(screen.getByRole("button", { name: "Escolher contato" }));
+  await fireEvent.press(await screen.findByRole("checkbox", { name: "Ana" }));
+  await waitFor(() => expect(screen.queryByLabelText("Buscar contatos")).toBeNull());
+}
+
 /** The contact form lives inside the agenda sheet, so the side trip starts there. */
 async function pressNewContact() {
   await fireEvent.press(screen.getByRole("button", { name: "Adicionar" }));
@@ -159,6 +166,7 @@ const onceBilling: BillingDetail = {
   id: "b1",
   recurrence: BillingRecurrence.Once,
   type: Direction.Receivable,
+  contact: null,
   payee: null,
   pix: null,
   description: "Jantar",
@@ -187,7 +195,7 @@ const untilBilling: BillingDetail = { ...onceBilling, id: "b5", recurrence: Bill
 const payableBilling: BillingDetail = {
   ...onceBilling,
   type: Direction.Payable,
-  payee: { userId: "u1", name: "Ana" },
+  contact: { id: "p1", userId: "u1", name: "Ana", avatar: null },
   pix: { keyType: PixKeyType.Phone, key: "+5511987654321", label: "Inter" },
   paymentMethodId: undefined,
   split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] },
@@ -389,7 +397,7 @@ describe("BillingFormScreen", () => {
     expect(patchBilling.mock.calls[0][1].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", notify: true }] });
   });
 
-  it("records a registro with the name typed in De quem and nobody to split with or pay through", async () => {
+  it("records a registro naming the single contact who paid it, with nobody to split with or pay through", async () => {
     const { client } = await quickForm();
 
     await fireEvent(screen.getByLabelText("Já recebi"), "valueChange", true);
@@ -398,9 +406,10 @@ describe("BillingFormScreen", () => {
     expect(screen.queryByText("Participantes")).toBeNull();
     expect(screen.queryByText("Divisão da Conta")).toBeNull();
     expect(screen.queryByText("Receber via Pix")).toBeNull();
-    expect(screen.getByLabelText("De quem")).toHaveProp("placeholder", "Ex.: Empresa X");
+    expect(screen.getByText("De quem")).toBeOnTheScreen();
+    expect(screen.getByText("Escolha quem pagou.")).toBeOnTheScreen();
 
-    await fireEvent.changeText(screen.getByLabelText("De quem"), "Empresa X");
+    await seatAna();
     await fireEvent.changeText(screen.getByLabelText("Valor"), "500000");
     await fireEvent.changeText(screen.getByLabelText("Título"), "Salário");
     await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
@@ -411,19 +420,37 @@ describe("BillingFormScreen", () => {
     expect(input).toMatchObject({
       type: "receivable",
       kind: "record",
-      counterpartLabel: "Empresa X",
       totalCents: 500_000,
-      split: { mode: "equal", parts: [{ kind: "owner" }] },
+      split: { mode: "equal", parts: [{ kind: "user", userId: "u1" }] },
     });
+    expect(input.counterpartLabel).toBeUndefined();
     expect(input.reminders).toBeUndefined();
     expect(input.paymentMethodId).toBeUndefined();
+  });
+
+  it("seats a registro a pagar under Para quem", async () => {
+    const { client } = await quickForm();
+
+    await fireEvent(screen.getByLabelText("Já recebi"), "valueChange", true);
+    await fireEvent.press(screen.getByRole("button", { name: "Vou pagar" }));
+
+    expect(screen.getByText("Para quem")).toBeOnTheScreen();
+    expect(screen.queryByText("Chave Pix (opcional)")).toBeNull();
+
+    await seatAna();
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "500000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ type: "payable", kind: "record", contactId: "p1" });
   });
 
   it("keeps a recorrente registro from starting before today", async () => {
     const { client } = await quickForm();
 
     await fireEvent(screen.getByLabelText("Já recebi"), "valueChange", true);
-    await fireEvent.changeText(screen.getByLabelText("De quem"), "Empresa X");
+    await seatAna();
     await fireEvent.press(screen.getByRole("button", { name: "Recorrente" }));
     await fireEvent.changeText(screen.getByLabelText("Vencimento"), yesterday());
     await fireEvent.changeText(screen.getByLabelText("Valor"), "500000");
@@ -433,15 +460,14 @@ describe("BillingFormScreen", () => {
     expect(client.createBilling).not.toHaveBeenCalled();
   });
 
-  it("keeps the registro switch locked on edit and patches only the new name", async () => {
+  it("keeps the registro switch locked on edit and never moves its counterpart", async () => {
     const registroBilling: BillingDetail = {
       ...onceBilling,
       id: "b4",
       kind: BillingKind.Record,
-      counterpartLabel: "Empresa X",
       paymentMethodId: undefined,
       reminders: [],
-      split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] },
+      split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
     };
     const patchBilling = jest.fn().mockResolvedValue(registroBilling);
 
@@ -452,13 +478,15 @@ describe("BillingFormScreen", () => {
     expect(toggle).toHaveProp("value", true);
     expect(toggle).toBeDisabled();
     expect(screen.getByText("Não dá para mudar depois de criada.")).toBeOnTheScreen();
-    expect(screen.getByLabelText("De quem")).toHaveProp("value", "Empresa X");
+    expect(screen.getByText("De quem")).toBeOnTheScreen();
+    expect(await screen.findByRole("button", { name: "Ana" })).toBeOnTheScreen();
+    // The API answers 409 for a counterpart change on a registro, so the form never offers it.
+    expect(screen.queryByRole("button", { name: "Escolher contato" })).toBeNull();
 
-    await fireEvent.changeText(screen.getByLabelText("De quem"), "Empresa Y");
     await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
     await waitFor(() => expect(patchBilling).toHaveBeenCalled());
 
-    expect(patchBilling.mock.calls[0][1]).toEqual({ counterpartLabel: "Empresa Y", category: "food" });
+    expect(patchBilling.mock.calls[0][1]).toEqual({ category: "food" });
   });
 
   it("turns the parcel count into an end date", async () => {
@@ -715,7 +743,7 @@ describe("BillingFormScreen", () => {
     await pressNewContact();
 
     // The contact screen saved the new contact and popped back to the still-mounted form.
-    patchDraft({ selected: ["u-new"] });
+    patchDraft({ contact: { id: "p-new", userId: "u-new" } });
     await refocus();
 
     expect(await screen.findByRole("button", { name: "Carla" })).toBeSelected();
@@ -1008,7 +1036,7 @@ describe("BillingFormScreen", () => {
     expect(screen.queryByRole("header", { name: "Aplicar às cobranças deste mês?" })).toBeNull();
   });
 
-  it("creates a conta a pagar without contacts, with the payee and the typed key", async () => {
+  it("creates a conta a pagar without participants, naming the contact who receives and the typed key", async () => {
     const { client } = await quickForm();
 
     await chooseToPay();
@@ -1018,11 +1046,9 @@ describe("BillingFormScreen", () => {
     expect(screen.queryByText("Receber via Pix")).toBeNull();
     expect(screen.queryByLabelText("Eu também participo")).toBeNull();
     expect(screen.getByText("Valor")).toBeOnTheScreen();
-    expect(screen.getByText("Sem contato, a conta fica só com você.")).toBeOnTheScreen();
+    expect(screen.getByText("Escolha quem recebe.")).toBeOnTheScreen();
 
-    await fireEvent.press(screen.getByRole("button", { name: "Escolher contato" }));
-    await fireEvent.press(await screen.findByRole("checkbox", { name: "Ana" }));
-    await waitFor(() => expect(screen.queryByLabelText("Buscar contatos")).toBeNull());
+    await seatAna();
 
     expect(screen.getByRole("button", { name: "Ana" })).toBeSelected();
 
@@ -1033,25 +1059,40 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
 
-    expect(client.createBilling.mock.calls[0][0]).toMatchObject({
+    const input = client.createBilling.mock.calls[0][0];
+
+    expect(input).toMatchObject({
       type: "payable",
-      payeeUserId: "u1",
+      contactId: "p1",
       totalCents: 10_000,
       description: "Aluguel",
       pix: { keyType: "email", key: "loja@example.com", label: "Nubank" },
     });
+    expect(input.payeeUserId).toBeUndefined();
   });
 
-  it("removes the payee from its chip and refuses a broken key", async () => {
+  it("refuses a conta a pagar whose receiving chip was removed", async () => {
     const { client } = await quickForm();
 
     await chooseToPay();
-    await fireEvent.press(screen.getByRole("button", { name: "Escolher contato" }));
-    await fireEvent.press(await screen.findByRole("checkbox", { name: "Ana" }));
+    await seatAna();
     await fireEvent.press(await screen.findByRole("button", { name: "Ana" }));
 
     expect(screen.queryByRole("button", { name: "Ana" })).toBeNull();
 
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Escolha quem recebe.");
+    expect(client.createBilling).not.toHaveBeenCalled();
+  });
+
+  it("refuses a broken inline key on a conta a pagar", async () => {
+    const { client } = await quickForm();
+
+    await chooseToPay();
+    await seatAna();
     await fireEvent.press(screen.getByRole("radio", { name: "CPF" }));
     await fireEvent.changeText(screen.getByLabelText("CPF do titular"), "123");
     await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
@@ -1076,7 +1117,7 @@ describe("BillingFormScreen", () => {
     expect(onCreatePix).not.toHaveBeenCalled();
   });
 
-  it("seeds a conta a pagar edit with its payee and key and locks the direction", async () => {
+  it("seeds a conta a pagar edit with its receiving contact and key and locks the direction", async () => {
     const patchBilling = jest.fn().mockResolvedValue(payableBilling);
     const client = financialApi({ patchBilling });
 
@@ -1095,11 +1136,11 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
     await waitFor(() => expect(patchBilling).toHaveBeenCalled());
 
+    // The seat did not move, so the patch leaves the receiving contact alone.
     expect(patchBilling).toHaveBeenCalledWith("b1", {
       reminders: [{ offsetDays: 0, enabled: true }],
       category: "food",
       pix: { keyType: "phone", key: "+5511987654321", label: "Inter" },
-      clearPix: false,
     });
   });
 
@@ -1140,12 +1181,12 @@ describe("BillingFormScreen", () => {
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
-  it("moves the Para quem payee block and its inline Pix key to the Divisão slot for a conta a pagar", async () => {
+  it("moves the Para quem seat and its inline Pix key to the Divisão slot for a conta a pagar", async () => {
     await quickForm();
     await chooseToPay();
 
     const json = JSON.stringify(screen.toJSON());
-    const order = ["Modalidade de Pagamento", "Para quem (opcional)", "Chave Pix (opcional)", "Criar conta"].map((marker) => json.indexOf(`"${marker}"`));
+    const order = ["Modalidade de Pagamento", "Para quem", "Chave Pix (opcional)", "Criar conta"].map((marker) => json.indexOf(`"${marker}"`));
 
     expect(order.every((value) => value >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));

@@ -6,10 +6,12 @@ import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { useThemeColors } from "@/theme/colors";
 
 type ContactPickerSheetProps = {
-  /** User ids: a billing seats the account behind the agenda entry, so two agendas agree on who is who. */
+  /** Ids of whoever is already seated, read through `by`. */
   selected: string[];
+  /** Which id `selected` carries: the account (`userId`) for split participants, the agenda entry (`id`) for the receiving contact. */
+  by?: "id" | "userId";
   contacts?: Pick<typeof contactsClient, "list">;
-  onToggle: (userId: string) => void;
+  onToggle: (contact: Contact) => void;
   /** Every contact the sheet has shown, so the form can name the ones it selected. */
   onSeen: (contacts: Contact[]) => void;
   onClose: () => void;
@@ -20,7 +22,7 @@ type ContactPickerSheetProps = {
 const LOAD_ERROR = "Não foi possível carregar os contatos.";
 
 /** The whole agenda in a sheet: server-side search plus cursor paging, multi selection. */
-export function ContactPickerSheet({ selected, contacts = contactsClient, onToggle, onSeen, onClose, onNew }: ContactPickerSheetProps) {
+export function ContactPickerSheet({ selected, by = "userId", contacts = contactsClient, onToggle, onSeen, onClose, onNew }: ContactPickerSheetProps) {
   const colors = useThemeColors();
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
@@ -95,7 +97,7 @@ export function ContactPickerSheet({ selected, contacts = contactsClient, onTogg
 
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-2">
             {found.map((contact) => {
-              const checked = selected.includes(contact.userId);
+              const checked = selected.includes(contact[by]);
 
               return (
                 <Pressable
@@ -103,7 +105,7 @@ export function ContactPickerSheet({ selected, contacts = contactsClient, onTogg
                   accessibilityRole="checkbox"
                   accessibilityLabel={contact.displayName}
                   accessibilityState={{ checked }}
-                  onPress={() => onToggle(contact.userId)}
+                  onPress={() => onToggle(contact)}
                   className={`min-h-14 flex-row items-center gap-3 rounded-2xl border px-4 ${checked ? "border-primary bg-primary-soft" : "border-outline bg-surface"}`}
                 >
                   <InitialsAvatar name={contact.displayName} size={36} avatar={contact.avatar} />

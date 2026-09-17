@@ -35,7 +35,8 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
       return request<BillingDetail>(`billings/${billingId}/participants/${userId}/notify`, { method: "PUT", body: JSON.stringify({ notify }) }, "Não foi possível atualizar os avisos.");
     },
     timeline(query = "") { return request<TimelinePage>(`timeline${query ? `?${query}` : ""}`); },
-    paymentMethods() { return request<PaymentMethodsPage>("payment-methods"); },
+    /** Without a contact these are the owner's own keys; with one, the keys filed under that contact. */
+    paymentMethods(contactId?: string) { return request<PaymentMethodsPage>(contactId ? `payment-methods?contactId=${encodeURIComponent(contactId)}` : "payment-methods"); },
     savePaymentMethod(input: PaymentMethodInput, id?: string) { return request<PaymentMethod>(id ? `payment-methods/${id}` : "payment-methods", { method: id ? "PATCH" : "POST", body: JSON.stringify(input) }); },
     defaultPaymentMethod(id: string) { return request<PaymentMethod>(`payment-methods/${id}/default`, { method: "POST" }); },
     archivePaymentMethod(id: string) { return request<void>(`payment-methods/${id}/archive`, { method: "POST" }); },

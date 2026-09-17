@@ -121,11 +121,13 @@ const DIRECTIONS: { value: Direction; label: string }[] = [
   { value: Direction.Payable, label: "Vou pagar" },
 ];
 
-/** "Já recebi" / "Já paguei" and the name field of a registro, by direction. */
+/** "Já recebi" / "Já paguei" and the label of the counterpart seat, by direction. */
 const SETTLED_LABELS: Record<Direction, { toggle: string; field: string }> = {
   receivable: { toggle: "Já recebi", field: "De quem" },
   payable: { toggle: "Já paguei", field: "Para quem" },
 };
+/** The empty counterpart seat, by direction: a conta a pagar names who receives, a registro who paid. */
+const SEAT_HINTS: Record<Direction, string> = { receivable: "Escolha quem pagou.", payable: "Escolha quem recebe." };
 const SETTLED_HELP = "Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento.";
 const SETTLED_LOCKED = "Não dá para mudar depois de criada.";
 
@@ -239,7 +241,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
 
   return {
     direction: billing.type,
-    payee: billing.payee?.userId ?? "",
+    payee: billing.contact?.id ?? "",
     pixInline: pixDraftFromBilling(billing),
     type: billing.recurrence,
     selected: parts.flatMap((part) => (part.kind === "user" ? [part.userId] : [])),
@@ -260,7 +262,6 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     reminders: billing.reminders.map((reminder) => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
     notify: notifyFromBilling(billing),
     settled: billing.kind === BillingKind.Record,
-    counterpartLabel: billing.counterpartLabel ?? "",
   };
 }
 
@@ -397,8 +398,10 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   const locked = Boolean(attempt);
   const frozen = editing && billing?.recurrence !== "indefinite";
   const payable = draft.direction === "payable";
-  // A registro has nobody to split with or pay through: participants, payee, split and Pix leave the form.
+  // A registro pays or is paid like any other conta; only reminders, splits and proofs leave the form.
   const settled = draft.settled === true;
+  // The counterpart of a registro never moves: the API answers 409 for a contact change on one.
+  const seatLocked = editing && settled;
   // A conta a pagar is paid elsewhere and a registro is already settled, so the wallet gate only holds a conta a receber.
   const blocked = gated && !payable && !settled;
   // `BillingPatch` carries no type, frequency or dates, so the schedule is
@@ -497,10 +500,19 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     update({ notify: { ...draft.notify, [userId]: !quiet } });
   }
 
-  /** The payee seat holds one contact: picking closes the sheet, picking again clears it. */
-  function pickPayee(userId: string) {
-    update({ payee: draft.payee === userId ? "" : userId });
+  /** The counterpart seat holds one contact: picking closes the sheet, picking the seated one empties it. */
+  function seat(contact: Contact) {
+    if (payable) {
+      update({ payee: draft.payee === contact.id ? "" : contact.id });
+    } else {
+      update({ selected: draft.selected[0] === contact.userId ? [] : [contact.userId] });
+    }
+
     setPicker(false);
+  }
+
+  function clearSeat() {
+    update(payable ? { payee: "" } : { selected: [] });
   }
 
   function updatePix(patch: Partial<PixDraft>) {
@@ -549,10 +561,15 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     update({ values: { ...draft.values, [draft.mode]: { ...draft.values[draft.mode], [key]: value } } });
   }
 
+  /** The receiving contact travels only when the seat actually moved: resending it is a no-op the API still validates. */
+  function seatPatch(input: BillingInput): Pick<BillingPatch, "contactId"> {
+    return input.contactId && input.contactId !== billing?.contact?.id ? { contactId: input.contactId } : {};
+  }
+
   function patchBody(input: BillingInput): BillingPatch {
-    // A registro only renames its counterpart (and, while recorrente, moves its schedule and amount).
+    // A registro keeps its counterpart: it only recategorizes (and, while recorrente, moves its schedule and amount).
     if (input.kind === BillingKind.Record) {
-      const named = { counterpartLabel: input.counterpartLabel, category: input.category };
+      const named = { category: input.category };
 
       if (billing && billing.recurrence !== "indefinite") {
         return named;
@@ -561,12 +578,12 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
       return { description: input.description, totalCents: input.totalCents, startDate: input.startDate, dueRule: input.dueRule ?? BillingDueRule.Fixed, ...named };
     }
 
+    // The API reads the direction off the receiving contact, and so does the patch: only a conta a pagar has one.
+    const toPayable = Boolean(input.contactId);
     const editable = {
       reminders: input.reminders,
       category: input.category,
-      ...(input.type === "payable"
-        ? { pix: input.pix, clearPix: !input.pix }
-        : { paymentMethodId: input.paymentMethodId, clearPaymentMethod: !input.paymentMethodId }),
+      ...(toPayable ? { ...(input.pix ? { pix: input.pix } : {}), ...seatPatch(input) } : { paymentMethodId: input.paymentMethodId, clearPaymentMethod: !input.paymentMethodId }),
     };
 
     if (billing && billing.recurrence !== "indefinite") {
@@ -575,8 +592,8 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
 
     const body = { description: input.description, totalCents: input.totalCents, startDate: input.startDate, dueRule: input.dueRule ?? BillingDueRule.Fixed, ...editable };
 
-    if (input.type === "payable") {
-      return { ...body, payeeUserId: input.payeeUserId, clearPayee: !input.payeeUserId };
+    if (toPayable) {
+      return body;
     }
 
     return { ...body, split: input.split };
@@ -679,8 +696,17 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     return recent.find((contact) => contact.userId === userId) ?? directory.find((contact) => contact.userId === userId) ?? unknownContact(userId);
   }
 
+  /** The counterpart seat holds the agenda entry itself, the way the API files keys and contas a pagar. */
+  function contactById(id: string): Contact {
+    return recent.find((contact) => contact.id === id) ?? directory.find((contact) => contact.id === id) ?? unknownContact(id);
+  }
+
   const chosen = draft.selected.map(contactOf);
-  const payee = draft.payee ? contactOf(draft.payee) : null;
+  // Who sits on the other side: the contact a conta a pagar pays, or the single person who paid a registro a receber.
+  // One sheet serves both roles, and the form never shows the seat and the split together.
+  const seating = payable || settled;
+  const seatId = payable ? draft.payee : (draft.selected[0] ?? "");
+  const seated = seatId ? (payable ? contactById(seatId) : contactOf(seatId)) : null;
   // Nothing reaches a contact without an e-mail or a phone, so the switch never shows for them.
   const notifiable = chosen.filter(canNotifyContact);
   const notifiableIds = new Set(notifiable.map((contact) => contact.userId));
@@ -1049,59 +1075,44 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
           )}
         </View>
 
-        {/* Divisão slot: De quem / Para quem, the counterpart of a registro, typed by hand */}
-        {settled && (
-          <View className="gap-1">
-            <SectionLabel>{SETTLED_LABELS[draft.direction].field}</SectionLabel>
-            <TextInput
-              accessibilityLabel={SETTLED_LABELS[draft.direction].field}
-              editable={!locked}
-              maxLength={120}
-              placeholder="Ex.: Empresa X"
-              placeholderTextColor={colors.muted}
-              value={draft.counterpartLabel ?? ""}
-              onChangeText={(value) => update({ counterpartLabel: value })}
-              className="h-11 rounded-[14px] border border-outline bg-surface px-3.5 py-0 font-sans text-[15px] tracking-normal text-ink"
-            />
-          </View>
-        )}
-
-        {/* Divisão slot, conta a pagar: Para quem (the single contact a conta a pagar is owed to) and its inline Pix key */}
-        {payable && !settled && (
+        {/* Divisão slot: quem está do outro lado — o contato que recebe uma conta a pagar, ou quem pagou um registro a receber */}
+        {(payable || settled) && (
           <View className="gap-3">
             <View className="flex-row items-center justify-between">
-              <Text className="font-sans text-[11px] font-semibold uppercase tracking-[0.88px] text-muted">Para quem (opcional)</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Escolher contato"
-                accessibilityState={{ disabled: locked || frozen }}
-                disabled={locked || frozen}
-                onPress={() => setPicker(true)}
-                className="min-h-10 flex-row items-center gap-1 px-1"
-              >
-                <Image source={closeMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
-                <Text className="text-xs font-semibold text-primary">{payee ? "Trocar" : "Escolher"}</Text>
-              </Pressable>
+              <Text className="font-sans text-[11px] font-semibold uppercase tracking-[0.88px] text-muted">{SETTLED_LABELS[draft.direction].field}</Text>
+              {!seatLocked && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Escolher contato"
+                  accessibilityState={{ disabled: locked || frozen }}
+                  disabled={locked || frozen}
+                  onPress={() => setPicker(true)}
+                  className="min-h-10 flex-row items-center gap-1 px-1"
+                >
+                  <Image source={closeMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
+                  <Text className="text-xs font-semibold text-primary">{seated ? "Trocar" : "Escolher"}</Text>
+                </Pressable>
+              )}
             </View>
 
-            {payee ? (
+            {seated ? (
               <View className="flex-row flex-wrap gap-2">
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={payee.displayName}
+                  accessibilityLabel={seated.displayName}
                   accessibilityHint="Remove da conta"
-                  accessibilityState={{ selected: true, disabled: locked || frozen }}
-                  disabled={locked || frozen}
-                  onPress={() => update({ payee: "" })}
+                  accessibilityState={{ selected: true, disabled: locked || frozen || seatLocked }}
+                  disabled={locked || frozen || seatLocked}
+                  onPress={clearSeat}
                   className="flex-row items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"
                 >
-                  <InitialsAvatar name={payee.displayName} size={24} avatar={payee.avatar} />
-                  <Text className="text-xs font-semibold text-ink">{payee.displayName}</Text>
-                  <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />
+                  <InitialsAvatar name={seated.displayName} size={24} avatar={seated.avatar} />
+                  <Text className="text-xs font-semibold text-ink">{seated.displayName}</Text>
+                  {!seatLocked && <Image source={closeMark} tintColor={colors.muted} style={{ width: 12, height: 12, transform: [{ rotate: "45deg" }] }} />}
                 </Pressable>
               </View>
             ) : (
-              <Text className="text-[11px] text-muted">Sem contato, a conta fica só com você.</Text>
+              <Text className="text-[11px] text-muted">{SEAT_HINTS[draft.direction]}</Text>
             )}
           </View>
         )}
@@ -1372,9 +1383,10 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
 
       {picker && (
         <ContactPickerSheet
-          selected={payable ? (draft.payee ? [draft.payee] : []) : draft.selected}
+          selected={seating ? (seatId ? [seatId] : []) : draft.selected}
+          by={payable ? "id" : "userId"}
           contacts={contacts}
-          onToggle={payable ? pickPayee : toggle}
+          onToggle={seating ? seat : (contact) => toggle(contact.userId)}
           onSeen={remember}
           onClose={() => setPicker(false)}
           onNew={

@@ -209,15 +209,14 @@ function typeTag(billing: BillingDetail, current: Cycle | null): string {
   return "À vista";
 }
 
-/** "De Empresa X" on a registro a receber, "Para Empresa X" on one a pagar. */
+/** The one person on the other side of a registro: the contact it pays, or the payer its charges name. */
+function counterpartName(billing: BillingDetail): string {
+  return billing.contact?.name ?? billing.charges[0]?.recipient.name ?? "";
+}
+
+/** "De Ana" on a registro a receber, "Para Ana" on one a pagar. */
 function counterpartHeadline(billing: BillingDetail): string {
-  const name = billing.counterpartLabel ?? "";
-
-  if (billing.type === "payable") {
-    return `Para ${name}`;
-  }
-
-  return `De ${name}`;
+  return `${billing.type === "payable" ? "Para" : "De"} ${counterpartName(billing)}`;
 }
 
 function Tag({ label, tone }: { label: string; tone: "success" | "warning" | "info" | "neutral" | "danger" }) {
@@ -714,9 +713,9 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
             const statusColor = { success: "text-primary", warning: "text-warning", danger: "text-danger", neutral: "text-muted" }[status.tone];
             // The corner tag's own urgency wording matches the feed's badges; only "Em revisão" overrides it.
             const tag = reviewing ? { label: "Em revisão", tone: "info" as const } : chargeStateTag(charge, today);
-            // A registro's rows carry its counterpart; a conta a pagar names the payee.
-            const name = payable && !settled ? (billing.payee?.name ?? "Só comigo") : charge.recipient.name;
-            const avatar = payable && !settled ? (billing.payee?.avatar ?? null) : charge.recipient.avatar;
+            // A registro's rows carry its counterpart; a conta a pagar names the contact who receives.
+            const name = payable && !settled ? (billing.contact?.name ?? "Só comigo") : charge.recipient.name;
+            const avatar = payable && !settled ? (billing.contact?.avatar ?? null) : charge.recipient.avatar;
             const participant = participantOf(billing, charge);
             // The badge is this charge's own switch; the participant's switch drives their action.
             const quiet = charge.notify === false;

@@ -27,12 +27,21 @@ export function takeDraft(): BillingDraft | null {
   return draft;
 }
 
+/** A conta a receber splits between everyone; a registro a receber has a single payer, so the newcomer takes the seat. */
+function selectedWith(draft: BillingDraft, userId: string): string[] {
+  if (draft.settled) {
+    return [userId];
+  }
+
+  return [...new Set([...draft.selected, userId])];
+}
+
 /**
  * Merges the result of a side trip (a new contact, a new Pix key) into the parked draft.
- * A conta a pagar has a single payee, so a contact created from it takes that seat
- * instead of joining the participants.
+ * A conta a pagar has a single receiving contact, so a contact created from it takes that seat by
+ * its agenda entry (`contact.id`) instead of joining the participants, who are seated by account.
  */
-export function patchDraft(patch: { selected?: string[]; pix?: string }): void {
+export function patchDraft(patch: { contact?: { id: string; userId: string }; pix?: string }): void {
   if (!parked) {
     return;
   }
@@ -40,13 +49,11 @@ export function patchDraft(patch: { selected?: string[]; pix?: string }): void {
   const pix = patch.pix === undefined ? {} : { pix: patch.pix };
 
   if (parked.direction === "payable") {
-    const payee = patch.selected?.at(-1);
-
-    parked = { ...parked, ...(payee ? { payee } : {}), ...pix };
+    parked = { ...parked, ...(patch.contact ? { payee: patch.contact.id } : {}), ...pix };
     return;
   }
 
-  const selected = patch.selected ? [...new Set([...parked.selected, ...patch.selected])] : parked.selected;
+  const selected = patch.contact ? selectedWith(parked, patch.contact.userId) : parked.selected;
 
   parked = { ...parked, selected, ...pix };
 }

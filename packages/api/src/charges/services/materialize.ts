@@ -83,9 +83,10 @@ export async function pixSnapshot(
   if (paymentMethodId) {
     const row = await db.payment_methods.findOne({
       select: { pix_key_type: true, pix_key: true, label: true, archived_at: true },
-      // An explicit id still has to live in the billing's own scope: a conta a receber publishes the
-      // owner's key, never one the owner keeps about a contact.
-      where: { id: paymentMethodId, owner_id: ownerId, contact_id: contactId ? contactId : { isNull: true } },
+      // A conta a receber publishes the owner's own key, never one they keep about a contact. A conta a
+      // pagar takes any key of the owner: new pointers are checked when they are filed, and the legacy
+      // ones the backfill leaves out of scope on purpose must keep paying.
+      where: { id: paymentMethodId, owner_id: ownerId, ...(contactId ? null : { contact_id: { isNull: true } }) },
       lock: true
     });
 

@@ -24,9 +24,11 @@ function dbWith(rows: { id: string; contact_id?: string; is_default: boolean; pi
 describe('pixSnapshot', () => {
   const owner = 'owner';
   const padaria = 'contact-padaria';
+  const mercado = 'contact-mercado';
   const db = dbWith([
     { id: 'mine', is_default: true, pix_key: 'dona@example.com' },
-    { id: 'theirs', contact_id: padaria, is_default: true, pix_key: 'padaria@example.com' }
+    { id: 'theirs', contact_id: padaria, is_default: true, pix_key: 'padaria@example.com' },
+    { id: 'others', contact_id: mercado, is_default: true, pix_key: 'mercado@example.com' }
   ]);
 
   it('falls back to the owner default when nobody receives on their behalf', async () => {
@@ -44,5 +46,12 @@ describe('pixSnapshot', () => {
 
   it('refuses an explicit contact key on a conta a receber', async () => {
     await expect(pixSnapshot(db, owner, 'theirs')).rejects.toThrow(HttpNotFoundError);
+  });
+
+  // A conta a pagar keeps paying through whatever key it points at: the legacy pointers the bloco 9
+  // backfill leaves out of scope on purpose are counted for the owner, never broken.
+  it('takes any key of the owner on a conta a pagar', async () => {
+    expect((await pixSnapshot(db, owner, 'mine', padaria))?.key).toBe('dona@example.com');
+    expect((await pixSnapshot(db, owner, 'others', padaria))?.key).toBe('mercado@example.com');
   });
 });

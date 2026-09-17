@@ -16,18 +16,17 @@
 --     (their own key) is never re-filed as a contact-scoped key: the unique index
 --     `payment_methods_owner_id_pix_key_type_pix_key_uk` is on `(owner_id, pix_key_type, pix_key)` alone
 --     (no `contact_id`), so a second row would violate it, and the app now answers 409 for that case
---     anyway. `payment_method_id` is pointed at the existing owner-owned row instead. Counted by
---     `keys_pointing_at_owner_key` below. ACT ON THESE: the app reads an explicit `payment_method_id`
---     only inside the billing's own scope, so a conta a pagar pointing at an owner-scoped key answers
---     "Chave Pix indisponível." on any edit that re-materializes its charges. The owner re-types the key
---     on that billing in the app (it is then filed under the contact) or archives the owner-scoped row.
+--     anyway. `payment_method_id` is pointed at the existing owner-owned row instead (a conta a pagar
+--     materializes through whatever key it points at, whichever scope that key belongs to). Counted by
+--     `keys_pointing_at_owner_key` below: the owner repoints it when convenient, by re-typing the key on
+--     that billing in the app; until then the charge keeps paying through the key it points at.
 --   * Two payables of the same owner filed under different contacts but carrying the same typed key
 --     can only ever own one `payment_methods` row between them (same unique index as above). Step 3
 --     picks one canonical row deterministically (earliest billing `created_at`, then billing `id`) and
 --     points BOTH billings' `payment_method_id` at it — the other billing's `contact_id` and this row's
---     `contact_id` then disagree. Counted by `keys_shared_across_contacts` below. ACT ON THESE too, for
---     the same reason as above: the "losing" billing's key is out of its scope and reads as unavailable
---     until the owner re-types it on that billing.
+--     `contact_id` then disagree. Counted by `keys_shared_across_contacts` below; the "losing" billing
+--     keeps paying through that key all the same, and the owner repoints it when convenient by editing
+--     that billing's `pix` in the app.
 --   * A typed key whose only matching `payment_methods` row is archived is never pointed at: step 3
 --     leaves `payment_method_id` NULL (the unique index is not partial, so no second row can be
 --     inserted for that key either). Those billings stay in `keyed_without_method`, which is a hard

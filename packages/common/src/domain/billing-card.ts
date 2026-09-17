@@ -85,7 +85,10 @@ export function billingBadges(billing: BillingSummary): BillingBadge[] {
 
   if (billing.type === Direction.Payable) {
     badges.push({ label: 'A pagar', tone: BadgeTone.Warning });
-    badges.push({ label: billing.counterpart?.name ?? 'Só comigo', tone: BadgeTone.Neutral });
+
+    if (billing.counterpart) {
+      badges.push({ label: billing.counterpart.name, tone: BadgeTone.Neutral });
+    }
 
     return badges;
   }

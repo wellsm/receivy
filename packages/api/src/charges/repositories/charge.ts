@@ -376,8 +376,6 @@ export namespace ChargeRepository {
       // Only the creditor sees the switch: whoever owes reads every charge the same.
       notify: !owns(row, userId) || row.notify,
       kind: record.kind,
-      // Block 9: the billing no longer names a counterpart label of its own.
-      counterpartLabel: null,
       ownedByViewer: owns(row, userId),
       hasPix,
       direction,

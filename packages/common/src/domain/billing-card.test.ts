@@ -195,7 +195,6 @@ describe('billingBadges on a conta a pagar', () => {
     const labels = billingBadges({ ...base, type: Direction.Payable, contact, counterpart: contact }).map((badge) => badge.label);
 
     expect(labels).toEqual(['Única', 'A pagar', 'Imobiliária']);
-    expect(billingBadges({ ...base, type: Direction.Payable }).map((badge) => badge.label)).toContain('Só comigo');
   });
 });
 

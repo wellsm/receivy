@@ -116,7 +116,7 @@ describe('charges under review', () => {
 });
 
 describe('registros in the feed', () => {
-  const registro: ChargeSummary = { ...base, counterpartName: 'Empresa X', kind: BillingKind.Record, counterpartLabel: 'Empresa X' };
+  const registro: ChargeSummary = { ...base, counterpartName: 'Empresa X', kind: BillingKind.Record };
 
   it('badges a registro beside its status and never offers a reminder', () => {
     expect(chargeBadges(registro, '2026-09-01')).toEqual([{ label: 'Registro', tone: 'neutral' }]);

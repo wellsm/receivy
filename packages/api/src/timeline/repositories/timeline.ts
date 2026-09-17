@@ -192,9 +192,7 @@ export namespace TimelineRepository {
           proofKind: ChargeRepository.proofKind(proofs.get(row.id) ?? null),
           confirmationRequired: await ChargeRepository.confirmationRequired(db, row),
           notify: !ChargeRepository.owns(row, userId) || row.notify,
-          kind: record.kind,
-          // Block 9: the billing no longer names a counterpart label of its own.
-          counterpartLabel: null
+          kind: record.kind
         }
       });
     }

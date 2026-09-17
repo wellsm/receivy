@@ -247,8 +247,7 @@ describe('registros', () => {
     ownedByViewer: true,
     pix,
     debtorId: null,
-    kind: BillingKind.Record,
-    counterpartLabel: 'Empresa X'
+    kind: BillingKind.Record
   });
   const paid = charge({
     direction: Direction.Payable,

@@ -613,7 +613,6 @@ it("heads a registro with its counterpart and hides the invite and the payment l
     pix: null,
     sharingState: SharingState.Closed,
     kind: BillingKind.Record,
-    counterpartLabel: "Empresa X",
   });
 
   await open(
@@ -646,7 +645,6 @@ it("heads a registro a pagar with Para and names its rows after the counterpart"
     debtorId: null,
     pix: null,
     kind: BillingKind.Record,
-    counterpartLabel: "Imobiliária",
   });
 
   const imobiliaria = { id: "c2", userId: "u2", name: "Imobiliária", avatar: null };

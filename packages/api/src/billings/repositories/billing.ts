@@ -90,12 +90,15 @@ async function knownAs(db: DbClient, contact: { id: string; user_id: string; nic
 }
 
 /** Who receives a conta a pagar, as the owner knows them; an archived contact still names it. */
-async function contactOf(db: DbClient, row: Pick<BillingRepository.Row, 'contact_id'>): Promise<BillingContact | null> {
+async function contactOf(db: DbClient, row: Pick<BillingRepository.Row, 'owner_id' | 'contact_id'>): Promise<BillingContact | null> {
   if (!row.contact_id) {
     return null;
   }
 
-  const contact = await db.contacts.findOne({ select: { id: true, user_id: true, nickname: true }, where: { id: row.contact_id } });
+  const contact = await db.contacts.findOne({
+    select: { id: true, user_id: true, nickname: true },
+    where: { id: row.contact_id, owner_id: row.owner_id }
+  });
 
   return contact ? knownAs(db, contact) : null;
 }

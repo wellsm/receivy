@@ -3043,8 +3043,6 @@ components:
                 enum: 
                   - 'live'
                   - 'record'
-              counterpartLabel:
-                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -3860,8 +3858,6 @@ components:
                 enum: 
                   - 'live'
                   - 'record'
-              counterpartLabel:
-                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -4565,8 +4561,6 @@ components:
                 enum: 
                   - 'live'
                   - 'record'
-              counterpartLabel:
-                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -5228,8 +5222,6 @@ components:
                 enum: 
                   - 'live'
                   - 'record'
-              counterpartLabel:
-                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -5891,8 +5883,6 @@ components:
                 enum: 
                   - 'live'
                   - 'record'
-              counterpartLabel:
-                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -6309,8 +6299,6 @@ components:
           enum: 
             - 'live'
             - 'record'
-        counterpartLabel:
-          type: string
         direction:
           enum: 
             - 'receivable'
@@ -6501,8 +6489,6 @@ components:
           enum: 
             - 'live'
             - 'record'
-        counterpartLabel:
-          type: string
         direction:
           enum: 
             - 'receivable'
@@ -6693,8 +6679,6 @@ components:
           enum: 
             - 'live'
             - 'record'
-        counterpartLabel:
-          type: string
         direction:
           enum: 
             - 'receivable'
@@ -6885,8 +6869,6 @@ components:
           enum: 
             - 'live'
             - 'record'
-        counterpartLabel:
-          type: string
         direction:
           enum: 
             - 'receivable'
@@ -7077,8 +7059,6 @@ components:
           enum: 
             - 'live'
             - 'record'
-        counterpartLabel:
-          type: string
         direction:
           enum: 
             - 'receivable'
@@ -7451,8 +7431,6 @@ components:
                     enum: 
                       - 'live'
                       - 'record'
-                  counterpartLabel:
-                    type: string
                 required:
                   - id
                   - description
@@ -7734,8 +7712,6 @@ components:
                 enum: 
                   - 'live'
                   - 'record'
-              counterpartLabel:
-                type: string
               direction:
                 enum: 
                   - 'receivable'
@@ -7946,8 +7922,6 @@ components:
           enum: 
             - 'live'
             - 'record'
-        counterpartLabel:
-          type: string
         direction:
           enum: 
             - 'receivable'
@@ -8138,8 +8112,6 @@ components:
           enum: 
             - 'live'
             - 'record'
-        counterpartLabel:
-          type: string
         direction:
           enum: 
             - 'receivable'
@@ -8418,8 +8390,6 @@ components:
           enum: 
             - 'live'
             - 'record'
-        counterpartLabel:
-          type: string
         direction:
           enum: 
             - 'receivable'

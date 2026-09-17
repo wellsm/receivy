@@ -51,8 +51,6 @@ export function billingDraftSummary(draft: BillingDraft, today: Date): BillingDr
     // widened to `BillingInput` because it also doubles as the request body sent over the wire.
     const input = buildBillingInput(seatless ? { ...draft, payee: SEAT_PREVIEW } : draft, today) as NormalizedBillingInput;
     const payer = input.type === Direction.Payable ? ChargePayer.Owner : ChargePayer.Person;
-    // The receiving contact stands for the person on the other side: one charge per due date, as the API plans it.
-    const payeeUserId = seatless ? null : (input.contactId ?? null);
     const people = (allocations: ResolvedAllocation[]) => (seatless ? 0 : summaryPeople(input, allocations));
     const settled = input.kind === BillingKind.Record;
 
@@ -64,7 +62,6 @@ export function billingDraftSummary(draft: BillingDraft, today: Date): BillingDr
         dueDates: [input.startDate],
         numbered: false,
         payer,
-        payeeUserId,
         settled
       });
       const perOccurrenceCents = sumCents(plan.charges);
@@ -86,7 +83,6 @@ export function billingDraftSummary(draft: BillingDraft, today: Date): BillingDr
       dueDates,
       numbered: true,
       payer,
-      payeeUserId,
       settled
     });
     const perOccurrenceCents = sumCents(plan.charges.filter((charge) => charge.dueDate === dueDates[0]));

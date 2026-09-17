@@ -483,7 +483,6 @@ describe("ChargeDetailScreen", () => {
         debtorId: null,
         sharingState: SharingState.Closed,
         kind: BillingKind.Record,
-        counterpartLabel: "Empresa X",
       }),
     );
 

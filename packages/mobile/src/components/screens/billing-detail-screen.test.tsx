@@ -521,7 +521,6 @@ describe("BillingDetailScreen", () => {
       pix: null,
       sharingState: SharingState.Closed,
       kind: BillingKind.Record,
-      counterpartLabel: "Empresa X",
     });
     const detail = billing({
       kind: BillingKind.Record,
@@ -553,7 +552,6 @@ describe("BillingDetailScreen", () => {
       debtorId: null,
       pix: null,
       kind: BillingKind.Record,
-      counterpartLabel: "Imobiliária",
     });
 
     const imobiliaria = { id: "c2", userId: "u2", name: "Imobiliária", avatar: null };

@@ -94,8 +94,6 @@ export type ChargeSummary = {
   notify?: boolean;
   /** The billing behind the charge: 'record' is a registro, settled on its due date, never reminded, shared or proven. Absent reads as 'live'. */
   kind?: BillingKind;
-  /** Registro only: the counterpart typed by the owner, the same text `counterpartName` carries; null otherwise. */
-  counterpartLabel?: string | null;
 };
 
 export enum ProofMime {

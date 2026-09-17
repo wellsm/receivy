@@ -178,7 +178,10 @@ export type BillingDetail = {
   counterpart: BillingContact | null;
   /** 'record' is a registro: the owner alone, already settled. The API always sends it; absent reads as 'live'. */
   kind?: BillingKind;
-  /** Inline key of a conta a pagar; null on a conta a receber, which uses paymentMethodId. */
+  /**
+   * The key `paymentMethodId` points at, resolved: the receiving contact's on a conta a pagar, the
+   * owner's own otherwise. Null when there is none, and when the key it points at was archived.
+   */
   pix: PixSnapshot | null;
   frequency?: BillingFrequency;
   description: string;

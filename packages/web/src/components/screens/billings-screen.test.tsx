@@ -31,7 +31,7 @@ function summary(overrides: Overrides = {}) {
     id: "b1",
     recurrence: "once",
     type: "receivable",
-    payeeName: null,
+    contact: null,
     description: "Churrasco",
     total: { amountCents: 12000, currency: "BRL" },
     startDate: "2026-09-01",
@@ -219,7 +219,7 @@ it("asks the API for one direction when the filter changes", async () => {
 });
 
 it("opens a conta a pagar from its card action instead of sharing a link", async () => {
-  const calls = listOnly([summary({ type: "payable", payeeName: "Ana", shareChargeId: "c9" })]);
+  const calls = listOnly([summary({ type: "payable", contact: { id: "c1", userId: "u1", name: "Ana", avatar: null }, shareChargeId: "c9" })]);
 
   render(<BillingsScreen />);
   const user = setup();

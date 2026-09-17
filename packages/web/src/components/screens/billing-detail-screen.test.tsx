@@ -72,7 +72,7 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
     recurrence: BillingRecurrence.Until,
     type: Direction.Receivable,
     contact: null,
-    payee: null,
+    
     pix: null,
     description: "Jantar de despedida",
     total: { amountCents: 18_000, currency: "BRL" },

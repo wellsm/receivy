@@ -17,7 +17,7 @@ function summary(overrides: Overrides = {}) {
     id: "b1",
     recurrence: "once" as const,
     type: "receivable" as const,
-    payeeName: null,
+    contact: null,
     description: "Churrasco",
     total: { amountCents: 12000, currency: "BRL" as const },
     startDate: "2026-09-01",
@@ -283,7 +283,7 @@ describe("BillingsScreen", () => {
   it("opens a conta a pagar instead of sharing a link", async () => {
     const onOpenBilling = jest.fn();
     const client = makeClient({
-      billings: jest.fn().mockResolvedValue({ billings: [summary({ type: "payable", payeeName: "Ana", shareChargeId: "c9" })], nextCursor: null }),
+      billings: jest.fn().mockResolvedValue({ billings: [summary({ type: "payable", contact: { id: "c1", userId: "u1", name: "Ana", avatar: null }, shareChargeId: "c9" })], nextCursor: null }),
     });
 
     await render(<BillingsScreen client={client} onOpenBilling={onOpenBilling} />);

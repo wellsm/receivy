@@ -35,7 +35,6 @@ const recurring: BillingDetail = {
   frequency: BillingFrequency.Monthly,
   type: Direction.Receivable,
   contact: null,
-  payee: null,
   pix: null,
   description: 'Aluguel',
   total: { amountCents: 100_000, currency: 'BRL' },

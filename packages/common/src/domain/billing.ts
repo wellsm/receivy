@@ -54,8 +54,6 @@ export type BillingReminder = { offsetDays: number; enabled: boolean };
 /** A Pix key typed on a conta a pagar: it belongs to whoever receives, never to a wallet. */
 export type BillingPixInput = { keyType: PixKeyType; key: string; label?: string };
 
-export type BillingPayee = { userId: string; name: string; avatar?: UserAvatar | null };
-
 export const DEFAULT_BILLING_REMINDERS: BillingReminder[] = [{ offsetDays: 0, enabled: true }];
 
 export const MAX_FINITE_OCCURRENCES = 120;
@@ -139,12 +137,8 @@ export type BillingSummary = {
   type: Direction;
   /** Block 9: who receives a conta a pagar, or null when the bill is the owner's alone. */
   contact: BillingContact | null;
-  /** @deprecated Block 9: read contact instead. Conta a pagar: who receives, or null when the bill is the owner's alone. */
-  payeeName: string | null;
   /** 'record' is a registro: the owner alone, already settled. The API always sends it; absent reads as 'live'. */
   kind?: BillingKind;
-  /** @deprecated Block 9: read contact instead. Registro only: the counterpart typed by the owner; null on every other conta. */
-  counterpartLabel?: string | null;
   frequency?: BillingFrequency;
   description: string;
   total: Money;
@@ -172,12 +166,8 @@ export type BillingDetail = {
   type: Direction;
   /** Block 9: who receives a conta a pagar, or null when the bill is the owner's alone. */
   contact: BillingContact | null;
-  /** @deprecated Block 9: read contact instead. */
-  payee: BillingPayee | null;
   /** 'record' is a registro: the owner alone, already settled. The API always sends it; absent reads as 'live'. */
   kind?: BillingKind;
-  /** @deprecated Block 9: read contact instead. Registro only: the counterpart typed by the owner; null on every other conta. */
-  counterpartLabel?: string | null;
   /** Inline key of a conta a pagar; null on a conta a receber, which uses paymentMethodId. */
   pix: PixSnapshot | null;
   frequency?: BillingFrequency;

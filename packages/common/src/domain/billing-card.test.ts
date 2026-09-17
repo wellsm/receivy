@@ -8,7 +8,6 @@ const base: BillingSummary = {
   id: 'b1',
   type: Direction.Receivable,
   contact: null,
-  payeeName: null,
   recurrence: BillingRecurrence.Once,
   description: 'Aluguel',
   total: { amountCents: 100_000, currency: 'BRL' },
@@ -190,23 +189,29 @@ describe('billingSummaryLine', () => {
 });
 
 describe('billingBadges on a conta a pagar', () => {
-  it('shows the direction and the payee instead of the participant count', () => {
-    const labels = billingBadges({ ...base, type: Direction.Payable, payeeName: 'Imobiliária' }).map((badge) => badge.label);
+  it('shows the direction and the receiving contact instead of the participant count', () => {
+    const contact = { id: 'c1', userId: 'u1', name: 'Imobiliária', avatar: null };
+    const labels = billingBadges({ ...base, type: Direction.Payable, contact }).map((badge) => badge.label);
 
     expect(labels).toEqual(['Única', 'A pagar', 'Imobiliária']);
-    expect(billingBadges({ ...base, type: Direction.Payable, payeeName: null }).map((badge) => badge.label)).toContain('Só comigo');
+    expect(billingBadges({ ...base, type: Direction.Payable, contact: null }).map((badge) => badge.label)).toContain('Só comigo');
   });
 });
 
 describe('billingBadges on a registro', () => {
-  it('names the counterpart instead of the people or the payee and marks it as a registro', () => {
+  it('names the receiving contact instead of the people and marks it as a registro', () => {
+    // A registro a receber names its payer through the split, so the card falls back to the badge alone.
+    expect(billingBadges({ ...base, kind: BillingKind.Record, participantCount: 0 }).map((badge) => badge.label)).toEqual([
+      'Única',
+      'Registro'
+    ]);
     expect(
-      billingBadges({ ...base, kind: BillingKind.Record, counterpartLabel: 'Empresa X', participantCount: 0 }).map((badge) => badge.label)
-    ).toEqual(['Única', 'Registro', 'Empresa X']);
-    expect(
-      billingBadges({ ...base, type: Direction.Payable, kind: BillingKind.Record, counterpartLabel: 'Clínica Sorriso' }).map(
-        (badge) => badge.label
-      )
+      billingBadges({
+        ...base,
+        type: Direction.Payable,
+        kind: BillingKind.Record,
+        contact: { id: 'c2', userId: 'u2', name: 'Clínica Sorriso', avatar: null }
+      }).map((badge) => badge.label)
     ).toEqual(['Única', 'Registro', 'A pagar', 'Clínica Sorriso']);
   });
 });

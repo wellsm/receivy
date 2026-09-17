@@ -101,6 +101,40 @@ describe("FeedScreen", () => {
     expect(screen.getByText(/Academia/)).toBeInTheDocument();
   });
 
+  it("names the counterpart by join: the contact when the viewer pays, the debtor when they receive", () => {
+    const viewerName = "Ana Silva";
+
+    render(
+      <FeedScreen
+        month={MONTH}
+        viewerEmail={VIEWER}
+        filters={DEFAULT_FEED_FILTERS}
+        today={TODAY}
+        charges={[
+          payable({
+            description: "Pão",
+            debtor: { email: VIEWER, name: viewerName },
+            billing: {
+              recurrence: "once",
+              kind: "live",
+              contact: { id: "c1", nickname: "Padaria da esquina", user: { name: "Padaria" } },
+            },
+          }),
+          charge({
+            description: "Aluguel",
+            debtor: { name: "Bruno", email: "bruno@example.com" },
+            billing: { recurrence: "once", kind: "live", contact: null },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/Padaria da esquina/)).toBeInTheDocument();
+    expect(screen.getByText(/Bruno/)).toBeInTheDocument();
+    // The payable card names the contact, never the viewer's own name (the debtor on that side).
+    expect(screen.queryByText(new RegExp(viewerName))).not.toBeInTheDocument();
+  });
+
   it("marks a day as settled once none of its charges is open", () => {
     render(<FeedScreen month={MONTH} viewerEmail={VIEWER} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[charge({ state: ChargeState.Paid })]} />);
 

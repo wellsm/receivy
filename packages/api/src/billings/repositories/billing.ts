@@ -80,15 +80,22 @@ function billingPix(row: Pick<BillingRepository.Row, 'pix_key_type' | 'pix_key' 
   return row.pix_key_type && row.pix_key ? { keyType: row.pix_key_type, key: row.pix_key, label: row.pix_label ?? 'Pix' } : null;
 }
 
+/** The payee of a conta a pagar: the one User part of its split since block 8, `payee_user_id` on rows from before. */
+function payeeIdOf(row: Pick<BillingRepository.Row, 'payee_user_id'>, split: BillingSplit): string | undefined {
+  return userIds(split)[0] ?? row.payee_user_id;
+}
+
 /** The contact who receives a conta a pagar; archived contacts still name it, the bill stays theirs. */
-async function payeeOf(db: DbClient, row: Pick<BillingRepository.Row, 'payee_user_id'>): Promise<BillingPayee | null> {
-  if (!row.payee_user_id) {
+async function payeeOf(db: DbClient, row: Pick<BillingRepository.Row, 'payee_user_id'>, split: BillingSplit): Promise<BillingPayee | null> {
+  const payeeUserId = payeeIdOf(row, split);
+
+  if (!payeeUserId) {
     return null;
   }
 
-  const person = await ContactRepository.counterpartOf(db, row.payee_user_id);
+  const person = await ContactRepository.counterpartOf(db, payeeUserId);
 
-  return person ? { userId: row.payee_user_id, name: person.name, avatar: person.avatar } : null;
+  return person ? { userId: payeeUserId, name: person.name, avatar: person.avatar } : null;
 }
 
 /** What `prepareChargeMaterialization` needs to know about a conta a pagar, or undefined for a conta a receber. */
@@ -255,6 +262,8 @@ async function summaryAggregates(db: DbClient, rows: BillingRepository.Row[], no
       FROM page p
       JOIN billings b ON b.id = p.billing_id
       JOIN allocations a ON a.billing_id = p.billing_id AND a.user_id <> b.owner_id
+      -- The payee of a conta a pagar sits in its split since block 8; the card keeps counting participants only.
+      WHERE COALESCE(b.direction, 'receivable') <> 'payable'
       GROUP BY p.billing_id
     ),
     proofs AS (
@@ -330,7 +339,11 @@ async function summaryDto(db: DbClient, row: BillingRepository.Row, now: Date, a
       ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null)
       : null);
 
-  return summary(row, nextDueDate, counters, installmentCountFor(row), await payeeOf(db, row));
+  // Only a conta a pagar names a payee, and it sits in the split now: the list reads it for those rows alone.
+  const payee =
+    BillingRepository.direction(row) === Direction.Payable ? await payeeOf(db, row, (await BillingRepository.splitFor(db, row)).split) : null;
+
+  return summary(row, nextDueDate, counters, installmentCountFor(row), payee);
 }
 
 async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: InviteLinkContext): Promise<BillingDetail> {
@@ -348,7 +361,7 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
   return {
     id: row.id,
     direction: BillingRepository.direction(row),
-    payee: await payeeOf(db, row),
+    payee: await payeeOf(db, row, split),
     settled: billingRegistered(row),
     counterpartLabel: row.counterpart_label ?? null,
     pix: billingPix(row),
@@ -669,7 +682,7 @@ async function rewriteMonthCharges(
     dueDates: [dueDate],
     numbered: false,
     payer,
-    payeeUserId: row.payee_user_id ?? null,
+    payeeUserId: payeeIdOf(row, split) ?? null,
     settled: billingRegistered(row)
   });
   const existing: MonthCharge[] = editable.map((charge) => ({
@@ -872,10 +885,11 @@ function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): Bill
     dueRule: row.due_rule,
     timezone: row.timezone,
     paymentMethodId: row.payment_method_id,
-    split,
+    // A conta a pagar takes no split as input: the normalizer rebuilds it from the payee, as it did at creation.
+    split: direction === Direction.Payable ? undefined : split,
     category: row.category,
     direction,
-    payeeUserId: row.payee_user_id,
+    payeeUserId: payeeIdOf(row, split),
     pix: pix ? { keyType: pix.keyType, key: pix.key, label: pix.label } : undefined,
     settled: billingRegistered(row),
     counterpartLabel: row.counterpart_label
@@ -992,6 +1006,7 @@ export namespace BillingRepository {
     payment_method_id?: string;
     /** Null on rows written before contas a pagar existed: the owner collects. */
     direction?: Direction;
+    /** @deprecated Read through `payeeIdOf`; no longer written. */
     payee_user_id?: string;
     pix_key_type?: PixKeyType;
     pix_key?: string;
@@ -1210,8 +1225,8 @@ export namespace BillingRepository {
 
       const payable: PayableMaterialization | undefined =
         input.direction === Direction.Payable ? { payer: ChargePayer.Owner, pix: input.pix } : undefined;
-      const counterparts = payable ? (input.payeeUserId ? [input.payeeUserId] : []) : userIds(input.split);
-      const context = await prepareChargeMaterialization(tx, ownerId, counterparts, input.paymentMethodId, payable);
+      // The normalized split already carries the payee of a conta a pagar as its one User part.
+      const context = await prepareChargeMaterialization(tx, ownerId, userIds(input.split), input.paymentMethodId, payable);
       const id = crypto.randomUUID();
       const instant = now.toISOString();
       const row = await tx.billings.insertOne({
@@ -1232,7 +1247,6 @@ export namespace BillingRepository {
           due_rule: input.dueRule ?? BillingDueRule.Fixed,
           ...(input.paymentMethodId ? { payment_method: { id: input.paymentMethodId } } : {}),
           direction: input.direction,
-          ...(input.payeeUserId ? { payee_user: { id: input.payeeUserId } } : {}),
           pix_key_type: input.pix?.keyType ?? sqlNull,
           pix_key: input.pix?.key ?? sqlNull,
           pix_label: input.pix?.label ?? sqlNull,
@@ -1411,7 +1425,7 @@ export namespace BillingRepository {
       const totalCents = patch.totalCents ?? row.total_cents;
       const split = patch.split ?? (await splitFor(tx, row)).split;
       const paymentMethodId = patch.clearPaymentMethod ? undefined : (patch.paymentMethodId ?? row.payment_method_id);
-      const payeeUserId = patch.clearPayee ? undefined : (patch.payeeUserId ?? row.payee_user_id);
+      const payeeUserId = patch.clearPayee ? undefined : (patch.payeeUserId ?? payeeIdOf(row, split));
       const description = patch.description === undefined ? row.description : patch.description.normalize('NFC').trim() || 'Conta';
       const counterpartLabel =
         patch.counterpartLabel === undefined ? undefined : normalizeCounterpartLabel(patch.counterpartLabel, direction(row));
@@ -1437,8 +1451,13 @@ export namespace BillingRepository {
         await prepareChargeMaterialization(tx, ownerId, counterparts, paymentMethodId, payable);
       }
 
-      if (patch.split !== undefined || patch.totalCents !== undefined) {
-        const changes = await saveAllocations(tx, row, totalCents, split, instant);
+      // A conta a pagar keeps its payee as the one User part of its split, for the whole total: a new payee or a
+      // new total rewrites it (a fixed part above the total would be refused otherwise).
+      const payeePatched = patch.payeeUserId !== undefined || patch.clearPayee === true;
+      const stored = payable ? normalizeBillingInput({ ...billingInputFrom(row, split), totalCents, payeeUserId }).split : split;
+
+      if (patch.split !== undefined || patch.totalCents !== undefined || (payable && payeePatched)) {
+        const changes = await saveAllocations(tx, row, totalCents, stored, instant);
 
         // Same rule as PUT /billings/{id}/participants/{userId}/notify for whoever stayed and changed.
         for (const change of changes) {
@@ -1468,13 +1487,14 @@ export namespace BillingRepository {
           category: patch.category ?? row.category,
           total_cents: totalCents,
           payment_method: { id: paymentMethodId ?? sqlNull },
-          payee_user: { id: payeeUserId ?? sqlNull },
+          // Rows from before block 8 still name the payee in the column: clearing has to reach it too.
+          ...(patch.clearPayee ? { payee_user: { id: sqlNull } } : {}),
           pix_key_type: pix?.keyType ?? sqlNull,
           pix_key: pix?.key ?? sqlNull,
           pix_label: pix?.label ?? sqlNull,
           ...(counterpartLabel === undefined ? {} : { counterpart_label: counterpartLabel }),
           ...(patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
-          ...(patch.split !== undefined ? { split_mode: split.mode } : {}),
+          ...(patch.split !== undefined || (payable && payeePatched) ? { split_mode: stored.mode } : {}),
           ...(patch.state ? { state: patch.state } : {}),
           ...(resumed
             ? { last_occurrence_date: (row.last_occurrence_date ?? boundary) > boundary ? row.last_occurrence_date : boundary }
@@ -1648,7 +1668,8 @@ export namespace BillingRepository {
         if (!exists) {
           const { split } = await splitFor(tx, row);
           const payable = payableOf(row);
-          const counterparts = payable ? (row.payee_user_id ? [row.payee_user_id] : []) : userIds(split);
+          const payeeUserId = payeeIdOf(row, split);
+          const counterparts = payable ? (payeeUserId ? [payeeUserId] : []) : userIds(split);
           const context = await prepareChargeMaterialization(tx, row.owner_id, counterparts, row.payment_method_id, payable);
           const plan = planBillingCharges({
             description: row.description,
@@ -1657,7 +1678,7 @@ export namespace BillingRepository {
             dueDates: [dueDate],
             numbered: false,
             payer: context.payer,
-            payeeUserId: row.payee_user_id ?? null,
+            payeeUserId: payeeUserId ?? null,
             settled: billingRegistered(row)
           });
 

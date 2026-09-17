@@ -32,7 +32,7 @@ export interface BillingSchema extends Database.Schema {
   payment_method_id?: String.UUID;
   /** 'payable' is the owner's own bill; null (legacy) or 'receivable' means the owner collects from contacts. */
   direction: Direction;
-  /** Conta a pagar only: the person who receives (users.id); null when the bill is the owner's alone. */
+  /** @deprecated The payee is the one User part of the split since block 8; no longer written, read only until the backfill runs. */
   payee_user_id?: String.UUID;
   /** Conta a pagar only: the key typed on the billing (it belongs to whoever receives, not to a wallet). */
   pix_key_type?: PixKeyType;

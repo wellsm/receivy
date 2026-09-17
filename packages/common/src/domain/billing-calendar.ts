@@ -324,7 +324,10 @@ function registroLabel(input: BillingInput, direction: Direction, now: Date | un
   return label;
 }
 
-/** A conta a pagar has a single payer, the owner: the allocation is the owner alone and no wallet key applies. */
+/**
+ * A conta a pagar has a single payer, the owner, and no wallet key applies. The payee, when there is one, is the
+ * one User part of its split, for the whole total: that is how the person on the creditor side is kept.
+ */
 function payableSplit(input: BillingInput): BillingSplit {
   if (input.split && input.split.parts.some((part) => part.kind === SplitPartKind.User)) {
     throw new RangeError('Uma conta a pagar não divide o valor com contatos.');
@@ -332,6 +335,12 @@ function payableSplit(input: BillingInput): BillingSplit {
 
   if (input.paymentMethodId) {
     throw new RangeError('Uma conta a pagar usa a chave Pix de quem recebe, não a sua.');
+  }
+
+  const payeeUserId = input.payeeUserId?.trim();
+
+  if (payeeUserId) {
+    return { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: payeeUserId, amountCents: input.totalCents }] };
   }
 
   return { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] };

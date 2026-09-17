@@ -243,7 +243,8 @@ describe('conta a pagar draft', () => {
     expect(input.payeeUserId).toBe('p9');
     expect(input.paymentMethodId).toBeUndefined();
     expect(input.pix).toEqual({ keyType: 'cpf', key: '52998224725', label: 'Aluguel' });
-    expect(input.split).toEqual({ mode: 'equal', parts: [{ kind: 'owner' }] });
+    // The payee is the one part of the split, for the whole total; the owner's part is the remainder, zero.
+    expect(input.split).toEqual({ mode: 'fixed', parts: [{ kind: 'user', userId: 'p9', amountCents: input.totalCents }] });
   });
 
   it('accepts a bill that is the owner alone, without payee or Pix', () => {

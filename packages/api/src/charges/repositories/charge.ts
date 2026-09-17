@@ -62,12 +62,6 @@ async function recipientOf(db: DbClient, row: ChargeRepository.Row): Promise<Cha
     return { userId: counterpartId!, name: person.name, email: person.email, avatar: person.avatar };
   }
 
-  const { counterpartLabel } = await ChargeRepository.settledBilling(db, row);
-
-  if (counterpartLabel) {
-    return { userId: null, name: counterpartLabel, email: null, avatar: null };
-  }
-
   const owner = await ContactRepository.counterpartOf(db, ChargeRepository.ownerOf(row));
 
   return { userId: null, name: owner?.name ?? 'Conta excluída', email: null, avatar: owner?.avatar ?? null };
@@ -298,12 +292,12 @@ export namespace ChargeRepository {
     return ownerOf(row) === userId;
   }
 
-  /** The billing behind a charge: its type, whether it is a registro, and the counterpart it names. */
-  export type SettledBilling = { kind: BillingKind; counterpartLabel: string | null; recurrence: BillingRecurrence };
+  /** The billing behind a charge: its type and whether it is a registro. */
+  export type SettledBilling = { kind: BillingKind; recurrence: BillingRecurrence };
 
   export async function settledBilling(db: DbClient, row: Pick<Row, 'billing_id'>): Promise<SettledBilling> {
     const billing = await db.billings.findOne({
-      select: { kind: true, counterpart_label: true, recurrence: true },
+      select: { kind: true, recurrence: true },
       where: { id: row.billing_id }
     });
 
@@ -312,7 +306,7 @@ export namespace ChargeRepository {
       throw new HttpNotFoundError();
     }
 
-    return { kind: billingKind(billing), counterpartLabel: billing.counterpart_label ?? null, recurrence: billingRecurrence(billing) };
+    return { kind: billingKind(billing), recurrence: billingRecurrence(billing) };
   }
 
   /** Direction is derived, never stored: whoever sits in `creditor_id` collects, anyone else on the charge pays. */
@@ -328,9 +322,9 @@ export namespace ChargeRepository {
 
     const otherId = counterpartId(row);
 
-    // Nobody on the other side: a registro names its counterpart; a conta a pagar without a payee is the owner's alone.
+    // Nobody on the other side: a conta a pagar without a payee is the owner's alone.
     if (!otherId) {
-      return (await settledBilling(db, row)).counterpartLabel ?? 'Você';
+      return 'Você';
     }
 
     return ContactRepository.displayNameFor(db, userId, otherId);
@@ -375,7 +369,8 @@ export namespace ChargeRepository {
       // Only the creditor sees the switch: whoever owes reads every charge the same.
       notify: !owns(row, userId) || row.notify,
       kind: record.kind,
-      counterpartLabel: record.counterpartLabel,
+      // Block 9: the billing no longer names a counterpart label of its own.
+      counterpartLabel: null,
       ownedByViewer: owns(row, userId),
       hasPix,
       direction,

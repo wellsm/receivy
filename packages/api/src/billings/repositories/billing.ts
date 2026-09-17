@@ -32,7 +32,6 @@ import {
   materializationHorizon,
   normalizeBillingInput,
   PendingChargesAction,
-  type PixKeyType,
   planBillingCharges,
   resolveBillingSplit,
   SplitMode,
@@ -602,7 +601,7 @@ async function searchBillingIds(
     AND (:type::text IS NULL OR b.recurrence = :type::text)
     AND (:state::text IS NULL OR b.state = :state::text)
     AND (:category::text IS NULL OR b.category = :category::text)
-    AND (:direction::text IS NULL OR b.type = :direction::text)
+    AND (:direction::text IS NULL OR (CASE WHEN b.contact_id IS NULL THEN 'receivable' ELSE 'payable' END) = :direction::text)
     AND position(:query::text in lower(b.description)) > 0
     ${paging}
     ORDER BY b.created_at DESC, b.id ASC LIMIT ${PAGE_SIZE + 1}`,
@@ -1009,11 +1008,6 @@ export namespace BillingRepository {
     due_rule: true,
     payment_method_id: true,
     contact_id: true,
-    type: true,
-    pix_key_type: true,
-    pix_key: true,
-    pix_label: true,
-    counterpart_label: true,
     reminders: true,
     state: true,
     split_mode: true,
@@ -1053,13 +1047,6 @@ export namespace BillingRepository {
     timezone: string;
     payment_method_id?: string;
     contact_id?: string;
-    /** Which way the money goes; the contract still calls it `direction`. */
-    type: Direction;
-    pix_key_type?: PixKeyType;
-    pix_key?: string;
-    pix_label?: string;
-    /** Registro only: the counterpart typed by the owner. */
-    counterpart_label?: string;
     reminders?: string;
     state: BillingState;
     /** Null only until the block 3 backfill runs; reads as 'equal'. */
@@ -1374,7 +1361,7 @@ export namespace BillingRepository {
           { owner_id: ownerId },
           ...(filters.recurrence ? [{ recurrence: filters.recurrence }] : []),
           ...(filters.state ? [{ state: filters.state }] : []),
-          ...(filters.type ? [{ type: filters.type }] : []),
+          ...(filters.type ? [filters.type === Direction.Payable ? { contact_id: { isNull: false } } : { contact_id: { isNull: true } }] : []),
           ...(matchingIds ? [{ id: { isIn: matchingIds } }] : []),
           ...(cursor ? [{ OR: [{ created_at: { lt: cursor.createdAt } }, { created_at: cursor.createdAt, id: { gt: cursor.id } }] }] : [])
         ]

@@ -30,13 +30,15 @@ export interface BillingSchema extends Database.Schema {
   payment_method_id?: String.UUID;
   /** Who receives (contacts.id); null when the owner receives. Block 9: replaces `type`, `pix_*` and `counterpart_label`. */
   contact_id?: String.UUID;
-  /** 'payable' is the owner's own bill; 'receivable' means the owner collects from contacts. */
+  /** @deprecated Block 9: read nothing, dropped in D4. */
   type: Direction;
-  /** Conta a pagar only: the key typed on the billing (it belongs to whoever receives, not to a wallet). */
+  /** @deprecated Block 9: read nothing, dropped in D4. */
   pix_key_type?: PixKeyType;
+  /** @deprecated Block 9: read nothing, dropped in D4. */
   pix_key?: String.Max<254>;
+  /** @deprecated Block 9: read nothing, dropped in D4. */
   pix_label?: String.Max<120>;
-  /** Registro only: who the money came from or went to, typed by the owner. */
+  /** @deprecated Block 9: read nothing, dropped in D4. */
   counterpart_label?: String.Max<120>;
   /** JSON array of { offsetDays, enabled }; null falls back to the owner's notification preferences. */
   reminders?: String.Max<2000>;

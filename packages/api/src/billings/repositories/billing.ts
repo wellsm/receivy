@@ -1314,8 +1314,6 @@ export namespace BillingRepository {
           due_rule: input.dueRule ?? BillingDueRule.Fixed,
           ...(paymentMethodId ? { payment_method: { id: paymentMethodId } } : {}),
           ...(contact ? { contact: { id: contact.contactId } } : {}),
-          // Block 9: `type` is derived from the contact and only kept because the column is still NOT NULL.
-          type: input.type,
           reminders: input.reminders ? JSON.stringify(input.reminders) : sqlNull,
           state: BillingState.Active,
           split_mode: input.split.mode,
@@ -1558,8 +1556,6 @@ export namespace BillingRepository {
           total_cents: totalCents,
           payment_method: { id: paymentMethodId ?? sqlNull },
           contact: { id: contactId ?? sqlNull },
-          // Block 9: `type` is derived from the contact and only kept because the column is still NOT NULL.
-          type: contactId ? Direction.Payable : Direction.Receivable,
           ...(patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
           ...(patch.split !== undefined || (payable && contactPatched) ? { split_mode: stored.mode } : {}),
           ...(patch.state ? { state: patch.state } : {}),

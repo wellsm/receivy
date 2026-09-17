@@ -7,8 +7,6 @@ import type {
   BillingKind,
   BillingState,
   BillingRecurrence,
-  Direction,
-  PixKeyType,
   SplitMode
 } from '@receivy/common';
 
@@ -30,16 +28,6 @@ export interface BillingSchema extends Database.Schema {
   payment_method_id?: String.UUID;
   /** Who receives (contacts.id); null when the owner receives. Block 9: replaces `type`, `pix_*` and `counterpart_label`. */
   contact_id?: String.UUID;
-  /** @deprecated Block 9: read nothing, dropped in D4. */
-  type: Direction;
-  /** @deprecated Block 9: read nothing, dropped in D4. */
-  pix_key_type?: PixKeyType;
-  /** @deprecated Block 9: read nothing, dropped in D4. */
-  pix_key?: String.Max<254>;
-  /** @deprecated Block 9: read nothing, dropped in D4. */
-  pix_label?: String.Max<120>;
-  /** @deprecated Block 9: read nothing, dropped in D4. */
-  counterpart_label?: String.Max<120>;
   /** JSON array of { offsetDays, enabled }; null falls back to the owner's notification preferences. */
   reminders?: String.Max<2000>;
   state: BillingState;

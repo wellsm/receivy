@@ -89,14 +89,7 @@ export async function eraseAccount(
       await tx.charges.updateOne({
         where: { id: chargeId },
         data: {
-          ...(creditorDeleted
-            ? {
-                payment_snapshot: sqlNull,
-                pix_key_snapshot: sqlNull,
-                pix_key_type_snapshot: sqlNull,
-                pix_label_snapshot: sqlNull
-              }
-            : {}),
+          ...(creditorDeleted ? { payment_snapshot: sqlNull } : {}),
           updated_at: now
         }
       });

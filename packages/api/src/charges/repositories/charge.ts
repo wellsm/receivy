@@ -28,7 +28,8 @@ import { LinkRepository } from '../../public/repositories/link';
 import { LinkableType } from '../../public/schemas/link';
 import { lockAccountReferences } from '../../users/services/locking';
 import { ChargeClosedError, ChargeNotPaidError, SilenceUnavailableError } from '../errors';
-import { PaymentMethodKind, StoredProofState } from '../schemas/charge';
+import type { PaymentMethodKind } from '../schemas/charge';
+import { StoredProofState } from '../schemas/charge';
 
 const sqlNull = null as unknown as undefined;
 
@@ -84,9 +85,6 @@ export namespace ChargeRepository {
     installment: true,
     installment_count: true,
     payment_snapshot: true,
-    pix_key_type_snapshot: true,
-    pix_key_snapshot: true,
-    pix_label_snapshot: true,
     state: true,
     cancelled_at: true,
     paid_at: true,
@@ -124,27 +122,9 @@ export namespace ChargeRepository {
     label: string;
   };
 
-  /**
-   * How this charge is paid. Transition read: `payment_snapshot` is null until the block 5 backfill runs, so the
-   * three folded columns answer meanwhile; the fallback goes away with them.
-   */
-  export function paymentOf(
-    row: Pick<Row, 'payment_snapshot' | 'pix_key_type_snapshot' | 'pix_key_snapshot' | 'pix_label_snapshot'>
-  ): PaymentSnapshotColumns | null {
-    if (row.payment_snapshot) {
-      return row.payment_snapshot;
-    }
-
-    if (!row.pix_key_type_snapshot || !row.pix_key_snapshot) {
-      return null;
-    }
-
-    return {
-      method: PaymentMethodKind.Pix,
-      type: row.pix_key_type_snapshot,
-      value: row.pix_key_snapshot,
-      label: row.pix_label_snapshot ?? 'Pix'
-    };
+  /** How this charge is paid, frozen at the moment it was published. */
+  export function paymentOf(row: Pick<Row, 'payment_snapshot'>): PaymentSnapshotColumns | null {
+    return row.payment_snapshot ?? null;
   }
 
   export type Row = {
@@ -162,10 +142,6 @@ export namespace ChargeRepository {
     installment?: number;
     installment_count?: number;
     payment_snapshot?: PaymentSnapshotColumns;
-    /** @deprecated Folded into `payment_snapshot`; only `paymentOf` still reads these three. */
-    pix_key_type_snapshot?: PixKeyType;
-    pix_key_snapshot?: string;
-    pix_label_snapshot?: string;
     state: ChargeState;
     cancelled_at?: string;
     paid_at?: string;
@@ -199,7 +175,7 @@ export namespace ChargeRepository {
       }
     };
   
-    const pendings = query.month !== today.slice(0, 7) ? {} : { 
+    const overdue = query.month !== today.slice(0, 7) ? {} : { 
       AND: [
         { 
           state: ChargeState.Pending,
@@ -242,7 +218,7 @@ export namespace ChargeRepository {
           { 
             OR: [
               inMonth,
-              pendings
+              overdue
             ]
           }
         ]

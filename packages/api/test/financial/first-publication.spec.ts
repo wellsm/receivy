@@ -77,11 +77,7 @@ describe('explicit first Pix publication', () => {
   it('never fills a previously published null-Pix record, including a revoked tombstone', async () => {
     await db.charges.updateOne({
       where: { id: chargeId },
-      data: {
-        payment_snapshot: null as unknown as undefined,
-        pix_key_snapshot: null as unknown as undefined,
-        pix_key_type_snapshot: null as unknown as undefined
-      }
+      data: { payment_snapshot: null as unknown as undefined }
     });
     await PublicLinkRepository.revoke(db, owner, chargeId);
     equal((await linkColumns()).revoked, true);

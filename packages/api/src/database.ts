@@ -84,6 +84,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
       relations: {
         'owner_id@owner': 'users:id';
         'creditor_id@creditor': 'users:id';
+        'debtor_id@debtor': 'users:id';
         'billing_id@billing': 'billings:id';
       };
       indexes: {

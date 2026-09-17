@@ -632,6 +632,8 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   // Who sits on the other side: the contact a conta a pagar pays, or the single person who paid a registro a receber.
   const seatId = payable ? draft.payee : (draft.selected[0] ?? "");
   const seated = seatId ? (payable ? contactById(seatId) : contactFor(seatId)) : null;
+  // A locked seat is not a toggle: it announces no pressed state and offers no remove hint.
+  const chipToggle = seatLocked ? {} : { "aria-pressed": true, title: "Remove quem está do outro lado" };
   const pixSpec = pixKeyField(draft.pixInline.type);
   const action = editing ? "Salvar conta" : "Criar conta";
   // Only meaningful on create: an edit patches a subset of fields, not the whole draft.
@@ -865,24 +867,27 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
       {/* Quem está do outro lado: o contato que recebe uma conta a pagar, ou quem pagou um registro a receber */}
       {(payable || settled) && (
-        <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked || frozen}>
-          <div className="flex items-center justify-between">
-            <span className={LABEL_CLASS}>{SETTLED_LABELS[draft.direction].field}</span>
-            {!seatLocked && (
-              <button type="button" ref={pickPayee} onClick={() => setPayeePicker(true)} className="flex min-h-10 items-center gap-1 bg-transparent px-1 text-xs font-semibold text-primary">
-                <Plus size={14} aria-hidden="true" />
-                {seated ? "Trocar" : "Escolher"}
-              </button>
-            )}
-          </div>
+        <fieldset className="relative m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked || frozen}>
+          {/* The legend names the whole seat, so it stays the fieldset's first child; Escolher shares its line. */}
+          <legend className={`${LABEL_CLASS} p-0 leading-10`}>{SETTLED_LABELS[draft.direction].field}</legend>
+          {!seatLocked && (
+            <button
+              type="button"
+              ref={pickPayee}
+              onClick={() => setPayeePicker(true)}
+              className="absolute right-0 top-0 flex min-h-10 items-center gap-1 bg-transparent px-1 text-xs font-semibold text-primary"
+            >
+              <Plus size={14} aria-hidden="true" />
+              {seated ? "Trocar" : "Escolher"}
+            </button>
+          )}
 
           {seated ? (
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 aria-label={seated.displayName}
-                aria-pressed="true"
-                title="Remove quem está do outro lado"
+                {...chipToggle}
                 disabled={seatLocked}
                 onClick={clearSeat}
                 className="flex items-center gap-1.5 rounded-full border border-outline/40 bg-surface py-1 pl-1 pr-2"

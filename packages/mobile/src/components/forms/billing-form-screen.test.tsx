@@ -428,6 +428,18 @@ describe("BillingFormScreen", () => {
     expect(input.paymentMethodId).toBeUndefined();
   });
 
+  it("refuses a registro a receber that names nobody who paid it", async () => {
+    const { client } = await quickForm();
+
+    await fireEvent(screen.getByLabelText("Já recebi"), "valueChange", true);
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "500000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Salário");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Escolha quem pagou.");
+    expect(client.createBilling).not.toHaveBeenCalled();
+  });
+
   it("seats a registro a pagar under Para quem", async () => {
     const { client } = await quickForm();
 

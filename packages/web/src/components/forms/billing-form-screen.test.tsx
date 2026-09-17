@@ -675,6 +675,18 @@ it("records a registro naming the single contact who paid it, with nobody to spl
   expect(body.paymentMethodId).toBeUndefined();
 });
 
+it("refuses a registro a receber that names nobody who paid it", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("switch", { name: "Já recebi" }));
+  await user.type(screen.getByLabelText("Valor total"), "5000,00");
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  expect(screen.getByRole("alert")).toHaveTextContent("Escolha quem pagou.");
+  expect(sent.some(entry => entry.init.method === "POST")).toBe(false);
+});
+
 it("seats a registro a pagar under Para quem and keeps a recorrente from starting before today", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
   const { user } = renderForm();

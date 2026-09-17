@@ -327,6 +327,10 @@ describe('registro draft', () => {
     expect(input.contactId).toBeUndefined();
   });
 
+  it('refuses a registro a receber that names nobody who paid it', () => {
+    expect(() => buildBillingInput({ ...base, settled: true, selected: [] })).toThrow('Escolha quem pagou.');
+  });
+
   it('refuses a registro a pagar that names nobody to receive it', () => {
     expect(() => buildBillingInput({ ...base, direction: Direction.Payable, settled: true, payee: '' })).toThrow('Escolha quem recebe.');
   });

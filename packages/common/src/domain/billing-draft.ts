@@ -255,6 +255,11 @@ function counterpartOf(draft: BillingDraft): Pick<BillingInput, 'contactId' | 's
     return { contactId: payeeOf(draft) };
   }
 
+  // A registro a receber has one payer, and the seat asks for them by name: the split message would not fit.
+  if (!draft.selected.length) {
+    throw new RangeError('Escolha quem pagou.');
+  }
+
   return { split: { mode: SplitMode.Equal, parts: draft.selected.map((userId) => ({ kind: SplitPartKind.User, userId })) } };
 }
 

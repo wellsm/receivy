@@ -9,7 +9,6 @@ import {
   materializationDate,
   materializationHorizon,
   normalizeBillingInput,
-  normalizeCounterpartLabel,
   zonedInstant
 } from './billing-calendar';
 import { Direction, PixKeyType, SplitMode } from './contracts';
@@ -215,37 +214,36 @@ describe('registros', () => {
     startDate: '2026-08-05',
     timezone: 'America/Sao_Paulo',
     kind: BillingKind.Record,
-    counterpartLabel: '  Empresa X  '
+    split
   };
 
-  it('keeps only the owner, trims the name and accepts a past date on a single registro', () => {
+  it('keeps who pays the owner and accepts a past date on a single registro', () => {
     const normalized = normalizeBillingInput(registro, now);
 
-    expect(normalized.split).toEqual({ mode: 'equal', parts: [{ kind: 'owner' }] });
+    expect(normalized.split).toEqual({ mode: 'equal', parts: [{ kind: 'user', userId: 'ana' }] });
     expect(normalized.type).toBe('receivable');
     expect(normalized.kind).toBe(BillingKind.Record);
-    expect(normalized.counterpartLabel).toBe('Empresa X');
     expect(normalized.startDate).toBe('2026-08-05');
     expect(normalized.reminders).toBeUndefined();
   });
 
-  it('asks for the name by direction, 1 to 120 characters', () => {
-    expect(() => normalizeBillingInput({ ...registro, counterpartLabel: '   ' }, now)).toThrow('Informe de quem é o valor.');
-    expect(() => normalizeBillingInput({ ...registro, type: Direction.Payable, counterpartLabel: undefined }, now)).toThrow(
-      'Informe para quem é o valor.'
-    );
-    expect(() => normalizeBillingInput({ ...registro, counterpartLabel: 'x'.repeat(121) }, now)).toThrow('Informe de quem é o valor.');
-    expect(normalizeCounterpartLabel('x'.repeat(120), Direction.Payable)).toHaveLength(120);
+  it('names a registro a pagar by its receiving contact and leaves the owner alone in the split', () => {
+    const normalized = normalizeBillingInput({ ...registro, split: undefined, contactId: 'contact-1' }, now);
+
+    expect(normalized.type).toBe(Direction.Payable);
+    expect(normalized.contactId).toBe('contact-1');
+    expect(normalized.split.parts).toEqual([{ kind: SplitPartKind.Owner }]);
   });
 
-  it('refuses participants, a payee, a wallet key, a typed Pix and reminders', () => {
-    const message = 'Registro não tem participantes nem avisos.';
+  it('refuses a wallet key, a typed Pix and reminders', () => {
+    const message = 'Registro não tem avisos nem Pix.';
 
-    expect(() => normalizeBillingInput({ ...registro, split }, now)).toThrow(message);
-    expect(() => normalizeBillingInput({ ...registro, type: Direction.Payable, payeeUserId: 'ana' }, now)).toThrow(message);
     expect(() => normalizeBillingInput({ ...registro, paymentMethodId: 'pix-1' }, now)).toThrow(message);
     expect(() =>
-      normalizeBillingInput({ ...registro, type: Direction.Payable, pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } }, now)
+      normalizeBillingInput(
+        { ...registro, split: undefined, contactId: 'contact-1', pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } },
+        now
+      )
     ).toThrow(message);
     expect(() => normalizeBillingInput({ ...registro, reminders: [{ offsetDays: 0, enabled: true }] }, now)).toThrow(message);
   });
@@ -263,9 +261,7 @@ describe('registros', () => {
   });
 
   it('still refuses a conta a receber without a contact when it is not a registro', () => {
-    expect(() => normalizeBillingInput({ ...registro, kind: undefined, counterpartLabel: undefined })).toThrow(
-      'Selecione ao menos um contato.'
-    );
+    expect(() => normalizeBillingInput({ ...registro, kind: undefined, split: undefined })).toThrow('Selecione ao menos um contato.');
     expect(() =>
       normalizeBillingInput({ ...registro, kind: BillingKind.Live, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } })
     ).toThrow('Selecione ao menos um contato.');
@@ -329,15 +325,10 @@ describe('block 9 direction', () => {
     );
   });
 
-  it('still lets a legacy payable type its payee and a Pix key without a contact', () => {
-    const normalized = normalizeBillingInput({
-      ...base,
-      type: Direction.Payable,
-      payeeUserId: 'u1',
-      pix: { keyType: PixKeyType.Email, key: 'u1@example.com' }
-    });
+  it('lets a conta a pagar point at one of the receiving contact keys', () => {
+    const normalized = normalizeBillingInput({ ...base, contactId: 'contact-1', paymentMethodId: 'method-1' });
 
     expect(normalized.type).toBe(Direction.Payable);
-    expect(normalized.split.parts).toEqual([{ kind: SplitPartKind.User, userId: 'u1', amountCents: base.totalCents }]);
+    expect(normalized.paymentMethodId).toBe('method-1');
   });
 });

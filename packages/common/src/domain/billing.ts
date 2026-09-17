@@ -75,18 +75,12 @@ export type BillingInput = {
   /** Required for a conta a receber; a conta a pagar has no participants and may omit it. */
   split?: BillingSplit;
   category?: BillingCategory;
-  /** @deprecated Block 9: replaced by contactId; removed once the repository writes contact_id. */
-  type?: Direction;
-  /** @deprecated Block 9: replaced by contactId; removed once the repository writes contact_id. */
-  payeeUserId?: string;
   /** Block 9: who receives (a contact of the owner). Absent means the owner receives. */
   contactId?: string;
   /** Conta a pagar only: the key of the receiving contact, filed under it as a payment method. */
   pix?: BillingPixInput;
   /** 'record' is a registro: the owner already received or paid it, every charge settles on its due date and nobody is notified. */
   kind?: BillingKind;
-  /** @deprecated Block 9: replaced by contactId; removed once the repository writes contact_id. */
-  counterpartLabel?: string;
 };
 
 export type NormalizedBillingInput = BillingInput & { description: string; split: BillingSplit; type: Direction };
@@ -99,10 +93,6 @@ export type BillingPatch = {
   clearPaymentMethod?: boolean;
   pix?: BillingPixInput;
   clearPix?: boolean;
-  /** @deprecated Block 9: replaced by contactId; removed once the repository writes contact_id. */
-  payeeUserId?: string;
-  /** @deprecated Block 9: replaced by clearContact; removed once the repository writes contact_id. */
-  clearPayee?: boolean;
   /** Block 9: who receives (a contact of the owner), replacing the current one. */
   contactId?: string;
   /** Block 9: clears the receiving contact, leaving the bill the owner's alone. */
@@ -120,8 +110,6 @@ export type BillingPatch = {
   category?: BillingCategory;
   /** Never changes after creation: a value other than the stored one answers 409 SETTLED_LOCKED. */
   kind?: BillingKind;
-  /** @deprecated Block 9: renames the counterpart. On any other conta it answers 409 SETTLED_LOCKED. Replaced by contactId. */
-  counterpartLabel?: string;
 };
 
 /** Who receives a conta a pagar, as the owner knows them. */

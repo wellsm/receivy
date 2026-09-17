@@ -59,12 +59,8 @@ describe('billing draft summary', () => {
     expect(billingDraftSummaryText(summary!)).toBe('Gera 1 cobrança · 1 pessoa');
   });
 
-  it('counts nobody on a conta a pagar the owner keeps alone', () => {
-    const draft: BillingDraft = { ...base, direction: Direction.Payable, payee: '', selected: [] };
-    const summary = billingDraftSummary(draft, TODAY);
-
-    expect(summary).toEqual({ charges: 1, people: 0, occurrences: 1, totalCents: 10000, perOccurrenceCents: 10000 });
-    expect(billingDraftSummaryText(summary!)).toBe('Gera 1 cobrança');
+  it('answers nothing for a conta a pagar that names nobody to receive it', () => {
+    expect(billingDraftSummary({ ...base, direction: Direction.Payable, payee: '', selected: [] }, TODAY)).toBeNull();
   });
 
   it('counts nobody on a registro, whichever direction it names', () => {
@@ -73,7 +69,7 @@ describe('billing draft summary', () => {
       direction: Direction.Payable,
       selected: [],
       settled: true,
-      counterpartLabel: 'Padaria'
+      payee: 'p1'
     };
     const summary = billingDraftSummary(draft, TODAY);
 
@@ -81,19 +77,19 @@ describe('billing draft summary', () => {
     expect(billingDraftSummaryText(summary!)).toBe('Gera 1 cobrança');
   });
 
-  it('reads "por mês" with nobody on an indefinite conta a pagar alone', () => {
+  it('reads "por mês" on an indefinite conta a pagar', () => {
     const draft: BillingDraft = {
       ...base,
       direction: Direction.Payable,
-      payee: '',
+      payee: 'p1',
       selected: [],
       type: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Monthly
     };
     const summary = billingDraftSummary(draft, TODAY);
 
-    expect(summary).toEqual({ charges: 1, people: 0, occurrences: null, totalCents: 10000, perOccurrenceCents: 10000 });
-    expect(billingDraftSummaryText(summary!)).toBe('Gera 1 cobrança por mês');
+    expect(summary).toEqual({ charges: 1, people: 1, occurrences: null, totalCents: 10000, perOccurrenceCents: 10000 });
+    expect(billingDraftSummaryText(summary!)).toBe('Gera 1 cobrança por mês · 1 pessoa');
   });
 
   it('returns null while the draft is not valid yet', () => {

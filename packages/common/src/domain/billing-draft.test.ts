@@ -236,10 +236,9 @@ describe('conta a pagar draft', () => {
     pixInline: { type: PixKeyType.Cpf, key: '529.982.247-25', label: ' Aluguel ' }
   };
 
-  it('needs no contact, drops the wallet key and normalizes the typed Pix', () => {
+  it('needs no participant, drops the wallet key and normalizes the typed Pix', () => {
     const input = buildBillingInput(payable);
 
-    expect(input.type).toBe('payable');
     expect(input.contactId).toBe('p9');
     expect(input.paymentMethodId).toBeUndefined();
     expect(input.pix).toEqual({ keyType: 'cpf', key: '52998224725', label: 'Aluguel' });
@@ -247,11 +246,10 @@ describe('conta a pagar draft', () => {
     expect(input.split).toEqual({ mode: 'equal', parts: [{ kind: 'owner' }] });
   });
 
-  it('accepts a bill that is the owner alone, without payee or Pix', () => {
-    const input = buildBillingInput({ ...payable, payee: '', pixInline: { type: PixKeyType.Email, key: '', label: '' } });
-
-    expect(input.contactId).toBeUndefined();
-    expect(input.pix).toBeUndefined();
+  it('refuses a conta a pagar that names nobody to receive it', () => {
+    expect(() => buildBillingInput({ ...payable, payee: '', pixInline: { type: PixKeyType.Email, key: '', label: '' } })).toThrow(
+      'Selecione ao menos um contato.'
+    );
   });
 
   it('rejects an invalid typed key', () => {
@@ -267,6 +265,7 @@ describe('typed phone key', () => {
       ...base,
       direction: Direction.Payable,
       selected: [],
+      payee: 'p9',
       pixInline: { type: PixKeyType.Phone, key: '(11) 98765-4321', label: '' }
     });
 
@@ -300,30 +299,35 @@ describe('notify of participants', () => {
 });
 
 describe('registro draft', () => {
-  it('sends the name and the owner alone, without participants, payee, Pix or reminders', () => {
+  it('sends the receiving contact alone, without the wallet key, typed Pix or reminders', () => {
     const input = buildBillingInput({
       ...base,
       settled: true,
-      counterpartLabel: ' Empresa X ',
       payee: 'p9',
       pix: 'pix-1',
       pixInline: { type: PixKeyType.Cpf, key: '529.982.247-25', label: '' }
     });
 
     expect(input).toMatchObject({
-      type: 'receivable',
+      type: 'payable',
       kind: 'record',
-      counterpartLabel: 'Empresa X',
+      contactId: 'p9',
       split: { mode: 'equal', parts: [{ kind: 'owner' }] }
     });
     expect(input.reminders).toBeUndefined();
     expect(input.paymentMethodId).toBeUndefined();
-    expect(input.payeeUserId).toBeUndefined();
     expect(input.pix).toBeUndefined();
   });
 
+  it('names the payers of a registro a receber from the selected contacts', () => {
+    const input = buildBillingInput({ ...base, settled: true, selected: ['p1'] });
+
+    expect(input).toMatchObject({ type: 'receivable', kind: 'record', split: { mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }] } });
+    expect(input.contactId).toBeUndefined();
+  });
+
   it('checks the start of a recorrente registro only with a clock', () => {
-    const monthly: BillingDraft = { ...base, settled: true, counterpartLabel: 'Empresa X', type: BillingRecurrence.Indefinite };
+    const monthly: BillingDraft = { ...base, settled: true, payee: 'p9', type: BillingRecurrence.Indefinite };
 
     expect(() => buildBillingInput(monthly, new Date('2026-09-15T12:00:00Z'))).toThrow('Registro recorrente começa hoje ou depois.');
     expect(buildBillingInput(monthly).startDate).toBe('2026-01-31');

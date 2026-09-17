@@ -175,21 +175,6 @@ function validateReminders(reminders: BillingReminder[]): BillingReminder[] {
     .sort((a, b) => a.offsetDays - b.offsetDays);
 }
 
-/** The free-text counterpart of a registro: 1 to 120 characters once trimmed. */
-export function normalizeCounterpartLabel(label: string | undefined, direction: Direction): string {
-  const value = label?.normalize('NFC').trim() ?? '';
-
-  if (value.length >= 1 && value.length <= 120) {
-    return value;
-  }
-
-  if (direction === Direction.Payable) {
-    throw new RangeError('Informe para quem é o valor.');
-  }
-
-  throw new RangeError('Informe de quem é o valor.');
-}
-
 /** `now` turns on the rule only a creation obeys: a recorrente registro starts today or later. */
 export function normalizeBillingInput(input: BillingInput, now?: Date): NormalizedBillingInput {
   if (!TYPES.includes(input.recurrence)) {
@@ -244,36 +229,23 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
   }
 
   const contactId = input.contactId?.trim() || undefined;
-  const direction = contactId ? Direction.Payable : (input.type ?? Direction.Receivable);
+  const direction = contactId ? Direction.Payable : Direction.Receivable;
+  const settled = input.kind === BillingKind.Record;
 
-  if (direction !== Direction.Receivable && direction !== Direction.Payable) {
-    throw new RangeError('Direção inválida.');
-  }
-
-  // Block 9: the new contact-based payable always files its key under the contact; a legacy payable
-  // (payeeUserId, no contactId) keeps typing its own key, as before.
-  if (input.pix && !contactId && direction !== Direction.Payable) {
+  // A key always belongs to whoever receives, and it is filed under their contact.
+  if (input.pix && !contactId) {
     throw new RangeError('Chave Pix só com um contato que recebe.');
   }
 
-  const settled = input.kind === BillingKind.Record;
-  // Block 9: a registro that still types a free-text counterpart (and no contact) keeps the old rules;
-  // one with a contact, or a plain split, follows the same rules as a live billing.
-  const legacyLabel = settled && !contactId && 'counterpartLabel' in input;
-  // Checked before the split, so a registro reads its own message instead of the direction's.
-  const counterpartLabel = legacyLabel ? registroLabel(input, direction, now) : undefined;
-
-  if (settled && !legacyLabel) {
-    if (input.paymentMethodId || input.pix || input.reminders) {
-      throw new RangeError('Registro não tem avisos nem Pix.');
-    }
-
-    if (now && input.recurrence !== BillingRecurrence.Once && input.startDate < calendarDate(now, input.timezone)) {
-      throw new RangeError('Registro recorrente começa hoje ou depois.');
-    }
+  if (settled && (input.paymentMethodId || input.pix || input.reminders)) {
+    throw new RangeError('Registro não tem avisos nem Pix.');
   }
 
-  const split: BillingSplit = legacyLabel ? { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } : splitOf(input, direction);
+  if (settled && now && input.recurrence !== BillingRecurrence.Once && input.startDate < calendarDate(now, input.timezone)) {
+    throw new RangeError('Registro recorrente começa hoje ou depois.');
+  }
+
+  const split: BillingSplit = splitOf(input, direction);
 
   resolveBillingSplit(input.totalCents, split);
 
@@ -291,16 +263,15 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     // Only the month end is carried: 'fixed' stays implicit, like before the rule existed.
     dueRule: monthEnd ? BillingDueRule.EndOfMonth : undefined,
     timezone: input.timezone,
-    paymentMethodId: direction === Direction.Receivable ? input.paymentMethodId || undefined : undefined,
+    // A conta a pagar may point at one of the receiving contact's keys; the owner's own keys collect.
+    paymentMethodId: input.paymentMethodId || undefined,
     reminders: input.reminders ? validateReminders(input.reminders) : undefined,
     split,
     category: input.category,
     type: direction,
     contactId,
-    payeeUserId: direction === Direction.Payable ? input.payeeUserId?.trim() || undefined : undefined,
-    pix: direction === Direction.Payable && input.pix ? normalizeBillingPix(input.pix) : undefined,
-    kind: settled ? BillingKind.Record : undefined,
-    counterpartLabel
+    pix: input.pix ? normalizeBillingPix(input.pix) : undefined,
+    kind: settled ? BillingKind.Record : undefined
   };
 }
 
@@ -315,55 +286,13 @@ function receivableSplit(input: BillingInput): BillingSplit {
   return split;
 }
 
-/** The allocation behind a billing: the owner alone on a conta a pagar (contact tracked separately), the contacts on a conta a receber. */
+/** The allocation behind a billing: the owner alone on a conta a pagar (the contact is apart), the contacts on a conta a receber. */
 function splitOf(input: BillingInput, direction: Direction): BillingSplit {
   if (direction === Direction.Payable) {
-    // Block 9: a contact names the receiver outside the split; only a legacy payeeUserId (no contactId) still uses it.
-    return input.contactId?.trim() ? { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } : payableSplit(input);
+    return { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] };
   }
 
   return receivableSplit(input);
-}
-
-/**
- * A registro is the owner's alone: it names the counterpart in free text and refuses anyone to split with, pay
- * through or remind. With a clock (creation), a recorrente registro may not start before today.
- */
-function registroLabel(input: BillingInput, direction: Direction, now: Date | undefined): string {
-  const label = normalizeCounterpartLabel(input.counterpartLabel, direction);
-  const participants = input.split?.parts.some((part) => part.kind === SplitPartKind.User) === true;
-
-  if (participants || input.payeeUserId || input.paymentMethodId || input.pix || input.reminders) {
-    throw new RangeError('Registro não tem participantes nem avisos.');
-  }
-
-  if (now && input.recurrence !== BillingRecurrence.Once && input.startDate < calendarDate(now, input.timezone)) {
-    throw new RangeError('Registro recorrente começa hoje ou depois.');
-  }
-
-  return label;
-}
-
-/**
- * A conta a pagar has a single payer, the owner, and no wallet key applies. The payee, when there is one, is the
- * one User part of its split, for the whole total: that is how the person on the creditor side is kept.
- */
-function payableSplit(input: BillingInput): BillingSplit {
-  if (input.split && input.split.parts.some((part) => part.kind === SplitPartKind.User)) {
-    throw new RangeError('Uma conta a pagar não divide o valor com contatos.');
-  }
-
-  if (input.paymentMethodId) {
-    throw new RangeError('Uma conta a pagar usa a chave Pix de quem recebe, não a sua.');
-  }
-
-  const payeeUserId = input.payeeUserId?.trim();
-
-  if (payeeUserId) {
-    return { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: payeeUserId, amountCents: input.totalCents }] };
-  }
-
-  return { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] };
 }
 
 function normalizeBillingPix(pix: BillingPixInput): BillingPixInput {

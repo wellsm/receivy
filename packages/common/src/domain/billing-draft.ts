@@ -251,6 +251,15 @@ function buildSplit(draft: BillingDraft, parties: SplitParty[]): BillingInput['s
   };
 }
 
+/** Who is on the other side of a registro: the receiving contact, or the people who pay the owner. */
+function counterpartOf(draft: BillingDraft): Pick<BillingInput, 'contactId' | 'split'> {
+  if (draft.payee) {
+    return { contactId: draft.payee };
+  }
+
+  return { split: { mode: SplitMode.Equal, parts: draft.selected.map((userId) => ({ kind: SplitPartKind.User, userId })) } };
+}
+
 /** Shared pure review boundary; raw text stays in each platform's local UI. `now` is passed only on creation. */
 export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput {
   const endDate = endDateFor(draft);
@@ -271,12 +280,9 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
     timezone: draft.timezone
   };
 
-  // A registro names who is on the other side and has nobody to split with, pay through or remind.
+  // A registro names who is on the other side and has nobody to pay through or remind.
   if (draft.settled) {
-    return normalizeBillingInput(
-      { ...schedule, type: draft.direction, kind: BillingKind.Record, counterpartLabel: draft.counterpartLabel ?? '' },
-      now
-    );
+    return normalizeBillingInput({ ...schedule, kind: BillingKind.Record, ...counterpartOf(draft) }, now);
   }
 
   const base = {
@@ -294,7 +300,6 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
     return normalizeBillingInput(
       {
         ...base,
-        type: Direction.Payable,
         contactId: draft.payee || undefined,
         pix: key ? { keyType: draft.pixInline.type, key, label: draft.pixInline.label.trim() || undefined } : undefined
       },
@@ -314,7 +319,6 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
   return normalizeBillingInput(
     {
       ...base,
-      type: Direction.Receivable,
       paymentMethodId: draft.pix || undefined,
       split: buildSplit(draft, parties)
     },

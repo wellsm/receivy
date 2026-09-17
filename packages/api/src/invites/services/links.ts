@@ -9,7 +9,7 @@ import {
   type PublicInviteView
 } from '@receivy/common';
 import { SettledLockedError } from '../../billings/errors';
-import { billingRecurrence, billingRegistered } from '../../billings/utils/columns';
+import { billingDirection, billingRecurrence, billingRegistered } from '../../billings/utils/columns';
 import { lockOwner } from '../../charges/services/materialize';
 import type { DbClient } from '../../database';
 import { type LinkRow, LinkRepository } from '../../public/repositories/link';
@@ -32,9 +32,9 @@ export type InviteLinkContext = { secret: string; webOrigin: string };
 export type InviteRow = LinkRow & { billing_id: string };
 
 /** The narrowest billing shape createInvite/revokeInvite need, so this module never depends on billings/repository. */
-const OWNED_BILLING_SELECT = { id: true, state: true, direction: true, kind: true } as const;
+const OWNED_BILLING_SELECT = { id: true, state: true, direction: true, type: true, kind: true } as const;
 
-type OwnedBillingRow = { id: string; state: BillingState; direction?: Direction; kind: BillingKind };
+type OwnedBillingRow = { id: string; state: BillingState; direction?: Direction; type?: Direction; kind: BillingKind };
 
 /** The narrowest billing shape a public invite preview needs. */
 const PUBLIC_BILLING_SELECT = {
@@ -112,7 +112,7 @@ export async function createInvite(
     }
 
     // A conta a pagar has no participants to invite.
-    if (billing.direction === Direction.Payable) {
+    if (billingDirection(billing) === Direction.Payable) {
       throw new PayableHasNoInviteError();
     }
 

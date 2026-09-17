@@ -158,6 +158,7 @@ export namespace ChargeRepository {
         amount_cents: true,
         payment_snapshot: true,
         billing: {
+          owner_id: true,
           recurrence: true,
           kind: true,
           contact: { id: true, nickname: true, user: { name: true } }
@@ -194,12 +195,18 @@ export namespace ChargeRepository {
       }
     });
 
-    return records.map(({ payment_snapshot, proofs, ...record }) => ({
-      ...record,
-      has_payment: !!payment_snapshot,
-      proof: proofs?.[0] ? { state: proofs[0].state, kind: proofs[0].kind ?? 'file' } : null,
-      billing: { ...record.billing, contact: record.billing.contact ?? null }
-    }));
+    return records.map(({ payment_snapshot, proofs, billing, ...record }) => {
+      const { owner_id, ...rest } = billing;
+
+      return {
+        ...record,
+        has_payment: !!payment_snapshot,
+        proof: proofs?.[0] ? { state: proofs[0].state, kind: proofs[0].kind ?? 'file' } : null,
+        // The contact is the owner's private agenda entry (their nickname for the person, their row id):
+        // the counterpart sits on the other side of the same charge and never receives it.
+        billing: { ...rest, contact: owner_id === userId ? (billing.contact ?? null) : null }
+      };
+    });
   }
 
   /** The stored proof state as anyone may see it: a reserved slot (`uploading`) is nobody's business yet. */

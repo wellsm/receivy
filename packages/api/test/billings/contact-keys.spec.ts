@@ -117,6 +117,12 @@ describe('contact keys', () => {
     equal(item.creditor?.name, 'Padaria');
     equal(item.has_payment, true);
     equal(item.proof, null);
+
+    const theirs = await ChargeRepository.list(db, contactUserId, { month: '2026-10' });
+    const theirItem = theirs.find((entry) => entry.id === charge.id)!;
+
+    equal(theirItem.billing.contact, null, 'the owner agenda entry never crosses to the other side');
+    equal(theirItem.debtor?.name, 'Dona', 'the counterpart still sees who owes them');
   });
 
   it('still reads a billing whose key was archived, with no Pix to show', async () => {

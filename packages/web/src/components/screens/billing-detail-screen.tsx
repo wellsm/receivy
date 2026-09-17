@@ -185,9 +185,9 @@ function typeTag(billing: BillingDetail, current: Cycle | null): string {
   return "À vista";
 }
 
-/** The one person on the other side of a registro: the contact it pays, or the payer its charges name. */
+/** The one person on the other side of a registro, as the owner knows them: the API names them either way. */
 function counterpartName(billing: BillingDetail): string {
-  return billing.contact?.name ?? billing.charges[0]?.recipient.name ?? "";
+  return billing.counterpart?.name ?? "";
 }
 
 /** "De Ana" on a registro a receber, "Para Ana" on one a pagar. */
@@ -420,7 +420,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   const pending = current?.charges.filter((charge) => charge.state === "pending") ?? [];
   // A conta a pagar carries its own key; a conta a receber points at the wallet.
   const payable = billing.type === "payable";
-  // A registro: the owner alone, already settled, with the counterpart typed as free text.
+  // A registro: the owner alone, already settled, with the other side named by the API.
   const settled = billing.kind === BillingKind.Record;
   const pix = payable ? billing.pix : (billing.charges.find((charge) => charge.pix)?.pix ?? pixFromWallet(methods, billing.paymentMethodId));
   const ended = billing.state === "ended";
@@ -661,8 +661,8 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
               // A file under review changes what the row asks of the owner: review it, never nag.
               const reviewing = isPending && charge.proofState === "pending";
               // A registro's rows carry its counterpart; a conta a pagar names the contact who receives.
-              const name = payable && !settled ? (billing.contact?.name ?? "Só comigo") : charge.recipient.name;
-              const avatar = payable && !settled ? (billing.contact?.avatar ?? null) : charge.recipient.avatar;
+              const name = payable && !settled ? (billing.counterpart?.name ?? "Só comigo") : charge.recipient.name;
+              const avatar = payable && !settled ? (billing.counterpart?.avatar ?? null) : charge.recipient.avatar;
               const participant = participantOf(billing, charge);
               // The badge is this charge's own switch; the participant's switch drives their action.
               const quiet = charge.notify === false;

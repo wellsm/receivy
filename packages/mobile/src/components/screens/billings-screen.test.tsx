@@ -12,12 +12,15 @@ jest.mock("expo-router", () => {
 
 type Overrides = Record<string, unknown>;
 
+const ana = { id: "c1", userId: "u1", name: "Ana", avatar: null };
+
 function summary(overrides: Overrides = {}) {
   return {
     id: "b1",
     recurrence: "once" as const,
     type: "receivable" as const,
     contact: null,
+    counterpart: null,
     description: "Churrasco",
     total: { amountCents: 12000, currency: "BRL" as const },
     startDate: "2026-09-01",
@@ -283,7 +286,7 @@ describe("BillingsScreen", () => {
   it("opens a conta a pagar instead of sharing a link", async () => {
     const onOpenBilling = jest.fn();
     const client = makeClient({
-      billings: jest.fn().mockResolvedValue({ billings: [summary({ type: "payable", contact: { id: "c1", userId: "u1", name: "Ana", avatar: null }, shareChargeId: "c9" })], nextCursor: null }),
+      billings: jest.fn().mockResolvedValue({ billings: [summary({ type: "payable", contact: ana, counterpart: ana, shareChargeId: "c9" })], nextCursor: null }),
     });
 
     await render(<BillingsScreen client={client} onOpenBilling={onOpenBilling} />);

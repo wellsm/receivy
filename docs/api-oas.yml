@@ -2677,6 +2677,31 @@ components:
             - id
             - userId
             - name
+        counterpart:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            userId:
+              type: string
+            name:
+              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
+          required:
+            - id
+            - userId
+            - name
         kind:
           enum: 
             - 'live'
@@ -3321,6 +3346,31 @@ components:
                   - id
                   - userId
                   - name
+              counterpart:
+                type: object
+                additionalProperties: false
+                properties:
+                  id:
+                    type: string
+                  userId:
+                    type: string
+                  name:
+                    type: string
+                  avatar:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      url:
+                        type: string
+                      version:
+                        type: string
+                    required:
+                      - url
+                      - version
+                required:
+                  - id
+                  - userId
+                  - name
               kind:
                 enum: 
                   - 'live'
@@ -3420,6 +3470,31 @@ components:
             - 'receivable'
             - 'payable'
         contact:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            userId:
+              type: string
+            name:
+              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
+          required:
+            - id
+            - userId
+            - name
+        counterpart:
           type: object
           additionalProperties: false
           properties:
@@ -4124,6 +4199,31 @@ components:
             - id
             - userId
             - name
+        counterpart:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            userId:
+              type: string
+            name:
+              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
+          required:
+            - id
+            - userId
+            - name
         kind:
           enum: 
             - 'live'
@@ -4762,6 +4862,31 @@ components:
             - id
             - userId
             - name
+        counterpart:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            userId:
+              type: string
+            name:
+              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
+          required:
+            - id
+            - userId
+            - name
         kind:
           enum: 
             - 'live'
@@ -5376,6 +5501,31 @@ components:
             - 'receivable'
             - 'payable'
         contact:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            userId:
+              type: string
+            name:
+              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
+          required:
+            - id
+            - userId
+            - name
+        counterpart:
           type: object
           additionalProperties: false
           properties:

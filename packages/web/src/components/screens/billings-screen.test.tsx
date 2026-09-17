@@ -26,12 +26,15 @@ afterEach(() => {
 
 type Overrides = Record<string, unknown>;
 
+const ana = { id: "c1", userId: "u1", name: "Ana", avatar: null };
+
 function summary(overrides: Overrides = {}) {
   return {
     id: "b1",
     recurrence: "once",
     type: "receivable",
     contact: null,
+    counterpart: null,
     description: "Churrasco",
     total: { amountCents: 12000, currency: "BRL" },
     startDate: "2026-09-01",
@@ -219,7 +222,7 @@ it("asks the API for one direction when the filter changes", async () => {
 });
 
 it("opens a conta a pagar from its card action instead of sharing a link", async () => {
-  const calls = listOnly([summary({ type: "payable", contact: { id: "c1", userId: "u1", name: "Ana", avatar: null }, shareChargeId: "c9" })]);
+  const calls = listOnly([summary({ type: "payable", contact: ana, counterpart: ana, shareChargeId: "c9" })]);
 
   render(<BillingsScreen />);
   const user = setup();

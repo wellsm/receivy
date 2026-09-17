@@ -137,6 +137,11 @@ export type BillingSummary = {
   type: Direction;
   /** Block 9: who receives a conta a pagar, or null when the bill is the owner's alone. */
   contact: BillingContact | null;
+  /**
+   * The other side as the owner knows them: the receiving contact of a conta a pagar (the same entry `contact`
+   * carries), the single payer of a registro a receber, null on a conta a receber, which may have many.
+   */
+  counterpart: BillingContact | null;
   /** 'record' is a registro: the owner alone, already settled. The API always sends it; absent reads as 'live'. */
   kind?: BillingKind;
   frequency?: BillingFrequency;
@@ -166,6 +171,11 @@ export type BillingDetail = {
   type: Direction;
   /** Block 9: who receives a conta a pagar, or null when the bill is the owner's alone. */
   contact: BillingContact | null;
+  /**
+   * The other side as the owner knows them: the receiving contact of a conta a pagar (the same entry `contact`
+   * carries), the single payer of a registro a receber, null on a conta a receber, which may have many.
+   */
+  counterpart: BillingContact | null;
   /** 'record' is a registro: the owner alone, already settled. The API always sends it; absent reads as 'live'. */
   kind?: BillingKind;
   /** Inline key of a conta a pagar; null on a conta a receber, which uses paymentMethodId. */

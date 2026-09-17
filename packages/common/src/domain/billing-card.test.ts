@@ -8,6 +8,7 @@ const base: BillingSummary = {
   id: 'b1',
   type: Direction.Receivable,
   contact: null,
+  counterpart: null,
   recurrence: BillingRecurrence.Once,
   description: 'Aluguel',
   total: { amountCents: 100_000, currency: 'BRL' },
@@ -191,27 +192,36 @@ describe('billingSummaryLine', () => {
 describe('billingBadges on a conta a pagar', () => {
   it('shows the direction and the receiving contact instead of the participant count', () => {
     const contact = { id: 'c1', userId: 'u1', name: 'Imobiliária', avatar: null };
-    const labels = billingBadges({ ...base, type: Direction.Payable, contact }).map((badge) => badge.label);
+    const labels = billingBadges({ ...base, type: Direction.Payable, contact, counterpart: contact }).map((badge) => badge.label);
 
     expect(labels).toEqual(['Única', 'A pagar', 'Imobiliária']);
-    expect(billingBadges({ ...base, type: Direction.Payable, contact: null }).map((badge) => badge.label)).toContain('Só comigo');
+    expect(billingBadges({ ...base, type: Direction.Payable }).map((badge) => badge.label)).toContain('Só comigo');
   });
 });
 
 describe('billingBadges on a registro', () => {
-  it('names the receiving contact instead of the people and marks it as a registro', () => {
-    // A registro a receber names its payer through the split, so the card falls back to the badge alone.
+  it('names the other side instead of the people and marks it as a registro', () => {
+    // A registro a receber keeps its payer in the split; the API names them on `counterpart` all the same.
+    expect(
+      billingBadges({
+        ...base,
+        kind: BillingKind.Record,
+        counterpart: { id: 'c1', userId: 'u1', name: 'Empresa X', avatar: null },
+        participantCount: 0
+      }).map((badge) => badge.label)
+    ).toEqual(['Única', 'Registro', 'Empresa X']);
+    // A registro from before the contact seat names nobody: the badge stands alone.
     expect(billingBadges({ ...base, kind: BillingKind.Record, participantCount: 0 }).map((badge) => badge.label)).toEqual([
       'Única',
       'Registro'
     ]);
+
+    const clinica = { id: 'c2', userId: 'u2', name: 'Clínica Sorriso', avatar: null };
+
     expect(
-      billingBadges({
-        ...base,
-        type: Direction.Payable,
-        kind: BillingKind.Record,
-        contact: { id: 'c2', userId: 'u2', name: 'Clínica Sorriso', avatar: null }
-      }).map((badge) => badge.label)
+      billingBadges({ ...base, type: Direction.Payable, kind: BillingKind.Record, contact: clinica, counterpart: clinica }).map(
+        (badge) => badge.label
+      )
     ).toEqual(['Única', 'Registro', 'A pagar', 'Clínica Sorriso']);
   });
 });

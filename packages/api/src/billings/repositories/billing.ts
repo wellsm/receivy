@@ -81,6 +81,14 @@ function counterpartIdOf(split: BillingSplit): string | undefined {
   return userIds(split)[0];
 }
 
+/** An agenda entry as the owner wrote it down: their nickname first, then the person's own name and photo. */
+async function knownAs(db: DbClient, contact: { id: string; user_id: string; nickname?: string | null }): Promise<BillingContact> {
+  const person = await ContactRepository.counterpartOf(db, contact.user_id);
+  const name = contact.nickname || person?.name || 'Conta excluída';
+
+  return { id: contact.id, userId: contact.user_id, name, avatar: person?.avatar ?? null };
+}
+
 /** Who receives a conta a pagar, as the owner knows them; an archived contact still names it. */
 async function contactOf(db: DbClient, row: Pick<BillingRepository.Row, 'contact_id'>): Promise<BillingContact | null> {
   if (!row.contact_id) {
@@ -89,14 +97,34 @@ async function contactOf(db: DbClient, row: Pick<BillingRepository.Row, 'contact
 
   const contact = await db.contacts.findOne({ select: { id: true, user_id: true, nickname: true }, where: { id: row.contact_id } });
 
-  if (!contact) {
+  return contact ? knownAs(db, contact) : null;
+}
+
+/**
+ * The other side as the owner knows them. A conta a pagar already names it: the receiving contact stands for it.
+ * A registro a receber keeps its single payer in the split, so their agenda entry is read from there — the one
+ * extra lookup this costs happens only for a registro a receber. A conta a receber may have many payers: nobody
+ * stands for the other side there.
+ */
+async function counterpartOf(
+  db: DbClient,
+  row: Pick<BillingRepository.Row, 'id' | 'owner_id' | 'kind'>,
+  contact: BillingContact | null
+): Promise<BillingContact | null> {
+  if (contact || billingKind(row) !== BillingKind.Record) {
+    return contact;
+  }
+
+  const { records } = await db.allocations.findMany({ select: { user_id: true }, where: { billing_id: row.id } });
+  const payerId = records.find((allocation) => allocation.user_id !== row.owner_id)?.user_id;
+
+  if (!payerId) {
     return null;
   }
 
-  const person = await ContactRepository.counterpartOf(db, contact.user_id);
-  const name = contact.nickname || person?.name || 'Conta excluída';
+  const entry = await db.contacts.findOne({ select: { id: true, user_id: true, nickname: true }, where: { owner_id: row.owner_id, user_id: payerId } });
 
-  return { id: contact.id, userId: contact.user_id, name, avatar: person?.avatar ?? null };
+  return entry ? knownAs(db, entry) : null;
 }
 
 /** The person a stored contact points at, read as it is: an archived contact must not block an unrelated edit. */
@@ -245,12 +273,14 @@ function summary(
   nextDueDate: string | null,
   counters: BillingCounters,
   installmentCount: number | undefined,
-  contact: BillingContact | null
+  contact: BillingContact | null,
+  counterpart: BillingContact | null
 ): BillingSummary {
   return {
     id: row.id,
     type: BillingRepository.direction(row),
     contact,
+    counterpart,
     kind: billingKind(row),
     recurrence: billingRecurrence(row),
     frequency: row.frequency,
@@ -397,7 +427,9 @@ async function summaryDto(db: DbClient, row: BillingRepository.Row, now: Date, a
       ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null)
       : null);
 
-  return summary(row, nextDueDate, counters, installmentCountFor(row), await contactOf(db, row));
+  const contact = await contactOf(db, row);
+
+  return summary(row, nextDueDate, counters, installmentCountFor(row), contact, await counterpartOf(db, row, contact));
 }
 
 async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: InviteLinkContext): Promise<BillingDetail> {
@@ -417,6 +449,7 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
     id: row.id,
     type: BillingRepository.direction(row),
     contact,
+    counterpart: await counterpartOf(db, row, contact),
     kind: billingKind(row),
     pix: await billingPix(db, row),
     recurrence: billingRecurrence(row),

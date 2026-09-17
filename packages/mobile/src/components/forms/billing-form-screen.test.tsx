@@ -167,7 +167,7 @@ const onceBilling: BillingDetail = {
   recurrence: BillingRecurrence.Once,
   type: Direction.Receivable,
   contact: null,
-  
+  counterpart: null,
   pix: null,
   description: "Jantar",
   total: { amountCents: 9_000, currency: "BRL" },

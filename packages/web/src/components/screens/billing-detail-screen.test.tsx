@@ -72,7 +72,7 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
     recurrence: BillingRecurrence.Until,
     type: Direction.Receivable,
     contact: null,
-    
+    counterpart: null,
     pix: null,
     description: "Jantar de despedida",
     total: { amountCents: 18_000, currency: "BRL" },
@@ -438,6 +438,7 @@ it("shows a conta a pagar with its inline key and receiving contact, without inv
   const detail = billing({
     type: Direction.Payable,
     contact: { id: "c1", userId: "u1", name: "Ana", avatar: null },
+    counterpart: { id: "c1", userId: "u1", name: "Ana", avatar: null },
     pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
     paymentMethodId: undefined,
     invite: { url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" },
@@ -615,7 +616,15 @@ it("heads a registro with its counterpart and hides the invite and the payment l
     counterpartLabel: "Empresa X",
   });
 
-  await open(billing({ kind: BillingKind.Record, paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] }, charges: [salary] }));
+  await open(
+    billing({
+      kind: BillingKind.Record,
+      counterpart: { id: "c1", userId: "u1", name: "Empresa X", avatar: null },
+      paymentMethodId: undefined,
+      split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
+      charges: [salary],
+    }),
+  );
 
   expect(screen.getByText("De Empresa X")).toBeInTheDocument();
   expect(screen.getByText("Registro")).toBeInTheDocument();
@@ -640,8 +649,24 @@ it("heads a registro a pagar with Para and names its rows after the counterpart"
     counterpartLabel: "Imobiliária",
   });
 
-  await open(billing({ type: Direction.Payable, kind: BillingKind.Record, contact: { id: "c2", userId: "u2", name: "Imobiliária", avatar: null }, paymentMethodId: undefined, charges: [rent] }));
+  const imobiliaria = { id: "c2", userId: "u2", name: "Imobiliária", avatar: null };
+
+  await open(billing({ type: Direction.Payable, kind: BillingKind.Record, contact: imobiliaria, counterpart: imobiliaria, paymentMethodId: undefined, charges: [rent] }));
 
   expect(screen.getByText("Para Imobiliária")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeInTheDocument();
+});
+
+it("names the payer of a registro a receber that has no charge yet", async () => {
+  await open(
+    billing({
+      kind: BillingKind.Record,
+      counterpart: { id: "c1", userId: "u1", name: "Empresa X", avatar: null },
+      paymentMethodId: undefined,
+      split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
+      charges: [],
+    }),
+  );
+
+  expect(await screen.findByText("De Empresa X")).toBeInTheDocument();
 });

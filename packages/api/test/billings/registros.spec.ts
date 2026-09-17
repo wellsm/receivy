@@ -286,6 +286,37 @@ describe('registros on native PostgreSQL', () => {
     equal(item?.charge.kind, BillingKind.Record);
   });
 
+  it('names the other side of a billing as the owner knows them, on the summary and on the detail', async () => {
+    const now = date('2026-03-05');
+    const salary = await BillingRepository.create(db, OWNER, 'registro-counterpart-salary', registro('Salário contraparte'), now);
+    const rent = await BillingRepository.create(db, OWNER, 'registro-counterpart-rent', registroPago('Aluguel contraparte'), now);
+    const split = await BillingRepository.create(
+      db,
+      OWNER,
+      'registro-counterpart-split',
+      registro('Rateio contraparte', { kind: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: anaId }] } }),
+      now
+    );
+
+    // A registro a receber keeps its payer in the split, so only `counterpart` can name them.
+    equal(salary.contact, null);
+    equal(salary.counterpart?.name, 'Empresa X');
+    equal(salary.counterpart?.userId, empresaId);
+    // A conta a pagar names the very contact it pays.
+    equal(rent.counterpart?.name, 'Imobiliária');
+    equal(rent.counterpart?.id, rent.contact?.id);
+    // A live conta a receber may have many payers: nobody stands for the other side.
+    equal(split.counterpart, null);
+
+    equal((await BillingRepository.get(db, OWNER, salary.id, now)).counterpart?.name, 'Empresa X');
+
+    const billings = (await BillingRepository.list(db, OWNER)).billings;
+
+    equal(billings.find((billing) => billing.id === salary.id)?.counterpart?.name, 'Empresa X');
+    equal(billings.find((billing) => billing.id === rent.id)?.counterpart?.name, 'Imobiliária');
+    equal(billings.find((billing) => billing.id === split.id)?.counterpart, null);
+  });
+
   it('settles each due charge of a registro once a day, never one somebody reopened', async () => {
     const commission = await BillingRepository.create(
       db,

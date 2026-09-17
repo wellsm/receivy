@@ -60,7 +60,7 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
     recurrence: BillingRecurrence.Until,
     type: Direction.Receivable,
     contact: null,
-    
+    counterpart: null,
     pix: null,
     description: "Jantar de despedida",
     total: { amountCents: 18_000, currency: "BRL" },
@@ -441,6 +441,7 @@ describe("BillingDetailScreen", () => {
     const detail = billing({
       type: Direction.Payable,
       contact: { id: "c1", userId: "u1", name: "Ana", avatar: null },
+      counterpart: { id: "c1", userId: "u1", name: "Ana", avatar: null },
       pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
       paymentMethodId: undefined,
       charges: [own],
@@ -522,7 +523,13 @@ describe("BillingDetailScreen", () => {
       kind: BillingKind.Record,
       counterpartLabel: "Empresa X",
     });
-    const detail = billing({ kind: BillingKind.Record, paymentMethodId: undefined, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] }, charges: [salary] });
+    const detail = billing({
+      kind: BillingKind.Record,
+      counterpart: { id: "c1", userId: "u1", name: "Empresa X", avatar: null },
+      paymentMethodId: undefined,
+      split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
+      charges: [salary],
+    });
 
     await open(makeClient(detail));
 
@@ -549,9 +556,25 @@ describe("BillingDetailScreen", () => {
       counterpartLabel: "Imobiliária",
     });
 
-    await open(makeClient(billing({ type: Direction.Payable, kind: BillingKind.Record, contact: { id: "c2", userId: "u2", name: "Imobiliária", avatar: null }, paymentMethodId: undefined, charges: [rent] })));
+    const imobiliaria = { id: "c2", userId: "u2", name: "Imobiliária", avatar: null };
+
+    await open(makeClient(billing({ type: Direction.Payable, kind: BillingKind.Record, contact: imobiliaria, counterpart: imobiliaria, paymentMethodId: undefined, charges: [rent] })));
 
     expect(screen.getByText("Para Imobiliária")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeOnTheScreen();
+  });
+
+  it("names the payer of a registro a receber that has no charge yet", async () => {
+    const detail = billing({
+      kind: BillingKind.Record,
+      counterpart: { id: "c1", userId: "u1", name: "Empresa X", avatar: null },
+      paymentMethodId: undefined,
+      split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
+      charges: [],
+    });
+
+    await open(makeClient(detail));
+
+    expect(screen.getByText("De Empresa X")).toBeOnTheScreen();
   });
 });

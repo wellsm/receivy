@@ -237,7 +237,7 @@ export function filterCharges(viewerEmail: string, charges: ListCharge, filters:
       return false;
     }
 
-    if (filters.recurrence.length && !filters.recurrence.includes(charge.billing.type as BillingRecurrence)) {
+    if (filters.recurrence.length && !filters.recurrence.includes(charge.billing.recurrence as BillingRecurrence)) {
       return false;
     }
 

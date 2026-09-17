@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chargeDirection, chargeTotals, groupChargesByDay, openChargesTotal, type ListCharge } from './charge';
+import { chargeDirection, chargeTotals, counterpartName, groupChargesByDay, openChargesTotal, type ListCharge } from './charge';
 import { ChargeState, Direction } from './contracts';
 
 function charge(overrides: Partial<ListCharge[number]> = {}): ListCharge[number] {
@@ -9,7 +9,9 @@ function charge(overrides: Partial<ListCharge[number]> = {}): ListCharge[number]
     state: ChargeState.Pending,
     due_date: '2026-09-10',
     amount_cents: 1000,
-    billing: { type: 'once', direction: Direction.Receivable },
+    has_payment: false,
+    proof: null,
+    billing: { recurrence: 'once', kind: 'live', contact: null },
     debtor: { email: 'bruno@example.com' },
     ...overrides
   };
@@ -21,18 +23,28 @@ const MINE = { debtor: { email: VIEWER } };
 describe('charge direction', () => {
   it('is payable for whoever is on the debtor side, whichever side owns the billing', () => {
     expect(chargeDirection(charge({ debtor: { email: VIEWER } }), VIEWER)).toBe(Direction.Payable);
-    expect(chargeDirection(charge({ debtor: { email: VIEWER }, billing: { type: 'once', direction: Direction.Payable } }), VIEWER)).toBe(
-      Direction.Payable
-    );
   });
 
   it('is receivable when the viewer is not the one paying', () => {
     expect(chargeDirection(charge(), VIEWER)).toBe(Direction.Receivable);
-    expect(chargeDirection(charge({ billing: { type: 'once', direction: Direction.Payable } }), VIEWER)).toBe(Direction.Receivable);
   });
 
   it('is receivable on a registro with nobody paying', () => {
     expect(chargeDirection(charge({ debtor: undefined }), VIEWER)).toBe(Direction.Receivable);
+  });
+});
+
+describe('counterpart name', () => {
+  it('names the counterpart from the contact when the viewer pays, from the debtor when they receive', () => {
+    const paying = charge({
+      debtor: { email: VIEWER },
+      billing: { recurrence: 'once', kind: 'live', contact: { id: 'c1', nickname: 'Padaria da esquina', user: { name: 'Padaria' } } }
+    });
+    const receiving = charge({ debtor: { name: 'Bruno', email: 'bruno@example.com' } });
+
+    expect(counterpartName(paying, VIEWER)).toBe('Padaria da esquina');
+    expect(counterpartName(receiving, VIEWER)).toBe('Bruno');
+    expect(counterpartName(charge({ debtor: undefined }), VIEWER)).toBe('Você');
   });
 });
 

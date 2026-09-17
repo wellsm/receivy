@@ -3,6 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import { HttpNotFoundError } from '@ez4/gateway';
 import { BillingRecurrence, Direction, PixKeyType } from '@receivy/common';
 import { BillingRepository } from '../../src/billings/repositories/billing';
+import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { PixKeyTakenError } from '../../src/payment-methods/errors';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
@@ -107,6 +108,15 @@ describe('contact keys', () => {
 
     equal(row?.creditor_id, contactUserId, 'the contact receives: they sit on the creditor side');
     equal(row?.debtor_id, OWNER, 'the owner pays their own bill');
+
+    const feed = await ChargeRepository.list(db, OWNER, { month: '2026-10' });
+    const item = feed.find((entry) => entry.id === charge.id)!;
+
+    equal(item.billing.contact?.nickname, null, 'this contact was created with no nickname');
+    equal(item.billing.contact?.user.name, 'Padaria');
+    equal(item.creditor?.name, 'Padaria');
+    equal(item.has_payment, true);
+    equal(item.proof, null);
   });
 
   it('still reads a billing whose key was archived, with no Pix to show', async () => {

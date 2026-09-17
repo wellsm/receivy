@@ -165,7 +165,12 @@ export namespace ChargeRepository {
         payment_snapshot: true,
         billing: {
           recurrence: true,
-          type: true,
+          kind: true,
+          contact: { id: true, nickname: true, user: { name: true } }
+        },
+        creditor: {
+          name: true,
+          email: true,
         },
         debtor: {
           name: true,
@@ -195,8 +200,12 @@ export namespace ChargeRepository {
       }
     });
 
-    // Block 8 renamed billings.type to recurrence and direction to type; the contract of this bench keeps the old names.
-    return records.map((record) => ({ ...record, billing: { type: record.billing.recurrence, direction: record.billing.type } }));
+    return records.map(({ payment_snapshot, proofs, ...record }) => ({
+      ...record,
+      has_payment: !!payment_snapshot,
+      proof: proofs?.[0] ? { state: proofs[0].state, kind: proofs[0].kind ?? 'file' } : null,
+      billing: { ...record.billing, contact: record.billing.contact ?? null }
+    }));
   }
 
   /** The stored proof state as anyone may see it: a reserved slot (`uploading`) is nobody's business yet. */

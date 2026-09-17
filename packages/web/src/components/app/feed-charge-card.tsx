@@ -1,4 +1,4 @@
-import { formatMoney, type Direction, type ListChargeItem } from "@receivy/common";
+import { counterpartName, formatMoney, type Direction, type ListChargeItem } from "@receivy/common";
 import Link from "next/link";
 import { InitialsAvatar } from "../ui/initials-avatar";
 
@@ -6,6 +6,8 @@ type ChargeCardProps = {
   charge: ListChargeItem;
   direction: Direction;
   today: string;
+  /** Who is reading the feed: names the counterpart on the other side of the card. */
+  viewerEmail: string;
   /** Card actions stay optional while the list endpoint does not answer with what they need. */
   reminded?: string | null;
   onRemind?: () => void;
@@ -16,6 +18,7 @@ type ChargeCardProps = {
 export function FeedChargeCard({
   charge,
   direction,
+  viewerEmail,
   // reminded,
   // onRemind,
   // onMarkPaid,
@@ -28,6 +31,7 @@ export function FeedChargeCard({
   // const action = chargeAction(charge, direction);
   const settled = charge.state !== "pending";
   const amountClass = settled ? "text-muted" : direction === "receivable" ? "text-ink" : "text-payable";
+  const counterpart = counterpartName(charge, viewerEmail);
 
   // The whole row opens the charge through one stretched link. Nesting the action inside it would
   // not be accessible, so the link is a sibling overlay and the action is raised above it.
@@ -42,12 +46,12 @@ export function FeedChargeCard({
       />
 
       <span className="hidden md:block">
-        <InitialsAvatar name={charge.debtor?.name ?? 'N/A'} size={44} />
+        <InitialsAvatar name={counterpart} size={44} />
       </span>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="m-0 truncate text-[13.5px] font-bold text-ink md:text-[15.5px] md:font-semibold">
-          {charge.description} · <span className="font-semibold text-muted md:font-normal">{charge.debtor?.name ?? 'N/A'}</span>
+          {charge.description} · <span className="font-semibold text-muted md:font-normal">{counterpart}</span>
         </p>
         {/* {badges.length > 0 && (
           <div className="flex flex-wrap gap-1.5">

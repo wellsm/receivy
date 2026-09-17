@@ -37,7 +37,7 @@ export function FeedDayGroup({ date, charges, today, viewerEmail }: FeedDayGroup
       </h2>
 
       {charges.map((charge) => (
-        <FeedChargeCard key={charge.id} charge={charge} direction={chargeDirection(charge, viewerEmail)} today={today} />
+        <FeedChargeCard key={charge.id} charge={charge} direction={chargeDirection(charge, viewerEmail)} today={today} viewerEmail={viewerEmail} />
       ))}
     </section>
   );

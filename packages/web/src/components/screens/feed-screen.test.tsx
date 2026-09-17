@@ -33,7 +33,9 @@ function charge(overrides: Partial<ListChargeItem> = {}): ListChargeItem {
     state: ChargeState.Pending,
     due_date: "2026-09-10",
     amount_cents: 1000,
-    billing: { type: "once", direction: Direction.Receivable },
+    has_payment: false,
+    proof: null,
+    billing: { recurrence: "once", kind: "live", contact: null },
     debtor: { name: "Ana Prado" },
     ...overrides,
   };

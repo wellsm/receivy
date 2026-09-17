@@ -77,7 +77,9 @@ describe('feed filters over a month of charges', () => {
     state: ChargeState.Pending,
     due_date: today,
     amount_cents: 1000,
-    billing: { type: BillingRecurrence.Once, direction: Direction.Receivable },
+    has_payment: false,
+    proof: null,
+    billing: { recurrence: BillingRecurrence.Once, kind: 'live', contact: null },
     debtor: { email: 'bruno@example.com' },
     ...overrides
   });
@@ -104,7 +106,7 @@ describe('feed filters over a month of charges', () => {
       charge({ id: 'open-in' }),
       charge({ id: 'paid-in', state: ChargeState.Paid }),
       charge({ id: 'open-out', debtor: mine }),
-      charge({ id: 'until-in', billing: { type: BillingRecurrence.Until, direction: Direction.Receivable } }),
+      charge({ id: 'until-in', billing: { recurrence: BillingRecurrence.Until, kind: 'live', contact: null } }),
       charge({ id: 'late-in', due_date: '2026-09-01' })
     ];
     const ids = (filters: Partial<FeedFilters>) =>

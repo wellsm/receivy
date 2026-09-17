@@ -8,9 +8,16 @@ export type ListChargeItem = {
   state: string;
   due_date: string;
   amount_cents: number;
+  has_payment: boolean;
+  proof: { state: string; kind: string } | null;
   billing: {
-    type: string;
-    direction: Direction;
+    recurrence: string;
+    kind: string;
+    contact: { id: string; nickname?: string; user: { name?: string } } | null;
+  };
+  creditor?: {
+    name?: string;
+    email?: string;
   };
   debtor?: {
     name?: string;
@@ -43,6 +50,17 @@ export function chargeDirection(charge: ListChargeItem, viewerEmail: string): Di
   const pays = !!viewerEmail && charge.debtor?.email === viewerEmail;
 
   return pays ? Direction.Payable : Direction.Receivable;
+}
+
+/** Who is on the other side, as the viewer knows them: the contact's nickname first, then the person's name. */
+export function counterpartName(charge: ListChargeItem, viewerEmail: string): string {
+  if (chargeDirection(charge, viewerEmail) === Direction.Payable) {
+    const contact = charge.billing.contact;
+
+    return contact?.nickname || contact?.user.name || charge.creditor?.name || 'Você';
+  }
+
+  return charge.debtor?.name || 'Você';
 }
 
 function money(amountCents: number): Money {

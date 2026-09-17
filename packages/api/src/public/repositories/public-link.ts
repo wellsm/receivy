@@ -2,7 +2,7 @@ import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import { ChargePayer, ChargeState, Direction, type PublicChargeView, type PublicLink } from '@receivy/common';
 import { ChargeClosedError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
-import { StoredProofState } from '../../charges/schemas/charge';
+import { PaymentMethodKind, StoredProofState } from '../../charges/schemas/charge';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
@@ -49,7 +49,7 @@ export namespace PublicLinkRepository {
       let current = row;
       let published = false;
 
-      if (!row.pix_key_snapshot || !row.pix_key_type_snapshot) {
+      if (!ChargeRepository.paymentOf(row)) {
         if (row.public_id || !paymentMethodId) throw new PixRequiredError();
         const method = await tx.payment_methods.findOne({
           select: { pix_key: true, pix_key_type: true, label: true },
@@ -61,9 +61,12 @@ export namespace PublicLinkRepository {
         await tx.charges.updateOne({
           where: { id: row.id },
           data: {
-            pix_key_snapshot: method.pix_key,
-            pix_key_type_snapshot: method.pix_key_type,
-            pix_label_snapshot: method.label,
+            payment_snapshot: {
+              method: PaymentMethodKind.Pix,
+              type: method.pix_key_type,
+              value: method.pix_key,
+              label: method.label ?? 'Pix'
+            },
             updated_at: stamp
           }
         });
@@ -85,8 +88,8 @@ export namespace PublicLinkRepository {
           where: { id: paymentMethodId, owner_id: creditorId, archived_at: { isNull: true } }
         });
         if (!method) throw new HttpNotFoundError();
-        if (method.pix_key !== row.pix_key_snapshot || method.pix_key_type !== row.pix_key_type_snapshot)
-          throw new PixSnapshotLockedError();
+        const published = ChargeRepository.paymentOf(row);
+        if (method.pix_key !== published?.value || method.pix_key_type !== published?.type) throw new PixSnapshotLockedError();
       }
 
       const linked = await ensurePublicLink(tx, current, nowSeconds, rotate);
@@ -123,16 +126,15 @@ export namespace PublicLinkRepository {
   export async function chargeView(db: DbClient, charge: ChargeRepository.Row): Promise<PublicChargeView> {
     const user = await db.users.findOne({ select: { name: true }, where: { id: charge.creditor_id } });
     const firstName = user?.name?.trim().split(/\s+/)[0] || 'Pessoa';
+    const payment = ChargeRepository.paymentOf(charge);
+
     return {
       creditorFirstName: firstName,
       description: charge.description,
       amount: { amountCents: charge.amount_cents, currency: 'BRL' },
       dueDate: charge.due_date,
       state: charge.state,
-      pix:
-        charge.pix_key_type_snapshot && charge.pix_key_snapshot
-          ? { keyType: charge.pix_key_type_snapshot, key: charge.pix_key_snapshot, label: charge.pix_label_snapshot ?? 'Pix' }
-          : null,
+      pix: payment ? { keyType: payment.type, key: payment.value, label: payment.label } : null,
       uploadsEnabled: charge.state === ChargeState.Pending && charge.proof_state !== StoredProofState.Pending
     };
   }

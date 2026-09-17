@@ -63,7 +63,13 @@ export async function eraseAccount(
         where: { id: chargeId },
         data: {
           ...(creditorDeleted
-            ? { pix_key_snapshot: sqlNull, pix_key_type_snapshot: sqlNull, pix_label_snapshot: sqlNull, link_revoked_at: now }
+            ? {
+                payment_snapshot: sqlNull,
+                pix_key_snapshot: sqlNull,
+                pix_key_type_snapshot: sqlNull,
+                pix_label_snapshot: sqlNull,
+                link_revoked_at: now
+              }
             : {}),
           ...(senderDeleted
             ? {

@@ -42,7 +42,7 @@ import {
 } from '@receivy/common';
 import { SilenceUnavailableError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
-import { StoredProofState } from '../../charges/schemas/charge';
+import { PaymentMethodKind, StoredProofState } from '../../charges/schemas/charge';
 import {
   lockOwner,
   type PayableMaterialization,
@@ -686,9 +686,14 @@ async function rewriteMonthCharges(
         ...(moving ? { due_date: planned.dueDate } : {}),
         ...(pixTouched
           ? {
-              pix_key_type_snapshot: context!.pix?.keyType ?? sqlNull,
-              pix_key_snapshot: context!.pix?.key ?? sqlNull,
-              pix_label_snapshot: context!.pix?.label ?? sqlNull
+              payment_snapshot: context!.pix
+                ? {
+                    method: PaymentMethodKind.Pix,
+                    type: context!.pix.keyType,
+                    value: context!.pix.key,
+                    label: context!.pix.label
+                  }
+                : sqlNull
             }
           : {}),
         updated_at: now

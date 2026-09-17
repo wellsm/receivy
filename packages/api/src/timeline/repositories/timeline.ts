@@ -194,7 +194,7 @@ export namespace TimelineRepository {
           proofState: visibleProofState(row),
           payer: ChargeRepository.payer(row),
           ownedByViewer: ChargeRepository.owns(row, userId),
-          hasPix: !!row.pix_key_snapshot && !!row.pix_key_type_snapshot,
+          hasPix: !!ChargeRepository.paymentOf(row),
           proofKind: ChargeRepository.proofKind(row),
           confirmationRequired: await ChargeRepository.confirmationRequired(db, row),
           notify: !ChargeRepository.owns(row, userId) || row.notify,

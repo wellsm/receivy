@@ -56,9 +56,7 @@ async function chargeRows(billingId: string) {
       state: true,
       amount_cents: true,
       debtor_user_id: true,
-      pix_key_snapshot: true,
-      pix_key_type_snapshot: true,
-      pix_label_snapshot: true
+      payment_snapshot: true
     },
     where: { billing_id: billingId },
     order: { due_date: Order.Asc }
@@ -393,7 +391,7 @@ describe('month materialized: pending charges and current month edits', () => {
     const [before] = await chargeRows(billing.id);
 
     ok(before);
-    equal(before.pix_key_snapshot, '52998224725', 'picked up the only default payment method at creation');
+    equal(before.payment_snapshot?.value, '52998224725', 'picked up the only default payment method at creation');
 
     const alternate = await PaymentMethodRepository.save(db, OWNER, {
       pixKeyType: PixKeyType.Email,
@@ -411,8 +409,8 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(after?.due_date, '2026-03-20', 'amount-only edit does not reschedule');
     equal(after?.amount_cents, 12_000);
     equal(
-      after?.pix_key_snapshot,
-      before.pix_key_snapshot,
+      after?.payment_snapshot?.value,
+      before.payment_snapshot?.value,
       'an unrelated default-payment-method change must not rotate an already shared key'
     );
 
@@ -504,7 +502,7 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(ownerOnly?.state, 'pending');
     equal(ownerOnly?.due_date, '2026-03-20');
     equal(ownerOnly?.amount_cents, 10_000);
-    equal(ownerOnly?.pix_key_snapshot, '52998224725');
+    equal(ownerOnly?.payment_snapshot?.value, '52998224725');
     equal(rows.length, 2);
   });
 });

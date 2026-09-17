@@ -9,6 +9,18 @@ export const enum StoredProofState {
   Rejected = 'rejected'
 }
 
+/** The only payment method today; the field exists so a second one does not need another column. */
+export const enum PaymentMethodKind {
+  Pix = 'pix'
+}
+
+export interface PaymentSnapshotSchema {
+  method: PaymentMethodKind;
+  type: PixKeyType;
+  value: String.Max<254>;
+  label: String.Max<120>;
+}
+
 export interface ProofFileSchema {
   key: String.Max<300>;
   name: String.Max<200>;
@@ -31,8 +43,13 @@ export interface ChargeSchema extends Database.Schema {
   due_date: String.Date;
   installment?: number;
   installment_count?: number;
+  /** Frozen copy of how this charge is paid; never queried by content, so one object beats three columns. */
+  payment_snapshot?: PaymentSnapshotSchema;
+  /** @deprecated Folded into `payment_snapshot`; read only as a fallback until the backfill runs. */
   pix_key_type_snapshot?: PixKeyType;
+  /** @deprecated Folded into `payment_snapshot`. */
   pix_key_snapshot?: String.Max<254>;
+  /** @deprecated Folded into `payment_snapshot`. */
   pix_label_snapshot?: String.Max<120>;
   state: ChargeState;
   cancelled_at?: String.DateTime;

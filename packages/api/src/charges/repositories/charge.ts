@@ -25,7 +25,7 @@ import type { DbClient } from '../../database';
 import { ProofDeclarationForbiddenError } from '../../proofs/errors';
 import { lockAccountReferences } from '../../users/services/locking';
 import { ChargeClosedError, ChargeNotPaidError, SilenceUnavailableError } from '../errors';
-import { StoredProofState } from '../schemas/charge';
+import { PaymentMethodKind, StoredProofState } from '../schemas/charge';
 
 const sqlNull = null as unknown as undefined;
 
@@ -80,6 +80,7 @@ export namespace ChargeRepository {
     due_date: true,
     installment: true,
     installment_count: true,
+    payment_snapshot: true,
     pix_key_type_snapshot: true,
     pix_key_snapshot: true,
     pix_label_snapshot: true,
@@ -112,6 +113,36 @@ export namespace ChargeRepository {
     sha256?: string;
   };
 
+  export type PaymentSnapshotColumns = {
+    method: PaymentMethodKind;
+    type: PixKeyType;
+    value: string;
+    label: string;
+  };
+
+  /**
+   * How this charge is paid. Transition read: `payment_snapshot` is null until the block 5 backfill runs, so the
+   * three folded columns answer meanwhile; the fallback goes away with them.
+   */
+  export function paymentOf(
+    row: Pick<Row, 'payment_snapshot' | 'pix_key_type_snapshot' | 'pix_key_snapshot' | 'pix_label_snapshot'>
+  ): PaymentSnapshotColumns | null {
+    if (row.payment_snapshot) {
+      return row.payment_snapshot;
+    }
+
+    if (!row.pix_key_type_snapshot || !row.pix_key_snapshot) {
+      return null;
+    }
+
+    return {
+      method: PaymentMethodKind.Pix,
+      type: row.pix_key_type_snapshot,
+      value: row.pix_key_snapshot,
+      label: row.pix_label_snapshot ?? 'Pix'
+    };
+  }
+
   export type Row = {
     id: string;
     /** The billing owner, whichever side of the money they are on. */
@@ -126,6 +157,8 @@ export namespace ChargeRepository {
     due_date: string;
     installment?: number;
     installment_count?: number;
+    payment_snapshot?: PaymentSnapshotColumns;
+    /** @deprecated Folded into `payment_snapshot`; only `paymentOf` still reads these three. */
     pix_key_type_snapshot?: PixKeyType;
     pix_key_snapshot?: string;
     pix_label_snapshot?: string;
@@ -151,6 +184,29 @@ export namespace ChargeRepository {
   };
 
   export async function list(db: DbClient, userId: String.UUID, query: { month: string }) {
+    const today = Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
+      .format(new Date());
+
+    const inMonth = {
+      due_date: { 
+        gte: startOfMonth(query.month),
+        lte: endOfMonth(query.month)
+      }
+    };
+  
+    const pendings = query.month !== today.slice(0, 7) ? {} : { 
+      AND: [
+        { 
+          state: ChargeState.Pending,
+        },
+        {
+          due_date: {
+            lt: startOfMonth(query.month)
+          }
+        }
+      ]
+    };
+
     const { records } = await db.charges.findMany({
       select: {
         id: true,
@@ -162,6 +218,7 @@ export namespace ChargeRepository {
         amount_cents: true,
         billing: {
           type: true,
+          direction: true,
         },
         debtor: {
           name: true,
@@ -179,24 +236,8 @@ export namespace ChargeRepository {
           },
           { 
             OR: [
-              { 
-                due_date: { 
-                  gte: startOfMonth(query.month), 
-                  lte: endOfMonth(query.month) 
-                }
-              },
-              { 
-                AND: [
-                  { 
-                    state: ChargeState.Pending,
-                  },
-                  {
-                    due_date: {
-                      lt: startOfMonth(query.month)
-                    }
-                  }
-                ]
-              }
+              inMonth,
+              pendings
             ]
           }
         ]
@@ -328,7 +369,8 @@ export namespace ChargeRepository {
   export async function dto(db: DbClient, row: Row, userId: string): Promise<ChargeDetail> {
     const direction = ChargeRepository.direction(row, userId);
     const payer = ChargeRepository.payer(row);
-    const hasPix = !!row.pix_key_snapshot && !!row.pix_key_type_snapshot;
+    const payment = paymentOf(row);
+    const hasPix = !!payment;
     const record = await settledBilling(db, row);
 
     return {
@@ -366,10 +408,7 @@ export namespace ChargeRepository {
             : row.public_id
               ? SharingState.LegacyWithoutPix
               : SharingState.PixRequired,
-      pix:
-        row.pix_key_type_snapshot && row.pix_key_snapshot
-          ? { keyType: row.pix_key_type_snapshot, key: row.pix_key_snapshot, label: row.pix_label_snapshot ?? 'Pix' }
-          : null,
+      pix: payment ? { keyType: payment.type, key: payment.value, label: payment.label } : null,
       proof: proofOf(row, userId),
       cancelledAt: row.cancelled_at ?? null,
       paidAt: row.paid_at ?? null,

@@ -13,6 +13,7 @@ import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
 import { lockAccountReferences } from '../../users/services/locking';
 import { ChargeRepository } from '../repositories/charge';
+import { PaymentMethodKind } from '../schemas/charge';
 
 /** A participant validated against the owner's agenda: the person's account id, and whether they already use the app. */
 export type ChargeRecipientMaterialization = { userId: string; active: boolean };
@@ -203,7 +204,14 @@ export async function persistChargePlan(
           : {}),
         // A registro is never paid through a link, so the wallet key stays out of it.
         ...(context.pix && !settlement.settled
-          ? { pix_key_type_snapshot: context.pix.keyType, pix_key_snapshot: context.pix.key, pix_label_snapshot: context.pix.label }
+          ? {
+              payment_snapshot: {
+                method: PaymentMethodKind.Pix,
+                type: context.pix.keyType,
+                value: context.pix.key,
+                label: context.pix.label
+              }
+            }
           : {}),
         state: ChargeState.Pending,
         notify: !recipient || !quiet.has(recipient.userId),

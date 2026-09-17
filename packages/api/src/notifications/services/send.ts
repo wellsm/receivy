@@ -115,7 +115,7 @@ export async function sendChargeNotice(
     return { channels: [] };
   }
 
-  const hasPix = !!charge.pix_key_snapshot && !!charge.pix_key_type_snapshot;
+  const hasPix = !!ChargeRepository.paymentOf(charge);
 
   // The notice carries the payment link, so a conta a receber without a key has nothing to send yet.
   if (!ownerPays && !hasPix) {

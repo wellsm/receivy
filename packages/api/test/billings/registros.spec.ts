@@ -61,7 +61,7 @@ function registro(key: string, overrides: Partial<BillingInput> = {}): BillingIn
 
 async function chargeRows(billingId: string) {
   const { records } = await db.charges.findMany({
-    select: { id: true, debtor_user_id: true, due_date: true, state: true, paid_at: true, pix_key_snapshot: true },
+    select: { id: true, debtor_user_id: true, due_date: true, state: true, paid_at: true, payment_snapshot: true },
     where: { billing_id: billingId },
     order: { due_date: Order.Asc }
   });
@@ -164,7 +164,7 @@ describe('registros on native PostgreSQL', () => {
     ok(row);
     equal(row.state, ChargeState.Paid);
     equal(row.debtor_user_id ?? null, null);
-    equal(row.pix_key_snapshot ?? null, null, 'the default wallet key never reaches a registro');
+    equal(row.payment_snapshot?.value ?? null, null, 'the default wallet key never reaches a registro');
     equal(Date.parse(String(row.paid_at)), dayStart('2026-02-20'));
     deepEqual(await paidVia(row.id), ['registered']);
 
@@ -381,7 +381,7 @@ describe('registros on native PostgreSQL', () => {
       );
 
       for (const row of await chargeRows(salary.id)) {
-        equal(row.pix_key_snapshot ?? null, null, `${field} never writes Pix onto a registro`);
+        equal(row.payment_snapshot?.value ?? null, null, `${field} never writes Pix onto a registro`);
       }
     };
 

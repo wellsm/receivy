@@ -130,7 +130,15 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
       )
     ]);
     ok(raced[0].status === 'fulfilled');
-    equal(raced[0].value.kind, 'replayed');
+    // Inside the grace window the loser of a rotation race is told to retry and the family stays alive.
+    equal(raced[0].value.kind, 'stale');
+    equal(await db.device_tokens.count({ where: { user_id: owner, session_family_id: second.familyId, active: true } }), 2);
+    // The very same reuse, once the consumption is older than the grace window, is a replay.
+    await db.refresh_tokens.updateMany({
+      data: { consumed_at: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
+      where: { family_id: second.familyId }
+    });
+    equal((await repository.rotateRefreshToken(second.refreshToken)).kind, 'replayed');
     equal(await db.device_tokens.count({ where: { user_id: owner, session_family_id: second.familyId, active: true } }), 0);
     await rejects(() => authorize(second.access), HttpUnauthorizedError);
     equal((await db.device_tokens.findOne({ select: { active: true }, where: { id: b.id } }))?.active, false);

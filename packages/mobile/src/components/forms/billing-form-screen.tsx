@@ -19,7 +19,6 @@ import {
   formatAmountDigits,
   formatMoney,
   parseBRLCents,
-  pixKeyField,
   previewBillingSplit,
   shouldAskEditScope,
   splitParties,
@@ -36,8 +35,6 @@ import {
   type Contact,
   Direction,
   type PaymentMethod,
-  type PixDraft,
-  PixKeyType,
   SplitMode,
   SplitPartKind,
   type SplitParty,
@@ -58,7 +55,6 @@ import { contactsClient } from "@/contacts/client";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { CategorySelect } from "@/components/app/category-select";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
-import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { SplitEditor, type SplitRow } from "@/components/app/split-editor";
 import { useThemeColors } from "@/theme/colors";
 
@@ -91,6 +87,8 @@ type BillingFormScreenProps = {
   onBack?: () => void;
   /** Absent when the screen cannot navigate to the contact form. */
   onCreateContact?: () => void;
+  /** Absent when the screen cannot navigate to the contact being paid: the key of a conta a pagar lives there. */
+  onEditContact?: (contactId: string) => void;
   /** Absent when the screen cannot navigate to the Pix keys. */
   onCreatePix?: (required?: boolean) => void;
 };
@@ -99,6 +97,7 @@ const FROZEN_NOTE = "Contas já geradas só permitem categoria, Pix e lembretes.
 const LOAD_ERROR = "Não foi possível carregar os dados.";
 const PIX_GATE_TITLE = "Cadastre uma chave Pix";
 const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com a sua chave Pix. Cadastre uma e volte para continuar de onde parou.";
+const NO_CONTACT_KEY = "Este contato ainda não tem chave Pix. Cadastre no contato.";
 const NO_VALUES: Record<string, string> = {};
 
 const TYPES: { value: BillingRecurrence; label: string }[] = [
@@ -215,14 +214,6 @@ function valuesFromBilling(billing: BillingDetail): SplitValues {
   return values;
 }
 
-function pixDraftFromBilling(billing: BillingDetail): PixDraft {
-  if (!billing.pix) {
-    return { type: PixKeyType.Email, key: "", label: "" };
-  }
-
-  return { type: billing.pix.keyType, key: pixKeyField(billing.pix.keyType).format(billing.pix.key), label: billing.pix.label };
-}
-
 /** Each participant's current "Não notificar", so saving the edit sends back what the billing already has. */
 function notifyFromBilling(billing: BillingDetail): Record<string, boolean> {
   const notify: Record<string, boolean> = {};
@@ -242,7 +233,6 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
   return {
     direction: billing.type,
     payee: billing.contact?.id ?? "",
-    pixInline: pixDraftFromBilling(billing),
     type: billing.recurrence,
     selected: parts.flatMap((part) => (part.kind === "user" ? [part.userId] : [])),
     owner: parts.some((part) => part.kind === "owner") || billing.split.mode === "fixed",
@@ -263,15 +253,6 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     notify: notifyFromBilling(billing),
     settled: billing.kind === BillingKind.Record,
   };
-}
-
-/** The draft keeps the key masked as typed; the API wants the canonical form (digits only, `+55…`). */
-function draftToBuild(draft: BillingDraft): BillingDraft {
-  if (draft.direction !== "payable") {
-    return draft;
-  }
-
-  return { ...draft, pixInline: { ...draft.pixInline, key: pixKeyField(draft.pixInline.type).unformat(draft.pixInline.key) } };
 }
 
 /** A seated user the agenda has not shown yet (a stale draft, a contact removed meanwhile): the chip still needs a face. */
@@ -373,7 +354,16 @@ function TypeButton({ label, active, disabled, onPress }: { label: string; activ
   );
 }
 
-export function BillingFormScreen({ client = financialClient, contacts = contactsClient, billing = null, onSaved, onBack, onCreateContact, onCreatePix }: BillingFormScreenProps) {
+export function BillingFormScreen({
+  client = financialClient,
+  contacts = contactsClient,
+  billing = null,
+  onSaved,
+  onBack,
+  onCreateContact,
+  onEditContact,
+  onCreatePix,
+}: BillingFormScreenProps) {
   const navigation = useNavigation();
   const colors = useThemeColors();
   const scheme = useColorScheme();
@@ -382,7 +372,10 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   );
   const [recent, setRecent] = useState<Contact[]>([]);
   const [directory, setDirectory] = useState<Contact[]>([]);
-  const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  /** The owner's own keys: what a conta a receber is paid through. */
+  const [wallet, setWallet] = useState<PaymentMethod[]>([]);
+  /** The seated contact's keys, tagged with whose they are: an unanswered seat reads as none. */
+  const [payeeKeys, setPayeeKeys] = useState<{ contactId: string; methods: PaymentMethod[] }>({ contactId: "", methods: [] });
   const [picker, setPicker] = useState(false);
   const [pixOpen, setPixOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -419,19 +412,16 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
         client.paymentMethods(),
         billing || stored ? Promise.resolve(null) : client.profile(),
       ])
-        .then(([agenda, wallet, me]) => {
+        .then(([agenda, keys, me]) => {
           if (!live) {
             return;
           }
 
-          const active = wallet.paymentMethods.filter((method) => !method.archivedAt);
-
-          if (active.length) {
-          }
+          const active = keys.paymentMethods.filter((method) => !method.archivedAt);
 
           setRecent(agenda.contacts.slice(0, 12));
           setDirectory(agenda.contacts);
-          setMethods(active);
+          setWallet(active);
           setGated(!billing && !active.length);
           setDraft((current) => {
             const base = stored ?? current;
@@ -472,6 +462,48 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
 
       return load(stored);
     }, [billing, load]),
+  );
+
+  // Whoever receives a conta a pagar owns the key, so only their keys are on offer.
+  const seatedPayee = payable && !settled ? draft.payee : "";
+
+  // Registering one of those keys happens on the contact screen while this route
+  // stays mounted, so every focus asks again — and so does a change of seat.
+  useFocusEffect(
+    useCallback(() => {
+      if (!seatedPayee) {
+        return undefined;
+      }
+
+      let live = true;
+
+      void client
+        .paymentMethods(seatedPayee)
+        .then((page) => {
+          if (!live) {
+            return;
+          }
+
+          const keys = page.paymentMethods.filter((method) => !method.archivedAt);
+
+          setPayeeKeys({ contactId: seatedPayee, methods: keys });
+          // A key of the contact the seat just left cannot pay this one: fall back to their
+          // default. A seeded edit already points at one of these, and keeps it.
+          setDraft((current) => ({
+            ...current,
+            pix: keys.some((method) => method.id === current.pix) ? current.pix : (keys.find((method) => method.isDefault)?.id ?? keys[0]?.id ?? ""),
+          }));
+        })
+        .catch(() => {
+          if (live) {
+            setPayeeKeys({ contactId: seatedPayee, methods: [] });
+          }
+        });
+
+      return () => {
+        live = false;
+      };
+    }, [client, seatedPayee]),
   );
 
   // Pushing the contact or Pix screen keeps this route mounted, so the parked
@@ -515,18 +547,6 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     update(payable ? { payee: "" } : { selected: [] });
   }
 
-  function updatePix(patch: Partial<PixDraft>) {
-    update({ pixInline: { ...draft.pixInline, ...patch } });
-  }
-
-  function pickPixType(type: PixKeyType) {
-    updatePix({ type, key: "" });
-  }
-
-  function changePixKey(raw: string) {
-    updatePix({ key: pixKeyField(draft.pixInline.type).format(raw) });
-  }
-
   const remember = useCallback((seen: Contact[]) => {
     setDirectory((current) => [...current, ...seen.filter((contact) => !current.some((known) => known.id === contact.id))]);
   }, []);
@@ -534,6 +554,21 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
   function leaveTo(go: () => void) {
     saveDraft(draft);
     go();
+  }
+
+  /** The key of a conta a pagar lives on the contact: the hint sends the owner there and back. */
+  function leaveToContactKeys() {
+    if (!onEditContact) {
+      return;
+    }
+
+    // An edit is not restorable from a parked draft: only a creation leaves one behind.
+    if (editing) {
+      onEditContact(draft.payee);
+      return;
+    }
+
+    leaveTo(() => onEditContact(draft.payee));
   }
 
   // The field behaves like a bank keypad: whatever the keyboard hands back is
@@ -581,9 +616,11 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     // The API reads the direction off the receiving contact, and so does the patch: only a conta a pagar has one.
     const toPayable = Boolean(input.contactId);
     const editable = {
+      paymentMethodId: input.paymentMethodId,
+      clearPaymentMethod: !input.paymentMethodId,
+      ...(toPayable ? seatPatch(input) : {}),
       reminders: input.reminders,
       category: input.category,
-      ...(toPayable ? { ...(input.pix ? { pix: input.pix } : {}), ...seatPatch(input) } : { paymentMethodId: input.paymentMethodId, clearPaymentMethod: !input.paymentMethodId }),
     };
 
     if (billing && billing.recurrence !== "indefinite") {
@@ -652,7 +689,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
       const notify = draft.notify && Object.fromEntries(Object.entries(draft.notify).filter(([userId]) => notifiableIds.has(userId)));
       // Only a creation checks that a recorrente registro starts today or later.
       const next: Attempt = {
-        input: buildBillingInput(draftToBuild({ ...draft, notify }), billing ? undefined : new Date()),
+        input: buildBillingInput({ ...draft, notify }, billing ? undefined : new Date()),
         key: Crypto.randomUUID(),
         uncertain: false,
       };
@@ -805,9 +842,14 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
     return "Valores manuais";
   }
 
+  // A seat whose keys have not landed yet answers none, so the selector never offers another contact's.
+  const payeeLoaded = payeeKeys.contactId === seatedPayee;
+  // The same selector serves both directions, over whichever keys pay this conta.
+  const methods = payable ? (payeeLoaded ? payeeKeys.methods : []) : wallet;
   const selectedPix = methods.find((method) => method.id === draft.pix) ?? null;
   // One registered key has nothing to switch to; the sheet only opens with a real choice.
   const switchable = methods.length > 1 || (methods.length === 1 && !selectedPix);
+  const pixTitle = payable ? "Pagar via Pix" : "Receber via Pix";
   const action = editing ? "Salvar conta" : "Criar conta";
   const retry = editing ? "Tentar salvar novamente" : "Tentar criar novamente";
   // Create-only, for parity with web: an edit's registro/recorrente past-dated draft can make the
@@ -1130,26 +1172,6 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
           </View>
         )}
 
-        {payable && !settled && (
-          <View className="gap-4">
-            <SectionLabel>Chave Pix (opcional)</SectionLabel>
-            <PixKeyFields type={draft.pixInline.type} value={draft.pixInline.key} disabled={locked} onPickType={pickPixType} onChangeKey={changePixKey} onClear={() => updatePix({ key: "" })} />
-            <View className="gap-1">
-              <SectionLabel>Apelido da chave</SectionLabel>
-              <TextInput
-                accessibilityLabel="Apelido da chave"
-                editable={!locked}
-                maxLength={60}
-                placeholder="Ex: Nubank, Inter..."
-                placeholderTextColor={colors.muted}
-                value={draft.pixInline.label}
-                onChangeText={(label) => updatePix({ label })}
-                className="h-11 rounded-[14px] border border-outline bg-surface px-3.5 py-0 font-sans text-[15px] tracking-normal text-ink"
-              />
-            </View>
-          </View>
-        )}
-
         {/* Divisão slot, conta a receber: split-mode tabs + participant list */}
         {!payable && !settled && (
           <Card>
@@ -1268,17 +1290,32 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
           </View>
         )}
 
-        {/* Chave Pix: conta a receber, selecting an existing method */}
-        {!payable && !settled && (
+        {/* Chave Pix: the owner's own keys on a conta a receber, the seated contact's on a conta a pagar */}
+        {!settled && (!payable || Boolean(seatedPayee)) && (
           <View className="gap-2">
             <View className="flex-row items-center justify-between">
-              <SectionLabel>Receber via Pix</SectionLabel>
-              {!editing && !gated && onCreatePix && (
+              <SectionLabel>{pixTitle}</SectionLabel>
+              {!payable && !editing && !gated && onCreatePix && (
                 <Pressable accessibilityRole="button" accessibilityLabel="Cadastrar chave" disabled={locked} onPress={() => leaveTo(onCreatePix)} className="min-h-8 justify-center">
                   <Text className="text-[11px] font-medium text-primary">+ Cadastrar nova chave</Text>
                 </Pressable>
               )}
             </View>
+            {payable && payeeLoaded && !methods.length ? (
+              <View className="gap-2 rounded-2xl border border-outline/40 bg-surface p-3.5">
+                <Text className="text-xs leading-5 text-muted">{NO_CONTACT_KEY}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Cadastrar chave"
+                  accessibilityState={{ disabled: locked || !onEditContact }}
+                  disabled={locked || !onEditContact}
+                  onPress={leaveToContactKeys}
+                  className="min-h-9 justify-center"
+                >
+                  <Text className="text-xs font-bold text-primary">Cadastrar chave</Text>
+                </Pressable>
+              </View>
+            ) : (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Trocar chave Pix"
@@ -1302,6 +1339,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
               </View>
               {switchable && <Image source={chevronMark} tintColor={colors.muted} style={{ width: 16, height: 16, transform: [{ rotate: "90deg" }] }} />}
             </Pressable>
+            )}
           </View>
         )}
 
@@ -1310,7 +1348,7 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
             <Pressable className="flex-1 justify-end bg-scrim" onPress={() => setPixOpen(false)}>
               <Pressable className="max-h-[80%] gap-2 rounded-t-3xl bg-canvas p-5 pb-10" onPress={() => undefined}>
                 <Text accessibilityRole="header" className="text-lg font-semibold text-primary-strong">
-                  Receber via Pix
+                  {pixTitle}
                 </Text>
                 <ScrollView contentContainerClassName="gap-2" showsVerticalScrollIndicator={false}>
                   {methods.map((method) => {

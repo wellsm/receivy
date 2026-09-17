@@ -5,7 +5,7 @@ import { clearDraft, patchDraft, saveDraft, takeDraft } from "@/financial/draft-
 import { BillingFormScreen } from "@/components/forms/billing-form-screen";
 
 let mockKeys = 0;
-let mockFocus: (() => void | (() => void)) | null = null;
+let mockFocus: (() => void | (() => void))[] = [];
 let mockRemoveListeners: (() => void)[] = [];
 
 jest.mock("expo-crypto", () => ({ randomUUID: () => `key-${++mockKeys}` }));
@@ -28,17 +28,26 @@ jest.mock("@react-native-community/datetimepicker", () => {
   };
 });
 
-// The route stays mounted across the side trip, so the focus callback is kept
-// here and replayed by the test instead of remounting the screen. `beforeRemove`
-// listeners are collected the same way, to stand in for the native pop.
+// The route stays mounted across the side trip, so the focus callbacks are kept
+// here and replayed by the test instead of remounting the screen — the screen
+// registers one per thing it reloads on focus. `beforeRemove` listeners are
+// collected the same way, to stand in for the native pop.
 jest.mock("expo-router", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories cannot close over module imports
   const react = require("react");
 
   return {
     useFocusEffect: (callback: () => void | (() => void)) => {
-      mockFocus = callback;
-      react.useEffect(() => callback(), [callback]);
+      react.useEffect(() => {
+        mockFocus.push(callback);
+
+        const cleanup = callback();
+
+        return () => {
+          mockFocus = mockFocus.filter((known) => known !== callback);
+          cleanup?.();
+        };
+      }, [callback]);
     },
     useNavigation: () => ({
       addListener: (event: string, listener: () => void) => {
@@ -54,10 +63,12 @@ jest.mock("expo-router", () => {
   };
 });
 
-/** Replays the screen's focus effect, the way expo-router does on `router.back()`. */
+/** Replays the screen's focus effects, the way expo-router does on `router.back()`. */
 async function refocus() {
   await act(async () => {
-    mockFocus?.();
+    for (const callback of [...mockFocus]) {
+      callback();
+    }
   });
 }
 
@@ -109,16 +120,27 @@ function contactsApi(pages: { contacts: Contact[]; nextCursor: string | null }[]
   return { list };
 }
 
-const nubank = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, archivedAt: null };
+const nubank = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, contactId: null, archivedAt: null };
+
+/** Block 9.1: the keys the owner filed under each contact; a conta a pagar only picks among the seated contact's. */
+const anaKey = { id: "pix-ana", label: "Nubank da Ana", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, contactId: "p1", archivedAt: null };
+const anaSecondKey = { ...anaKey, id: "pix-ana-2", label: "Itaú da Ana", pixKey: "52998224725", pixKeyType: "cpf", isDefault: false };
+const brunoKey = { ...anaKey, id: "pix-bruno", label: "Bruno", pixKey: "bruno@example.com", contactId: "p2" };
+const CONTACT_KEYS: Record<string, unknown[]> = { p1: [anaKey, anaSecondKey], p2: [brunoKey] };
 
 /** Wallets without a key gate the form, so the shared fixture carries one. */
 function emptyWallet() {
   return financialApi({ paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }) });
 }
 
+/** The contact whose keys nobody registered yet: every lookup answers an empty list. */
+function keylessContacts() {
+  return financialApi({ paymentMethods: jest.fn((contactId?: string) => Promise.resolve({ paymentMethods: contactId ? [] : [nubank] })) });
+}
+
 function financialApi(overrides: Record<string, unknown> = {}) {
   return {
-    paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [nubank] }),
+    paymentMethods: jest.fn((contactId?: string) => Promise.resolve({ paymentMethods: contactId ? (CONTACT_KEYS[contactId] ?? []) : [nubank] })),
     profile: jest.fn().mockResolvedValue({ user: { timezone: TIMEZONE } }),
     createBilling: jest.fn().mockResolvedValue({ id: "b1", charges: [{ id: "c1" }] }),
     patchBilling: jest.fn(),
@@ -196,8 +218,8 @@ const payableBilling: BillingDetail = {
   ...onceBilling,
   type: Direction.Payable,
   contact: { id: "p1", userId: "u1", name: "Ana", avatar: null },
-  pix: { keyType: PixKeyType.Phone, key: "+5511987654321", label: "Inter" },
-  paymentMethodId: undefined,
+  pix: { keyType: PixKeyType.Cpf, key: "52998224725", label: "Itaú da Ana" },
+  paymentMethodId: "pix-ana-2",
   split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] },
 };
 
@@ -1018,6 +1040,38 @@ describe("BillingFormScreen", () => {
     expect(patchBilling.mock.calls[0][1]).toMatchObject({ totalCents: 12_000, applyTo: "current_month" });
   });
 
+  it("asks for the scope when the key of a recorrente conta a pagar moves to another of the contact's", async () => {
+    onSeptemberTenth();
+    const recurringPayable: BillingDetail = {
+      ...payableBilling,
+      id: "b9",
+      recurrence: BillingRecurrence.Indefinite,
+      frequency: BillingFrequency.Monthly,
+      startDate: "2026-09-20",
+      nextDueDate: "2026-09-20",
+      charges: [{ ...monthCharge, billingId: "b9", direction: Direction.Payable }],
+    };
+    const patchBilling = jest.fn().mockResolvedValue(recurringPayable);
+    const client = financialApi({ patchBilling });
+
+    await render(<BillingFormScreen client={client as never} contacts={contactsApi()} billing={recurringPayable} onSaved={jest.fn()} onBack={jest.fn()} />);
+    await screen.findByText("Editar conta");
+
+    await waitFor(() => expect(screen.getByText("Chave secundária")).toBeOnTheScreen());
+
+    await fireEvent.press(screen.getByRole("button", { name: "Trocar chave Pix" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "E-mail · ana@example.com" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+
+    expect(await screen.findByRole("header", { name: "Aplicar às cobranças deste mês?" })).toBeOnTheScreen();
+    expect(patchBilling).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Aplicar também às deste mês" }));
+
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+    expect(patchBilling.mock.calls[0][1]).toMatchObject({ paymentMethodId: "pix-ana", applyTo: "current_month" });
+  });
+
   it("sends no scope when the owner keeps this month as it is", async () => {
     onSeptemberTenth();
     const patchBilling = jest.fn().mockResolvedValue(recurringWithCharge);
@@ -1048,7 +1102,7 @@ describe("BillingFormScreen", () => {
     expect(screen.queryByRole("header", { name: "Aplicar às cobranças deste mês?" })).toBeNull();
   });
 
-  it("creates a conta a pagar without participants, naming the contact who receives and the typed key", async () => {
+  it("creates a conta a pagar without participants, naming the contact who receives and one of their keys", async () => {
     const { client } = await quickForm();
 
     await chooseToPay();
@@ -1059,13 +1113,21 @@ describe("BillingFormScreen", () => {
     expect(screen.queryByLabelText("Eu também participo")).toBeNull();
     expect(screen.getByText("Valor")).toBeOnTheScreen();
     expect(screen.getByText("Escolha quem recebe.")).toBeOnTheScreen();
+    // The key is no longer typed here: it belongs to the contact.
+    expect(screen.queryByLabelText("Tipo de chave")).toBeNull();
+    expect(screen.queryByLabelText("E-mail Pix")).toBeNull();
+    expect(screen.queryByLabelText("Apelido da chave")).toBeNull();
+    expect(screen.queryByText("Pagar via Pix")).toBeNull();
 
     await seatAna();
 
     expect(screen.getByRole("button", { name: "Ana" })).toBeSelected();
+    // The seated contact's default key comes preselected.
+    expect(await screen.findByText("Pagar via Pix")).toBeOnTheScreen();
+    expect(client.paymentMethods).toHaveBeenCalledWith("p1");
+    await waitFor(() => expect(screen.getByText("E-mail: ana@example.com")).toBeOnTheScreen());
+    expect(screen.getByText("Chave padrão")).toBeOnTheScreen();
 
-    await fireEvent.changeText(screen.getByLabelText("E-mail Pix"), "Loja@Example.com");
-    await fireEvent.changeText(screen.getByLabelText("Apelido da chave"), "Nubank");
     await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
     await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
     await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
@@ -1078,9 +1140,87 @@ describe("BillingFormScreen", () => {
       contactId: "p1",
       totalCents: 10_000,
       description: "Aluguel",
-      pix: { keyType: "email", key: "loja@example.com", label: "Nubank" },
+      paymentMethodId: "pix-ana",
     });
+    expect(input.pix).toBeUndefined();
     expect(input.payeeUserId).toBeUndefined();
+  });
+
+  it("switches the conta a pagar to another key of the same contact", async () => {
+    const { client } = await quickForm();
+
+    await chooseToPay();
+    await seatAna();
+
+    await waitFor(() => expect(screen.getByText("Chave padrão")).toBeOnTheScreen());
+
+    await fireEvent.press(screen.getByRole("button", { name: "Trocar chave Pix" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "CPF · 52998224725" }));
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0].paymentMethodId).toBe("pix-ana-2");
+  });
+
+  it("re-picks the default key when the receiving seat moves to another contact", async () => {
+    const { client } = await quickForm();
+
+    await chooseToPay();
+    await seatAna();
+
+    await waitFor(() => expect(screen.getByText("E-mail: ana@example.com")).toBeOnTheScreen());
+
+    await fireEvent.press(screen.getByRole("button", { name: "Escolher contato" }));
+    await fireEvent.press(await screen.findByRole("checkbox", { name: "Bruno" }));
+
+    await waitFor(() => expect(client.paymentMethods).toHaveBeenCalledWith("p2"));
+    await waitFor(() => expect(screen.getByText("E-mail: bruno@example.com")).toBeOnTheScreen());
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ contactId: "p2", paymentMethodId: "pix-bruno" });
+  });
+
+  it("points at the contact form when the seated contact has no Pix key yet", async () => {
+    const onEditContact = jest.fn();
+    const { client } = await quickForm(keylessContacts(), contactsApi(), { onEditContact });
+
+    await chooseToPay();
+    await seatAna();
+
+    expect(await screen.findByText("Este contato ainda não tem chave Pix. Cadastre no contato.")).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Trocar chave Pix" })).toBeNull();
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.press(screen.getByRole("button", { name: "Cadastrar chave" }));
+
+    expect(onEditContact).toHaveBeenCalledWith("p1");
+    expect(takeDraft()).toMatchObject({ payee: "p1", amount: "100,00" });
+    expect(client.createBilling).not.toHaveBeenCalled();
+  });
+
+  it("sends a conta a pagar with no key at all when the contact has none", async () => {
+    const { client } = await quickForm(keylessContacts());
+
+    await chooseToPay();
+    await seatAna();
+    await screen.findByText("Este contato ainda não tem chave Pix. Cadastre no contato.");
+
+    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
+    await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+    await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+    const input = client.createBilling.mock.calls[0][0];
+
+    expect(input).toMatchObject({ type: "payable", contactId: "p1" });
+    expect(input.paymentMethodId).toBeUndefined();
   });
 
   it("refuses a conta a pagar whose receiving chip was removed", async () => {
@@ -1100,19 +1240,14 @@ describe("BillingFormScreen", () => {
     expect(client.createBilling).not.toHaveBeenCalled();
   });
 
-  it("refuses a broken inline key on a conta a pagar", async () => {
+  it("never offers a Pix selector on a conta a pagar with no seated contact", async () => {
     const { client } = await quickForm();
 
     await chooseToPay();
-    await seatAna();
-    await fireEvent.press(screen.getByRole("radio", { name: "CPF" }));
-    await fireEvent.changeText(screen.getByLabelText("CPF do titular"), "123");
-    await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
-    await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
-    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Chave Pix inválida.");
-    expect(client.createBilling).not.toHaveBeenCalled();
+    expect(screen.queryByText("Pagar via Pix")).toBeNull();
+    expect(screen.getByText("Escolha quem recebe.")).toBeOnTheScreen();
+    expect(client.paymentMethods).not.toHaveBeenCalledWith("p1");
   });
 
   it("does not gate a conta a pagar on the wallet", async () => {
@@ -1140,9 +1275,11 @@ describe("BillingFormScreen", () => {
     expect(screen.getByRole("button", { name: "Vou pagar" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Vou receber" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Ana" })).toBeSelected();
-    expect(screen.getByRole("radio", { name: "Celular" })).toBeChecked();
-    expect(screen.getByLabelText("Telefone celular")).toHaveDisplayValue(/98765/);
-    expect(screen.getByLabelText("Apelido da chave")).toHaveDisplayValue("Inter");
+    // The seeded key survives the contact's key list landing: it is one of them.
+    expect(await screen.findByText("CPF: 52998224725")).toBeOnTheScreen();
+    expect(screen.getByText("Chave secundária")).toBeOnTheScreen();
+    expect(screen.queryByLabelText("E-mail Pix")).toBeNull();
+    expect(screen.queryByLabelText("Apelido da chave")).toBeNull();
     expect(screen.queryByRole("button", { name: "Convidar" })).toBeNull();
 
     await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
@@ -1150,10 +1287,28 @@ describe("BillingFormScreen", () => {
 
     // The seat did not move, so the patch leaves the receiving contact alone.
     expect(patchBilling).toHaveBeenCalledWith("b1", {
+      paymentMethodId: "pix-ana-2",
+      clearPaymentMethod: false,
       reminders: [{ offsetDays: 0, enabled: true }],
       category: "food",
-      pix: { keyType: "phone", key: "+5511987654321", label: "Inter" },
     });
+  });
+
+  it("clears the key of a conta a pagar whose contact has none left", async () => {
+    const patchBilling = jest.fn().mockResolvedValue(payableBilling);
+    const client = keylessContacts();
+
+    client.patchBilling = patchBilling;
+
+    await render(<BillingFormScreen client={client as never} contacts={contactsApi()} billing={payableBilling} onSaved={jest.fn()} onBack={jest.fn()} />);
+
+    expect(await screen.findByText("Este contato ainda não tem chave Pix. Cadastre no contato.")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
+    expect(patchBilling.mock.calls[0][1]).toMatchObject({ clearPaymentMethod: true });
+    expect(patchBilling.mock.calls[0][1].paymentMethodId).toBeUndefined();
   });
 
   it("names the seated contact from the loaded billing when the agenda no longer lists them", async () => {
@@ -1203,12 +1358,15 @@ describe("BillingFormScreen", () => {
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
-  it("moves the Para quem seat and its inline Pix key to the Divisão slot for a conta a pagar", async () => {
+  it("moves the Para quem seat and the contact's Pix key to the Divisão slot for a conta a pagar", async () => {
     await quickForm();
     await chooseToPay();
+    await seatAna();
+
+    await screen.findByText("Pagar via Pix");
 
     const json = JSON.stringify(screen.toJSON());
-    const order = ["Modalidade de Pagamento", "Para quem", "Chave Pix (opcional)", "Criar conta"].map((marker) => json.indexOf(`"${marker}"`));
+    const order = ["Modalidade de Pagamento", "Para quem", "Pagar via Pix", "Criar conta"].map((marker) => json.indexOf(`"${marker}"`));
 
     expect(order.every((value) => value >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));

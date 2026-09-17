@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT, UserStatus, type Contact } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
 import { ContactsRequestError } from "@/contacts/client";
@@ -29,6 +29,28 @@ function contactsApi(loaded: Contact = contact()) {
   };
 }
 
+/** The keys the owner filed under this contact, the way `GET /payment-methods?contactId=` answers them. */
+const nubank: PaymentMethod = {
+  id: "pm-1",
+  type: "pix",
+  label: "Nubank",
+  pixKey: "ana@example.com",
+  pixKeyType: PixKeyType.Email,
+  isDefault: true,
+  contactId: "p1",
+  archivedAt: null,
+  createdAt: "2026-01-01T00:00:00Z",
+};
+const itau: PaymentMethod = { ...nubank, id: "pm-2", label: "Itaú", pixKey: "52998224725", pixKeyType: PixKeyType.Cpf, isDefault: false, createdAt: "2026-01-02T00:00:00Z" };
+
+function financialApi(keys: PaymentMethod[] = []) {
+  return {
+    paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: keys }),
+    defaultPaymentMethod: jest.fn().mockResolvedValue(itau),
+    archivePaymentMethod: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 const TIMEZONE = "America/Sao_Paulo";
 const TODAY = "2026-09-10";
 const LINKED_NOTE = "Contato vinculado a uma conta: só o apelido pode mudar.";
@@ -42,7 +64,7 @@ describe("ContactFormScreen", () => {
     await render(<ContactFormScreen client={client} />);
 
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "  Ana Paula Souza  ");
-    await fireEvent.changeText(screen.getByLabelText("E-mail"), " Ana@Example.com ");
+    await fireEvent.changeText(screen.getByLabelText("E-mail (opcional)"), " Ana@Example.com ");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Paula Souza", email: "ana@example.com" }, undefined));
@@ -71,7 +93,7 @@ describe("ContactFormScreen", () => {
     await render(<ContactFormScreen client={client} />);
 
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
-    await fireEvent.changeText(screen.getByLabelText("E-mail"), "ana");
+    await fireEvent.changeText(screen.getByLabelText("E-mail (opcional)"), "ana");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     expect(await screen.findByText("Informe um e-mail válido.")).toBeOnTheScreen();
@@ -85,7 +107,7 @@ describe("ContactFormScreen", () => {
 
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana Paula Souza");
     await fireEvent.changeText(screen.getByLabelText("Apelido"), "Aninha");
-    await fireEvent.changeText(screen.getByLabelText("E-mail"), "ana@example.com");
+    await fireEvent.changeText(screen.getByLabelText("E-mail (opcional)"), "ana@example.com");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Paula Souza", nickname: "Aninha", email: "ana@example.com" }, undefined));
@@ -94,13 +116,13 @@ describe("ContactFormScreen", () => {
   it("loads the contact being edited and keeps its fields editable while pending", async () => {
     const client = contactsApi(contact({ nickname: "Aninha" }));
 
-    await render(<ContactFormScreen contactId="p1" client={client} />);
+    await render(<ContactFormScreen contactId="p1" client={client} financial={financialApi()} />);
 
     await waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveDisplayValue("Ana Paula Souza"));
     expect(screen.getByLabelText("Apelido")).toHaveDisplayValue("Aninha");
-    expect(screen.getByLabelText("E-mail")).toHaveDisplayValue("ana@example.com");
+    expect(screen.getByLabelText("E-mail (opcional)")).toHaveDisplayValue("ana@example.com");
     expect(screen.getByLabelText("Nome completo")).toBeEnabled();
-    expect(screen.getByLabelText("E-mail")).toBeEnabled();
+    expect(screen.getByLabelText("E-mail (opcional)")).toBeEnabled();
     expect(screen.queryByText(LINKED_NOTE)).toBeNull();
 
     await fireEvent.changeText(screen.getByLabelText("Apelido"), "Ana P.");
@@ -112,11 +134,11 @@ describe("ContactFormScreen", () => {
   it("freezes the name and the e-mail of an active contact", async () => {
     const client = contactsApi(contact({ status: UserStatus.Active }));
 
-    await render(<ContactFormScreen contactId="p1" client={client} />);
+    await render(<ContactFormScreen contactId="p1" client={client} financial={financialApi()} />);
 
     expect(await screen.findByText(LINKED_NOTE)).toBeOnTheScreen();
     expect(screen.getByLabelText("Nome completo")).toBeDisabled();
-    expect(screen.getByLabelText("E-mail")).toBeDisabled();
+    expect(screen.getByLabelText("E-mail (opcional)")).toBeDisabled();
     expect(screen.getByLabelText("Apelido")).toBeEnabled();
   });
 
@@ -125,7 +147,7 @@ describe("ContactFormScreen", () => {
 
     client.save.mockRejectedValue(new ContactsRequestError("Já existe um contato com esse e-mail.", 409));
 
-    await render(<ContactFormScreen contactId="p1" client={client} />);
+    await render(<ContactFormScreen contactId="p1" client={client} financial={financialApi()} />);
 
     await screen.findByText(LINKED_NOTE);
     await fireEvent.changeText(screen.getByLabelText("Apelido"), "Aninha");
@@ -141,10 +163,10 @@ describe("ContactFormScreen", () => {
 
     client.save.mockRejectedValue(new ContactsRequestError("Já existe um contato com esse e-mail.", 409));
 
-    await render(<ContactFormScreen contactId="p1" client={client} />);
+    await render(<ContactFormScreen contactId="p1" client={client} financial={financialApi()} />);
 
-    await waitFor(() => expect(screen.getByLabelText("E-mail")).toHaveDisplayValue("ana@example.com"));
-    await fireEvent.changeText(screen.getByLabelText("E-mail"), "bruno@example.com");
+    await waitFor(() => expect(screen.getByLabelText("E-mail (opcional)")).toHaveDisplayValue("ana@example.com"));
+    await fireEvent.changeText(screen.getByLabelText("E-mail (opcional)"), "bruno@example.com");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     expect(await screen.findByText("Esse e-mail já pertence a outra conta ou contato.")).toBeOnTheScreen();
@@ -157,11 +179,130 @@ describe("ContactFormScreen", () => {
     await render(<ContactFormScreen client={client} />);
 
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
-    await fireEvent.changeText(screen.getByLabelText("E-mail"), "ana@example.com");
+    await fireEvent.changeText(screen.getByLabelText("E-mail (opcional)"), "ana@example.com");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     expect(await screen.findByText("Já existe um contato com esse e-mail.")).toBeOnTheScreen();
     expect(screen.getByLabelText("Nome completo")).toHaveDisplayValue("Ana");
+  });
+
+  it("files the typed Pix key under the new contact", async () => {
+    const client = contactsApi();
+    const financial = financialApi();
+
+    await render(<ContactFormScreen client={client} financial={financial} />);
+
+    expect(screen.getByText("Chave Pix (opcional)")).toBeOnTheScreen();
+
+    await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana Souza");
+    await fireEvent.press(screen.getByRole("radio", { name: "Celular" }));
+    await fireEvent.changeText(screen.getByLabelText("Telefone celular"), "11987654321");
+    await fireEvent.changeText(screen.getByLabelText("Rótulo da chave"), "Nubank");
+
+    expect(screen.getByLabelText("Telefone celular")).toHaveDisplayValue("(11) 98765-4321");
+
+    await fireEvent.press(screen.getByLabelText("Salvar contato"));
+
+    await waitFor(() =>
+      expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", paymentMethod: { pixKeyType: "phone", pixKey: "+5511987654321", label: "Nubank" } }, undefined),
+    );
+    expect(financial.paymentMethods).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Definir padrão")).toBeNull();
+  });
+
+  it("leaves the label out when only the key was typed", async () => {
+    const client = contactsApi();
+
+    await render(<ContactFormScreen client={client} financial={financialApi()} />);
+
+    await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana Souza");
+    await fireEvent.changeText(screen.getByLabelText("E-mail Pix"), " Ana@Example.com ");
+    await fireEvent.press(screen.getByLabelText("Salvar contato"));
+
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", paymentMethod: { pixKeyType: "email", pixKey: "Ana@Example.com" } }, undefined));
+  });
+
+  it("files a new key under the contact being edited", async () => {
+    const client = contactsApi();
+
+    await render(<ContactFormScreen contactId="p1" client={client} financial={financialApi([nubank])} />);
+
+    await waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveDisplayValue("Ana Paula Souza"));
+
+    await fireEvent.press(screen.getByRole("radio", { name: "CPF" }));
+    await fireEvent.changeText(screen.getByLabelText("CPF do titular"), "52998224725");
+    await fireEvent.press(screen.getByLabelText("Salvar contato"));
+
+    await waitFor(() =>
+      expect(client.save).toHaveBeenCalledWith(
+        { name: "Ana Paula Souza", email: "ana@example.com", paymentMethod: { pixKeyType: "cpf", pixKey: "52998224725" } },
+        "p1",
+      ),
+    );
+  });
+
+  it("lists the contact's Pix keys on edit and promotes the one the owner picks", async () => {
+    const financial = financialApi([nubank, itau]);
+
+    await render(<ContactFormScreen contactId="p1" client={contactsApi()} financial={financial} />);
+
+    expect(await screen.findByText("Itaú")).toBeOnTheScreen();
+    expect(financial.paymentMethods).toHaveBeenCalledWith("p1");
+    expect(screen.getByText("Padrão")).toBeOnTheScreen();
+    expect(screen.getAllByLabelText("Definir padrão")).toHaveLength(1);
+
+    await fireEvent.press(screen.getByLabelText("Definir padrão"));
+
+    await waitFor(() => expect(financial.defaultPaymentMethod).toHaveBeenCalledWith("pm-2"));
+    expect(financial.paymentMethods).toHaveBeenCalledTimes(2);
+  });
+
+  it("archives one of the contact's keys only after the owner confirms, then reloads the list", async () => {
+    const financial = financialApi([nubank, itau]);
+
+    await render(<ContactFormScreen contactId="p1" client={contactsApi()} financial={financial} />);
+
+    expect(await screen.findByText("Itaú")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getAllByLabelText("Arquivar")[1]!);
+
+    expect(screen.getByRole("header", { name: "Arquivar chave Pix?" })).toBeOnTheScreen();
+    // The row and the dialog both name the key about to leave.
+    expect(screen.getAllByText("529.982.247-25")).toHaveLength(2);
+    expect(financial.archivePaymentMethod).not.toHaveBeenCalled();
+
+    await fireEvent.press(screen.getByLabelText("Arquivar chave Pix"));
+
+    await waitFor(() => expect(financial.archivePaymentMethod).toHaveBeenCalledWith("pm-2"));
+    expect(financial.paymentMethods).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("header", { name: "Arquivar chave Pix?" })).toBeNull();
+  });
+
+  it("keeps the key when the archive confirmation is cancelled", async () => {
+    const financial = financialApi([nubank, itau]);
+
+    await render(<ContactFormScreen contactId="p1" client={contactsApi()} financial={financial} />);
+
+    expect(await screen.findByText("Itaú")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getAllByLabelText("Arquivar")[1]!);
+    await fireEvent.press(screen.getByLabelText("Cancelar"));
+
+    expect(screen.queryByRole("header", { name: "Arquivar chave Pix?" })).toBeNull();
+    expect(financial.archivePaymentMethod).not.toHaveBeenCalled();
+    expect(screen.getByText("Itaú")).toBeOnTheScreen();
+  });
+
+  it("never asks the API for keys while the contact does not exist yet", async () => {
+    const financial = financialApi([nubank]);
+
+    await render(<ContactFormScreen client={contactsApi()} financial={financial} />);
+
+    await screen.findByLabelText("Salvar contato");
+
+    expect(financial.paymentMethods).not.toHaveBeenCalled();
+    expect(screen.queryByText("Nubank")).toBeNull();
+    expect(screen.queryByLabelText("Arquivar")).toBeNull();
   });
 
   it("hands the new contact's user id to the billing draft when it came from there", async () => {
@@ -172,7 +313,7 @@ describe("ContactFormScreen", () => {
     await render(<ContactFormScreen client={client} returnTo="new-billing" onSaved={onSaved} />);
 
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
-    await fireEvent.changeText(screen.getByLabelText("E-mail"), "ana@example.com");
+    await fireEvent.changeText(screen.getByLabelText("E-mail (opcional)"), "ana@example.com");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(contact({ id: "saved", userId: "u-saved" })));
@@ -187,7 +328,7 @@ describe("ContactFormScreen", () => {
     await render(<ContactFormScreen client={client} onSaved={onSaved} />);
 
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
-    await fireEvent.changeText(screen.getByLabelText("E-mail"), "ana@example.com");
+    await fireEvent.changeText(screen.getByLabelText("E-mail (opcional)"), "ana@example.com");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());

@@ -48,5 +48,12 @@ export default function EditBillingRoute() {
     );
   }
 
-  return <BillingFormScreen billing={billing} onSaved={() => router.back()} />;
+  return (
+    <BillingFormScreen
+      billing={billing}
+      onSaved={() => router.back()}
+      // The key of a conta a pagar belongs to whoever receives: it is registered on their contact.
+      onEditContact={(contactId) => router.push({ pathname: "/contacts/[id]/edit", params: { id: contactId } })}
+    />
+  );
 }

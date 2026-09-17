@@ -1,21 +1,37 @@
-import { normalizeContact, type Contact, type ContactInput } from "@receivy/common";
-import { useEffect, useState, type ReactNode } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { normalizeContact, pixKeyField, PixKeyType, type Contact, type ContactInput, type ContactPaymentMethodInput, type PaymentMethod } from "@receivy/common";
+import { Image } from "expo-image";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { PixKeyFields, PIX_TYPE_ICONS } from "@/components/app/pix-key-fields";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
+import { financialClient, type FinancialClient } from "@/financial/client";
 import { patchDraft } from "@/financial/draft-store";
 import { contactsClient, ContactsRequestError } from "@/contacts/client";
 import { useThemeColors } from "@/theme/colors";
 
 type ContactFormClient = Pick<typeof contactsClient, "get" | "save">;
+/** The keys filed under this contact live on the financial API, not on the contact itself. */
+type ContactKeysClient = Pick<FinancialClient, "paymentMethods" | "defaultPaymentMethod" | "archivePaymentMethod">;
 
 type ContactFormScreenProps = {
   /** Absent on `/contacts/new`: the screen creates instead of editing. */
   contactId?: string;
   client?: ContactFormClient;
+  financial?: ContactKeysClient;
   /** `new-billing` when the billing form sent the user here. */
   returnTo?: string;
   onSaved?: (contact: Contact) => void;
 };
+
+const KEY_LABELS: Record<PixKeyType, string> = {
+  cpf: "CPF",
+  cnpj: "CNPJ",
+  phone: "Celular",
+  email: "E-mail",
+  random: "Chave aleatória",
+};
+
+const trashMark = require("../../../assets/images/auth/trash.svg");
 
 const INTRO = "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento.";
 const EMAIL_NOTE = "Sem e-mail, a pessoa só recebe pelo link compartilhado. Quando ela entrar por um convite, você confirma quem é.";
@@ -24,6 +40,10 @@ const TAKEN_NOTE = "Esse e-mail já pertence a outra conta ou contato.";
 const LOAD_ERROR = "Não foi possível carregar o contato.";
 const SAVE_ERROR = "Não foi possível salvar o contato.";
 const INVALID_ERROR = "Confira os dados do contato.";
+const PIX_NOTE = "A chave que você usa para pagar esta pessoa. Ela entra como a chave padrão do contato.";
+const KEYS_ERROR = "Não foi possível carregar as chaves Pix do contato.";
+const KEYS_UPDATE_ERROR = "Não foi possível atualizar as chaves Pix do contato.";
+const ARCHIVE_NOTE = "A chave sai das próximas contas a pagar deste contato. As contas já criadas não mudam.";
 
 const FIELD_CLASS = "min-h-12 rounded-xl border border-outline/60 bg-surface px-3 text-ink";
 const FROZEN_CLASS = "min-h-12 rounded-xl border border-outline/40 bg-surface-muted px-3 text-muted";
@@ -72,14 +92,35 @@ function saveError(reason: unknown, linked: boolean, editing: boolean): string {
 }
 
 /** The contact form on its own screen: create from `/contacts/new`, edit from `/contacts/[id]/edit`. */
-export function ContactFormScreen({ contactId, client = contactsClient, returnTo, onSaved }: ContactFormScreenProps) {
+export function ContactFormScreen({ contactId, client = contactsClient, financial = financialClient, returnTo, onSaved }: ContactFormScreenProps) {
   const colors = useThemeColors();
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
   const [linked, setLinked] = useState(false);
+  const [pixType, setPixType] = useState<PixKeyType>(PixKeyType.Email);
+  // The key as the person sees it: masked for the current type, canonicalized only on save.
+  const [pixKey, setPixKey] = useState("");
+  const [pixLabel, setPixLabel] = useState("");
+  const [keys, setKeys] = useState<PaymentMethod[]>([]);
+  const [archiving, setArchiving] = useState<PaymentMethod | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  const loadKeys = useCallback(() => {
+    if (!contactId) {
+      return Promise.resolve();
+    }
+
+    return financial
+      .paymentMethods(contactId)
+      .then((page) => setKeys(page.paymentMethods.filter((method) => !method.archivedAt)))
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : KEYS_ERROR));
+  }, [contactId, financial]);
+
+  useEffect(() => {
+    void loadKeys();
+  }, [loadKeys]);
 
   useEffect(() => {
     if (!contactId) {
@@ -112,13 +153,47 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
     };
   }, [client, contactId]);
 
+  function pickPixType(type: PixKeyType) {
+    setPixType(type);
+    setPixKey("");
+    setError("");
+  }
+
+  /** The typed key travels canonical (`+55…`, digits only); only the field keeps the mask. */
+  function paymentMethodInput(): { paymentMethod?: ContactPaymentMethodInput } {
+    const key = pixKeyField(pixType).unformat(pixKey);
+
+    if (!key) {
+      return {};
+    }
+
+    const label = pixLabel.trim();
+
+    return { paymentMethod: { pixKeyType: pixType, pixKey: key, ...(label ? { label } : {}) } };
+  }
+
+  async function act(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError("");
+
+    try {
+      await action();
+      setArchiving(null);
+      await loadKeys();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : KEYS_UPDATE_ERROR);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function save() {
     setError("");
 
     let input: ContactInput;
 
     try {
-      input = normalizeContact({ name, nickname, email });
+      input = normalizeContact({ name, nickname, email, ...paymentMethodInput() });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : INVALID_ERROR);
       return;
@@ -131,7 +206,8 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
 
       // Came from the billing form: hand the contact back to the parked draft, which seats
       // participants by the account behind the agenda entry and the one who receives by the entry.
-      if (returnTo === "new-billing") {
+      // An edit changes nobody's seat: the form only went there to register a key.
+      if (!contactId && returnTo === "new-billing") {
         patchDraft({ contact: { id: saved.id, userId: saved.userId } });
       }
 
@@ -180,7 +256,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
 
           <Field label="E-mail (opcional)" hint={EMAIL_NOTE}>
             <TextInput
-              accessibilityLabel="E-mail"
+              accessibilityLabel="E-mail (opcional)"
               accessibilityState={{ disabled: linked }}
               placeholder="contato@email.com"
               placeholderTextColor={colors.muted}
@@ -192,6 +268,75 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
               value={email}
               onChangeText={setEmail}
               className={linked ? FROZEN_CLASS : FIELD_CLASS}
+            />
+          </Field>
+        </View>
+
+        <View className="gap-4 rounded-3xl border border-outline/40 bg-surface p-5">
+          <View className="gap-1">
+            <Text className="text-sm font-bold text-ink">Chave Pix (opcional)</Text>
+            <Text className="text-xs leading-5 text-muted">{PIX_NOTE}</Text>
+          </View>
+
+          {keys.map((method) => (
+            <View key={method.id} className="gap-3 rounded-2xl border border-outline/30 bg-surface-muted/60 p-3">
+              <View className="flex-row items-center gap-3">
+                <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
+                  <Image source={PIX_TYPE_ICONS[method.pixKeyType]} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
+                </View>
+                <View className="flex-1 gap-0.5">
+                  <View className="flex-row items-center gap-2">
+                    <Text className="flex-shrink text-sm font-semibold text-ink" numberOfLines={1}>
+                      {method.label || KEY_LABELS[method.pixKeyType]}
+                    </Text>
+                    {method.isDefault ? <Text className="rounded-full bg-primary-soft/70 px-2 py-0.5 text-[11px] font-semibold text-primary-strong">Padrão</Text> : null}
+                  </View>
+                  <Text className="text-[11px] text-muted" numberOfLines={1}>
+                    {pixKeyField(method.pixKeyType).format(method.pixKey)}
+                  </Text>
+                </View>
+              </View>
+
+              <View className="flex-row gap-2">
+                {method.isDefault ? null : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Definir padrão"
+                    accessibilityHint={`Usa a chave ${KEY_LABELS[method.pixKeyType]} por padrão`}
+                    accessibilityState={{ disabled: busy }}
+                    disabled={busy}
+                    onPress={() => void act(() => financial.defaultPaymentMethod(method.id))}
+                    className="min-h-10 items-center justify-center rounded-lg border border-outline/40 px-3"
+                  >
+                    <Text className="text-xs font-semibold text-primary">Definir padrão</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Arquivar"
+                  accessibilityHint={`Arquiva a chave ${KEY_LABELS[method.pixKeyType]}`}
+                  accessibilityState={{ disabled: busy }}
+                  disabled={busy}
+                  onPress={() => setArchiving(method)}
+                  className="min-h-10 items-center justify-center rounded-lg px-3"
+                >
+                  <Text className="text-xs font-semibold text-danger">Arquivar</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+
+          <PixKeyFields type={pixType} value={pixKey} disabled={busy} onPickType={pickPixType} onChangeKey={(raw) => setPixKey(pixKeyField(pixType).format(raw))} onClear={() => setPixKey("")} />
+
+          <Field label="Rótulo da chave">
+            <TextInput
+              accessibilityLabel="Rótulo da chave"
+              placeholder="Rótulo (opcional)"
+              placeholderTextColor={colors.muted}
+              maxLength={60}
+              value={pixLabel}
+              onChangeText={setPixLabel}
+              className={FIELD_CLASS}
             />
           </Field>
         </View>
@@ -215,6 +360,52 @@ export function ContactFormScreen({ contactId, client = contactsClient, returnTo
           {busy ? <ActivityIndicator color={colors.onPrimary} /> : <Text className="font-bold text-on-primary">Salvar contato</Text>}
         </Pressable>
       </View>
+
+      {archiving && (
+        <Modal transparent animationType="fade" visible onRequestClose={() => setArchiving(null)}>
+          <View className="flex-1 items-center justify-center bg-scrim px-4">
+            <View className="w-full max-w-sm gap-4 rounded-2xl border border-outline/30 bg-surface p-5">
+              <View className="flex-row items-center gap-3">
+                <View className="h-11 w-11 items-center justify-center rounded-full bg-danger-soft">
+                  <Image source={trashMark} tintColor={colors.danger} style={{ width: 22, height: 22 }} />
+                </View>
+                <View className="flex-1">
+                  <Text accessibilityRole="header" className="text-[17px] font-bold text-ink">
+                    Arquivar chave Pix?
+                  </Text>
+                  <Text className="text-[11px] text-muted">Esta ação não pode ser desfeita.</Text>
+                </View>
+              </View>
+              <View className="gap-1 rounded-xl border border-outline/30 bg-surface-muted/70 p-3">
+                <Text className="text-[11px] font-medium text-muted">{KEY_LABELS[archiving.pixKeyType]}</Text>
+                <Text className="text-sm font-bold text-ink">{pixKeyField(archiving.pixKeyType).format(archiving.pixKey)}</Text>
+              </View>
+              <Text className="text-xs leading-5 text-muted">{ARCHIVE_NOTE}</Text>
+              <View className="flex-row gap-2.5 pt-1">
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancelar"
+                  onPress={() => setArchiving(null)}
+                  className="h-11 flex-1 items-center justify-center rounded-xl border border-outline/50"
+                >
+                  <Text className="text-sm font-semibold text-ink">Cancelar</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Arquivar chave Pix"
+                  accessibilityState={{ disabled: busy }}
+                  disabled={busy}
+                  onPress={() => void act(() => financial.archivePaymentMethod(archiving.id))}
+                  className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-danger-solid"
+                >
+                  <Image source={trashMark} tintColor="white" style={{ width: 16, height: 16 }} />
+                  <Text className="text-sm font-semibold text-on-danger">Arquivar</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }

@@ -86,6 +86,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
         'creditor_id@creditor': 'users:id';
         'debtor_id@debtor': 'users:id';
         'billing_id@billing': 'billings:id';
+        'id@proofs': 'proofs:charge_id';
       };
       indexes: {
         id: Index.Primary;

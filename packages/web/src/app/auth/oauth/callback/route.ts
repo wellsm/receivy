@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const session = await upstream.json() as AuthSessionResponse;
     response.cookies.set(ACCESS_COOKIE, session.accessToken, authCookieOptions(ACCESS_MAX_AGE));
     response.cookies.set(REFRESH_COOKIE, session.refreshToken, authCookieOptions(REFRESH_MAX_AGE));
-    response.headers.set("Location", appUrl(request, "/").toString());
+    response.headers.set("Location", appUrl(request, "/feed").toString());
     return response;
   } catch { return response; }
 }

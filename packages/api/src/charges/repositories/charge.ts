@@ -162,6 +162,7 @@ export namespace ChargeRepository {
         state: true,
         due_date: true,
         amount_cents: true,
+        payment_snapshot: true,
         billing: {
           recurrence: true,
           type: true,
@@ -170,7 +171,11 @@ export namespace ChargeRepository {
           name: true,
           email: true,
           phone: true,
-        }
+        },
+        proofs: {
+          state: true,
+          kind: true,
+        },
       },
       where: {
         AND: [

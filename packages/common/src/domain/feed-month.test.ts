@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { currentMonth, monthLabel, monthTabs, shiftMonth } from './feed-month';
+import { currentMonth, isMonth, monthLabel, monthTabs, shiftMonth } from './feed-month';
 
 describe('feed month', () => {
   it('reads the current month from today, respecting the timezone', () => {
     expect(currentMonth(new Date('2026-09-01T02:00:00Z'), 'America/Sao_Paulo')).toBe('2026-08');
     expect(currentMonth(new Date('2026-09-01T14:00:00Z'), 'America/Sao_Paulo')).toBe('2026-09');
+  });
+
+  it('accepts only a well-formed month, so a URL cannot reach the month helpers', () => {
+    expect(isMonth('2026-09')).toBe(true);
+    expect(isMonth('2026-13')).toBe(false);
+    expect(isMonth('2026-9')).toBe(false);
+    expect(isMonth('2026-09-01')).toBe(false);
+    expect(isMonth(undefined)).toBe(false);
   });
 
   it('shifts months across year boundaries', () => {

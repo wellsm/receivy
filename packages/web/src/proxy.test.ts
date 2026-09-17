@@ -43,7 +43,7 @@ describe("session gate", () => {
   it("sends a signed-in visitor away from the code confirmation screen", async () => {
     const response = await proxy(request("/login/code", { [ACCESS_COOKIE]: "access" }));
     expect(response.status).toBe(307);
-    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/");
+    expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/feed");
   });
 
   it("sends anonymous visitors of the onboarding screen to login with a return path", async () => {

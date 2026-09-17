@@ -1,8 +1,10 @@
 export function authApiUrl(path: string): URL {
   const base = process.env.EZ4_API_URL;
+
   if (!base) {
     throw new Error("EZ4_API_URL is not configured");
   }
+
   return new URL(path.replace(/^\//, ""), base.endsWith("/") ? base : `${base}/`);
 }
 

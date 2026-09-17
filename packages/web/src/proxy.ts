@@ -85,7 +85,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   if (pathname === "/login" || pathname === "/login/code") {
     if (hasSession) {
-      return NextResponse.redirect(appUrl(request, "/"));
+      return NextResponse.redirect(appUrl(request, "/feed"));
     }
     return NextResponse.next();
   }
@@ -102,5 +102,5 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/login/code", "/onboarding", "/charges/:path*", "/pay/:path*", "/join/:path*", "/contacts/:path*", "/billings/:path*", "/settings/:path*"],
+  matcher: ["/", "/login", "/login/code", "/onboarding", "/charges/:path*", "/pay/:path*", "/join/:path*", "/contacts/:path*", "/feed/:path*", "/billings/:path*", "/settings/:path*"],
 };

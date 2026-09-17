@@ -37,6 +37,16 @@ describe('refresh session', () => {
     }
   });
 
+  it('separates a token consumed moments ago from a real replay', async () => {
+    const repo = repository({
+      rotateRefreshToken: vi.fn().mockResolvedValue({ kind: 'stale' })
+    });
+
+    await expect(refreshSession({ refreshToken: 'lost-the-race' }, { accessTokenSecret: 'jwt-secret', repo })).rejects.toEqual(
+      new SessionFlowError('STALE_SESSION')
+    );
+  });
+
   it('allows logout after access expiry and does not reveal unknown tokens', async () => {
     const repo = repository();
 

@@ -24,10 +24,10 @@ describe("web auth cookies", () => {
 describe("safeNextPath", () => {
   it("allows only local absolute paths", () => {
     expect(safeNextPath("/contacts?from=login")).toBe("/contacts?from=login");
-    expect(safeNextPath("https://evil.example/steal")).toBe("/");
-    expect(safeNextPath("//evil.example/steal")).toBe("/");
-    expect(safeNextPath("/\\evil.example/steal")).toBe("/");
-    expect(safeNextPath("javascript:alert(1)")).toBe("/");
-    expect(safeNextPath(null)).toBe("/");
+    expect(safeNextPath("https://evil.example/steal")).toBe("/feed");
+    expect(safeNextPath("//evil.example/steal")).toBe("/feed");
+    expect(safeNextPath("/\\evil.example/steal")).toBe("/feed");
+    expect(safeNextPath("javascript:alert(1)")).toBe("/feed");
+    expect(safeNextPath(null)).toBe("/feed");
   });
 });

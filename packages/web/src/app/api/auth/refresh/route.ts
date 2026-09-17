@@ -28,6 +28,12 @@ export async function POST(request: Request) {
       method: "POST",
       body: JSON.stringify({ refreshToken: current }),
     });
+    // A sibling window rotated first: the cookie jar already holds the new pair, so clearing it here
+    // would end a session that is alive. The caller retries with what it now has.
+    if (upstream.status === 409) {
+      return new NextResponse(null, { status: 409 });
+    }
+
     if (!upstream.ok) {
       return clearSessionCookies(new NextResponse(null, { status: 401 }));
     }

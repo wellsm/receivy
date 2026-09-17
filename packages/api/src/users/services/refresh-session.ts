@@ -10,7 +10,7 @@ export type RotateRefreshTokenOutcome =
       refreshToken: string;
       userId: string;
     }
-  | { kind: 'invalid' | 'expired' | 'replayed' };
+  | { kind: 'invalid' | 'expired' | 'replayed' | 'stale' };
 
 export interface SessionRepository {
   rotateRefreshToken(token: string): Promise<RotateRefreshTokenOutcome>;
@@ -18,7 +18,7 @@ export interface SessionRepository {
 }
 
 export class SessionFlowError extends Error {
-  constructor(readonly code: 'INVALID_SESSION') {
+  constructor(readonly code: 'INVALID_SESSION' | 'STALE_SESSION') {
     super('Sessão inválida ou expirada.');
     this.name = 'SessionFlowError';
   }
@@ -29,6 +29,10 @@ export async function refreshSession(
   dependencies: { accessTokenSecret: string; repo: SessionRepository }
 ): Promise<SessionTokens> {
   const outcome = await dependencies.repo.rotateRefreshToken(input.refreshToken);
+
+  if (outcome.kind === 'stale') {
+    throw new SessionFlowError('STALE_SESSION');
+  }
 
   if (outcome.kind !== 'rotated') {
     throw new SessionFlowError('INVALID_SESSION');

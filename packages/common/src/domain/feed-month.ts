@@ -6,6 +6,11 @@ const SHORT_MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 's
 
 export type MonthTab = { value: string; label: string; selected: boolean };
 
+/** Guards a month coming from outside — a URL, a query string — before the helpers below assert it. */
+export function isMonth(value: unknown): value is string {
+  return typeof value === 'string' && MONTH_FORMAT.test(value);
+}
+
 function assertMonth(month: string): void {
   if (!MONTH_FORMAT.test(month)) {
     throw new RangeError('Mês inválido: use o formato AAAA-MM.');
@@ -13,8 +18,8 @@ function assertMonth(month: string): void {
 }
 
 /** The feed's default month: `today` read in `timezone` (or the local one), as `YYYY-MM`. */
-export function currentMonth(today: Date, timezone?: string): string {
-  return calendarDate(today, timezone).slice(0, 7);
+export function currentMonth(today?: Date, timezone?: string): string {
+  return calendarDate(today ?? new Date(), timezone).slice(0, 7);
 }
 
 /** `month` shifted by `delta` months, carrying the year over on either boundary. */

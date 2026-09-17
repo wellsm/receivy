@@ -11,6 +11,12 @@ export function makeMoney(amountCents: number): Money {
   return { amountCents, currency: 'BRL' };
 }
 
+export function signedMoney(amountCents: number): string {
+  const sign = amountCents > 0 ? "+ " : amountCents < 0 ? "− " : "";
+
+  return `${sign}${formatMoney({ amountCents: Math.abs(amountCents), currency: "BRL" })}`;
+}
+
 export function formatMoney(money: Money, locale = 'pt-BR'): string {
   if (!Number.isSafeInteger(money.amountCents)) {
     throw new RangeError('amountCents must be a safe integer');

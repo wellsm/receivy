@@ -25,7 +25,7 @@ describe("OAuth browser binding", () => {
     expect(authApiFetch).toHaveBeenCalledWith("auth/oauth/exchange", expect.objectContaining({
       body: JSON.stringify({ code: "grant", codeVerifier: "v".repeat(43), deviceName: "Web" }),
     }));
-    expect(response.headers.get("Location")).toBe("https://receivy.example/");
+    expect(response.headers.get("Location")).toBe("https://receivy.example/feed");
     expect(await response.text()).not.toContain("secret-");
     const cookie = response.cookies.get("__Host-receivy_refresh");
     expect(cookie).toMatchObject({ httpOnly: true, secure: true, sameSite: "lax", path: "/" });

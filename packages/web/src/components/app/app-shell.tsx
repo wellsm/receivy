@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { BackButton } from "@/components/app/back-button";
 
 const navigation = [
-  { href: "/", label: "Feed", icon: Rows3 },
+  { href: "/feed", label: "Feed", icon: Rows3 },
   { href: "/billings", label: "Contas", icon: ReceiptText },
   { href: "/settings", label: "Perfil", icon: UserRound },
 ] as const;

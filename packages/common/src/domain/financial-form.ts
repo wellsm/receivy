@@ -72,6 +72,7 @@ export function calendarDate(date = new Date(), timeZone?: string): string {
   if (!timeZone) {
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
   }
+
   const values = Object.fromEntries(
     new Intl.DateTimeFormat('en', {
       timeZone,
@@ -83,5 +84,6 @@ export function calendarDate(date = new Date(), timeZone?: string): string {
       .filter((part) => part.type !== 'literal')
       .map((part) => [part.type, part.value])
   );
+
   return `${values.year}-${values.month}-${values.day}`;
 }

@@ -3,6 +3,7 @@ import type { Http } from '@ez4/gateway';
 import { HttpUnauthorizedError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { SessionTokens } from '@receivy/common';
+import { StaleSessionError } from '../errors';
 import type { UserProvider } from '../provider';
 import { AuthRepository } from '../repositories/auth';
 import { refreshSession, SessionFlowError } from '../services/refresh-session';
@@ -25,7 +26,7 @@ export async function refreshHandler(request: RefreshRequest, { db, variables }:
     return { status: 200, body };
   } catch (error) {
     if (error instanceof SessionFlowError) {
-      throw new HttpUnauthorizedError();
+      throw error.code === 'STALE_SESSION' ? new StaleSessionError() : new HttpUnauthorizedError();
     }
     throw error;
   }

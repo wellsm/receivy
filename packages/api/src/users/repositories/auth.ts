@@ -14,6 +14,13 @@ import { SessionRepository } from './sessions';
 const CODE_TTL_MS = 10 * 60 * 1000;
 const CODE_COOLDOWN_MS = 60 * 1000;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * How long a consumed refresh token is still tolerated. Concurrent clients (browser tabs sharing one
+ * cookie jar, a middleware hit by parallel requests) can present the same token before the winner's
+ * rotation reaches them: inside this window the loser is told to retry with the pair it now holds,
+ * and no token is ever issued for it. A reuse after the window is a replay and revokes the family.
+ */
+const REFRESH_GRACE_MS = 30 * 1000;
 
 const LOGIN_CODE_SELECT = {
   id: true,
@@ -484,6 +491,10 @@ async function rotateRefreshToken(db: DbClient, clearToken: string): Promise<Rot
     if (!token) return { kind: 'invalid' };
 
     if (token.consumed_at) {
+      if (Date.now() - new Date(token.consumed_at).getTime() <= REFRESH_GRACE_MS) {
+        return { kind: 'stale' };
+      }
+
       await tx.session_families.updateOne({
         select: { id: true },
         data: { revoked_at: new Date().toISOString() },

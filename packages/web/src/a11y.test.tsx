@@ -70,7 +70,7 @@ describe("accessibility of the main web screens", () => {
   });
 
   it("feed (empty) has no axe violations and names the month carousel", async () => {
-    const { container } = render(<FeedScreen charges={[]} month="2026-09" viewerEmail="ana@example.com" filters={DEFAULT_FEED_FILTERS} />);
+    const { container } = render(<FeedScreen charges={[]} month="2026-09" viewerEmail="ana@example.com" filters={DEFAULT_FEED_FILTERS} today="2026-09-11" />);
     expect(screen.getByText("Sua timeline começa aqui")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Mês" })).toBeInTheDocument();
     await expectNoViolations(container);

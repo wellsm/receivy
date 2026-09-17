@@ -20,7 +20,7 @@ export function safeNextPath(value: string | null): string {
     value.startsWith("//") ||
     value.startsWith("/\\")
   ) {
-    return "/";
+    return "/feed";
   }
   return value;
 }

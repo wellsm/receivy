@@ -18,7 +18,6 @@ import {
   formatAmountDigits,
   formatMoney,
   parseBRLCents,
-  pixKeyField,
   previewBillingSplit,
   shouldAskEditScope,
   splitPartyKey,
@@ -42,7 +41,7 @@ import {
   type PaymentMethod,
   type Contact,
   type ContactsPage,
-  type PixDraft,
+  type PaymentMethodsPage,
   type SplitParty,
   type SplitValues,
 } from "@receivy/common";
@@ -56,7 +55,6 @@ import { ScopeDialog } from "@/components/app/scope-dialog";
 import { CategorySelect } from "@/components/app/category-select";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
 import { MonthSelect } from "@/components/app/month-select";
-import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { SplitEditor, type SplitRow } from "@/components/app/split-editor";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { PIX_TYPE_LABELS, PixTypeIcon } from "@/components/ui/pix-type-icon";
@@ -75,6 +73,7 @@ const NEW_CONTACT = `/contacts/new?returnTo=${encodeURIComponent(RETURN_TO)}`;
 const FROZEN_NOTE = "Contas já geradas só permitem categoria, Pix e lembretes.";
 const PIX_GATE_TITLE = "Cadastre uma chave Pix";
 const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com a sua chave Pix. Cadastre uma e volte para continuar de onde parou.";
+const NO_CONTACT_KEY = "Este contato ainda não tem chave Pix. Cadastre no contato.";
 const NO_VALUES: Record<string, string> = {};
 
 const DIRECTIONS: { value: Direction; label: string }[] = [
@@ -167,15 +166,6 @@ function valuesFromBilling(billing: BillingDetail): SplitValues {
   return values;
 }
 
-/** The draft keeps the canonical key (`+55…`, digits only); the field masks it for display. */
-function pixDraftFromBilling(billing: BillingDetail): PixDraft {
-  if (!billing.pix) {
-    return { type: PixKeyType.Email, key: "", label: "" };
-  }
-
-  return { type: billing.pix.keyType, key: billing.pix.key, label: billing.pix.label };
-}
-
 /** Each participant's current "Não notificar", so saving the edit sends back what the billing already has. */
 function notifyFromBilling(billing: BillingDetail): Record<string, boolean> {
   const notify: Record<string, boolean> = {};
@@ -195,7 +185,6 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
   return {
     direction: billing.type,
     payee: billing.contact?.id ?? "",
-    pixInline: pixDraftFromBilling(billing),
     type: billing.recurrence,
     selected: parts.flatMap(part => (part.kind === "user" ? [part.userId] : [])),
     owner: parts.some(part => part.kind === "owner") || billing.split.mode === "fixed",
@@ -246,7 +235,10 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   );
   const [recent, setRecent] = useState<Contact[]>([]);
   const [directory, setDirectory] = useState<Contact[]>([]);
-  const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  /** The owner's own keys: what a conta a receber is paid through. */
+  const [wallet, setWallet] = useState<PaymentMethod[]>([]);
+  /** The seated contact's keys, tagged with whose they are: an unanswered seat reads as none. */
+  const [payeeKeys, setPayeeKeys] = useState<{ contactId: string; methods: PaymentMethod[] }>({ contactId: "", methods: [] });
   const [picker, setPicker] = useState(false);
   const [payeePicker, setPayeePicker] = useState(false);
   const [pixOpen, setPixOpen] = useState(false);
@@ -292,19 +284,16 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       request<{ paymentMethods: PaymentMethod[] }>("/api/financial/payment-methods"),
       billing || stored ? Promise.resolve(null) : request<{ user: { timezone: string } }>("/api/auth/me"),
     ])
-      .then(([agenda, wallet, me]) => {
+      .then(([agenda, keys, me]) => {
         if (!live) {
           return;
         }
 
-        const active = wallet.paymentMethods.filter(method => !method.archivedAt);
-
-        if (active.length) {
-        }
+        const active = keys.paymentMethods.filter(method => !method.archivedAt);
 
         setRecent(agenda.contacts.slice(0, 12));
         setDirectory(agenda.contacts);
-        setMethods(active);
+        setWallet(active);
         setGated(!billing && !active.length);
         setDraft(current => {
           const base = stored ? stored.draft : current;
@@ -327,6 +316,43 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       live = false;
     };
   }, [billing]);
+
+  // Whoever receives a conta a pagar owns the key: the form only picks among the seated contact's.
+  useEffect(() => {
+    const contactId = draft.payee;
+
+    if (!payable || settled || !contactId) {
+      return;
+    }
+
+    let live = true;
+
+    void request<PaymentMethodsPage>(`/api/financial/payment-methods?contactId=${contactId}`)
+      .then(page => {
+        if (!live) {
+          return;
+        }
+
+        const methods = page.paymentMethods.filter(method => !method.archivedAt);
+
+        setPayeeKeys({ contactId, methods });
+        // A key of the contact the seat just left cannot pay this one: fall back to their
+        // default. A seeded edit already points at one of these, and keeps it.
+        setDraft(current => ({
+          ...current,
+          pix: methods.some(method => method.id === current.pix) ? current.pix : (methods.find(method => method.isDefault)?.id ?? methods[0]?.id ?? ""),
+        }));
+      })
+      .catch(() => {
+        if (live) {
+          setPayeeKeys({ contactId, methods: [] });
+        }
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [payable, settled, draft.payee]);
 
   function update(patch: Partial<BillingDraft>) {
     if (locked) {
@@ -368,6 +394,20 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     router.push(path);
   }
 
+  /** The key of a conta a pagar lives on the contact: the hint sends the owner there and back. */
+  function leaveToContactKeys() {
+    const back = billing ? `/billings/${billing.id}/edit` : RETURN_TO;
+    const path = `/contacts/${draft.payee}/edit?returnTo=${encodeURIComponent(back)}`;
+
+    // An edit is not restorable from a stored draft: only a creation leaves one behind.
+    if (editing) {
+      router.push(path);
+      return;
+    }
+
+    leaveTo(path);
+  }
+
   // The field behaves like a bank keypad: whatever the browser hands back is
   // reduced to its digits and re-rendered, so typing pushes cents to the left
   // and Backspace drops the last digit.
@@ -381,18 +421,6 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     }
 
     update({ values: { ...draft.values, [draft.mode]: { ...draft.values[draft.mode], [key]: value } } });
-  }
-
-  function pickPixType(type: PixKeyType) {
-    update({ pixInline: { ...draft.pixInline, type, key: "" } });
-  }
-
-  // The mask trims and groups what was typed; the draft keeps the canonical key
-  // (`+55…`, digits only) so `buildBillingInput` normalizes it like the wallet does.
-  function typePixKey(raw: string) {
-    const spec = pixKeyField(draft.pixInline.type);
-
-    update({ pixInline: { ...draft.pixInline, key: spec.unformat(spec.format(raw)) } });
   }
 
   async function save(sent: Attempt) {
@@ -446,19 +474,13 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
     // The API reads the direction off the receiving contact, and so does the patch: only a conta a pagar has one.
     const toPayable = Boolean(input.contactId);
-    const editable = toPayable
-      ? {
-          ...(input.pix ? { pix: input.pix } : {}),
-          ...seatPatch(input),
-          reminders: input.reminders,
-          category: input.category,
-        }
-      : {
-          paymentMethodId: input.paymentMethodId,
-          clearPaymentMethod: !input.paymentMethodId,
-          reminders: input.reminders,
-          category: input.category,
-        };
+    const editable = {
+      paymentMethodId: input.paymentMethodId,
+      clearPaymentMethod: !input.paymentMethodId,
+      ...(toPayable ? seatPatch(input) : {}),
+      reminders: input.reminders,
+      category: input.category,
+    };
 
     if (billing && billing.recurrence !== "indefinite") {
       return editable;
@@ -639,6 +661,10 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     return "Valores manuais";
   }
 
+  // A seat whose keys have not landed yet answers none, so the selector never offers another contact's.
+  const payeeLoaded = payeeKeys.contactId === draft.payee;
+  // The same selector serves both directions, over whichever keys pay this conta.
+  const methods = payable ? (payeeLoaded ? payeeKeys.methods : []) : wallet;
   const selectedPix = methods.find(method => method.id === draft.pix) ?? null;
   // One registered key has nothing to switch to; the list only opens with a real choice.
   const switchable = methods.length > 1 || (methods.length === 1 && !selectedPix);
@@ -647,7 +673,6 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   const seated = seatId ? (payable ? contactById(seatId) : contactFor(seatId)) : null;
   // A locked seat is not a toggle: it announces no pressed state and offers no remove hint.
   const chipToggle = seatLocked ? {} : { "aria-pressed": true, title: "Remove quem está do outro lado" };
-  const pixSpec = pixKeyField(draft.pixInline.type);
   const action = editing ? "Salvar conta" : "Criar conta";
   // Only meaningful on create: an edit patches a subset of fields, not the whole draft.
   const draftSummary = editing ? null : billingDraftSummary(draft, new Date());
@@ -1060,36 +1085,25 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
         />
       )}
 
-      {/* Chave Pix (conta a pagar): typed inline, it belongs to whoever receives */}
-      {payable && !settled && (
-        <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={locked}>
-          <span className={LABEL_CLASS}>Chave Pix (opcional)</span>
-          <PixKeyFields type={draft.pixInline.type} value={pixSpec.format(draft.pixInline.key)} inputId="billing-pix-key" onPickType={pickPixType} onChange={typePixKey} />
-          <div className="flex flex-col gap-1">
-            <SectionLabel htmlFor="billing-pix-label">Apelido da chave (opcional)</SectionLabel>
-            <input
-              id="billing-pix-label"
-              maxLength={60}
-              placeholder="Ex: Conta da Ana"
-              value={draft.pixInline.label}
-              onChange={event => update({ pixInline: { ...draft.pixInline, label: event.target.value } })}
-              className={INPUT_CLASS}
-            />
-          </div>
-        </fieldset>
-      )}
-
-      {/* Pix */}
-      {!payable && !settled && (
+      {/* Pix: the owner's own keys on a conta a receber, the seated contact's on a conta a pagar */}
+      {!settled && (!payable || Boolean(draft.payee)) && (
       <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0" disabled={locked}>
         <div className="flex items-center justify-between">
-          <span className={LABEL_CLASS}>Receber via Pix</span>
-          {!editing && !gate && (
+          <span className={LABEL_CLASS}>{payable ? "Pagar via Pix" : "Receber via Pix"}</span>
+          {!payable && !editing && !gate && (
             <button type="button" aria-label="Cadastrar chave" onClick={() => leaveTo(PIX_SETUP)} className="min-h-8 bg-transparent text-[11px] font-medium text-primary">
               + Cadastrar nova chave
             </button>
           )}
         </div>
+        {payable && payeeLoaded && !methods.length ? (
+          <div className="flex flex-col items-start gap-2 rounded-xl border border-outline/40 bg-surface p-3" role="status">
+            <p className="m-0 text-xs leading-5 text-muted">{NO_CONTACT_KEY}</p>
+            <button type="button" onClick={leaveToContactKeys} className="min-h-9 bg-transparent px-0 text-xs font-bold text-primary">
+              Cadastrar chave
+            </button>
+          </div>
+        ) : (
         <div className="relative">
           <button
             type="button"
@@ -1147,6 +1161,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
             </ul>
           )}
         </div>
+        )}
       </fieldset>
       )}
 

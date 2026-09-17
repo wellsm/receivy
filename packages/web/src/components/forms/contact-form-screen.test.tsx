@@ -1,5 +1,5 @@
-import { EMPTY_BILLING_DRAFT, UserStatus, type Contact } from "@receivy/common";
-import { cleanup, render, screen } from "@testing-library/react";
+import { EMPTY_BILLING_DRAFT, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
@@ -32,13 +32,31 @@ const ana: Contact = {
   activeCharges: 0,
 };
 
+/** The contact's own keys, the way `GET /payment-methods?contactId=` answers them. */
+const nubank: PaymentMethod = {
+  id: "pm-1",
+  type: "pix",
+  label: "Nubank",
+  pixKey: "ana@example.com",
+  pixKeyType: PixKeyType.Email,
+  isDefault: true,
+  contactId: "c1",
+  archivedAt: null,
+  createdAt: "2026-01-01",
+};
+const itau: PaymentMethod = { ...nubank, id: "pm-2", label: "Itaú", pixKey: "52998224725", pixKeyType: PixKeyType.Cpf, isDefault: false, createdAt: "2026-01-02" };
+
 type Sent = { path: string; init: RequestInit };
 
-function api(contact = ana) {
+function api(contact = ana, keys: PaymentMethod[] = []) {
   const sent: Sent[] = [];
 
   vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
     sent.push({ path, init });
+
+    if (path.includes("payment-methods")) {
+      return init.method === "POST" ? new Response(null, { status: 204 }) : Response.json({ paymentMethods: keys });
+    }
 
     if (init.method === "POST" || init.method === "PATCH") {
       return Response.json({ ...contact, id: "saved", userId: "user-saved" }, { status: 201 });
@@ -48,6 +66,10 @@ function api(contact = ana) {
   });
 
   return sent;
+}
+
+function keyList() {
+  return within(screen.getByRole("list", { name: "Chaves Pix do contato" }));
 }
 
 it("creates a contact with a nickname and an e-mail", async () => {
@@ -132,6 +154,87 @@ it("hands the new contact's account back to the billing draft when it came from 
 
   await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/billings/new"));
   expect(takeDraft()?.draft.selected).toEqual(["user-0", "user-saved"]);
+});
+
+it("files the typed Pix key under the new contact", async () => {
+  const sent = api();
+  render(<ContactFormScreen />);
+
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
+
+  expect(screen.getByText("Chave Pix (opcional)")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("radio", { name: "Celular" }));
+  await user.type(screen.getByLabelText("Telefone celular"), "11987654321");
+  await user.type(screen.getByLabelText("Rótulo da chave"), "Nubank");
+
+  expect(screen.getByLabelText("Telefone celular")).toHaveValue("(11) 98765-4321");
+  expect(screen.getByLabelText("Rótulo da chave")).toHaveAttribute("placeholder", "Rótulo (opcional)");
+
+  await user.click(screen.getByRole("button", { name: "Salvar contato" }));
+
+  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts"));
+
+  expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toEqual({
+    name: "Ana Souza",
+    paymentMethod: { pixKeyType: "phone", pixKey: "+5511987654321", label: "Nubank" },
+  });
+});
+
+it("leaves the label out when only the key was typed", async () => {
+  const sent = api();
+  render(<ContactFormScreen />);
+
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
+  await user.type(screen.getByLabelText("E-mail Pix"), "ana@example.com");
+  await user.click(screen.getByRole("button", { name: "Salvar contato" }));
+
+  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts"));
+
+  expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toEqual({
+    name: "Ana Souza",
+    paymentMethod: { pixKeyType: "email", pixKey: "ana@example.com" },
+  });
+});
+
+it("lists the contact's Pix keys on edit and promotes the one the owner picks", async () => {
+  const sent = api(ana, [nubank, itau]);
+  render(<ContactFormScreen contactId="c1" />);
+
+  await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
+
+  expect(sent.some(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toBe(true);
+  expect(keyList().getByText("Padrão")).toBeInTheDocument();
+  expect(keyList().getAllByRole("button", { name: "Definir padrão" })).toHaveLength(1);
+
+  await userEvent.setup().click(keyList().getByRole("button", { name: "Definir padrão" }));
+
+  await vi.waitFor(() => expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(2));
+  expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pm-2/default" && entry.init.method === "POST")).toBe(true);
+});
+
+it("archives one of the contact's keys and reloads the list", async () => {
+  const sent = api(ana, [nubank, itau]);
+  render(<ContactFormScreen contactId="c1" />);
+
+  await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
+
+  await userEvent.setup().click(keyList().getAllByRole("button", { name: "Arquivar" })[1]!);
+
+  await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pm-2/archive" && entry.init.method === "POST")).toBe(true));
+  expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(2);
+});
+
+it("never asks the API for keys while the contact does not exist yet", async () => {
+  const sent = api();
+  render(<ContactFormScreen />);
+
+  await screen.findByRole("button", { name: "Salvar contato" });
+
+  expect(sent.some(entry => entry.path.includes("payment-methods"))).toBe(false);
+  expect(screen.queryByRole("list", { name: "Chaves Pix do contato" })).not.toBeInTheDocument();
 });
 
 it("keeps the typed data when the server rejects the contact", async () => {

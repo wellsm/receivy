@@ -26,7 +26,12 @@ const ana = { id: "c1", userId: "u1", name: "Ana Souza", nickname: "Ana", displa
 const bruno = { id: "c2", userId: "u2", name: "Bruno Lima", nickname: null, displayName: "Bruno Lima", email: "bruno@example.com", phone: null, status: "active", archivedAt: null, createdAt: "2026-01-01", lastBilledAt: null, activeCharges: 0 };
 /** No e-mail and no phone: a placeholder contact nobody can notify. */
 const carla = { id: "c3", userId: "u3", name: "Carla Dias", nickname: null, displayName: "Carla", email: "", phone: null, status: "pending", archivedAt: null, createdAt: "2026-01-01", lastBilledAt: null, activeCharges: 0 };
-const method = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, archivedAt: null };
+const method = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, contactId: null, archivedAt: null };
+/** Block 9.1: the keys the owner filed under each contact; a conta a pagar only picks among the seated contact's. */
+const anaKey = { id: "pix-ana", label: "Nubank da Ana", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, contactId: "c1", archivedAt: null };
+const anaSecondKey = { id: "pix-ana-2", label: "Itaú da Ana", pixKey: "52998224725", pixKeyType: "cpf", isDefault: false, contactId: "c1", archivedAt: null };
+const brunoKey = { id: "pix-bruno", label: "Bruno", pixKey: "bruno@example.com", pixKeyType: "email", isDefault: true, contactId: "c2", archivedAt: null };
+const CONTACT_KEYS: Record<string, unknown[]> = { c1: [anaKey, anaSecondKey], c2: [brunoKey] };
 const PIX_SETUP = "/settings/pix/new?returnTo=%2Fbillings%2Fnew&required=1";
 
 type Sent = { path: string; init: RequestInit };
@@ -49,6 +54,12 @@ function api(handler: (path: string, init: RequestInit) => Response | undefined 
 
     if (path.startsWith("/api/contacts")) {
       return Response.json({ contacts: [ana], nextCursor: null });
+    }
+
+    const contactId = path.match(/payment-methods\?contactId=([^&]+)/)?.[1];
+
+    if (contactId) {
+      return Response.json({ paymentMethods: CONTACT_KEYS[contactId] ?? [] });
     }
 
     if (path.includes("payment-methods")) {
@@ -770,7 +781,7 @@ it("never gates the form once a key exists", async () => {
   expect(routerMock.push).not.toHaveBeenCalled();
 });
 
-it("creates a conta a pagar without participants, naming the contact who receives and a typed Pix key", async () => {
+it("creates a conta a pagar without participants, naming the contact who receives and one of their keys", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
   const { user } = renderForm();
 
@@ -780,16 +791,18 @@ it("creates a conta a pagar without participants, naming the contact who receive
   expect(screen.queryByText("Divisão da Conta")).not.toBeInTheDocument();
   expect(screen.queryByText("Receber via Pix")).not.toBeInTheDocument();
   expect(screen.getByText("Para quem")).toBeInTheDocument();
-  expect(screen.getByText("Chave Pix (opcional)")).toBeInTheDocument();
+  // The key is no longer typed here: it belongs to the contact.
+  expect(screen.queryByRole("radiogroup", { name: "Tipo de chave" })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("E-mail Pix")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Apelido da chave (opcional)")).not.toBeInTheDocument();
 
   await seatAna(user);
 
   expect(screen.getByRole("button", { name: "Ana" })).toHaveAttribute("aria-pressed", "true");
-
-  await user.click(screen.getByRole("radio", { name: "Celular" }));
-  await user.type(screen.getByLabelText("Telefone celular"), "11987654321");
-
-  expect(screen.getByLabelText("Telefone celular")).toHaveValue("(11) 98765-4321");
+  // The seated contact's default key comes preselected.
+  expect(await screen.findByText("Pagar via Pix")).toBeInTheDocument();
+  expect(sent.some(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toBe(true);
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Chave padrão"));
 
   await user.type(screen.getByLabelText("Valor total"), "100,00");
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
@@ -801,9 +814,90 @@ it("creates a conta a pagar without participants, naming the contact who receive
     type: "payable",
     totalCents: 10_000,
     contactId: "c1",
-    pix: { keyType: "phone", key: "+5511987654321" },
+    paymentMethodId: "pix-ana",
   });
+  expect(body.pix).toBeUndefined();
   expect(body.payeeUserId).toBeUndefined();
+});
+
+it("switches the conta a pagar to another key of the same contact", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
+  await seatAna(user);
+
+  await user.click(await screen.findByRole("button", { name: /E-mail/ }));
+  await user.click(within(screen.getByRole("listbox", { name: "Chave Pix" })).getByRole("button", { name: /CPF/ }));
+
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toMatchObject({ paymentMethodId: "pix-ana-2" });
+});
+
+it("re-picks the default key when the receiving seat moves to another contact", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
+  await seatAna(user);
+
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Chave padrão"));
+
+  await user.click(screen.getByRole("button", { name: /Trocar/ }));
+
+  const panel = screen.getByRole("dialog", { name: "Contatos" });
+  await user.type(within(panel).getByLabelText("Buscar contatos"), "ma");
+  await user.click(await within(panel).findByRole("checkbox", { name: "Bruno Lima" }));
+  await user.click(within(panel).getByRole("button", { name: "Concluir" }));
+
+  await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods?contactId=c2")).toBe(true));
+
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toMatchObject({ contactId: "c2", paymentMethodId: "pix-bruno" });
+});
+
+it("points at the contact form when the seated contact has no Pix key yet", async () => {
+  const sent = api(path => (path.includes("payment-methods?contactId=") ? Response.json({ paymentMethods: [] }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
+  await seatAna(user);
+
+  expect(await screen.findByText("Este contato ainda não tem chave Pix. Cadastre no contato.")).toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+  await user.click(screen.getByRole("button", { name: "Cadastrar chave" }));
+
+  expect(routerMock.push).toHaveBeenCalledWith("/contacts/c1/edit?returnTo=%2Fbillings%2Fnew");
+  expect(window.sessionStorage.getItem("receivy.billingDraft")).toContain("100,00");
+  expect(sent.some(entry => entry.init.method === "POST")).toBe(false);
+});
+
+it("sends a conta a pagar with no key at all when the contact has none", async () => {
+  const sent = api((path, init) => {
+    if (path.includes("payment-methods?contactId=")) {
+      return Response.json({ paymentMethods: [] });
+    }
+
+    return init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined;
+  });
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
+  await seatAna(user);
+  await screen.findByText("Este contato ainda não tem chave Pix. Cadastre no contato.");
+
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  const body = JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body));
+
+  expect(body).toMatchObject({ type: "payable", contactId: "c1" });
+  expect(body.paymentMethodId).toBeUndefined();
 });
 
 it("refuses a conta a pagar whose receiving chip was removed", async () => {
@@ -833,17 +927,14 @@ it("never gates a conta a pagar on a wallet key", async () => {
   expect(screen.getByRole("button", { name: "Criar conta" })).toBeEnabled();
 });
 
-it("shows the inline key error of a conta a pagar without leaving the form", async () => {
+it("never offers a Pix selector on a conta a pagar with no seated contact", async () => {
   api();
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
-  await seatAna(user);
-  await user.type(screen.getByLabelText("E-mail Pix"), "nao-e-email");
-  await user.type(screen.getByLabelText("Valor total"), "100,00");
-  await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
-  expect(screen.getByRole("alert")).toHaveTextContent("Chave Pix inválida.");
+  expect(screen.queryByText("Pagar via Pix")).not.toBeInTheDocument();
+  expect(screen.getByText("Escolha quem recebe.")).toBeInTheDocument();
 });
 
 const onceBilling: BillingDetail = {
@@ -911,20 +1002,21 @@ const payableBilling: BillingDetail = {
   ...onceBilling,
   id: "b3",
   type: Direction.Payable,
-  paymentMethodId: undefined,
+  paymentMethodId: "pix-ana-2",
   contact: { id: "c1", userId: "u1", name: "Ana", avatar: null },
-  pix: { keyType: PixKeyType.Email, key: "ana@example.com", label: "Nubank" },
+  pix: { keyType: PixKeyType.Cpf, key: "52998224725", label: "Itaú da Ana" },
 };
 
-it("seeds a conta a pagar with its receiving contact and inline key and patches the key back", async () => {
+it("seeds a conta a pagar with its receiving contact and its key, and patches the key back", async () => {
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(payableBilling) : undefined));
   const { user } = renderForm(payableBilling);
 
   expect(await screen.findByRole("button", { name: "Ana" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("radio", { name: "Vou pagar" })).toBeChecked();
   expect(screen.getByRole("radio", { name: "Vou pagar" })).toBeDisabled();
-  expect(screen.getByLabelText("E-mail Pix")).toHaveValue("ana@example.com");
-  expect(screen.getByLabelText("Apelido da chave (opcional)")).toHaveValue("Nubank");
+  // The seeded key survives the contact's key list landing: it is one of them.
+  expect(await screen.findByRole("button", { name: /CPF/ })).toHaveTextContent("Chave secundária");
+  expect(screen.queryByLabelText("E-mail Pix")).not.toBeInTheDocument();
   expect(screen.queryByText("Participantes")).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
@@ -934,14 +1026,32 @@ it("seeds a conta a pagar with its receiving contact and inline key and patches 
 
   expect(patch?.path).toBe("/api/financial/billings/b3");
   expect(body).toMatchObject({
-    pix: { keyType: "email", key: "ana@example.com", label: "Nubank" },
+    paymentMethodId: "pix-ana-2",
+    clearPaymentMethod: false,
     reminders: [{ offsetDays: -3, enabled: true }],
     category: "other",
   });
   // The seat did not move, so the patch leaves the receiving contact alone.
   expect(body.contactId).toBeUndefined();
+  expect(body.pix).toBeUndefined();
   expect(body.payeeUserId).toBeUndefined();
-  expect(body.paymentMethodId).toBeUndefined();
+});
+
+it("clears the key of a conta a pagar whose contact has none left", async () => {
+  const sent = api((path, init) => {
+    if (path.includes("payment-methods?contactId=")) {
+      return Response.json({ paymentMethods: [] });
+    }
+
+    return init.method === "PATCH" ? Response.json(payableBilling) : undefined;
+  });
+  const { user } = renderForm(payableBilling);
+
+  expect(await screen.findByText("Este contato ainda não tem chave Pix. Cadastre no contato.")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  expect(JSON.parse(String(sent.find(entry => entry.init.method === "PATCH")?.init.body))).toMatchObject({ clearPaymentMethod: true });
 });
 
 it("names the seated contact from the loaded billing when the agenda no longer lists them", async () => {
@@ -968,9 +1078,12 @@ it("patches the receiving contact of a conta a pagar once the seat moves", async
 
   expect(screen.getByRole("button", { name: "Bruno Lima" })).toHaveAttribute("aria-pressed", "true");
 
+  await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods?contactId=c2")).toBe(true));
+
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
-  expect(JSON.parse(String(sent.find(entry => entry.init.method === "PATCH")?.init.body))).toMatchObject({ contactId: "c2" });
+  // The old contact's key cannot pay the new one: the patch carries the new contact's default.
+  expect(JSON.parse(String(sent.find(entry => entry.init.method === "PATCH")?.init.body))).toMatchObject({ contactId: "c2", paymentMethodId: "pix-bruno" });
 });
 
 const indefiniteBilling: BillingDetail = { ...onceBilling, id: "b2", recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, nextDueDate: null };

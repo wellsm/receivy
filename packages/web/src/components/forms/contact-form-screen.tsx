@@ -1,11 +1,14 @@
 "use client";
 
-import { normalizeContact, type Contact } from "@receivy/common";
+import { normalizeContact, pixKeyField, PixKeyType, type Contact, type ContactPaymentMethodInput, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
 import { useRouter } from "next/navigation";
 import { Check, Loader2 } from "lucide-react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { patchDraft } from "@/lib/billing-draft";
+import { responseMessage } from "@/lib/financial-response";
+import { PixKeyFields } from "@/components/app/pix-key-fields";
+import { PIX_TYPE_LABELS, PixTypeIcon } from "@/components/ui/pix-type-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 
 type ContactFormScreenProps = { contactId?: string; returnTo?: string };
@@ -13,8 +16,11 @@ type ContactFormScreenProps = { contactId?: string; returnTo?: string };
 const INTRO = "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento.";
 const LINKED_NOTE = "Contato vinculado a uma conta: só o apelido pode mudar.";
 const EMAIL_NOTE = "Sem e-mail, a pessoa só recebe pelo link compartilhado. Quando ela entrar por um convite, você confirma quem é.";
+const PIX_NOTE = "A chave que você usa para pagar esta pessoa. Ela entra como a chave padrão do contato.";
 const LOAD_ERROR = "Não foi possível carregar o contato.";
 const SAVE_ERROR = "Não foi possível salvar o contato.";
+const KEYS_ERROR = "Não foi possível carregar as chaves Pix do contato.";
+const KEYS_UPDATE_ERROR = "Não foi possível atualizar as chaves Pix do contato.";
 
 const FIELD_CLASS = "min-h-12 w-full rounded-xl border border-outline/60 bg-surface px-4 text-[15px] text-ink placeholder:text-muted";
 const FROZEN_CLASS = "min-h-12 w-full rounded-xl border border-outline/30 bg-surface-muted px-4 text-[15px] text-muted";
@@ -52,8 +58,35 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
   const [linked, setLinked] = useState(false);
+  const [pixType, setPixType] = useState<PixKeyType>(PixKeyType.Email);
+  // The key as the person sees it: masked for the current type, canonicalized only on submit.
+  const [pixKey, setPixKey] = useState("");
+  const [pixLabel, setPixLabel] = useState("");
+  const [keys, setKeys] = useState<PaymentMethod[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  const loadKeys = useCallback(() => {
+    if (!contactId) {
+      return Promise.resolve();
+    }
+
+    return browserFetch(`/api/financial/payment-methods?contactId=${contactId}`)
+      .then(async response => {
+        if (!response.ok) {
+          throw new Error(await responseMessage(response, KEYS_ERROR));
+        }
+
+        const page = (await response.json()) as PaymentMethodsPage;
+
+        setKeys(page.paymentMethods.filter(method => !method.archivedAt));
+      })
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : KEYS_ERROR));
+  }, [contactId]);
+
+  useEffect(() => {
+    void loadKeys();
+  }, [loadKeys]);
 
   useEffect(() => {
     if (!contactId) {
@@ -91,6 +124,44 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     };
   }, [contactId]);
 
+  function pickPixType(type: PixKeyType) {
+    setPixType(type);
+    setPixKey("");
+    setError("");
+  }
+
+  /** The typed key travels canonical (`+55…`, digits only); only the field keeps the mask. */
+  function paymentMethodInput(): { paymentMethod?: ContactPaymentMethodInput } {
+    const key = pixKeyField(pixType).unformat(pixKey);
+
+    if (!key) {
+      return {};
+    }
+
+    const label = pixLabel.trim();
+
+    return { paymentMethod: { pixKeyType: pixType, pixKey: key, ...(label ? { label } : {}) } };
+  }
+
+  async function act(id: string, action: "default" | "archive") {
+    setBusy(true);
+    setError("");
+
+    try {
+      const response = await browserFetch(`/api/financial/payment-methods/${id}/${action}`, { method: "POST" });
+
+      if (!response.ok) {
+        throw new Error(await responseMessage(response, KEYS_UPDATE_ERROR));
+      }
+
+      await loadKeys();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : KEYS_UPDATE_ERROR);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -98,7 +169,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     let input;
 
     try {
-      input = normalizeContact({ name, nickname, email });
+      input = normalizeContact({ name, nickname, email, ...paymentMethodInput() });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Confira os dados do contato.");
       return;
@@ -188,6 +259,51 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
             />
           </Field>
         </div>
+      </fieldset>
+
+      <fieldset className="m-0 flex min-w-0 flex-col gap-4 rounded-3xl border border-outline/40 bg-surface p-5">
+        <legend className="px-1 text-sm font-bold text-ink">Chave Pix (opcional)</legend>
+        <p className="m-0 text-xs leading-5 text-muted">{PIX_NOTE}</p>
+
+        {keys.length > 0 && (
+          <ul aria-label="Chaves Pix do contato" className="m-0 flex list-none flex-col gap-2 p-0">
+            {keys.map(key => (
+              <li key={key.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-outline/30 bg-surface-muted/60 p-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">
+                  <PixTypeIcon type={key.pixKeyType} size={18} />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-ink">{key.label || PIX_TYPE_LABELS[key.pixKeyType]}</span>
+                    {key.isDefault && <span className="rounded-full bg-primary-soft/70 px-2 py-0.5 text-[11px] font-semibold text-primary-strong">Padrão</span>}
+                  </span>
+                  <span className="truncate text-[11px] text-muted">{pixKeyField(key.pixKeyType).format(key.pixKey)}</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  {!key.isDefault && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void act(key.id, "default")}
+                      className="min-h-10 rounded-lg border border-outline/40 px-3 text-xs font-semibold text-primary disabled:opacity-50"
+                    >
+                      Definir padrão
+                    </button>
+                  )}
+                  <button type="button" disabled={busy} onClick={() => void act(key.id, "archive")} className="min-h-10 rounded-lg px-3 text-xs font-semibold text-danger disabled:opacity-50">
+                    Arquivar
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <PixKeyFields type={pixType} value={pixKey} inputId="contact-pix-key" onPickType={pickPixType} onChange={raw => setPixKey(pixKeyField(pixType).format(raw))} />
+
+        <Field id="contact-pix-label" label="Rótulo da chave">
+          <input id="contact-pix-label" type="text" maxLength={60} placeholder="Rótulo (opcional)" value={pixLabel} onChange={event => setPixLabel(event.target.value)} className={FIELD_CLASS} />
+        </Field>
       </fieldset>
 
       {error && (

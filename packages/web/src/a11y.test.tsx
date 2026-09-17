@@ -87,8 +87,20 @@ describe("accessibility of the main web screens", () => {
   it("contact form labels every field and has no axe violations", async () => {
     vi.mocked(browserFetch).mockResolvedValue(Response.json(contact));
     const { container } = render(<ContactFormScreen />);
-    for (const label of ["Nome completo", "Apelido", "E-mail (opcional)"]) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    for (const label of ["Nome completo", "Apelido", "E-mail (opcional)", "E-mail Pix", "Rótulo da chave"]) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Tipo de chave" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Salvar contato" })).toBeInTheDocument();
+    await expectNoViolations(container);
+  });
+
+  it("contact key list names its per-key actions and has no axe violations", async () => {
+    vi.mocked(browserFetch).mockImplementation(async path =>
+      String(path).includes("payment-methods") ? Response.json({ paymentMethods: [pixMethod, { ...pixMethod, id: "pix-2", isDefault: false }] }) : Response.json(contact),
+    );
+    const { container } = render(<ContactFormScreen contactId="contact-1" />);
+    expect(await screen.findByRole("list", { name: "Chaves Pix do contato" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Definir padrão" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Arquivar" })).toHaveLength(2);
     await expectNoViolations(container);
   });
 
@@ -153,13 +165,13 @@ describe("accessibility of the main web screens", () => {
     expect(screen.getByRole("button", { name: "Criar conta" })).toBeInTheDocument();
     await expectNoViolations(container);
 
-    // A conta a pagar swaps the participants and the wallet for a payee and an inline key.
+    // A conta a pagar swaps the participants and the wallet for a payee, whose own keys it picks from.
     await keyboard.click(screen.getByRole("radio", { name: "Vou pagar" }));
     expect(screen.getByRole("radiogroup", { name: "Direção" })).toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: "Tipo de chave" })).toBeInTheDocument();
-    expect(screen.getByLabelText("E-mail Pix")).toBeInTheDocument();
-    expect(screen.getByLabelText("Apelido da chave (opcional)")).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Tipo de chave" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("E-mail Pix")).not.toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: "Divisão" })).not.toBeInTheDocument();
+    expect(screen.getByText("Escolha quem recebe.")).toBeInTheDocument();
     await expectNoViolations(container);
   });
 

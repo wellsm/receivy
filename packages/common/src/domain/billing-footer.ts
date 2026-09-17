@@ -22,7 +22,7 @@ function summaryPeople(input: NormalizedBillingInput, allocations: ResolvedAlloc
   }
 
   if (input.type === Direction.Payable) {
-    return input.payeeUserId ? 1 : 0;
+    return input.contactId || input.payeeUserId ? 1 : 0;
   }
 
   return allocations.filter((allocation) => allocation.kind === SplitPartKind.User && allocation.amountCents > 0).length;
@@ -44,7 +44,8 @@ export function billingDraftSummary(draft: BillingDraft, today: Date): BillingDr
     // widened to `BillingInput` because it also doubles as the request body sent over the wire.
     const input = buildBillingInput(draft, today) as NormalizedBillingInput;
     const payer = input.type === Direction.Payable ? ChargePayer.Owner : ChargePayer.Person;
-    const payeeUserId = input.payeeUserId ?? null;
+    // Block 9: a contact is the receiver going forward; a legacy payeeUserId (no contact) still labels the charge.
+    const payeeUserId = input.contactId ?? input.payeeUserId ?? null;
     const settled = input.kind === BillingKind.Record;
 
     if (input.recurrence === BillingRecurrence.Indefinite) {

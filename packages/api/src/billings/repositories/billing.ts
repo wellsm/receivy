@@ -189,6 +189,8 @@ function summary(
   return {
     id: row.id,
     type: BillingRepository.direction(row),
+    // Block 9: the repository does not write contact_id yet; Task 6 resolves it here.
+    contact: null,
     payeeName: payee?.name ?? null,
     kind: billingKind(row),
     counterpartLabel: row.counterpart_label ?? null,
@@ -359,6 +361,8 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
   return {
     id: row.id,
     type: BillingRepository.direction(row),
+    // Block 9: the repository does not write contact_id yet; Task 6 resolves it here.
+    contact: null,
     payee: await payeeOf(db, split),
     kind: billingKind(row),
     counterpartLabel: row.counterpart_label ?? null,

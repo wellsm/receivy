@@ -7,6 +7,7 @@ import { Direction, SplitMode } from './contracts';
 const base: BillingSummary = {
   id: 'b1',
   type: Direction.Receivable,
+  contact: null,
   payeeName: null,
   recurrence: BillingRecurrence.Once,
   description: 'Aluguel',

@@ -38,7 +38,7 @@ export type PixDraft = { type: PixKeyType; key: string; label: string };
 export type BillingDraft = {
   /** 'receivable' collects from contacts; 'payable' is the owner's own bill, optionally owed to one contact. */
   direction: Direction;
-  /** Conta a pagar: the contact who receives, or empty when the bill is the owner's alone. */
+  /** Conta a pagar: the receiving contact (contacts.id), or empty when the bill is the owner's alone. */
   payee: string;
   pixInline: PixDraft;
   type: BillingRecurrence;
@@ -295,7 +295,7 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
       {
         ...base,
         type: Direction.Payable,
-        payeeUserId: draft.payee || undefined,
+        contactId: draft.payee || undefined,
         pix: key ? { keyType: draft.pixInline.type, key, label: draft.pixInline.label.trim() || undefined } : undefined
       },
       now

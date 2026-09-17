@@ -292,3 +292,52 @@ describe('DEFAULT_BILLING_REMINDERS', () => {
     expect(DEFAULT_BILLING_REMINDERS).toEqual([{ offsetDays: 0, enabled: true }]);
   });
 });
+
+describe('block 9 direction', () => {
+  const base: BillingInput = { recurrence: BillingRecurrence.Once, totalCents: 1000, startDate: '2026-09-20', timezone: 'America/Sao_Paulo' };
+
+  it('derives payable from the receiving contact and settles the split on the owner', () => {
+    const normalized = normalizeBillingInput({ ...base, contactId: 'contact-1' });
+
+    expect(normalized.type).toBe(Direction.Payable);
+    expect(normalized.contactId).toBe('contact-1');
+    expect(normalized.split.parts).toEqual([{ kind: SplitPartKind.Owner }]);
+  });
+
+  it('is receivable without a contact and keeps the payers the split names', () => {
+    const normalized = normalizeBillingInput({ ...base, split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: 'u1' }] } });
+
+    expect(normalized.type).toBe(Direction.Receivable);
+    expect(normalized.contactId).toBeUndefined();
+  });
+
+  it('lets a receivable registro name its payer and a payable registro its contact', () => {
+    const paid = normalizeBillingInput({ ...base, kind: BillingKind.Record, contactId: 'contact-1' });
+    const received = normalizeBillingInput({
+      ...base,
+      kind: BillingKind.Record,
+      split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: 'u1' }] }
+    });
+
+    expect(paid.type).toBe(Direction.Payable);
+    expect(received.split.parts).toEqual([{ kind: SplitPartKind.User, userId: 'u1' }]);
+  });
+
+  it('refuses a Pix key without a contact to file it under', () => {
+    expect(() => normalizeBillingInput({ ...base, pix: { keyType: PixKeyType.Email, key: 'x@example.com' } })).toThrow(
+      'Chave Pix só com um contato que recebe.'
+    );
+  });
+
+  it('still lets a legacy payable type its payee and a Pix key without a contact', () => {
+    const normalized = normalizeBillingInput({
+      ...base,
+      type: Direction.Payable,
+      payeeUserId: 'u1',
+      pix: { keyType: PixKeyType.Email, key: 'u1@example.com' }
+    });
+
+    expect(normalized.type).toBe(Direction.Payable);
+    expect(normalized.split.parts).toEqual([{ kind: SplitPartKind.User, userId: 'u1', amountCents: base.totalCents }]);
+  });
+});

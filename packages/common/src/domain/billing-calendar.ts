@@ -243,16 +243,37 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     throw new RangeError('Informe uma descrição de até 500 caracteres.');
   }
 
-  const direction = input.type ?? Direction.Receivable;
+  const contactId = input.contactId?.trim() || undefined;
+  const direction = contactId ? Direction.Payable : (input.type ?? Direction.Receivable);
 
   if (direction !== Direction.Receivable && direction !== Direction.Payable) {
     throw new RangeError('Direção inválida.');
   }
 
+  // Block 9: the new contact-based payable always files its key under the contact; a legacy payable
+  // (payeeUserId, no contactId) keeps typing its own key, as before.
+  if (input.pix && !contactId && direction !== Direction.Payable) {
+    throw new RangeError('Chave Pix só com um contato que recebe.');
+  }
+
   const settled = input.kind === BillingKind.Record;
+  // Block 9: a registro that still types a free-text counterpart (and no contact) keeps the old rules;
+  // one with a contact, or a plain split, follows the same rules as a live billing.
+  const legacyLabel = settled && !contactId && 'counterpartLabel' in input;
   // Checked before the split, so a registro reads its own message instead of the direction's.
-  const counterpartLabel = settled ? registroLabel(input, direction, now) : undefined;
-  const split = splitOf(input, direction, settled);
+  const counterpartLabel = legacyLabel ? registroLabel(input, direction, now) : undefined;
+
+  if (settled && !legacyLabel) {
+    if (input.paymentMethodId || input.pix || input.reminders) {
+      throw new RangeError('Registro não tem avisos nem Pix.');
+    }
+
+    if (now && input.recurrence !== BillingRecurrence.Once && input.startDate < calendarDate(now, input.timezone)) {
+      throw new RangeError('Registro recorrente começa hoje ou depois.');
+    }
+  }
+
+  const split: BillingSplit = legacyLabel ? { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } : splitOf(input, direction);
 
   resolveBillingSplit(input.totalCents, split);
 
@@ -275,6 +296,7 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     split,
     category: input.category,
     type: direction,
+    contactId,
     payeeUserId: direction === Direction.Payable ? input.payeeUserId?.trim() || undefined : undefined,
     pix: direction === Direction.Payable && input.pix ? normalizeBillingPix(input.pix) : undefined,
     kind: settled ? BillingKind.Record : undefined,
@@ -293,14 +315,11 @@ function receivableSplit(input: BillingInput): BillingSplit {
   return split;
 }
 
-/** The allocation behind a billing: the owner alone on a registro or a conta a pagar, the contacts on a conta a receber. */
-function splitOf(input: BillingInput, direction: Direction, settled: boolean): BillingSplit {
-  if (settled) {
-    return { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] };
-  }
-
+/** The allocation behind a billing: the owner alone on a conta a pagar (contact tracked separately), the contacts on a conta a receber. */
+function splitOf(input: BillingInput, direction: Direction): BillingSplit {
   if (direction === Direction.Payable) {
-    return payableSplit(input);
+    // Block 9: a contact names the receiver outside the split; only a legacy payeeUserId (no contactId) still uses it.
+    return input.contactId?.trim() ? { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.Owner }] } : payableSplit(input);
   }
 
   return receivableSplit(input);

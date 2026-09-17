@@ -75,15 +75,17 @@ export type BillingInput = {
   /** Required for a conta a receber; a conta a pagar has no participants and may omit it. */
   split?: BillingSplit;
   category?: BillingCategory;
-  /** 'receivable' (default): the owner collects. 'payable': the owner pays a contact or only tracks the bill. */
+  /** @deprecated Block 9: replaced by contactId; removed once the repository writes contact_id. */
   type?: Direction;
-  /** Conta a pagar only: the contact who receives; empty means the bill is the owner's alone. */
+  /** @deprecated Block 9: replaced by contactId; removed once the repository writes contact_id. */
   payeeUserId?: string;
-  /** Conta a pagar only: where the owner pays. */
+  /** Block 9: who receives (a contact of the owner). Absent means the owner receives. */
+  contactId?: string;
+  /** Conta a pagar only: the key of the receiving contact, filed under it as a payment method. */
   pix?: BillingPixInput;
   /** 'record' is a registro: the owner already received or paid it, every charge settles on its due date and nobody is notified. */
   kind?: BillingKind;
-  /** Registro only: who the money came from (a receber) or went to (a pagar), 1 to 120 characters. */
+  /** @deprecated Block 9: replaced by contactId; removed once the repository writes contact_id. */
   counterpartLabel?: string;
 };
 
@@ -97,8 +99,14 @@ export type BillingPatch = {
   clearPaymentMethod?: boolean;
   pix?: BillingPixInput;
   clearPix?: boolean;
+  /** @deprecated Block 9: replaced by contactId; removed once the repository writes contact_id. */
   payeeUserId?: string;
+  /** @deprecated Block 9: replaced by clearContact; removed once the repository writes contact_id. */
   clearPayee?: boolean;
+  /** Block 9: who receives (a contact of the owner), replacing the current one. */
+  contactId?: string;
+  /** Block 9: clears the receiving contact, leaving the bill the owner's alone. */
+  clearContact?: boolean;
   /** Recorrente only: the next due date; occurrences already generated keep theirs. */
   startDate?: string;
   /** Recorrente only, sent with startDate: a fixed day or the last day of each month. */
@@ -112,9 +120,12 @@ export type BillingPatch = {
   category?: BillingCategory;
   /** Never changes after creation: a value other than the stored one answers 409 SETTLED_LOCKED. */
   kind?: BillingKind;
-  /** Registro only: renames the counterpart. On any other conta it answers 409 SETTLED_LOCKED. */
+  /** @deprecated Block 9: renames the counterpart. On any other conta it answers 409 SETTLED_LOCKED. Replaced by contactId. */
   counterpartLabel?: string;
 };
+
+/** Who receives a conta a pagar, as the owner knows them. */
+export type BillingContact = { id: string; userId: string; name: string; avatar: UserAvatar | null };
 
 export type BillingAllocation = {
   kind: SplitPartKind;
@@ -141,11 +152,13 @@ export type BillingSummary = {
   id: string;
   recurrence: BillingRecurrence;
   type: Direction;
-  /** Conta a pagar: who receives, or null when the bill is the owner's alone. */
+  /** Block 9: who receives a conta a pagar, or null when the bill is the owner's alone. */
+  contact: BillingContact | null;
+  /** @deprecated Block 9: read contact instead. Conta a pagar: who receives, or null when the bill is the owner's alone. */
   payeeName: string | null;
   /** 'record' is a registro: the owner alone, already settled. The API always sends it; absent reads as 'live'. */
   kind?: BillingKind;
-  /** Registro only: the counterpart typed by the owner; null on every other conta. */
+  /** @deprecated Block 9: read contact instead. Registro only: the counterpart typed by the owner; null on every other conta. */
   counterpartLabel?: string | null;
   frequency?: BillingFrequency;
   description: string;
@@ -172,10 +185,13 @@ export type BillingDetail = {
   id: string;
   recurrence: BillingRecurrence;
   type: Direction;
+  /** Block 9: who receives a conta a pagar, or null when the bill is the owner's alone. */
+  contact: BillingContact | null;
+  /** @deprecated Block 9: read contact instead. */
   payee: BillingPayee | null;
   /** 'record' is a registro: the owner alone, already settled. The API always sends it; absent reads as 'live'. */
   kind?: BillingKind;
-  /** Registro only: the counterpart typed by the owner; null on every other conta. */
+  /** @deprecated Block 9: read contact instead. Registro only: the counterpart typed by the owner; null on every other conta. */
   counterpartLabel?: string | null;
   /** Inline key of a conta a pagar; null on a conta a receber, which uses paymentMethodId. */
   pix: PixSnapshot | null;

@@ -38,14 +38,14 @@ describe('billing request fingerprint', () => {
 });
 
 describe('conta a pagar fingerprint', () => {
-  it('tells a conta a pagar apart by direction, payee and typed key', () => {
+  it('tells a conta a pagar apart by direction, contact and typed key', () => {
     const payable = {
       ...input,
       type: Direction.Payable as const,
       split: { mode: SplitMode.Equal as const, parts: [{ kind: SplitPartKind.Owner as const }] }
     };
     expect(billingRequestFingerprint(payable)).not.toBe(billingRequestFingerprint(input));
-    expect(billingRequestFingerprint({ ...payable, payeeUserId: 'p9' })).not.toBe(billingRequestFingerprint(payable));
+    expect(billingRequestFingerprint({ ...payable, contactId: 'p9' })).not.toBe(billingRequestFingerprint(payable));
     expect(billingRequestFingerprint({ ...payable, pix: { keyType: PixKeyType.Email, key: 'pay@example.com' } })).not.toBe(
       billingRequestFingerprint(payable)
     );

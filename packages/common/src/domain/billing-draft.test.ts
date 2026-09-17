@@ -240,17 +240,17 @@ describe('conta a pagar draft', () => {
     const input = buildBillingInput(payable);
 
     expect(input.type).toBe('payable');
-    expect(input.payeeUserId).toBe('p9');
+    expect(input.contactId).toBe('p9');
     expect(input.paymentMethodId).toBeUndefined();
     expect(input.pix).toEqual({ keyType: 'cpf', key: '52998224725', label: 'Aluguel' });
-    // The payee is the one part of the split, for the whole total; the owner's part is the remainder, zero.
-    expect(input.split).toEqual({ mode: 'fixed', parts: [{ kind: 'user', userId: 'p9', amountCents: input.totalCents }] });
+    // The contact is the receiver: with one named, the split settles on the owner alone.
+    expect(input.split).toEqual({ mode: 'equal', parts: [{ kind: 'owner' }] });
   });
 
   it('accepts a bill that is the owner alone, without payee or Pix', () => {
     const input = buildBillingInput({ ...payable, payee: '', pixInline: { type: PixKeyType.Email, key: '', label: '' } });
 
-    expect(input.payeeUserId).toBeUndefined();
+    expect(input.contactId).toBeUndefined();
     expect(input.pix).toBeUndefined();
   });
 

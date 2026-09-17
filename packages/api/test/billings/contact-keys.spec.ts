@@ -162,13 +162,19 @@ describe('contact keys', () => {
     const keys = await PaymentMethodRepository.list(db, OWNER, false, contact.id);
 
     equal(keys.length, 2);
-    equal(keys.find((key) => key.isDefault)?.pixKey, '+5511988887777');
+    equal(keys.filter((key) => key.isDefault).length, 1);
+    equal(keys.find((key) => key.pixKey === 'farmacia@example.com')?.isDefault, false);
+    equal(keys.find((key) => key.pixKey === '+5511988887777')?.isDefault, true);
   });
 
   it('editing without a key touches no key', async () => {
     const contact = await ContactRepository.save(db, OWNER, { name: 'Papelaria', paymentMethod: { pixKeyType: PixKeyType.Email, pixKey: 'papelaria@example.com' } });
     await ContactRepository.save(db, OWNER, { name: 'Papelaria', nickname: 'Papel' }, contact.id);
 
-    equal((await PaymentMethodRepository.list(db, OWNER, false, contact.id)).length, 1);
+    const keys = await PaymentMethodRepository.list(db, OWNER, false, contact.id);
+
+    equal(keys.length, 1);
+    equal(keys[0]!.pixKey, 'papelaria@example.com');
+    equal(keys[0]!.isDefault, true);
   });
 });

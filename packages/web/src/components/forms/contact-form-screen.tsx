@@ -2,12 +2,13 @@
 
 import { normalizeContact, pixKeyField, PixKeyType, type Contact, type ContactPaymentMethodInput, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
 import { useRouter } from "next/navigation";
-import { Check, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Check, Loader2, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { patchDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PIX_TYPE_LABELS, PixTypeIcon } from "@/components/ui/pix-type-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 
@@ -63,8 +64,11 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
   const [pixKey, setPixKey] = useState("");
   const [pixLabel, setPixLabel] = useState("");
   const [keys, setKeys] = useState<PaymentMethod[]>([]);
+  const [archiving, setArchiving] = useState<PaymentMethod | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The Arquivar button that opened the dialog; the keyboard goes back to it on cancel.
+  const trigger = useRef<HTMLButtonElement | null>(null);
 
   const loadKeys = useCallback(() => {
     if (!contactId) {
@@ -143,6 +147,11 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     return { paymentMethod: { pixKeyType: pixType, pixKey: key, ...(label ? { label } : {}) } };
   }
 
+  function closeDialog() {
+    setArchiving(null);
+    trigger.current?.focus();
+  }
+
   async function act(id: string, action: "default" | "archive") {
     setBusy(true);
     setError("");
@@ -154,6 +163,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
         throw new Error(await responseMessage(response, KEYS_UPDATE_ERROR));
       }
 
+      setArchiving(null);
       await loadKeys();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : KEYS_UPDATE_ERROR);
@@ -290,7 +300,15 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
                       Definir padrão
                     </button>
                   )}
-                  <button type="button" disabled={busy} onClick={() => void act(key.id, "archive")} className="min-h-10 rounded-lg px-3 text-xs font-semibold text-danger disabled:opacity-50">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={event => {
+                      trigger.current = event.currentTarget;
+                      setArchiving(key);
+                    }}
+                    className="min-h-10 rounded-lg px-3 text-xs font-semibold text-danger disabled:opacity-50"
+                  >
                     Arquivar
                   </button>
                 </span>
@@ -322,6 +340,25 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
           {busy ? "Salvando…" : "Salvar contato"}
         </button>
       </ScreenFooter>
+
+      {archiving && (
+        <ConfirmDialog
+          title="Arquivar chave Pix?"
+          subtitle="Esta ação não pode ser desfeita."
+          icon={Trash2}
+          detail={
+            <>
+              <span className="text-[11px] font-medium text-muted">{PIX_TYPE_LABELS[archiving.pixKeyType]}</span>
+              <span className="text-sm font-bold text-ink">{pixKeyField(archiving.pixKeyType).format(archiving.pixKey)}</span>
+            </>
+          }
+          explanation="A chave sai das próximas contas a pagar deste contato. As contas já criadas não mudam."
+          confirmLabel="Arquivar"
+          busy={busy}
+          onConfirm={() => void act(archiving.id, "archive")}
+          onCancel={closeDialog}
+        />
+      )}
     </form>
   );
 }

@@ -215,16 +215,40 @@ it("lists the contact's Pix keys on edit and promotes the one the owner picks", 
   expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pm-2/default" && entry.init.method === "POST")).toBe(true);
 });
 
-it("archives one of the contact's keys and reloads the list", async () => {
+it("archives one of the contact's keys only after the owner confirms, then reloads the list", async () => {
   const sent = api(ana, [nubank, itau]);
   render(<ContactFormScreen contactId="c1" />);
 
   await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
 
-  await userEvent.setup().click(keyList().getAllByRole("button", { name: "Arquivar" })[1]!);
+  const user = userEvent.setup();
+  await user.click(keyList().getAllByRole("button", { name: "Arquivar" })[1]!);
+
+  const dialog = screen.getByRole("dialog", { name: "Arquivar chave Pix?" });
+
+  expect(within(dialog).getByText("529.982.247-25")).toBeInTheDocument();
+  expect(sent.some(entry => entry.path.endsWith("/archive"))).toBe(false);
+
+  await user.click(within(dialog).getByRole("button", { name: "Arquivar" }));
 
   await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pm-2/archive" && entry.init.method === "POST")).toBe(true));
   expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(2);
+});
+
+it("keeps the key when the archive confirmation is cancelled", async () => {
+  const sent = api(ana, [nubank, itau]);
+  render(<ContactFormScreen contactId="c1" />);
+
+  await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
+
+  const user = userEvent.setup();
+  const trigger = keyList().getAllByRole("button", { name: "Arquivar" })[1]!;
+  await user.click(trigger);
+  await user.click(within(screen.getByRole("dialog", { name: "Arquivar chave Pix?" })).getByRole("button", { name: "Cancelar" }));
+
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(sent.some(entry => entry.path.endsWith("/archive"))).toBe(false);
+  expect(document.activeElement).toBe(trigger);
 });
 
 it("never asks the API for keys while the contact does not exist yet", async () => {

@@ -1054,6 +1054,33 @@ it("clears the key of a conta a pagar whose contact has none left", async () => 
   expect(JSON.parse(String(sent.find(entry => entry.init.method === "PATCH")?.init.body))).toMatchObject({ clearPaymentMethod: true });
 });
 
+it("asks for the scope when the key of a recorrente conta a pagar moves to another of the contact's", async () => {
+  onSeptemberTenth();
+  const recurringPayable: BillingDetail = {
+    ...payableBilling,
+    id: "b9",
+    recurrence: BillingRecurrence.Indefinite,
+    frequency: BillingFrequency.Monthly,
+    nextDueDate: null,
+    startDate: "2026-09-20",
+    charges: [{ ...monthCharge, billingId: "b9", direction: Direction.Payable }],
+  };
+  const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(recurringPayable) : undefined));
+  const { user } = renderForm(recurringPayable);
+
+  await user.click(await screen.findByRole("button", { name: /CPF/ }));
+  await user.click(within(screen.getByRole("listbox", { name: "Chave Pix" })).getByRole("button", { name: /E-mail/ }));
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  const dialog = await screen.findByRole("dialog", { name: "Aplicar às cobranças deste mês?" });
+
+  expect(sent.some(entry => entry.init.method === "PATCH")).toBe(false);
+
+  await user.click(within(dialog).getByRole("button", { name: "Aplicar também às deste mês" }));
+
+  expect(JSON.parse(String(sent.find(entry => entry.init.method === "PATCH")?.init.body))).toMatchObject({ paymentMethodId: "pix-ana", applyTo: "current_month" });
+});
+
 it("names the seated contact from the loaded billing when the agenda no longer lists them", async () => {
   const archived: BillingDetail = { ...payableBilling, id: "b8", contact: { id: "c9", userId: "u9", name: "Padaria", avatar: null } };
 

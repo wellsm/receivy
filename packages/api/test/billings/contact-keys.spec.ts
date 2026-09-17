@@ -1,4 +1,4 @@
-import { equal, rejects } from 'node:assert/strict';
+import { equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpNotFoundError } from '@ez4/gateway';
 import { BillingRecurrence, Direction, PixKeyType } from '@receivy/common';
@@ -107,5 +107,27 @@ describe('contact keys', () => {
 
     equal(row?.creditor_id, contactUserId, 'the contact receives: they sit on the creditor side');
     equal(row?.debtor_id, OWNER, 'the owner pays their own bill');
+  });
+
+  it('still reads a billing whose key was archived, with no Pix to show', async () => {
+    const billing = await BillingRepository.create(db, OWNER, 'contact-keys-2', {
+      recurrence: BillingRecurrence.Once,
+      description: 'Bolo',
+      totalCents: 4500,
+      startDate: '2026-10-09',
+      timezone: 'America/Sao_Paulo',
+      contactId: padaria,
+      pix: { keyType: PixKeyType.Random, key: '223e4567-e89b-12d3-a456-426614174111', label: 'Padaria' }
+    });
+
+    ok(billing.pix);
+    ok(billing.paymentMethodId);
+
+    await PaymentMethodRepository.archive(db, OWNER, billing.paymentMethodId);
+
+    const detail = await BillingRepository.get(db, OWNER, billing.id);
+
+    equal(detail.pix, null, 'an archived key shows nothing instead of failing the whole read');
+    equal(detail.paymentMethodId, billing.paymentMethodId, 'the billing still points at the key it was created with');
   });
 });

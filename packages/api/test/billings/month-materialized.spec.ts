@@ -35,6 +35,7 @@ let anaContactId: string;
 let brunoId: string;
 let brunoContactId: string;
 let carlaId: string;
+let carlaContactId: string;
 
 function recurring(key: string, startDate: string, userIds: string[], overrides: Partial<BillingInput> = {}): BillingInput {
   return {
@@ -85,7 +86,11 @@ describe('month materialized: pending charges and current month edits', () => {
 
     brunoId = bruno.userId;
     brunoContactId = bruno.id;
-    carlaId = (await ContactRepository.save(db, OWNER, { name: 'Carla', email: 'month-carla@example.com' })).userId;
+
+    const carla = await ContactRepository.save(db, OWNER, { name: 'Carla', email: 'month-carla@example.com' });
+
+    carlaId = carla.userId;
+    carlaContactId = carla.id;
     pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
   });
 
@@ -475,11 +480,11 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(ana?.amount_cents, 6_000);
   });
 
-  it('clearContact on a conta a pagar cancels the contact charge and leaves the bill owner-only for CurrentMonth', async () => {
+  it('moves a conta a pagar to another contact for CurrentMonth, cancelling the charge of the old one', async () => {
     const billing = await BillingRepository.create(
       db,
       OWNER,
-      'month-payable-clear-payee',
+      'month-payable-move-contact',
       {
         recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
@@ -502,26 +507,33 @@ describe('month materialized: pending charges and current month edits', () => {
       'the typed key is filed under the contact and travels to the charge'
     );
 
-    const cleared = await BillingRepository.patch(
+    const moved = await BillingRepository.patch(
       db,
       OWNER,
       billing.id,
-      { clearContact: true, applyTo: EditScope.CurrentMonth },
+      { contactId: carlaContactId, applyTo: EditScope.CurrentMonth },
       date('2026-03-06')
     );
 
     const rows = await chargeRows(billing.id);
     const cancelled = rows.find((row) => row.id === anaCharge.id);
+    const charged = rows.find((row) => row.creditor_id === carlaId);
 
     equal(cancelled?.state, 'cancelled');
     deepEqual((await EventRepository.list(db, anaCharge.id, 'charge.cancelled'))[0]?.payload, { reason: 'billing_edited' });
 
-    // Without a contact the bill is nobody's to pay: it reads as a conta a receber with the owner alone,
-    // so this month plans no charge at all and Ana's is simply cancelled.
-    equal(cleared.type, Direction.Receivable);
-    equal(cleared.contact, null);
-    equal(cleared.pix, null);
-    deepEqual(cleared.split, { mode: 'equal', parts: [{ kind: 'owner' }] });
-    equal(rows.length, 1);
+    equal(moved.type, Direction.Payable);
+    equal(moved.contact?.id, carlaContactId);
+    // A key belongs to the contact it was filed under: whoever receives now has none, so the bill points at nothing.
+    equal(moved.pix, null);
+    ok(!moved.paymentMethodId);
+    deepEqual(moved.split, { mode: 'equal', parts: [{ kind: 'owner' }] });
+
+    ok(charged, 'the month is charged to whoever receives now');
+    equal(charged?.state, 'pending');
+    equal(charged?.due_date, '2026-03-20');
+    equal(charged?.amount_cents, 10_000);
+    equal(charged?.payment_snapshot ?? null, null);
+    equal(rows.length, 2);
   });
 });

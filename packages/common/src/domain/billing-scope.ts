@@ -70,7 +70,6 @@ export function patchTouchesCharges(billing: BillingDetail, patch: BillingPatch)
     patch.pix !== undefined && pixKey(patch.pix) !== pixKey(billing.pix),
     Boolean(patch.clearPix) && Boolean(billing.pix),
     patch.contactId !== undefined && patch.contactId !== billing.contact?.id,
-    Boolean(patch.clearContact) && Boolean(billing.contact),
     patch.startDate !== undefined && patch.startDate !== billing.startDate,
     patch.dueRule !== undefined && patch.dueRule !== (billing.dueRule ?? BillingDueRule.Fixed)
   ];

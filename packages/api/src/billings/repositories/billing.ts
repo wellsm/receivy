@@ -128,6 +128,26 @@ async function contactKey(db: DbClient, ownerId: string, contactId: string, pix:
   return PaymentMethodRepository.upsertContactKey(db, ownerId, contactId, key);
 }
 
+/**
+ * The key a conta a pagar pays through: the one it points at, or the default of its contact. Reading a
+ * billing never fails over a key: one archived or deleted after the fact simply shows nothing.
+ */
+async function billingPix(db: DbClient, row: BillingRepository.Row): Promise<BillingDetail['pix']> {
+  if (!row.contact_id) {
+    return null;
+  }
+
+  try {
+    return await pixSnapshot(db, row.owner_id, row.payment_method_id, row.contact_id);
+  } catch (error) {
+    if (error instanceof HttpNotFoundError) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
 /** A conta a pagar may only point at a key filed under the contact who receives it. */
 async function assertContactKey(db: DbClient, ownerId: string, contactId: string, paymentMethodId: string): Promise<void> {
   const method = await db.payment_methods.findOne({
@@ -403,8 +423,7 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
     payee: contact ? { userId: contact.userId, name: contact.name, avatar: contact.avatar } : null,
     kind: billingKind(row),
     counterpartLabel: null,
-    // A conta a pagar pays through the contact's key: the one it points at, or that scope's default.
-    pix: row.contact_id ? await pixSnapshot(db, row.owner_id, row.payment_method_id, row.contact_id) : null,
+    pix: await billingPix(db, row),
     recurrence: billingRecurrence(row),
     frequency: row.frequency,
     description: row.description,
@@ -673,7 +692,6 @@ function touchesCharges(patch: BillingPatch): boolean {
     patch.pix !== undefined ||
     patch.clearPix !== undefined ||
     patch.contactId !== undefined ||
-    patch.clearContact !== undefined ||
     patch.startDate !== undefined ||
     patch.dueRule !== undefined
   );
@@ -836,8 +854,7 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
     patch.contactId !== undefined ||
     patch.reminders !== undefined ||
     patch.clearPaymentMethod !== undefined ||
-    patch.clearPix !== undefined ||
-    patch.clearContact !== undefined;
+    patch.clearPix !== undefined;
 
   if (settled && crowded) {
     throw new SettledLockedError();
@@ -870,19 +887,16 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
   }
 
   // A key always belongs to whoever receives, so it needs a contact: the stored one, or the patched one.
-  const receives = patch.clearContact ? false : Boolean(patch.contactId ?? row.contact_id);
-
-  if (!receives && (patch.pix !== undefined || patch.clearPix)) {
+  if (!patch.contactId && !row.contact_id && (patch.pix !== undefined || patch.clearPix)) {
     throw new ReceivableHasNoPayeeError();
   }
 
-  const contactChanged = patch.contactId !== undefined || patch.clearContact;
   const frozen =
     billingRecurrence(row) !== BillingRecurrence.Indefinite &&
     (patch.description !== undefined ||
       patch.totalCents !== undefined ||
       patch.split !== undefined ||
-      contactChanged ||
+      patch.contactId !== undefined ||
       patch.startDate !== undefined ||
       patch.dueRule !== undefined);
 
@@ -1469,15 +1483,16 @@ export namespace BillingRepository {
           : undefined;
       const reminders = patch.reminders === undefined ? undefined : normalized?.reminders;
 
-      // A new contact is validated like at creation; clearing one leaves the bill the owner's alone.
+      // Whoever receives may change, and a new contact is validated like at creation.
       const named = patch.contactId !== undefined ? await ContactRepository.user(tx, ownerId, patch.contactId) : undefined;
-      const contactId = patch.clearContact ? undefined : (named?.contactId ?? row.contact_id);
-      const contactPatched = patch.contactId !== undefined || patch.clearContact === true;
+      const contactId = named?.contactId ?? row.contact_id;
+      const contactPatched = named !== undefined && named.contactId !== row.contact_id;
       const payable: PayableMaterialization | undefined = contactId ? { payer: ChargePayer.Owner, contactId } : undefined;
       // A typed key is filed under the contact and becomes the method the billing points at; clearing it leaves the scope default.
       const keyed = contactId && normalized?.pix ? await contactKey(tx, ownerId, contactId, normalized.pix) : undefined;
-      const paymentMethodId =
-        patch.clearPaymentMethod || patch.clearPix ? undefined : (keyed ?? patch.paymentMethodId ?? row.payment_method_id);
+      // A key belongs to the contact it was filed under: moving to another one drops the key the billing pointed at.
+      const kept = contactPatched ? undefined : row.payment_method_id;
+      const paymentMethodId = patch.clearPaymentMethod || patch.clearPix ? undefined : (keyed ?? patch.paymentMethodId ?? kept);
 
       if (contactId && !keyed && paymentMethodId) {
         await assertContactKey(tx, ownerId, contactId, paymentMethodId);

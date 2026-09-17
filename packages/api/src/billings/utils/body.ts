@@ -72,8 +72,6 @@ export declare class PatchBody implements Http.JsonBody {
   clearPix?: boolean;
   /** Block 9: who receives (a contact of the owner), replacing the current one. */
   contactId?: String.UUID;
-  /** Block 9: clears the receiving contact, leaving the bill the owner's alone. */
-  clearContact?: boolean;
   startDate?: String.Date;
   dueRule?: BillingDueRule;
   reminders?: ReminderBody[];

@@ -95,8 +95,6 @@ export type BillingPatch = {
   clearPix?: boolean;
   /** Block 9: who receives (a contact of the owner), replacing the current one. */
   contactId?: string;
-  /** Block 9: clears the receiving contact, leaving the bill the owner's alone. */
-  clearContact?: boolean;
   /** Recorrente only: the next due date; occurrences already generated keep theirs. */
   startDate?: string;
   /** Recorrente only, sent with startDate: a fixed day or the last day of each month. */

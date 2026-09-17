@@ -564,6 +564,13 @@ describe("BillingDetailScreen", () => {
     expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeOnTheScreen();
   });
 
+  it("heads a registro nobody is named on with the word alone", async () => {
+    await open(makeClient(billing({ kind: BillingKind.Record, counterpart: null, paymentMethodId: undefined, charges: [] })));
+
+    expect(await screen.findAllByText("Registro")).not.toHaveLength(0);
+    expect(screen.queryByText("De ")).toBeNull();
+  });
+
   it("names the payer of a registro a receber that has no charge yet", async () => {
     const detail = billing({
       kind: BillingKind.Record,

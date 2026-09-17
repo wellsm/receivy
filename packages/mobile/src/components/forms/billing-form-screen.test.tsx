@@ -1156,6 +1156,16 @@ describe("BillingFormScreen", () => {
     });
   });
 
+  it("names the seated contact from the loaded billing when the agenda no longer lists them", async () => {
+    const archived: BillingDetail = { ...payableBilling, id: "b8", contact: { id: "p9", userId: "u9", name: "Padaria", avatar: null } };
+
+    await render(<BillingFormScreen client={financialApi() as never} contacts={contactsApi()} billing={archived} onSaved={jest.fn()} onBack={jest.fn()} />);
+    await screen.findByText("Editar conta");
+
+    expect(screen.getByRole("button", { name: "Padaria" })).toBeSelected();
+    expect(screen.queryByRole("button", { name: "Contato" })).toBeNull();
+  });
+
   it("keeps the schedule read-only on every edit", async () => {
     await render(<BillingFormScreen client={financialApi() as never} contacts={contactsApi()} billing={onceBilling} onSaved={jest.fn()} onBack={jest.fn()} />);
     await screen.findByText("Editar conta");

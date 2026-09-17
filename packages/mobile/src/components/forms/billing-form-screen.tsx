@@ -698,7 +698,20 @@ export function BillingFormScreen({ client = financialClient, contacts = contact
 
   /** The counterpart seat holds the agenda entry itself, the way the API files keys and contas a pagar. */
   function contactById(id: string): Contact {
-    return recent.find((contact) => contact.id === id) ?? directory.find((contact) => contact.id === id) ?? unknownContact(id);
+    const found = recent.find((contact) => contact.id === id) ?? directory.find((contact) => contact.id === id);
+
+    if (found) {
+      return found;
+    }
+
+    // An archived contact leaves the agenda but stays seated on the billing: the loaded detail still names them.
+    const seat = billing?.contact;
+
+    if (seat?.id === id) {
+      return { ...unknownContact(seat.userId), id: seat.id, name: seat.name, displayName: seat.name, avatar: seat.avatar };
+    }
+
+    return unknownContact(id);
   }
 
   const chosen = draft.selected.map(contactOf);

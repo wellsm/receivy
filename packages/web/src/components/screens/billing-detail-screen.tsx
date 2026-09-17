@@ -190,9 +190,15 @@ function counterpartName(billing: BillingDetail): string {
   return billing.counterpart?.name ?? "";
 }
 
-/** "De Ana" on a registro a receber, "Para Ana" on one a pagar. */
+/** "De Ana" on a registro a receber, "Para Ana" on one a pagar, just "Registro" when nobody is named. */
 function counterpartHeadline(billing: BillingDetail): string {
-  return `${billing.type === "payable" ? "Para" : "De"} ${counterpartName(billing)}`;
+  const name = counterpartName(billing);
+
+  if (!name) {
+    return "Registro";
+  }
+
+  return `${billing.type === "payable" ? "Para" : "De"} ${name}`;
 }
 
 type BillingDetailScreenProps = {

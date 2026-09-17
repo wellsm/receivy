@@ -657,6 +657,14 @@ it("heads a registro a pagar with Para and names its rows after the counterpart"
   expect(screen.getByRole("button", { name: "Abrir cobrança de Imobiliária" })).toBeInTheDocument();
 });
 
+it("heads a registro nobody is named on with the word alone", async () => {
+  await open(billing({ kind: BillingKind.Record, counterpart: null, paymentMethodId: undefined, charges: [] }));
+
+  // The badge says "Registro" too; the headline is the paragraph that would otherwise read "De ".
+  expect((await screen.findAllByText("Registro")).some(node => node.tagName === "P")).toBe(true);
+  expect(screen.queryByText(/^De\s*$/)).not.toBeInTheDocument();
+});
+
 it("names the payer of a registro a receber that has no charge yet", async () => {
   await open(
     billing({

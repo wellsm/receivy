@@ -944,6 +944,16 @@ it("seeds a conta a pagar with its receiving contact and inline key and patches 
   expect(body.paymentMethodId).toBeUndefined();
 });
 
+it("names the seated contact from the loaded billing when the agenda no longer lists them", async () => {
+  const archived: BillingDetail = { ...payableBilling, id: "b8", contact: { id: "c9", userId: "u9", name: "Padaria", avatar: null } };
+
+  api(() => undefined);
+  renderForm(archived);
+
+  expect(await screen.findByRole("button", { name: "Padaria" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Contato" })).not.toBeInTheDocument();
+});
+
 it("patches the receiving contact of a conta a pagar once the seat moves", async () => {
   const openPayable: BillingDetail = { ...payableBilling, id: "b7", recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, nextDueDate: null };
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(openPayable) : undefined));

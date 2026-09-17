@@ -10,10 +10,9 @@ export function linkAlive(link: LinkRow | null, nowSeconds: number): boolean {
   return !!link && !link.revoked_at && Date.parse(link.expires_at) / 1000 > nowSeconds;
 }
 
-export function linkToken(link: Pick<LinkRow, 'public_id' | 'version' | 'expires_at'>, secret: string): string {
+export function linkToken(link: Pick<LinkRow, 'public_id' | 'expires_at'>, secret: string): string {
   return issuePublicChargeToken({
     publicId: link.public_id,
-    version: link.version,
     expiresAtSeconds: Math.floor(Date.parse(link.expires_at) / 1000),
     secret,
     purpose: PublicTokenPurpose.Charge
@@ -22,7 +21,7 @@ export function linkToken(link: Pick<LinkRow, 'public_id' | 'version' | 'expires
 
 /**
  * Makes sure the charge has a live public link. `rotate` revokes the live row and issues a new handle, so
- * the previous token stops resolving — the row is the rotation now, instead of a bumped version column.
+ * the previous token stops resolving: a fresh row with a fresh handle is what rotating means.
  */
 export async function ensurePublicLink(db: DbClient, chargeId: string, nowSeconds: number, rotate = false): Promise<LinkRow> {
   const live = await LinkRepository.live(db, LinkableType.Charge, chargeId, nowSeconds);

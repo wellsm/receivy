@@ -23,6 +23,6 @@ export async function publicProofStateHandler(
 ): Promise<PublicStateResponse> {
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
   const charge = await PublicLinkRepository.resolveCharge(db, request.parameters.token, secret);
-  await throttlePublicRead(db, charge.public_id ?? charge.id);
+  await throttlePublicRead(db, charge.id);
   return { status: 200, body: ProofRepository.stateView(await currentProof(db, charge.id), request.parameters.token, secret) };
 }

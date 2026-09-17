@@ -13,6 +13,6 @@ export async function resolveThrottledActor(
 ): Promise<{ charge: ChargeRepository.Row; actor: PublicProofActor }> {
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
   const charge = await PublicLinkRepository.resolveCharge(db, token, secret);
-  await throttleProof(db, charge.public_id ?? charge.id);
+  await throttleProof(db, charge.id);
   return { charge, actor: { token, secret } };
 }

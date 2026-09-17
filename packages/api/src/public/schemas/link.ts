@@ -18,11 +18,6 @@ export interface LinkSchema extends Database.Schema {
   linkable_id: String.UUID;
   /** Random base64url handle; the signed token is derived from it and never stored. */
   public_id: String.Max<64>;
-  /**
-   * Carried into the signature. The row is the rotation now, so new links are always 1; it stays while the
-   * tokens minted from the old `charges.link_version` must keep verifying, and goes with that column.
-   */
-  version: number;
   expires_at: String.DateTime;
   revoked_at?: String.DateTime;
   /** Invite only: how many people joined through this link. Null on a charge link. */

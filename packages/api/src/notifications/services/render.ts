@@ -18,7 +18,6 @@ export interface RenderInputs {
   cents: number;
   dueDate: string;
   publicId: string;
-  version: number;
   expires: number;
   origin: string;
   from: string;
@@ -44,7 +43,6 @@ export function renderNotice(input: RenderInputs, template: NoticeTemplate, secr
 
   const token = issuePublicChargeToken({
     publicId: input.publicId,
-    version: input.version,
     expiresAtSeconds: input.expires,
     secret,
     purpose: PublicTokenPurpose.Charge

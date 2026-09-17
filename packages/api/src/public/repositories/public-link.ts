@@ -152,7 +152,7 @@ export namespace PublicLinkRepository {
     if (!link || link.linkable_type !== LinkableType.Charge || link.revoked_at) throw new HttpNotFoundError();
     let capability: { publicId: string; expiresAtSeconds: number };
     try {
-      capability = verifyPublicChargeToken(token, { version: link.version, nowSeconds, secret, purpose: PublicTokenPurpose.Charge });
+      capability = verifyPublicChargeToken(token, { nowSeconds, secret, purpose: PublicTokenPurpose.Charge });
     } catch {
       throw new HttpNotFoundError();
     }

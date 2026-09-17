@@ -20,6 +20,6 @@ export async function publicChargeHandler(
   { db, variables }: Service.Context<PublicProvider>
 ): Promise<PublicResponse> {
   const charge = await PublicLinkRepository.resolveCharge(db, request.parameters.token, variables.PUBLIC_LINK_HMAC_SECRET);
-  await throttlePublicRead(db, charge.public_id ?? charge.id);
+  await throttlePublicRead(db, charge.id);
   return { status: 200, body: await PublicLinkRepository.chargeView(db, charge) };
 }

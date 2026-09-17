@@ -67,17 +67,16 @@ function asInvite(link: LinkRow): InviteRow {
   return { ...link, billing_id: link.linkable_id };
 }
 
-function inviteToken(row: Pick<InviteRow, 'public_id' | 'version' | 'expires_at'>, secret: string): string {
+function inviteToken(row: Pick<InviteRow, 'public_id' | 'expires_at'>, secret: string): string {
   return issuePublicChargeToken({
     publicId: row.public_id,
-    version: row.version,
     expiresAtSeconds: seconds(row.expires_at),
     secret,
     purpose: PublicTokenPurpose.Invite
   });
 }
 
-function inviteResponse(row: Pick<InviteRow, 'public_id' | 'version' | 'expires_at'>, secret: string, webOrigin: string): BillingInvite {
+function inviteResponse(row: Pick<InviteRow, 'public_id' | 'expires_at'>, secret: string, webOrigin: string): BillingInvite {
   return { url: `${webOrigin.replace(/\/+$/, '')}/join/${inviteToken(row, secret)}`, expiresAt: row.expires_at };
 }
 
@@ -183,7 +182,6 @@ export async function resolveInvite(db: DbClient, token: string, secret: string)
 
   try {
     capability = verifyPublicChargeToken(token, {
-      version: link.version,
       nowSeconds: IGNORE_EXPIRY,
       secret,
       purpose: PublicTokenPurpose.Invite

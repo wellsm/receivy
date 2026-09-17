@@ -8,7 +8,6 @@ const input: RenderInputs = {
   cents: 12345,
   dueDate: '2026-09-20',
   publicId: 'public-id',
-  version: 1,
   expires: 1893456000,
   origin: 'https://receivy.app',
   from: 'Receivy <test@example.com>'

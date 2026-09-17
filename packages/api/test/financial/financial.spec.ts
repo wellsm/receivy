@@ -209,7 +209,7 @@ describe('financial repositories on PostgreSQL', () => {
     }
   });
 
-  it('expires, rotates and revokes versioned public capabilities without leaking private fields', async () => {
+  it('expires, rotates and revokes public capabilities without leaking private fields', async () => {
     const person = await ContactRepository.save(db, OWNER, { name: 'Público', email: 'public@example.com' });
     const billing = await BillingRepository.create(db, OWNER, 'public-capability', {
       type: BillingType.Once,

@@ -1,6 +1,6 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
-import type { ChargePayer, ChargeState, PixKeyType, ProofKind, ProofMime } from '@receivy/common';
+import type { ChargePayer, ChargeState, PixKeyType, ProofMime } from '@receivy/common';
 
 export const enum StoredProofState {
   Uploading = 'uploading',
@@ -48,31 +48,6 @@ export interface ChargeSchema extends Database.Schema {
   state: ChargeState;
   cancelled_at?: String.DateTime;
   paid_at?: String.DateTime;
-  /**
-   * The single file attached to the charge. `uploading` is a reserved slot waiting for the bucket
-   * event; the earlier files' history lives in `events`.
-   */
-  proof_state?: StoredProofState;
-  /** File or declaration; null on rows written before declarations existed reads as a file. */
-  proof_kind?: ProofKind;
-  proof_file?: ProofFileSchema;
-  /** Who sent it: a signed-in debtor, or nobody when it came through the public link. */
-  proof_sender_user_id?: String.UUID;
-  /** Hash of the sender (user id or public token) so the same actor may replace or withdraw it. */
-  proof_actor_hash?: String.Max<64>;
-  /** Only while `uploading`: when the reserved slot expires. */
-  proof_expires_at?: String.DateTime;
-  proof_sent_at?: String.DateTime;
-  proof_reviewed_at?: String.DateTime;
-  proof_reason?: String.Max<500>;
-  /**
-   * @deprecated Moved to the `links` table, where rotating means a new row instead of a bumped version.
-   * Kept until the block 7 backfill runs; `link_version` is what the migrated tokens still verify against.
-   */
-  public_id?: String.Max<64>;
-  link_version?: number;
-  link_expires_at?: String.DateTime;
-  link_revoked_at?: String.DateTime;
   /** Automatic notices: the only value the notice gate reads. Defaults to true in the database. */
   notify: boolean;
   created_at: String.DateTime;

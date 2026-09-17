@@ -8,7 +8,6 @@ import type { BillingGuestSchema } from './billings/schemas/billing-guest';
 import type { ChargeSchema } from './charges/schemas/charge';
 import type { EventSchema } from './common/schemas/event';
 import type { ContactSchema } from './contacts/schemas/contact';
-import type { BillingInviteSchema } from './invites/schemas/invite';
 import type { DeviceTokenSchema } from './notifications/schemas/notification';
 import type { PaymentMethodSchema } from './payment-methods/schemas/payment-method';
 import type { ProofSchema } from './proofs/schemas/proof';
@@ -87,7 +86,6 @@ export declare class Db extends Database.Service<PostgresEngine> {
         'creditor_id@creditor': 'users:id';
         'debtor_user_id@debtor': 'users:id';
         'billing_id@billing': 'billings:id';
-        'proof_sender_user_id@proof_sender': 'users:id';
       };
       indexes: {
         id: Index.Primary;
@@ -95,20 +93,6 @@ export declare class Db extends Database.Service<PostgresEngine> {
         debtor_user_id: Index.Secondary;
         billing_id: Index.Secondary;
         'billing_id:debtor_user_id:due_date': Index.Unique;
-        public_id: Index.Unique;
-      };
-    }>,
-    Database.UseTable<{
-      name: 'billing_invites';
-      schema: BillingInviteSchema;
-      relations: {
-        'billing_id@billing': 'billings:id';
-        'owner_id@owner': 'users:id';
-      };
-      indexes: {
-        id: Index.Primary;
-        public_id: Index.Unique;
-        billing_id: Index.Secondary;
       };
     }>,
     Database.UseTable<{

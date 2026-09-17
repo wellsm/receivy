@@ -140,7 +140,6 @@ export async function sendChargeNotice(
       cents: charge.amount_cents,
       dueDate: charge.due_date,
       publicId: link?.public_id ?? '',
-      version: link?.version ?? 0,
       expires: link ? Math.floor(Date.parse(link.expires_at) / 1000) : 0,
       origin: context.config.publicOrigin,
       from: context.config.from ?? 'disabled',

@@ -10,7 +10,6 @@ export const LINK_SELECT = {
   linkable_type: true,
   linkable_id: true,
   public_id: true,
-  version: true,
   expires_at: true,
   revoked_at: true,
   accepted_count: true,
@@ -22,7 +21,6 @@ export type LinkRow = {
   linkable_type: LinkableType;
   linkable_id: string;
   public_id: string;
-  version: number;
   expires_at: string;
   revoked_at?: string;
   accepted_count?: number;
@@ -70,11 +68,7 @@ export namespace LinkRepository {
     });
   }
 
-  /**
-   * Issues a link for the target, revoking the live one first. `version` is always 1 on a new row: the row
-   * itself is the rotation now, and the field only survives so tokens minted from `charges.link_version`
-   * keep verifying until that column goes.
-   */
+  /** Issues a link for the target, revoking the live one first: the new row is what rotating means. */
   export async function issue(
     db: DbClient,
     input: { linkableType: LinkableType; linkableId: string; expiresAt: string; acceptedCount?: number },
@@ -89,7 +83,6 @@ export namespace LinkRepository {
         linkable_type: input.linkableType,
         linkable_id: input.linkableId,
         public_id: randomBytes(16).toString('base64url'),
-        version: 1,
         expires_at: input.expiresAt,
         revoked_at: sqlNull,
         ...(input.acceptedCount === undefined ? {} : { accepted_count: input.acceptedCount }),

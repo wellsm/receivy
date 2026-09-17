@@ -422,7 +422,6 @@ describe('registros on native PostgreSQL', () => {
         linkable_type: LinkableType.BillingInvite,
         linkable_id: freela.id,
         public_id: publicId,
-        version: 1,
         expires_at: expiresAt,
         accepted_count: 0,
         created_at: new Date().toISOString()
@@ -431,7 +430,6 @@ describe('registros on native PostgreSQL', () => {
 
     const token = issuePublicChargeToken({
       publicId,
-      version: 1,
       expiresAtSeconds: Date.parse(expiresAt) / 1000,
       secret: SECRET,
       purpose: PublicTokenPurpose.Invite

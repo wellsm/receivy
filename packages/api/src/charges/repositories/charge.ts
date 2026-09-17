@@ -10,7 +10,6 @@ import {
   endOfMonth,
   type PixKeyType,
   ProofKind,
-  type ProofMime,
   ProofState,
   SharingState,
   startOfMonth,
@@ -88,32 +87,10 @@ export namespace ChargeRepository {
     state: true,
     cancelled_at: true,
     paid_at: true,
-    // @deprecated Moved to the `proofs` table; selected only until the block 7 backfill runs and they go.
-    proof_state: true,
-    proof_kind: true,
-    proof_file: true,
-    proof_sender_user_id: true,
-    proof_actor_hash: true,
-    proof_expires_at: true,
-    proof_sent_at: true,
-    proof_reviewed_at: true,
-    proof_reason: true,
-    public_id: true,
-    link_version: true,
-    link_expires_at: true,
-    link_revoked_at: true,
     notify: true,
     created_at: true,
     updated_at: true
   } as const;
-
-  export type ProofFileColumns = {
-    key: string;
-    name: string;
-    mime: ProofMime;
-    size: number;
-    sha256?: string;
-  };
 
   export type PaymentSnapshotColumns = {
     method: PaymentMethodKind;
@@ -145,20 +122,6 @@ export namespace ChargeRepository {
     state: ChargeState;
     cancelled_at?: string;
     paid_at?: string;
-    /** @deprecated Moved to the `proofs` table; nothing reads these nine any more. */
-    proof_state?: StoredProofState;
-    proof_kind?: ProofKind;
-    proof_file?: ProofFileColumns;
-    proof_sender_user_id?: string;
-    proof_actor_hash?: string;
-    proof_expires_at?: string;
-    proof_sent_at?: string;
-    proof_reviewed_at?: string;
-    proof_reason?: string;
-    public_id?: string;
-    link_version?: number;
-    link_expires_at?: string;
-    link_revoked_at?: string;
     notify: boolean;
     created_at: string;
     updated_at: string;

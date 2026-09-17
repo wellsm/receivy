@@ -35,8 +35,8 @@ const PUBLIC_READ: TokenBucket = { scope: 'public-read', limit: 60 };
 export const INVITE_ACCEPT: TokenBucket = { scope: 'invite-accept', limit: 120 };
 
 /**
- * Call only after the token was resolved: the key is the link's `public_id`, so a guessed token
- * costs one read and a 404, never a throttle row.
+ * Call only after the token was resolved: the key names what the token opened — the charge, or the
+ * invite handle — so a guessed token costs one read and a 404, never a throttle row.
  */
 export async function throttlePublicRead(db: DbClient, key: string, bucket = PUBLIC_READ) {
   await enforceQuota(db, `${bucket.scope}:${key}`, bucket.limit);

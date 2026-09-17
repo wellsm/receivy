@@ -19,11 +19,10 @@ export function billingRequestFingerprint(input: NormalizedBillingInput): string
       reminders: input.reminders ?? null,
       split: input.split,
       direction: input.type,
-      payeeUserId: input.payeeUserId ?? null,
       contactId: input.contactId ?? null,
       pix: input.pix ?? null,
-      // Only a registro adds its fields, so replays of older requests keep their fingerprint.
-      ...(input.kind === BillingKind.Record ? { settled: true, counterpartLabel: input.counterpartLabel } : {})
+      // Only a registro adds its field, so replays of older requests keep their fingerprint.
+      ...(input.kind === BillingKind.Record ? { settled: true } : {})
     },
     (_key, value: unknown) =>
       value && typeof value === 'object' && !Array.isArray(value)

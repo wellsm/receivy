@@ -1,7 +1,8 @@
 import { equal, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpNotFoundError } from '@ez4/gateway';
-import { PixKeyType } from '@receivy/common';
+import { BillingRecurrence, Direction, PixKeyType } from '@receivy/common';
+import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { PixKeyTakenError } from '../../src/payment-methods/errors';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
@@ -74,5 +75,37 @@ describe('contact keys', () => {
 
     equal(back, id);
     equal((await PaymentMethodRepository.list(db, OWNER, false, padaria)).map((method) => `${method.id}:${method.isDefault}`).join(), `${id}:true`);
+  });
+
+  it('creates a conta a pagar from a contact, files its key and pays the contact user', async () => {
+    const billing = await BillingRepository.create(db, OWNER, 'contact-keys-1', {
+      recurrence: BillingRecurrence.Once,
+      description: 'Pão',
+      totalCents: 1500,
+      startDate: '2026-10-05',
+      timezone: 'America/Sao_Paulo',
+      contactId: padaria,
+      pix: { keyType: PixKeyType.Email, key: 'padaria@example.com', label: 'Padaria' }
+    });
+    const detail = await BillingRepository.get(db, OWNER, billing.id);
+
+    equal(detail.type, Direction.Payable);
+    equal(detail.contact?.id, padaria);
+    equal(detail.pix?.key, 'padaria@example.com');
+
+    const keys = await PaymentMethodRepository.list(db, OWNER, false, padaria);
+
+    equal(keys.some((method) => method.id === detail.paymentMethodId), true);
+
+    const charge = detail.charges[0]!;
+    const contactUserId = (await ContactRepository.user(db, OWNER, padaria)).userId;
+
+    equal(charge.direction, Direction.Payable);
+    equal(charge.hasPix, true);
+
+    const row = await db.charges.findOne({ select: { creditor_id: true, debtor_id: true }, where: { id: charge.id } });
+
+    equal(row?.creditor_id, contactUserId, 'the contact receives: they sit on the creditor side');
+    equal(row?.debtor_id, OWNER, 'the owner pays their own bill');
   });
 });

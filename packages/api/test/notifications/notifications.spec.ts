@@ -63,6 +63,15 @@ async function person(owner: string, name: string, email: string) {
   return created.userId;
 }
 
+/** A contact of the owner with no account of its own: it names who receives, and never hears about anything. */
+async function contactOf(name: string) {
+  return (await ContactRepository.save(db, OWNER, { name })).id;
+}
+
+async function contactUserOf(contactId: string) {
+  return (await ContactRepository.user(db, OWNER, contactId)).userId;
+}
+
 /** A once charge for one person; `announce` runs the creation notice through the fakes. */
 async function charge(owner = OWNER, email?: string, announce = false) {
   count++;
@@ -89,7 +98,7 @@ async function charge(owner = OWNER, email?: string, announce = false) {
   return { id: billing.charges[0]!.id, address, userId };
 }
 
-/** The owner's own bill: nobody on the other side, the key typed by hand. */
+/** The owner's own bill, owed to a contact with no account: the key is typed on the billing. */
 async function payableCharge(announce = false) {
   count++;
 
@@ -99,12 +108,12 @@ async function payableCharge(announce = false) {
     `notify-payable-${count}`,
     {
       recurrence: BillingRecurrence.Once,
-      type: Direction.Payable,
+      contactId: await contactOf(`Imobiliária ${count}`),
       description: 'Aluguel',
       totalCents: 150_000,
       startDate: DUE_DATE,
       timezone: TZ,
-      pix: { keyType: PixKeyType.Email, key: 'landlord@example.com', label: 'Imobiliária' }
+      pix: { keyType: PixKeyType.Email, key: `landlord-${count}@example.com`, label: 'Imobiliária' }
     },
     new Date(clock),
     undefined,
@@ -114,23 +123,25 @@ async function payableCharge(announce = false) {
   return billing.charges[0]!.id;
 }
 
-/** A registro due on DUE_DATE, created before it: still pending, with nobody on the other side. */
+/** A registro due on DUE_DATE, created before it: still pending, nobody to notify. */
 async function registroCharge(direction: Direction = Direction.Receivable) {
   count++;
 
+  const contactId = await contactOf(`Empresa X ${count}`);
   const billing = await BillingRepository.create(
     db,
     OWNER,
     `notify-registro-${count}`,
     {
       recurrence: BillingRecurrence.Once,
-      type: direction,
       description: 'Salário',
       totalCents: 500_000,
       startDate: DUE_DATE,
       timezone: TZ,
       kind: BillingKind.Record,
-      counterpartLabel: 'Empresa X'
+      ...(direction === Direction.Payable
+        ? { contactId }
+        : { split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: await contactUserOf(contactId) }] } })
     },
     new Date(clock)
   );

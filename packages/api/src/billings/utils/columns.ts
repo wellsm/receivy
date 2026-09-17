@@ -1,4 +1,4 @@
-import { BillingKind, type BillingRecurrence, type Direction } from '@receivy/common';
+import { BillingKind, type BillingRecurrence, Direction } from '@receivy/common';
 
 /**
  * Readers of the billing columns block 8 renamed. They live outside the repository so the charge side can read
@@ -15,9 +15,9 @@ export function billingKind(row: { kind: BillingKind }): BillingKind {
   return row.kind;
 }
 
-/** Which way the money goes: 'payable' is the owner's own bill, 'receivable' means the owner collects. */
-export function billingDirection(row: { type: Direction }): Direction {
-  return row.type;
+/** Which way the money goes: a receiving contact makes it the owner's own bill; without one the owner collects. */
+export function billingDirection(row: { contact_id?: string }): Direction {
+  return row.contact_id ? Direction.Payable : Direction.Receivable;
 }
 
 /** A registro: every charge settles on its due date and nobody is notified. */

@@ -30,11 +30,13 @@ const PAYEE = 'c2222222-2222-4222-8222-222222222222';
 const SECRET = 'payable-spec-secret-with-enough-length-0123456789';
 
 let payeeContactId: string;
+/** A contact nobody uses the app for: the bill is the owner's, and only the name says who receives it. */
+let soloContactId: string;
 
 function payable(overrides: Partial<BillingInput> = {}): BillingInput {
   return {
     recurrence: BillingRecurrence.Once,
-    type: Direction.Payable,
+    contactId: payeeContactId,
     description: 'Aluguel',
     totalCents: 150_000,
     startDate: '2026-11-05',
@@ -44,6 +46,11 @@ function payable(overrides: Partial<BillingInput> = {}): BillingInput {
   };
 }
 
+/** The same bill with nobody to confirm it: a contact without an account, and no key typed. */
+function solo(overrides: Partial<BillingInput> = {}): BillingInput {
+  return payable({ contactId: soloContactId, pix: undefined, ...overrides });
+}
+
 describe('contas a pagar on native PostgreSQL', () => {
   before(async () => {
     await createUser(db, { id: OWNER, email: 'payable-owner@example.com', name: 'Dona' });
@@ -51,20 +58,17 @@ describe('contas a pagar on native PostgreSQL', () => {
     payeeContactId = (
       await ContactRepository.save(db, OWNER, { name: 'Credora', email: 'payable-payee@example.com', nickname: 'Imobiliária' })
     ).id;
+    soloContactId = (await ContactRepository.save(db, OWNER, { name: 'Netflix' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, PAYEE]));
 
-  it('creates a bill that is the owner alone: one owner-paid charge, no wallet key, no participants', async () => {
-    const created = await BillingRepository.create(
-      db,
-      OWNER,
-      'payable-alone',
-      payable({ description: 'Netflix', totalCents: 3_990, pix: undefined })
-    );
+  it('creates a bill the owner pays alone: one owner-paid charge named after the contact, no wallet key', async () => {
+    const created = await BillingRepository.create(db, OWNER, 'payable-alone', solo({ description: 'Netflix', totalCents: 3_990 }));
 
     equal(created.type, 'payable');
-    equal(created.payee, null);
+    equal(created.contact?.id, soloContactId);
+    equal(created.contact?.name, 'Netflix');
     equal(created.pix, null);
     ok(!created.paymentMethodId);
     deepEqual(created.split, { mode: 'equal', parts: [{ kind: 'owner' }] });
@@ -76,7 +80,7 @@ describe('contas a pagar on native PostgreSQL', () => {
     equal(ownerPays(charge), true);
     equal(charge.ownedByViewer, true);
     equal(charge.hasPix, false);
-    equal(charge.counterpartName, 'Você');
+    equal(charge.counterpartName, 'Netflix');
     equal(charge.sharingState, 'closed');
     equal(charge.amount.amountCents, 3_990);
 
@@ -85,24 +89,33 @@ describe('contas a pagar on native PostgreSQL', () => {
     );
 
     equal(summary?.type, 'payable');
-    equal(summary?.payeeName, null);
+    equal(summary?.contact?.name, 'Netflix');
+    equal(summary?.participantCount, 0, 'the contact who receives is not a participant');
     ok(!(await BillingRepository.list(db, OWNER, { type: Direction.Receivable })).billings.some((row) => row.id === created.id));
   });
 
-  it('rejects contacts, wallet keys and invalid typed keys on a conta a pagar', async () => {
+  it('ignores a split, refuses a key of somebody else and an invalid typed key on a conta a pagar', async () => {
+    const ignored = await BillingRepository.create(
+      db,
+      OWNER,
+      'payable-split',
+      solo({
+        description: 'Divisão ignorada',
+        split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: PAYEE, amountCents: 1 }] }
+      })
+    );
+
+    deepEqual(ignored.split, { mode: 'equal', parts: [{ kind: 'owner' }] });
+
     await rejects(
       () =>
         BillingRepository.create(
           db,
           OWNER,
-          'payable-split',
-          payable({ split: { mode: SplitMode.Fixed, parts: [{ kind: SplitPartKind.User, userId: PAYEE, amountCents: 1 }] } })
+          'payable-wallet',
+          solo({ description: 'Chave alheia', paymentMethodId: 'a1111111-1111-4111-8111-111111111111' })
         ),
-      /não divide o valor/
-    );
-    await rejects(
-      () => BillingRepository.create(db, OWNER, 'payable-wallet', payable({ paymentMethodId: 'a1111111-1111-4111-8111-111111111111' })),
-      /quem recebe/
+      HttpNotFoundError
     );
     await rejects(
       () => BillingRepository.create(db, OWNER, 'payable-bad-pix', payable({ pix: { keyType: PixKeyType.Cpf, key: '123' } })),
@@ -112,10 +125,11 @@ describe('contas a pagar on native PostgreSQL', () => {
 
   it('shows the payee the same charge as receivable, with settle powers only', async () => {
     // Due this month at the latest: the feed never lists charges past the end of the current month.
-    const created = await BillingRepository.create(db, OWNER, 'payable-payee', payable({ payeeUserId: PAYEE, startDate: '2026-09-05' }));
+    const created = await BillingRepository.create(db, OWNER, 'payable-payee', payable({ startDate: '2026-09-05' }));
     const chargeId = created.charges[0]!.id;
 
-    equal(created.payee?.userId, PAYEE);
+    equal(created.contact?.id, payeeContactId);
+    equal(created.contact?.userId, PAYEE);
     deepEqual(created.pix, { keyType: PixKeyType.Email, key: 'imobiliaria@example.com', label: 'Imobiliária' });
     equal(created.charges[0]!.counterpartName, 'Imobiliária');
     equal(created.charges[0]!.hasPix, true);
@@ -164,25 +178,15 @@ describe('contas a pagar on native PostgreSQL', () => {
   it('tells whether a declared payment needs someone to confirm it', async () => {
     // Due this month at the latest, so the feed (capped at the month end) lists them.
     const due = { startDate: '2026-09-05' };
-    const withPayee = await BillingRepository.create(
-      db,
-      OWNER,
-      'payable-confirm-active',
-      payable({ ...due, payeeUserId: PAYEE, description: 'Confirma' })
-    );
+    const withPayee = await BillingRepository.create(db, OWNER, 'payable-confirm-active', payable({ ...due, description: 'Confirma' }));
     const placeholder = await ContactRepository.save(db, OWNER, { name: 'Sem app', email: 'payable-placeholder@example.com' });
     const withPlaceholder = await BillingRepository.create(
       db,
       OWNER,
       'payable-confirm-pending',
-      payable({ ...due, payeeUserId: placeholder.userId, description: 'Sem app' })
+      payable({ ...due, contactId: placeholder.id, description: 'Sem app', pix: undefined })
     );
-    const alone = await BillingRepository.create(
-      db,
-      OWNER,
-      'payable-confirm-alone',
-      payable({ ...due, description: 'Só minha', pix: undefined })
-    );
+    const alone = await BillingRepository.create(db, OWNER, 'payable-confirm-alone', solo({ ...due, description: 'Só minha' }));
 
     equal((await ChargeRepository.get(db, OWNER, withPayee.charges[0]!.id)).confirmationRequired, true);
     equal((await ChargeRepository.get(db, OWNER, withPlaceholder.charges[0]!.id)).confirmationRequired, false);
@@ -197,18 +201,8 @@ describe('contas a pagar on native PostgreSQL', () => {
 
   it('lets the owner declare a bill only to a payee who can confirm, and the payee answer it', async () => {
     const due = { startDate: '2026-09-05' };
-    const confirmable = await BillingRepository.create(
-      db,
-      OWNER,
-      'payable-declare-active',
-      payable({ ...due, payeeUserId: PAYEE, description: 'Declara' })
-    );
-    const alone = await BillingRepository.create(
-      db,
-      OWNER,
-      'payable-declare-alone',
-      payable({ ...due, description: 'Sozinha', pix: undefined })
-    );
+    const confirmable = await BillingRepository.create(db, OWNER, 'payable-declare-active', payable({ ...due, description: 'Declara' }));
+    const alone = await BillingRepository.create(db, OWNER, 'payable-declare-alone', solo({ ...due, description: 'Sozinha' }));
     // A declaration never touches the bucket unless an upload slot was open.
     const storage = { delete: async () => undefined } as unknown as ProofStorage;
     const chargeId = confirmable.charges[0]!.id;
@@ -236,18 +230,18 @@ describe('contas a pagar on native PostgreSQL', () => {
     });
 
     deepEqual(patched.pix, { keyType: PixKeyType.Cpf, key: '52998224725', label: 'Nova' });
-    equal((await BillingRepository.patch(db, OWNER, created.id, { clearPix: true })).pix, null);
+    // Both keys are filed under the contact: dropping the one it points at falls back to that scope's default.
+    deepEqual(await BillingRepository.patch(db, OWNER, created.id, { clearPix: true }).then((billing) => billing.pix), {
+      keyType: PixKeyType.Email,
+      key: 'imobiliaria@example.com',
+      label: 'Imobiliária'
+    });
     await rejects(
       () => BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: 'a1111111-1111-4111-8111-111111111111' }),
-      ApiError
+      HttpNotFoundError
     );
 
-    const once = await BillingRepository.create(
-      db,
-      OWNER,
-      'payable-self-once',
-      payable({ description: 'Luz', totalCents: 12_000, payeeUserId: undefined })
-    );
+    const once = await BillingRepository.create(db, OWNER, 'payable-self-once', solo({ description: 'Luz', totalCents: 12_000 }));
     const settled = await ChargeRepository.pay(db, OWNER, once.charges[0]!.id);
 
     equal(settled.state, 'paid');
@@ -259,7 +253,13 @@ describe('contas a pagar on native PostgreSQL', () => {
 describe('assinatura due date on native PostgreSQL', () => {
   const OWNER2 = 'c3333333-3333-4333-8333-333333333333';
 
-  before(async () => createUser(db, { id: OWNER2, email: 'due-owner@example.com', name: 'Dona' }));
+  let gymContactId: string;
+
+  before(async () => {
+    await createUser(db, { id: OWNER2, email: 'due-owner@example.com', name: 'Dona' });
+    gymContactId = (await ContactRepository.save(db, OWNER2, { name: 'Academia' })).id;
+  });
+
   after(async () => cleanupUsers(db, [OWNER2]));
 
   it('materializes an assinatura due today at creation and moves the next due date on patch', async () => {
@@ -267,7 +267,7 @@ describe('assinatura due date on native PostgreSQL', () => {
     const created = await BillingRepository.create(db, OWNER2, 'due-today', {
       recurrence: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Monthly,
-      type: Direction.Payable,
+      contactId: gymContactId,
       description: 'Academia',
       totalCents: 9_900,
       startDate: today,

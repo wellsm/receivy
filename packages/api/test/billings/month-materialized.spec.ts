@@ -31,6 +31,7 @@ const { context, sent } = fakeNotice();
 
 let pixId: string;
 let anaId: string;
+let anaContactId: string;
 let brunoId: string;
 let brunoContactId: string;
 let carlaId: string;
@@ -75,7 +76,10 @@ describe('month materialized: pending charges and current month edits', () => {
 
     await createUser(db, { id: OWNER, email: 'month-owner@example.com', name: 'Dona' });
 
-    anaId = (await ContactRepository.save(db, OWNER, { name: 'Ana', email: 'month-ana@example.com' })).userId;
+    const ana = await ContactRepository.save(db, OWNER, { name: 'Ana', email: 'month-ana@example.com' });
+
+    anaId = ana.userId;
+    anaContactId = ana.id;
 
     const bruno = await ContactRepository.save(db, OWNER, { name: 'Bruno', email: 'month-bruno@example.com' });
 
@@ -471,7 +475,7 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(ana?.amount_cents, 6_000);
   });
 
-  it('clearPayee on a conta a pagar cancels the payee charge and keeps the bill owner-only for CurrentMonth', async () => {
+  it('clearContact on a conta a pagar cancels the contact charge and leaves the bill owner-only for CurrentMonth', async () => {
     const billing = await BillingRepository.create(
       db,
       OWNER,
@@ -479,22 +483,32 @@ describe('month materialized: pending charges and current month edits', () => {
       {
         recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
-        type: Direction.Payable,
+        contactId: anaContactId,
         description: 'Aluguel',
         totalCents: 10_000,
         startDate: '2026-03-20',
         timezone: TZ,
-        payeeUserId: anaId,
-        pix: { keyType: PixKeyType.Cpf, key: '52998224725', label: 'Imobiliária' }
+        pix: { keyType: PixKeyType.Email, key: 'month-landlord@example.com', label: 'Imobiliária' }
       },
       date('2026-03-05')
     );
     const [anaCharge] = await chargeRows(billing.id);
 
     ok(anaCharge);
-    equal(anaCharge.creditor_id, anaId, 'the payee receives: she sits on the creditor side');
+    equal(anaCharge.creditor_id, anaId, 'the contact receives: she sits on the creditor side');
+    equal(
+      anaCharge.payment_snapshot?.value,
+      'month-landlord@example.com',
+      'the typed key is filed under the contact and travels to the charge'
+    );
 
-    await BillingRepository.patch(db, OWNER, billing.id, { clearPayee: true, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+    const cleared = await BillingRepository.patch(
+      db,
+      OWNER,
+      billing.id,
+      { clearContact: true, applyTo: EditScope.CurrentMonth },
+      date('2026-03-06')
+    );
 
     const rows = await chargeRows(billing.id);
     const cancelled = rows.find((row) => row.id === anaCharge.id);
@@ -502,19 +516,12 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(cancelled?.state, 'cancelled');
     deepEqual((await EventRepository.list(db, anaCharge.id, 'charge.cancelled'))[0]?.payload, { reason: 'billing_edited' });
 
-    // Clearing the payee plans a charge with userId: null (planBillingCharges, payer: owner). monthChanges
-    // matches planned charges by counterpart, so Ana's charge (creditor_id: anaId) does not match the
-    // planned null id: it is cancelled above and the payee-less occurrence lands in `changes.create`
-    // instead of `changes.update`. The billing_id:creditor_id:debtor_id:due_date unique index has no
-    // existing row for (billing, null, owner, 2026-03-20) - only Ana's row held that date - so the create
-    // is not skipped as "taken" and a fresh owner-only charge is persisted alongside the cancelled one.
-    const ownerOnly = rows.find((row) => row.creditor_id === null);
-
-    ok(ownerOnly, 'the owner keeps paying the bill even without a payee on record');
-    equal(ownerOnly?.state, 'pending');
-    equal(ownerOnly?.due_date, '2026-03-20');
-    equal(ownerOnly?.amount_cents, 10_000);
-    equal(ownerOnly?.payment_snapshot?.value, '52998224725');
-    equal(rows.length, 2);
+    // Without a contact the bill is nobody's to pay: it reads as a conta a receber with the owner alone,
+    // so this month plans no charge at all and Ana's is simply cancelled.
+    equal(cleared.type, Direction.Receivable);
+    equal(cleared.contact, null);
+    equal(cleared.pix, null);
+    deepEqual(cleared.split, { mode: 'equal', parts: [{ kind: 'owner' }] });
+    equal(rows.length, 1);
   });
 });

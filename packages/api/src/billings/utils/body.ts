@@ -7,7 +7,6 @@ import type {
   BillingKind,
   BillingState,
   BillingRecurrence,
-  Direction,
   EditScope,
   PendingChargesAction,
   PixKeyType,
@@ -53,20 +52,14 @@ export declare class BillingBody implements Http.JsonBody {
   timezone: String.Max<100>;
   paymentMethodId?: String.UUID;
   reminders?: ReminderBody[];
-  /** Required on a conta a receber; a conta a pagar (type payable) has no participants. */
+  /** Required on a conta a receber; a conta a pagar names its receiving contact instead. */
   split?: SplitBody;
-  /** @deprecated Block 9: replaced by contactId. */
-  type?: Direction;
-  /** @deprecated Block 9: replaced by contactId. */
-  payeeUserId?: String.UUID;
   /** Block 9: who receives (a contact of the owner). Absent means the owner receives. */
   contactId?: String.UUID;
   pix?: PixBody;
   category?: BillingCategory;
-  /** Registro: already received or paid; the owner alone, no participants, Pix or reminders. */
+  /** Registro: already received or paid; the owner alone, no Pix or reminders. */
   kind?: BillingKind;
-  /** Registro only; trimmed to 1–120 characters by the domain, which answers the pt-BR message. */
-  counterpartLabel?: String.Max<200>;
 }
 
 export declare class PatchBody implements Http.JsonBody {
@@ -77,10 +70,6 @@ export declare class PatchBody implements Http.JsonBody {
   clearPaymentMethod?: boolean;
   pix?: PixBody;
   clearPix?: boolean;
-  /** @deprecated Block 9: replaced by contactId. */
-  payeeUserId?: String.UUID;
-  /** @deprecated Block 9: replaced by clearContact. */
-  clearPayee?: boolean;
   /** Block 9: who receives (a contact of the owner), replacing the current one. */
   contactId?: String.UUID;
   /** Block 9: clears the receiving contact, leaving the bill the owner's alone. */
@@ -93,5 +82,4 @@ export declare class PatchBody implements Http.JsonBody {
   applyTo?: EditScope;
   category?: BillingCategory;
   kind?: BillingKind;
-  counterpartLabel?: String.Max<200>;
 }

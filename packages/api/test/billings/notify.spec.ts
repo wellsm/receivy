@@ -7,7 +7,6 @@ import {
   type BillingInput,
   BillingRecurrence,
   ChargeState,
-  Direction,
   EditScope,
   PixKeyType,
   SplitMode,
@@ -84,12 +83,11 @@ async function allocationFlags(billingId: string) {
 function payableOnce(key: string): BillingInput {
   return {
     recurrence: BillingRecurrence.Once,
-    type: Direction.Payable,
     description: key,
     totalCents: 5_000,
     startDate: '2026-03-10',
     timezone: TZ,
-    payeeUserId: anaId
+    contactId: anaContactId
   };
 }
 

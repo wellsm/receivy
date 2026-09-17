@@ -4,13 +4,14 @@ import {
   addCalendarDays,
   type BillingAllocation,
   BillingCategory,
+  type BillingContact,
   type BillingDetail,
   BillingDueRule,
   type BillingFrequency,
   type BillingGuest,
   type BillingInput,
   type BillingPatch,
-  type BillingPayee,
+  type BillingPixInput,
   type BillingPreview,
   type BillingReminder,
   type BillingSplit,
@@ -30,10 +31,8 @@ import {
   materializationDate,
   materializationHorizon,
   normalizeBillingInput,
-  normalizeCounterpartLabel,
   PendingChargesAction,
   type PixKeyType,
-  type PixSnapshot,
   planBillingCharges,
   resolveBillingSplit,
   SplitMode,
@@ -49,7 +48,8 @@ import {
   lockOwner,
   type PayableMaterialization,
   persistChargePlan,
-  prepareChargeMaterialization
+  prepareChargeMaterialization,
+  pixSnapshot
 } from '../../charges/services/materialize';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
@@ -57,6 +57,7 @@ import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
 import { activeInvite, type InviteLinkContext } from '../../invites/services/links';
 import { announceCharges, type NoticeContext } from '../../notifications/services/send';
+import { PaymentMethodRepository } from '../../payment-methods/repositories/payment-method';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import { billingDirection, billingKind, billingRecurrence, billingRegistered } from '../utils/columns';
 import {
@@ -76,30 +77,71 @@ import { type MonthCharge, monthChanges } from '../services/month-scope';
 import { effectiveReminders, parseReminders } from '../services/reminders';
 import { billingRequestFingerprint } from '../services/request';
 
-function billingPix(row: Pick<BillingRepository.Row, 'pix_key_type' | 'pix_key' | 'pix_label'>): PixSnapshot | null {
-  return row.pix_key_type && row.pix_key ? { keyType: row.pix_key_type, key: row.pix_key, label: row.pix_label ?? 'Pix' } : null;
-}
-
-/** The payee of a conta a pagar: the one User part of its split. */
-function payeeIdOf(split: BillingSplit): string | undefined {
+/** The one person a charge planned for the whole total names: the payer of a conta a receber settled as one. */
+function counterpartIdOf(split: BillingSplit): string | undefined {
   return userIds(split)[0];
 }
 
-/** The contact who receives a conta a pagar; archived contacts still name it, the bill stays theirs. */
-async function payeeOf(db: DbClient, split: BillingSplit): Promise<BillingPayee | null> {
-  const payeeUserId = payeeIdOf(split);
-
-  if (!payeeUserId) {
+/** Who receives a conta a pagar, as the owner knows them; an archived contact still names it. */
+async function contactOf(db: DbClient, row: Pick<BillingRepository.Row, 'contact_id'>): Promise<BillingContact | null> {
+  if (!row.contact_id) {
     return null;
   }
 
-  const person = await ContactRepository.counterpartOf(db, payeeUserId);
+  const contact = await db.contacts.findOne({ select: { id: true, user_id: true, nickname: true }, where: { id: row.contact_id } });
 
-  return person ? { userId: payeeUserId, name: person.name, avatar: person.avatar } : null;
+  if (!contact) {
+    return null;
+  }
+
+  const person = await ContactRepository.counterpartOf(db, contact.user_id);
+  const name = contact.nickname || person?.name || 'Conta excluída';
+
+  return { id: contact.id, userId: contact.user_id, name, avatar: person?.avatar ?? null };
+}
+
+/** The person a stored contact points at, read as it is: an archived contact must not block an unrelated edit. */
+async function contactUserId(db: DbClient, ownerId: string, contactId: string): Promise<string | undefined> {
+  const row = await db.contacts.findOne({ select: { user_id: true }, where: { id: contactId, owner_id: ownerId } });
+
+  return row?.user_id;
+}
+
+/** The person on the other side of a charge planned for the whole total: the receiving contact, or the payer of the split. */
+async function chargeCounterpart(
+  db: DbClient,
+  ownerId: string,
+  payable: PayableMaterialization | undefined,
+  split: BillingSplit
+): Promise<string | undefined> {
+  if (!payable) {
+    return counterpartIdOf(split);
+  }
+
+  return payable.contactId ? contactUserId(db, ownerId, payable.contactId) : undefined;
+}
+
+/** The key typed on a conta a pagar, filed under the contact who receives it; the label is what the charge shows. */
+async function contactKey(db: DbClient, ownerId: string, contactId: string, pix: BillingPixInput): Promise<string> {
+  const key = { keyType: pix.keyType, key: pix.key, label: pix.label ?? 'Pix' };
+
+  return PaymentMethodRepository.upsertContactKey(db, ownerId, contactId, key);
+}
+
+/** A conta a pagar may only point at a key filed under the contact who receives it. */
+async function assertContactKey(db: DbClient, ownerId: string, contactId: string, paymentMethodId: string): Promise<void> {
+  const method = await db.payment_methods.findOne({
+    select: { id: true },
+    where: { id: paymentMethodId, owner_id: ownerId, contact_id: contactId }
+  });
+
+  if (!method) {
+    throw new HttpNotFoundError('Chave Pix indisponível.');
+  }
 }
 
 /** What `prepareChargeMaterialization` needs to know about a conta a pagar, or undefined for a conta a receber. */
-function payableOf(row: Pick<BillingRepository.Row, 'type' | 'contact_id'>): PayableMaterialization | undefined {
+function payableOf(row: Pick<BillingRepository.Row, 'contact_id'>): PayableMaterialization | undefined {
   return BillingRepository.direction(row) === Direction.Payable ? { payer: ChargePayer.Owner, contactId: row.contact_id } : undefined;
 }
 
@@ -184,16 +226,15 @@ function summary(
   nextDueDate: string | null,
   counters: BillingCounters,
   installmentCount: number | undefined,
-  payee: BillingPayee | null
+  contact: BillingContact | null
 ): BillingSummary {
   return {
     id: row.id,
     type: BillingRepository.direction(row),
-    // Block 9: the repository does not write contact_id yet; Task 6 resolves it here.
-    contact: null,
-    payeeName: payee?.name ?? null,
+    contact,
+    payeeName: contact?.name ?? null,
     kind: billingKind(row),
-    counterpartLabel: row.counterpart_label ?? null,
+    counterpartLabel: null,
     recurrence: billingRecurrence(row),
     frequency: row.frequency,
     description: row.description,
@@ -262,8 +303,8 @@ async function summaryAggregates(db: DbClient, rows: BillingRepository.Row[], no
       FROM page p
       JOIN billings b ON b.id = p.billing_id
       JOIN allocations a ON a.billing_id = p.billing_id AND a.user_id <> b.owner_id
-      -- The payee of a conta a pagar sits in its split since block 8; the card keeps counting participants only.
-      WHERE b.type <> 'payable'
+      -- A conta a pagar names who receives outside its split; the card keeps counting participants only.
+      WHERE b.contact_id IS NULL
       GROUP BY p.billing_id
     ),
     proofs AS (
@@ -339,11 +380,7 @@ async function summaryDto(db: DbClient, row: BillingRepository.Row, now: Date, a
       ? ((await previewsFor(db, row, effectiveReminders(row), now))[0]?.occurrenceDate ?? null)
       : null);
 
-  // Only a conta a pagar names a payee, and it sits in the split now: the list reads it for those rows alone.
-  const payee =
-    BillingRepository.direction(row) === Direction.Payable ? await payeeOf(db, (await BillingRepository.splitFor(db, row)).split) : null;
-
-  return summary(row, nextDueDate, counters, installmentCountFor(row), payee);
+  return summary(row, nextDueDate, counters, installmentCountFor(row), await contactOf(db, row));
 }
 
 async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: InviteLinkContext): Promise<BillingDetail> {
@@ -356,17 +393,18 @@ async function dto(db: DbClient, row: BillingRepository.Row, now: Date, link?: I
   });
   const previews = await previewsFor(db, row, reminders, now);
   const earliest = await earliestPendingCharge(db, row.id);
+  const contact = await contactOf(db, row);
 
   // The detail response has its own field list: the card counters stay out of it.
   return {
     id: row.id,
     type: BillingRepository.direction(row),
-    // Block 9: the repository does not write contact_id yet; Task 6 resolves it here.
-    contact: null,
-    payee: await payeeOf(db, split),
+    contact,
+    payee: contact ? { userId: contact.userId, name: contact.name, avatar: contact.avatar } : null,
     kind: billingKind(row),
-    counterpartLabel: row.counterpart_label ?? null,
-    pix: billingPix(row),
+    counterpartLabel: null,
+    // A conta a pagar pays through the contact's key: the one it points at, or that scope's default.
+    pix: row.contact_id ? await pixSnapshot(db, row.owner_id, row.payment_method_id, row.contact_id) : null,
     recurrence: billingRecurrence(row),
     frequency: row.frequency,
     description: row.description,
@@ -634,8 +672,8 @@ function touchesCharges(patch: BillingPatch): boolean {
     patch.clearPaymentMethod !== undefined ||
     patch.pix !== undefined ||
     patch.clearPix !== undefined ||
-    patch.payeeUserId !== undefined ||
-    patch.clearPayee !== undefined ||
+    patch.contactId !== undefined ||
+    patch.clearContact !== undefined ||
     patch.startDate !== undefined ||
     patch.dueRule !== undefined
   );
@@ -684,7 +722,7 @@ async function rewriteMonthCharges(
     dueDates: [dueDate],
     numbered: false,
     payer,
-    payeeUserId: payeeIdOf(split) ?? null,
+    payeeUserId: (await chargeCounterpart(db, row.owner_id, payable, split)) ?? null,
     settled: billingRegistered(row)
   });
   const existing: MonthCharge[] = editable.map((charge) => ({
@@ -785,12 +823,8 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
 
   const settled = billingRegistered(row);
 
-  // A registro stays a registro, and only a registro has a free-text counterpart.
+  // A registro stays a registro.
   if (patch.kind !== undefined && (patch.kind === BillingKind.Record) !== settled) {
-    throw new SettledLockedError();
-  }
-
-  if (patch.counterpartLabel !== undefined && !settled) {
     throw new SettledLockedError();
   }
 
@@ -799,11 +833,11 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
     patch.split !== undefined ||
     patch.paymentMethodId !== undefined ||
     patch.pix !== undefined ||
-    patch.payeeUserId !== undefined ||
+    patch.contactId !== undefined ||
     patch.reminders !== undefined ||
     patch.clearPaymentMethod !== undefined ||
     patch.clearPix !== undefined ||
-    patch.clearPayee !== undefined;
+    patch.clearContact !== undefined;
 
   if (settled && crowded) {
     throw new SettledLockedError();
@@ -825,22 +859,30 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
 
   const payable = BillingRepository.direction(row) === Direction.Payable;
 
-  // Each direction has its own Pix source: the owner's wallet collects, a typed key pays.
-  if (payable && (patch.paymentMethodId !== undefined || patch.split !== undefined)) {
+  // A conta a pagar has no split: whoever receives it is a contact, never a participant.
+  if (payable && patch.split !== undefined) {
     throw new PayableHasNoSplitError();
   }
 
-  if (!payable && (patch.pix !== undefined || patch.clearPix || patch.payeeUserId !== undefined || patch.clearPayee)) {
+  // A conta a receber already charges other people: it never turns into the owner's own bill.
+  if (!payable && patch.contactId !== undefined) {
     throw new ReceivableHasNoPayeeError();
   }
 
-  const payeeChanged = patch.payeeUserId !== undefined || patch.clearPayee;
+  // A key always belongs to whoever receives, so it needs a contact: the stored one, or the patched one.
+  const receives = patch.clearContact ? false : Boolean(patch.contactId ?? row.contact_id);
+
+  if (!receives && (patch.pix !== undefined || patch.clearPix)) {
+    throw new ReceivableHasNoPayeeError();
+  }
+
+  const contactChanged = patch.contactId !== undefined || patch.clearContact;
   const frozen =
     billingRecurrence(row) !== BillingRecurrence.Indefinite &&
     (patch.description !== undefined ||
       patch.totalCents !== undefined ||
       patch.split !== undefined ||
-      payeeChanged ||
+      contactChanged ||
       patch.startDate !== undefined ||
       patch.dueRule !== undefined);
 
@@ -875,7 +917,6 @@ async function rescheduledMonthCursor(db: DbClient, row: BillingRepository.Row, 
 
 function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): BillingInput {
   const direction = BillingRepository.direction(row);
-  const pix = billingPix(row);
 
   return {
     recurrence: billingRecurrence(row),
@@ -887,14 +928,12 @@ function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): Bill
     dueRule: row.due_rule,
     timezone: row.timezone,
     paymentMethodId: row.payment_method_id,
-    // A conta a pagar takes no split as input: the normalizer rebuilds it from the payee, as it did at creation.
+    // A conta a pagar takes no split as input: the normalizer settles it on the owner, as it did at creation.
     split: direction === Direction.Payable ? undefined : split,
     category: row.category,
-    type: direction,
-    payeeUserId: payeeIdOf(split),
-    pix: pix ? { keyType: pix.keyType, key: pix.key, label: pix.label } : undefined,
-    kind: billingKind(row),
-    counterpartLabel: row.counterpart_label
+    contactId: row.contact_id,
+    // No `pix`: the key is already filed under the contact, and `paymentMethodId` is what the billing points at.
+    kind: billingKind(row)
   };
 }
 
@@ -1029,7 +1068,7 @@ export namespace BillingRepository {
   };
 
   /** Which way the money goes; see `billingDirection`. */
-  export function direction(row: Pick<Row, 'type'>): Direction {
+  export function direction(row: Pick<Row, 'contact_id'>): Direction {
     return billingDirection(row);
   }
 
@@ -1217,11 +1256,18 @@ export namespace BillingRepository {
         throw new RangeError('O início não pode estar no passado.');
       }
 
-      // The normalized split already carries the payee of a conta a pagar as its one User part.
-      // Task 6 rewrites this from `input.contactId`; until then no contact to resolve here.
-      const payable: PayableMaterialization | undefined =
-        input.type === Direction.Payable ? { payer: ChargePayer.Owner } : undefined;
-      const context = await prepareChargeMaterialization(tx, ownerId, userIds(input.split), input.paymentMethodId, payable);
+      // A conta a pagar names its receiving contact outside the split; the key it types is filed under that contact.
+      const contact = input.contactId ? await ContactRepository.user(tx, ownerId, input.contactId) : undefined;
+      const payable: PayableMaterialization | undefined = contact ? { payer: ChargePayer.Owner, contactId: contact.contactId } : undefined;
+      const paymentMethodId = contact && input.pix ? await contactKey(tx, ownerId, contact.contactId, input.pix) : input.paymentMethodId;
+
+      if (contact && !input.pix && paymentMethodId) {
+        await assertContactKey(tx, ownerId, contact.contactId, paymentMethodId);
+      }
+
+      const counterpartId = contact ? contact.userId : counterpartIdOf(input.split);
+      const counterparts = payable ? (counterpartId ? [counterpartId] : []) : userIds(input.split);
+      const context = await prepareChargeMaterialization(tx, ownerId, counterparts, paymentMethodId, payable);
       const id = crypto.randomUUID();
       const instant = now.toISOString();
       const row = await tx.billings.insertOne({
@@ -1238,12 +1284,10 @@ export namespace BillingRepository {
           start_date: input.startDate,
           end_date: input.endDate ?? sqlNull,
           due_rule: input.dueRule ?? BillingDueRule.Fixed,
-          ...(input.paymentMethodId ? { payment_method: { id: input.paymentMethodId } } : {}),
+          ...(paymentMethodId ? { payment_method: { id: paymentMethodId } } : {}),
+          ...(contact ? { contact: { id: contact.contactId } } : {}),
+          // Block 9: `type` is derived from the contact and only kept because the column is still NOT NULL.
           type: input.type,
-          pix_key_type: input.pix?.keyType ?? sqlNull,
-          pix_key: input.pix?.key ?? sqlNull,
-          pix_label: input.pix?.label ?? sqlNull,
-          ...(input.kind === BillingKind.Record ? { counterpart_label: input.counterpartLabel } : {}),
           reminders: input.reminders ? JSON.stringify(input.reminders) : sqlNull,
           state: BillingState.Active,
           split_mode: input.split.mode,
@@ -1265,7 +1309,7 @@ export namespace BillingRepository {
           dueDates: billingDueDates(input),
           numbered: true,
           payer: context.payer,
-          payeeUserId: input.payeeUserId ?? null,
+          payeeUserId: counterpartId ?? null,
           settled: input.kind === BillingKind.Record
         });
 
@@ -1412,39 +1456,48 @@ export namespace BillingRepository {
       const today = calendarDate(now, row.timezone);
       const totalCents = patch.totalCents ?? row.total_cents;
       const split = patch.split ?? (await splitFor(tx, row)).split;
-      const paymentMethodId = patch.clearPaymentMethod ? undefined : (patch.paymentMethodId ?? row.payment_method_id);
-      const payeeUserId = patch.clearPayee ? undefined : (patch.payeeUserId ?? payeeIdOf(split));
       const description = patch.description === undefined ? row.description : patch.description.normalize('NFC').trim() || 'Conta';
-      const counterpartLabel =
-        patch.counterpartLabel === undefined ? undefined : normalizeCounterpartLabel(patch.counterpartLabel, direction(row));
       const pixPatched = patch.pix !== undefined || patch.clearPix;
       const normalized =
         patch.reminders !== undefined || patch.pix !== undefined
           ? normalizeBillingInput({
               ...billingInputFrom(row, split),
+              ...(patch.contactId !== undefined ? { contactId: patch.contactId } : {}),
               ...(patch.reminders !== undefined ? { reminders: patch.reminders } : {}),
               ...(patch.pix !== undefined ? { pix: patch.pix } : {})
             })
           : undefined;
       const reminders = patch.reminders === undefined ? undefined : normalized?.reminders;
-      const pix = patch.clearPix ? null : patch.pix !== undefined ? (normalized?.pix ?? null) : billingPix(row);
-      const payable = payableOf(row);
+
+      // A new contact is validated like at creation; clearing one leaves the bill the owner's alone.
+      const named = patch.contactId !== undefined ? await ContactRepository.user(tx, ownerId, patch.contactId) : undefined;
+      const contactId = patch.clearContact ? undefined : (named?.contactId ?? row.contact_id);
+      const contactPatched = patch.contactId !== undefined || patch.clearContact === true;
+      const payable: PayableMaterialization | undefined = contactId ? { payer: ChargePayer.Owner, contactId } : undefined;
+      // A typed key is filed under the contact and becomes the method the billing points at; clearing it leaves the scope default.
+      const keyed = contactId && normalized?.pix ? await contactKey(tx, ownerId, contactId, normalized.pix) : undefined;
+      const paymentMethodId =
+        patch.clearPaymentMethod || patch.clearPix ? undefined : (keyed ?? patch.paymentMethodId ?? row.payment_method_id);
+
+      if (contactId && !keyed && paymentMethodId) {
+        await assertContactKey(tx, ownerId, contactId, paymentMethodId);
+      }
 
       // Only newly introduced recipients/Pix need revalidation; materializeNextOccurrence re-checks the stored
       // split at occurrence time, so an already-persisted split must not block unrelated edits (e.g. ending
       // a billing whose recipient was archived later).
-      if (patch.split !== undefined || patch.paymentMethodId !== undefined || patch.clearPaymentMethod || pixPatched || patch.payeeUserId) {
-        const counterparts = payable ? (payeeUserId ? [payeeUserId] : []) : userIds(split);
+      if (patch.split !== undefined || patch.paymentMethodId !== undefined || patch.clearPaymentMethod || pixPatched || contactPatched) {
+        const counterpartId = await chargeCounterpart(tx, ownerId, payable, split);
+        const counterparts = payable ? (counterpartId ? [counterpartId] : []) : userIds(split);
 
         await prepareChargeMaterialization(tx, ownerId, counterparts, paymentMethodId, payable);
       }
 
-      // A conta a pagar keeps its payee as the one User part of its split, for the whole total: a new payee or a
-      // new total rewrites it (a fixed part above the total would be refused otherwise).
-      const payeePatched = patch.payeeUserId !== undefined || patch.clearPayee === true;
-      const stored = payable ? normalizeBillingInput({ ...billingInputFrom(row, split), totalCents, payeeUserId }).split : split;
+      // A conta a pagar keeps the owner alone in its split, for the whole total: a new total rewrites it
+      // (a fixed part above the total would be refused otherwise).
+      const stored = payable ? normalizeBillingInput({ ...billingInputFrom(row, split), totalCents, contactId }).split : split;
 
-      if (patch.split !== undefined || patch.totalCents !== undefined || (payable && payeePatched)) {
+      if (patch.split !== undefined || patch.totalCents !== undefined || (payable && contactPatched)) {
         const changes = await saveAllocations(tx, row, totalCents, stored, instant);
 
         // Same rule as PUT /billings/{id}/participants/{userId}/notify for whoever stayed and changed.
@@ -1475,12 +1528,11 @@ export namespace BillingRepository {
           category: patch.category ?? row.category,
           total_cents: totalCents,
           payment_method: { id: paymentMethodId ?? sqlNull },
-          pix_key_type: pix?.keyType ?? sqlNull,
-          pix_key: pix?.key ?? sqlNull,
-          pix_label: pix?.label ?? sqlNull,
-          ...(counterpartLabel === undefined ? {} : { counterpart_label: counterpartLabel }),
+          contact: { id: contactId ?? sqlNull },
+          // Block 9: `type` is derived from the contact and only kept because the column is still NOT NULL.
+          type: contactId ? Direction.Payable : Direction.Receivable,
           ...(patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
-          ...(patch.split !== undefined || (payable && payeePatched) ? { split_mode: stored.mode } : {}),
+          ...(patch.split !== undefined || (payable && contactPatched) ? { split_mode: stored.mode } : {}),
           ...(patch.state ? { state: patch.state } : {}),
           ...(resumed
             ? { last_occurrence_date: (row.last_occurrence_date ?? boundary) > boundary ? row.last_occurrence_date : boundary }
@@ -1653,8 +1705,8 @@ export namespace BillingRepository {
         if (!exists) {
           const { split } = await splitFor(tx, row);
           const payable = payableOf(row);
-          const payeeUserId = payeeIdOf(split);
-          const counterparts = payable ? (payeeUserId ? [payeeUserId] : []) : userIds(split);
+          const counterpartId = await chargeCounterpart(tx, row.owner_id, payable, split);
+          const counterparts = payable ? (counterpartId ? [counterpartId] : []) : userIds(split);
           const context = await prepareChargeMaterialization(tx, row.owner_id, counterparts, row.payment_method_id, payable);
           const plan = planBillingCharges({
             description: row.description,
@@ -1663,7 +1715,7 @@ export namespace BillingRepository {
             dueDates: [dueDate],
             numbered: false,
             payer: context.payer,
-            payeeUserId: payeeUserId ?? null,
+            payeeUserId: counterpartId ?? null,
             settled: billingRegistered(row)
           });
 

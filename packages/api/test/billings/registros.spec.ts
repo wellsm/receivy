@@ -17,7 +17,7 @@ import {
   SplitMode,
   SplitPartKind
 } from '@receivy/common';
-import { SettledLockedError } from '../../src/billings/errors';
+import { ReceivableHasNoPayeeError, SettledLockedError } from '../../src/billings/errors';
 import { LinkableType } from '../../src/public/schemas/link';
 import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
@@ -45,8 +45,13 @@ const cronAt = (day: string) => new Date(`${day}T05:00:00Z`);
 
 let anaId: string;
 let pixId: string;
+/** The contact who pays the owner on a registro a receber, and the one who receives a registro a pagar. */
+let empresaId: string;
+let imobiliariaId: string;
+let otherEmpresaId: string;
+let otherImobiliariaId: string;
 
-/** A registro a receber: the owner alone, the counterpart typed by hand, due in February. */
+/** A registro a receber: what Empresa X paid the owner, due in February. */
 function registro(key: string, overrides: Partial<BillingInput> = {}): BillingInput {
   return {
     recurrence: BillingRecurrence.Once,
@@ -56,9 +61,14 @@ function registro(key: string, overrides: Partial<BillingInput> = {}): BillingIn
     startDate: '2026-02-20',
     timezone: TZ,
     kind: BillingKind.Record,
-    counterpartLabel: 'Empresa X',
+    split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: empresaId }] },
     ...overrides
   };
+}
+
+/** A registro a pagar: what the owner already paid the contact who receives it. */
+function registroPago(key: string, overrides: Partial<BillingInput> = {}): BillingInput {
+  return registro(key, { split: undefined, contactId: imobiliariaId, ...overrides });
 }
 
 async function chargeRows(billingId: string) {
@@ -86,34 +96,24 @@ describe('registros on native PostgreSQL', () => {
 
     anaId = (await ContactRepository.save(db, OWNER, { name: 'Ana', email: 'registros-ana@example.com' })).userId;
     pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    empresaId = (await ContactRepository.save(db, OWNER, { name: 'Empresa X' })).userId;
+    imobiliariaId = (await ContactRepository.save(db, OWNER, { name: 'Imobiliária' })).id;
+    // A registro only ever names contacts of whoever owns it: the other owner keeps their own agenda.
+    otherEmpresaId = (await ContactRepository.save(db, OTHER, { name: 'Empresa X' })).userId;
+    otherImobiliariaId = (await ContactRepository.save(db, OTHER, { name: 'Imobiliária' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, OTHER]));
 
-  it('refuses a registro without a name, with participants, a payee, Pix or reminders, and a recorrente in the past', async () => {
+  it('refuses a registro without a counterpart, with a wallet key, Pix or reminders, and a recorrente in the past', async () => {
     const now = date('2026-03-05');
     const refuse = (key: string, input: BillingInput, message: string) =>
       rejects(() => BillingRepository.create(db, OWNER, key, input, now), { name: 'RangeError', message });
-    const crowded = 'Registro não tem participantes nem avisos.';
+    const crowded = 'Registro não tem avisos nem Pix.';
 
-    await refuse('registro-no-name', registro('Sem nome', { counterpartLabel: '  ' }), 'Informe de quem é o valor.');
-    await refuse(
-      'registro-no-name-payable',
-      registro('Sem nome', { type: Direction.Payable, counterpartLabel: undefined }),
-      'Informe para quem é o valor.'
-    );
-    await refuse(
-      'registro-participant',
-      registro('Com Ana', { split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: anaId }] } }),
-      crowded
-    );
-    await refuse('registro-payee', registro('Para Ana', { type: Direction.Payable, payeeUserId: anaId }), crowded);
+    await refuse('registro-no-name', registro('Sem nome', { split: undefined }), 'Selecione ao menos um contato.');
     await refuse('registro-wallet', registro('Com chave', { paymentMethodId: pixId }), crowded);
-    await refuse(
-      'registro-pix',
-      registro('Com Pix', { type: Direction.Payable, pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } }),
-      crowded
-    );
+    await refuse('registro-pix', registroPago('Com Pix', { pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } }), crowded);
     await refuse('registro-reminders', registro('Com lembrete', { reminders: [{ offsetDays: 0, enabled: true }] }), crowded);
     await refuse(
       'registro-monthly-past',
@@ -145,27 +145,21 @@ describe('registros on native PostgreSQL', () => {
     equal(await db.billings.count({ where: { owner_id: OWNER } }), 0, 'nothing was written');
   });
 
-  it('pays a registro due by today at creation, on its due date, with nobody on the other side', async () => {
-    const once = await BillingRepository.create(
-      db,
-      OWNER,
-      'registro-past',
-      registro('Venda do sofá', { counterpartLabel: '  Empresa X  ' }),
-      date('2026-03-05')
-    );
+  it('pays a registro due by today at creation, on its due date, naming who was on the other side', async () => {
+    const once = await BillingRepository.create(db, OWNER, 'registro-past', registro('Venda do sofá'), date('2026-03-05'));
 
     equal(once.kind, BillingKind.Record);
-    equal(once.counterpartLabel, 'Empresa X');
+    equal(once.contact, null, 'a registro a receber names its payer in the split, not a receiving contact');
     deepEqual(
       once.allocations.map((allocation) => allocation.kind),
-      ['owner']
+      ['user']
     );
 
     const [row] = await chargeRows(once.id);
 
     ok(row);
     equal(row.state, ChargeState.Paid);
-    equal(row.debtor_id ?? null, null);
+    equal(row.debtor_id, empresaId, 'whoever paid the owner sits on the debtor side');
     equal(row.payment_snapshot?.value ?? null, null, 'the default wallet key never reaches a registro');
     equal(Date.parse(String(row.paid_at)), dayStart('2026-02-20'));
     deepEqual(await paidVia(row.id), ['registered']);
@@ -176,7 +170,6 @@ describe('registros on native PostgreSQL', () => {
     equal(detail.counterpartName, 'Empresa X');
     equal(detail.recipient.name, 'Empresa X');
     equal(detail.kind, BillingKind.Record);
-    equal(detail.counterpartLabel, 'Empresa X');
     equal(detail.sharingState, SharingState.Closed);
     equal(detail.pix, null);
 
@@ -184,12 +177,7 @@ describe('registros on native PostgreSQL', () => {
       db,
       OWNER,
       'registro-past-payable',
-      registro('Aluguel de fevereiro', {
-        type: Direction.Payable,
-        counterpartLabel: 'Imobiliária',
-        startDate: '2026-02-10',
-        category: BillingCategory.Housing
-      }),
+      registroPago('Aluguel de fevereiro', { startDate: '2026-02-10', category: BillingCategory.Housing }),
       date('2026-03-05')
     );
     const own = await ChargeRepository.get(db, OWNER, rent.charges[0]!.id);
@@ -210,12 +198,10 @@ describe('registros on native PostgreSQL', () => {
     deepEqual(await paidVia(bonus.charges[0]!.id), []);
   });
 
-  it('renames a registro and refuses to turn a conta into a registro or back', async () => {
+  it('keeps who is on the other side of a registro and refuses to turn a conta into a registro or back', async () => {
     const once = await BillingRepository.create(db, OWNER, 'registro-rename', registro('Freela'), date('2026-03-05'));
-    const renamed = await BillingRepository.patch(db, OWNER, once.id, { counterpartLabel: '  Empresa Y ' }, date('2026-03-06'));
 
-    equal(renamed.counterpartLabel, 'Empresa Y');
-    equal(renamed.charges[0]!.counterpartName, 'Empresa Y');
+    equal(once.charges[0]!.counterpartName, 'Empresa X');
     equal(
       (await BillingRepository.patch(db, OWNER, once.id, { kind: BillingKind.Record }, date('2026-03-06'))).kind,
       BillingKind.Record,
@@ -227,10 +213,11 @@ describe('registros on native PostgreSQL', () => {
       () => BillingRepository.patch(db, OWNER, once.id, { reminders: [{ offsetDays: 0, enabled: true }] }, date('2026-03-06')),
       SettledLockedError
     );
-    await rejects(() => BillingRepository.patch(db, OWNER, once.id, { counterpartLabel: ' ' }, date('2026-03-06')), {
-      name: 'RangeError',
-      message: 'Informe de quem é o valor.'
-    });
+    await rejects(
+      () => BillingRepository.patch(db, OWNER, once.id, { contactId: imobiliariaId }, date('2026-03-06')),
+      SettledLockedError,
+      'a registro never changes who was on the other side'
+    );
 
     const dinner = await BillingRepository.create(
       db,
@@ -249,10 +236,11 @@ describe('registros on native PostgreSQL', () => {
     );
 
     equal(dinner.kind, BillingKind.Live);
-    equal(dinner.counterpartLabel, null);
+    equal(dinner.contact, null);
     await rejects(
-      () => BillingRepository.patch(db, OWNER, dinner.id, { counterpartLabel: 'Empresa X' }, date('2026-03-06')),
-      SettledLockedError
+      () => BillingRepository.patch(db, OWNER, dinner.id, { contactId: imobiliariaId }, date('2026-03-06')),
+      ReceivableHasNoPayeeError,
+      'a conta a receber never becomes the owner own bill'
     );
     await rejects(() => BillingRepository.patch(db, OWNER, dinner.id, { kind: BillingKind.Record }, date('2026-03-06')), SettledLockedError);
   });
@@ -260,21 +248,30 @@ describe('registros on native PostgreSQL', () => {
   it('lists a registro by its counterpart and counts it in the month it is due', async () => {
     const now = new Date();
     const today = calendarDate(now, TZ);
-    const salary = await BillingRepository.create(db, OTHER, 'registro-timeline-salary', registro('Salário', { startDate: today }), now);
+    const salary = await BillingRepository.create(
+      db,
+      OTHER,
+      'registro-timeline-salary',
+      registro('Salário', {
+        startDate: today,
+        split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: otherEmpresaId }] }
+      }),
+      now
+    );
 
     await BillingRepository.create(
       db,
       OTHER,
       'registro-timeline-rent',
-      registro('Aluguel', { type: Direction.Payable, counterpartLabel: 'Imobiliária', startDate: today, totalCents: 120_000 }),
+      registroPago('Aluguel', { contactId: otherImobiliariaId, startDate: today, totalCents: 120_000 }),
       now
     );
 
     const listed = (await BillingRepository.list(db, OTHER)).billings.find((billing) => billing.id === salary.id);
 
     equal(listed?.kind, BillingKind.Record);
-    equal(listed?.counterpartLabel, 'Empresa X');
-    equal(listed?.participantCount, 0);
+    equal(listed?.contact, null);
+    equal(listed?.participantCount, 1, 'a registro a receber names who paid the owner');
 
     const page = await TimelineRepository.get(db, OTHER, {});
 
@@ -287,7 +284,6 @@ describe('registros on native PostgreSQL', () => {
     equal(item?.direction, Direction.Receivable);
     equal(item?.charge.counterpartName, 'Empresa X');
     equal(item?.charge.kind, BillingKind.Record);
-    equal(item?.charge.counterpartLabel, 'Empresa X');
   });
 
   it('settles each due charge of a registro once a day, never one somebody reopened', async () => {
@@ -389,12 +385,12 @@ describe('registros on native PostgreSQL', () => {
 
     await refuse('split', { split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: anaId }] } });
     await refuse('pix', { pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } });
-    await refuse('payeeUserId', { payeeUserId: anaId });
+    await refuse('contactId', { contactId: imobiliariaId });
     await refuse('paymentMethodId', { paymentMethodId: pixId });
     await refuse('reminders', { reminders: [{ offsetDays: 0, enabled: true }] });
     await refuse('clearPaymentMethod', { clearPaymentMethod: true });
     await refuse('clearPix', { clearPix: true });
-    await refuse('clearPayee', { clearPayee: true });
+    await refuse('clearContact', { clearContact: true });
   });
 
   it('refuses to create or accept an invite on a registro', async () => {
@@ -442,7 +438,8 @@ describe('registros on native PostgreSQL', () => {
 
     deepEqual(
       detail.allocations.map((allocation) => allocation.kind),
-      ['owner']
+      ['user'],
+      'nobody joined: the registro still names only who paid the owner'
     );
   });
 

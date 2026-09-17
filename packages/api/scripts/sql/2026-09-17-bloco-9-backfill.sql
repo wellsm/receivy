@@ -18,8 +18,22 @@
 --     (no `contact_id`), so a second row would violate it, and the app now answers 409 for that case
 --     anyway. `payment_method_id` is pointed at the existing owner-owned row instead (`pixSnapshot`
 --     accepts an explicit id regardless of scope). Counted by `keys_pointing_at_owner_key` below.
+--   * Two payables of the same owner filed under different contacts but carrying the same typed key
+--     can only ever own one `payment_methods` row between them (same unique index as above). Step 3
+--     picks one canonical row deterministically (earliest billing `created_at`, then billing `id`) and
+--     points BOTH billings' `payment_method_id` at it — the other billing's `contact_id` and this row's
+--     `contact_id` then disagree. Counted by `keys_shared_across_contacts` below; the owner repoints the
+--     odd one out later by editing that billing's `pix` in the app.
+--   * A registro label that matches more than one contact of the same owner (two contacts that happen
+--     to share a `users.name`) resolves to exactly one of them, deterministically (earliest contact
+--     `created_at`, then contact `id`) — never to both. Counted by `ambiguous_registro_labels` below.
+--   * If a registro's `counterpart_label` happens to equal the owner's own name, step 2 still mints a
+--     new pending user with that name (a namesake) — there is no contact linking an owner to
+--     themselves, so this is expected, not a bug.
 --
--- Run the whole thing inside BEGIN/ROLLBACK first and read the six sanity counters at the end.
+-- Run the whole thing inside BEGIN/ROLLBACK first and read the eight sanity counters at the end. The
+-- first four must be zero; each has a listing query below it (run by hand) and a one-line cause. The
+-- last four are informational counts to hand the owner, not failures — each also has a listing query.
 
 BEGIN;
 
@@ -66,27 +80,43 @@ SELECT gen_random_uuid(), nl.owner_id, nl.new_user_id, now(), now()
 FROM new_labels nl
 WHERE nl.new_user_id IN (SELECT id FROM made_users);
 
--- 2a. Payable registro: the label is who received.
+-- 2a. Payable registro: the label is who received. `label_contacts` picks exactly one contact per
+--     (owner, name) — the earliest created, tie-broken by id — so an owner with two contacts sharing a
+--     name never gets an arbitrary match (see `ambiguous_registro_labels` below).
+WITH label_contacts AS (
+  SELECT DISTINCT ON (c.owner_id, u.name) c.owner_id, u.name, c.id AS contact_id
+  FROM contacts c
+  JOIN users u ON u.id = c.user_id
+  ORDER BY c.owner_id, u.name, c.created_at ASC, c.id ASC
+)
 UPDATE billings b
-SET contact_id = c.id
-FROM contacts c
-JOIN users u ON u.id = c.user_id
+SET contact_id = lc.contact_id
+FROM label_contacts lc
 WHERE b.kind = 'record' AND b.type = 'payable' AND b.counterpart_label IS NOT NULL
   AND btrim(b.counterpart_label) <> ''
-  AND c.owner_id = b.owner_id AND u.name = btrim(b.counterpart_label)
+  AND lc.owner_id = b.owner_id AND lc.name = btrim(b.counterpart_label)
   AND b.contact_id IS NULL;
 
--- 2b. Receivable registro: the label is who paid — an allocation, and the charges' debtor. A registro
---     whose label is NULL or blank has nobody to become the payer and is skipped on purpose (see
---     `receivable_registros_without_payer` below).
+-- 2b. Receivable registro: the label is who paid — an allocation, and the charges' debtor. Same
+--     `label_contacts` tie-break as 2a, so an ambiguous label produces exactly one allocation, never
+--     two. A registro whose label is NULL or blank has nobody to become the payer and is skipped on
+--     purpose (see `receivable_registros_without_payer` below). `sort_order` picks the next free slot
+--     instead of hardcoding 0 — the unique index is on `(billing_id, sort_order)`, not
+--     `(billing_id, user_id)`, so 0 could already be taken.
+WITH label_contacts AS (
+  SELECT DISTINCT ON (c.owner_id, u.name) c.owner_id, u.name, c.user_id
+  FROM contacts c
+  JOIN users u ON u.id = c.user_id
+  ORDER BY c.owner_id, u.name, c.created_at ASC, c.id ASC
+)
 INSERT INTO allocations (id, billing_id, user_id, sort_order, notify, created_at)
-SELECT gen_random_uuid(), b.id, c.user_id, 0, false, now()
+SELECT gen_random_uuid(), b.id, lc.user_id,
+       COALESCE((SELECT max(x.sort_order) + 1 FROM allocations x WHERE x.billing_id = b.id), 0), false, now()
 FROM billings b
-JOIN contacts c ON c.owner_id = b.owner_id
-JOIN users u ON u.id = c.user_id AND u.name = btrim(b.counterpart_label)
+JOIN label_contacts lc ON lc.owner_id = b.owner_id AND lc.name = btrim(b.counterpart_label)
 WHERE b.kind = 'record' AND b.type = 'receivable' AND b.counterpart_label IS NOT NULL
   AND btrim(b.counterpart_label) <> ''
-  AND NOT EXISTS (SELECT 1 FROM allocations a WHERE a.billing_id = b.id AND a.user_id = c.user_id);
+  AND NOT EXISTS (SELECT 1 FROM allocations a WHERE a.billing_id = b.id AND a.user_id = lc.user_id);
 
 UPDATE charges ch
 SET debtor_id = a.user_id
@@ -104,8 +134,16 @@ WHERE ch.billing_id = b.id AND b.kind = 'record' AND b.type = 'receivable' AND c
 --    `payment_methods` scan never sees the row `inserted` just created — it only ever matches a
 --    pre-existing key. Splitting them lets the UPDATE run as its own statement, which does see what
 --    the INSERT committed within this transaction.
+--    The `DISTINCT ON` picks one billing's contact per (owner, key) deterministically — earliest
+--    billing `created_at`, tie-broken by billing `id` — instead of an arbitrary row, because two
+--    payables filed under different contacts can carry the same typed key (see
+--    `keys_shared_across_contacts` below); whichever billing "wins" here decides which contact the new
+--    payment_methods row belongs to, but the closing UPDATE still matches on (owner_id, pix_key_type,
+--    pix_key) alone, so it points every billing sharing that key — including the "losing" one — at the
+--    same single row.
 WITH keyed AS (
-  SELECT b.id AS billing_id, b.owner_id, b.contact_id, b.pix_key_type, b.pix_key, COALESCE(b.pix_label, 'Pix') AS label
+  SELECT b.id AS billing_id, b.created_at AS billing_created_at, b.owner_id, b.contact_id, b.pix_key_type, b.pix_key,
+         COALESCE(b.pix_label, 'Pix') AS label
   FROM billings b
   WHERE b.pix_key IS NOT NULL AND b.contact_id IS NOT NULL
 )
@@ -114,7 +152,8 @@ SELECT DISTINCT ON (k.owner_id, k.pix_key_type, k.pix_key) gen_random_uuid(), k.
 FROM keyed k
 WHERE NOT EXISTS (
   SELECT 1 FROM payment_methods p WHERE p.owner_id = k.owner_id AND p.pix_key_type = k.pix_key_type AND p.pix_key = k.pix_key
-);
+)
+ORDER BY k.owner_id, k.pix_key_type, k.pix_key, k.billing_created_at ASC, k.billing_id ASC;
 
 UPDATE billings b
 SET payment_method_id = p.id
@@ -122,40 +161,109 @@ FROM payment_methods p
 WHERE p.owner_id = b.owner_id AND p.pix_key_type = b.pix_key_type AND p.pix_key = b.pix_key
   AND b.pix_key IS NOT NULL AND b.payment_method_id IS NULL;
 
--- 4. Only one default per contact scope (the DISTINCT ON above may leave a second key for the same contact).
+-- 4. Only one default per contact scope (the DISTINCT ON above may leave a second key for the same
+--    contact). Tie-broken by id too: every row this script inserts in one run shares the same `now()`.
 UPDATE payment_methods p
 SET is_default = false
 WHERE p.contact_id IS NOT NULL
   AND p.id <> (
     SELECT id FROM payment_methods q
     WHERE q.owner_id = p.owner_id AND q.contact_id = p.contact_id AND q.archived_at IS NULL
-    ORDER BY q.created_at ASC LIMIT 1
+    ORDER BY q.created_at ASC, q.id ASC LIMIT 1
   );
 
 -- 5. Payable split holds the owner alone from now on: the payee part leaves. Runs after step 1, which
---    still needs to read the payee's allocation row to resolve contact_id.
+--    still needs to read the payee's allocation row to resolve contact_id. `sort_order` picks the next
+--    free slot rather than hardcoding 0, same reasoning as 2b.
 DELETE FROM allocations a
 USING billings b
 WHERE a.billing_id = b.id AND b.type = 'payable' AND a.user_id <> b.owner_id;
 
 INSERT INTO allocations (id, billing_id, user_id, sort_order, notify, created_at)
-SELECT gen_random_uuid(), b.id, b.owner_id, 0, true, now()
+SELECT gen_random_uuid(), b.id, b.owner_id,
+       COALESCE((SELECT max(x.sort_order) + 1 FROM allocations x WHERE x.billing_id = b.id), 0), true, now()
 FROM billings b
 WHERE b.type = 'payable'
   AND NOT EXISTS (SELECT 1 FROM allocations a WHERE a.billing_id = b.id AND a.user_id = b.owner_id);
 
--- 6. Sanity. The first three must be zero. The last two are informational counts to hand the owner,
---    not failures: see the header notes above.
+-- 6. Sanity.
+--
+-- Must be zero:
+--
+--   SELECT id, owner_id, description FROM billings WHERE type = 'payable' AND contact_id IS NULL;
+--   -- payable_without_contact: the payee's user has no agenda entry (contacts row) under this owner.
+--   -- Create the contact (or fix the allocation's user_id), then re-run.
+--
+--   SELECT id, owner_id, description FROM billings WHERE pix_key IS NOT NULL AND payment_method_id IS NULL;
+--   -- keyed_without_method: step 3 only looks at billings that already have a contact_id — this is
+--   -- almost always downstream of a payable_without_contact row above. Fix that first, then re-run.
+--
+--   SELECT id, owner_id, description FROM billings
+--     WHERE kind = 'record' AND type = 'payable' AND counterpart_label IS NOT NULL AND contact_id IS NULL;
+--   -- registro_payable_without_contact: step 2/2a could not match this label to any contact (check
+--   -- for stray whitespace or punctuation the label CTE's btrim doesn't strip), then re-run.
+--
+--   SELECT ch.id, ch.owner_id, ch.description FROM charges ch
+--     JOIN billings b ON b.id = ch.billing_id
+--     JOIN contacts c ON c.id = b.contact_id
+--     WHERE b.type = 'payable' AND ch.state = 'pending' AND ch.creditor_id IS DISTINCT FROM c.user_id;
+--   -- payable_charges_creditor_mismatch: a pending charge's creditor was never the billing's payee (or
+--   -- the payee changed after the charge was created). This backfill does not guess which is right —
+--   -- the owner reconciles the charge or the billing's contact by hand, then re-run.
+--
+-- Informational (may be non-zero — see the header notes above for what each means):
+--
+--   SELECT id, owner_id, description FROM billings b
+--     WHERE kind = 'record' AND type = 'receivable'
+--       AND NOT EXISTS (SELECT 1 FROM allocations a WHERE a.billing_id = b.id AND a.user_id <> b.owner_id);
+--   -- receivable_registros_without_payer
+--
+--   SELECT b.id, b.owner_id, b.description FROM billings b
+--     JOIN payment_methods p ON p.id = b.payment_method_id
+--     WHERE b.pix_key IS NOT NULL AND p.contact_id IS NULL;
+--   -- keys_pointing_at_owner_key
+--
+--   SELECT owner_id, pix_key_type, pix_key, array_agg(DISTINCT contact_id) AS contacts FROM billings
+--     WHERE type = 'payable' AND pix_key IS NOT NULL AND contact_id IS NOT NULL
+--     GROUP BY owner_id, pix_key_type, pix_key HAVING count(DISTINCT contact_id) > 1;
+--   -- keys_shared_across_contacts
+--
+--   SELECT c.owner_id, u.name, array_agg(c.id) AS contacts FROM contacts c
+--     JOIN users u ON u.id = c.user_id
+--     GROUP BY c.owner_id, u.name HAVING count(*) > 1;
+--   -- ambiguous_registro_labels (contacts sharing a name under the same owner; not every group here
+--   -- necessarily has a registro pointed at it — cross-check against counterpart_label by hand)
 SELECT
   (SELECT count(*) FROM billings WHERE type = 'payable' AND contact_id IS NULL) AS payable_without_contact,
   (SELECT count(*) FROM billings WHERE pix_key IS NOT NULL AND payment_method_id IS NULL) AS keyed_without_method,
   (SELECT count(*) FROM billings WHERE kind = 'record' AND counterpart_label IS NOT NULL AND contact_id IS NULL AND type = 'payable') AS registro_payable_without_contact,
+  (SELECT count(*) FROM charges ch
+     JOIN billings b ON b.id = ch.billing_id
+     JOIN contacts c ON c.id = b.contact_id
+     WHERE b.type = 'payable' AND ch.state = 'pending' AND ch.creditor_id IS DISTINCT FROM c.user_id
+  ) AS payable_charges_creditor_mismatch,
   (SELECT count(*) FROM billings b
      WHERE b.kind = 'record' AND b.type = 'receivable'
        AND NOT EXISTS (SELECT 1 FROM allocations a WHERE a.billing_id = b.id AND a.user_id <> b.owner_id)
   ) AS receivable_registros_without_payer,
   (SELECT count(*) FROM billings b JOIN payment_methods p ON p.id = b.payment_method_id
      WHERE b.pix_key IS NOT NULL AND p.contact_id IS NULL
-  ) AS keys_pointing_at_owner_key;
+  ) AS keys_pointing_at_owner_key,
+  (SELECT count(*) FROM (
+     SELECT owner_id, pix_key_type, pix_key FROM billings
+     WHERE type = 'payable' AND pix_key IS NOT NULL AND contact_id IS NOT NULL
+     GROUP BY owner_id, pix_key_type, pix_key HAVING count(DISTINCT contact_id) > 1
+   ) shared
+  ) AS keys_shared_across_contacts,
+  (SELECT count(*) FROM (
+     SELECT DISTINCT b.owner_id, btrim(b.counterpart_label) AS label
+     FROM billings b
+     WHERE b.kind = 'record' AND b.counterpart_label IS NOT NULL AND btrim(b.counterpart_label) <> ''
+   ) registro_labels
+   WHERE (
+     SELECT count(*) FROM contacts c JOIN users u ON u.id = c.user_id
+     WHERE c.owner_id = registro_labels.owner_id AND u.name = registro_labels.label
+   ) > 1
+  ) AS ambiguous_registro_labels;
 
 COMMIT;

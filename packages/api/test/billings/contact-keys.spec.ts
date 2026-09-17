@@ -63,4 +63,16 @@ describe('contact keys', () => {
       PixKeyTakenError
     );
   });
+
+  it('brings an archived contact key back as the default when its scope has none', async () => {
+    const id = await PaymentMethodRepository.upsertContactKey(db, OWNER, padaria, { keyType: PixKeyType.Random, key: '123e4567-e89b-12d3-a456-426614174000', label: 'Padaria' });
+    for (const method of await PaymentMethodRepository.list(db, OWNER, false, padaria)) {
+      await PaymentMethodRepository.archive(db, OWNER, method.id);
+    }
+
+    const back = await PaymentMethodRepository.upsertContactKey(db, OWNER, padaria, { keyType: PixKeyType.Random, key: '123e4567-e89b-12d3-a456-426614174000', label: 'Padaria' });
+
+    equal(back, id);
+    equal((await PaymentMethodRepository.list(db, OWNER, false, padaria)).map((method) => `${method.id}:${method.isDefault}`).join(), `${id}:true`);
+  });
 });

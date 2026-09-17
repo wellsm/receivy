@@ -179,7 +179,17 @@ export namespace PaymentMethodRepository {
     if (existing) {
       if ((existing.contact_id ?? null) !== contactId) throw new PixKeyTakenError();
       if (existing.archived_at) {
-        await db.payment_methods.updateOne({ select: { id: true }, where: { id: existing.id }, data: { archived_at: sqlNull, updated_at: now } });
+        // Resurrecting the scope's only key must not leave it without a default.
+        const others = await db.payment_methods.findMany({
+          select: { id: true },
+          where: { ...scopeWhere(ownerId, contactId), archived_at: { isNull: true }, id: { not: existing.id } },
+          take: 1
+        });
+        await db.payment_methods.updateOne({
+          select: { id: true },
+          where: { id: existing.id },
+          data: { archived_at: sqlNull, is_default: others.records.length === 0, updated_at: now }
+        });
       }
       return existing.id;
     }

@@ -78,7 +78,13 @@ describe('contact keys', () => {
     equal((await PaymentMethodRepository.list(db, OWNER, false, padaria)).map((method) => `${method.id}:${method.isDefault}`).join(), `${id}:true`);
   });
 
-  it('creates a conta a pagar from a contact, files its key and pays the contact user', async () => {
+  it('creates a conta a pagar pointing at a key of the contact and pays the contact user', async () => {
+    const key = await PaymentMethodRepository.save(db, OWNER, {
+      pixKeyType: PixKeyType.Email,
+      pixKey: 'padaria-pao@example.com',
+      label: 'Padaria',
+      contactId: padaria
+    });
     const billing = await BillingRepository.create(db, OWNER, 'contact-keys-1', {
       recurrence: BillingRecurrence.Once,
       description: 'Pão',
@@ -86,13 +92,13 @@ describe('contact keys', () => {
       startDate: '2026-10-05',
       timezone: 'America/Sao_Paulo',
       contactId: padaria,
-      pix: { keyType: PixKeyType.Email, key: 'padaria@example.com', label: 'Padaria' }
+      paymentMethodId: key.id
     });
     const detail = await BillingRepository.get(db, OWNER, billing.id);
 
     equal(detail.type, Direction.Payable);
     equal(detail.contact?.id, padaria);
-    equal(detail.pix?.key, 'padaria@example.com');
+    equal(detail.pix?.key, 'padaria-pao@example.com');
 
     const keys = await PaymentMethodRepository.list(db, OWNER, false, padaria);
 
@@ -126,6 +132,12 @@ describe('contact keys', () => {
   });
 
   it('still reads a billing whose key was archived, with no Pix to show', async () => {
+    const key = await PaymentMethodRepository.save(db, OWNER, {
+      pixKeyType: PixKeyType.Random,
+      pixKey: '223e4567-e89b-12d3-a456-426614174111',
+      label: 'Padaria',
+      contactId: padaria
+    });
     const billing = await BillingRepository.create(db, OWNER, 'contact-keys-2', {
       recurrence: BillingRecurrence.Once,
       description: 'Bolo',
@@ -133,7 +145,7 @@ describe('contact keys', () => {
       startDate: '2026-10-09',
       timezone: 'America/Sao_Paulo',
       contactId: padaria,
-      pix: { keyType: PixKeyType.Random, key: '223e4567-e89b-12d3-a456-426614174111', label: 'Padaria' }
+      paymentMethodId: key.id
     });
 
     ok(billing.pix);

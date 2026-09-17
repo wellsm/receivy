@@ -2,12 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { BillingDueRule, BillingFrequency, BillingRecurrence } from './billing';
 import { BillingCategory } from './billing-category';
 import { type BillingDraft, buildBillingInput, EMPTY_BILLING_DRAFT, EMPTY_SPLIT_VALUES } from './billing-draft';
-import { Direction, PixKeyType, SplitMode } from './contracts';
+import { Direction, SplitMode } from './contracts';
 
 const base: BillingDraft = {
   direction: Direction.Receivable,
   payee: '',
-  pixInline: { type: PixKeyType.Email, key: '', label: '' },
   type: BillingRecurrence.Once,
   selected: ['p1'],
   owner: true,
@@ -41,8 +40,7 @@ describe('billing draft review', () => {
       category: 'other',
       split: { mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }, { kind: 'owner' }] },
       type: 'receivable',
-      payeeUserId: undefined,
-      pix: undefined
+      payeeUserId: undefined
     });
   });
 
@@ -184,7 +182,6 @@ describe('EMPTY_BILLING_DRAFT', () => {
     expect(draft).toEqual({
       direction: 'receivable',
       payee: '',
-      pixInline: { type: 'email', key: '', label: '' },
       type: 'once',
       selected: [],
       owner: true,
@@ -233,43 +230,24 @@ describe('conta a pagar draft', () => {
     direction: Direction.Payable,
     selected: [],
     payee: 'p9',
-    pixInline: { type: PixKeyType.Cpf, key: '529.982.247-25', label: ' Aluguel ' }
+    pix: 'method-1'
   };
 
-  it('needs no participant, drops the wallet key and normalizes the typed Pix', () => {
+  it('needs no participant and points at a key of the receiving contact', () => {
     const input = buildBillingInput(payable);
 
     expect(input.contactId).toBe('p9');
-    expect(input.paymentMethodId).toBeUndefined();
-    expect(input.pix).toEqual({ keyType: 'cpf', key: '52998224725', label: 'Aluguel' });
+    expect(input.paymentMethodId).toBe('method-1');
     // The contact is the receiver: with one named, the split settles on the owner alone.
     expect(input.split).toEqual({ mode: 'equal', parts: [{ kind: 'owner' }] });
   });
 
+  it('sends no key when the draft points at none: the contact default answers for it', () => {
+    expect(buildBillingInput({ ...payable, pix: '' }).paymentMethodId).toBeUndefined();
+  });
+
   it('refuses a conta a pagar that names nobody to receive it', () => {
-    expect(() => buildBillingInput({ ...payable, payee: '', pixInline: { type: PixKeyType.Email, key: '', label: '' } })).toThrow(
-      'Escolha quem recebe.'
-    );
-  });
-
-  it('rejects an invalid typed key', () => {
-    expect(() => buildBillingInput({ ...payable, pixInline: { type: PixKeyType.Cpf, key: '123', label: '' } })).toThrow(
-      /Chave Pix inválida/
-    );
-  });
-});
-
-describe('typed phone key', () => {
-  it('accepts the masked national number and sends it as E.164', () => {
-    const input = buildBillingInput({
-      ...base,
-      direction: Direction.Payable,
-      selected: [],
-      payee: 'p9',
-      pixInline: { type: PixKeyType.Phone, key: '(11) 98765-4321', label: '' }
-    });
-
-    expect(input.pix).toEqual({ keyType: 'phone', key: '+5511987654321', label: undefined });
+    expect(() => buildBillingInput({ ...payable, payee: '' })).toThrow('Escolha quem recebe.');
   });
 });
 
@@ -299,15 +277,8 @@ describe('notify of participants', () => {
 });
 
 describe('registro draft', () => {
-  it('sends the receiving contact alone, without the wallet key, typed Pix or reminders', () => {
-    const input = buildBillingInput({
-      ...base,
-      direction: Direction.Payable,
-      settled: true,
-      payee: 'p9',
-      pix: 'pix-1',
-      pixInline: { type: PixKeyType.Cpf, key: '529.982.247-25', label: '' }
-    });
+  it('sends the receiving contact alone, without a key or reminders', () => {
+    const input = buildBillingInput({ ...base, direction: Direction.Payable, settled: true, payee: 'p9', pix: 'pix-1' });
 
     expect(input).toMatchObject({
       type: 'payable',
@@ -317,7 +288,6 @@ describe('registro draft', () => {
     });
     expect(input.reminders).toBeUndefined();
     expect(input.paymentMethodId).toBeUndefined();
-    expect(input.pix).toBeUndefined();
   });
 
   it('names the payers of a registro a receber from the selected contacts', () => {

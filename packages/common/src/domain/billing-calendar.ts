@@ -3,7 +3,6 @@ import {
   BillingFrequency,
   BillingKind,
   type BillingInput,
-  type BillingPixInput,
   type BillingReminder,
   BillingRecurrence,
   MAX_FINITE_OCCURRENCES,
@@ -12,7 +11,6 @@ import {
 } from './billing';
 import { Direction, SplitMode } from './contracts';
 import { calendarDate } from './financial-form';
-import { normalizePixKey } from './pix-key';
 import { type BillingSplit, resolveBillingSplit } from './split';
 
 export type BillingCalendarRule = { frequency: BillingFrequency; startDate: string; endDate?: string; dueRule?: BillingDueRule };
@@ -232,12 +230,7 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
   const direction = contactId ? Direction.Payable : Direction.Receivable;
   const settled = input.kind === BillingKind.Record;
 
-  // A key always belongs to whoever receives, and it is filed under their contact.
-  if (input.pix && !contactId) {
-    throw new RangeError('Chave Pix só com um contato que recebe.');
-  }
-
-  if (settled && (input.paymentMethodId || input.pix || input.reminders)) {
+  if (settled && (input.paymentMethodId || input.reminders)) {
     throw new RangeError('Registro não tem avisos nem Pix.');
   }
 
@@ -275,7 +268,6 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     category: input.category,
     type: direction,
     contactId,
-    pix: input.pix ? normalizeBillingPix(input.pix) : undefined,
     kind: settled ? BillingKind.Record : undefined
   };
 }
@@ -298,16 +290,6 @@ function splitOf(input: BillingInput, direction: Direction): BillingSplit {
   }
 
   return receivableSplit(input);
-}
-
-function normalizeBillingPix(pix: BillingPixInput): BillingPixInput {
-  const label = pix.label?.normalize('NFC').trim() || undefined;
-
-  if (label && label.length > 120) {
-    throw new RangeError('Rótulo inválido.');
-  }
-
-  return { keyType: pix.keyType, key: normalizePixKey(pix.keyType, pix.key), label };
 }
 
 const CLOCK_PARTS: Intl.DateTimeFormatOptions = {

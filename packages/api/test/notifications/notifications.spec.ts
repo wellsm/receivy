@@ -98,22 +98,29 @@ async function charge(owner = OWNER, email?: string, announce = false) {
   return { id: billing.charges[0]!.id, address, userId };
 }
 
-/** The owner's own bill, owed to a contact with no account: the key is typed on the billing. */
+/** The owner's own bill, owed to a contact with no account: it points at a key filed under that contact. */
 async function payableCharge(announce = false) {
   count++;
 
+  const contactId = await contactOf(`Imobiliária ${count}`);
+  const key = await PaymentMethodRepository.save(db, OWNER, {
+    pixKeyType: PixKeyType.Email,
+    pixKey: `landlord-${count}@example.com`,
+    label: 'Imobiliária',
+    contactId
+  });
   const billing = await BillingRepository.create(
     db,
     OWNER,
     `notify-payable-${count}`,
     {
       recurrence: BillingRecurrence.Once,
-      contactId: await contactOf(`Imobiliária ${count}`),
+      contactId,
       description: 'Aluguel',
       totalCents: 150_000,
       startDate: DUE_DATE,
       timezone: TZ,
-      pix: { keyType: PixKeyType.Email, key: `landlord-${count}@example.com`, label: 'Imobiliária' }
+      paymentMethodId: key.id
     },
     new Date(clock),
     undefined,

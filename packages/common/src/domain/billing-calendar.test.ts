@@ -11,7 +11,7 @@ import {
   normalizeBillingInput,
   zonedInstant
 } from './billing-calendar';
-import { Direction, PixKeyType, SplitMode } from './contracts';
+import { Direction, SplitMode } from './contracts';
 import type { BillingSplit } from './split';
 
 const split = { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: 'ana' }] } satisfies BillingSplit;
@@ -244,15 +244,12 @@ describe('registros', () => {
     expect(() => normalizeBillingInput(two, now)).toThrow('Registro a receber tem um pagador só.');
   });
 
-  it('refuses a wallet key, a typed Pix and reminders', () => {
+  it('refuses a wallet key, a key of the receiving contact and reminders', () => {
     const message = 'Registro não tem avisos nem Pix.';
 
     expect(() => normalizeBillingInput({ ...registro, paymentMethodId: 'pix-1' }, now)).toThrow(message);
     expect(() =>
-      normalizeBillingInput(
-        { ...registro, split: undefined, contactId: 'contact-1', pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } },
-        now
-      )
+      normalizeBillingInput({ ...registro, split: undefined, contactId: 'contact-1', paymentMethodId: 'method-1' }, now)
     ).toThrow(message);
     expect(() => normalizeBillingInput({ ...registro, reminders: [{ offsetDays: 0, enabled: true }] }, now)).toThrow(message);
   });
@@ -326,12 +323,6 @@ describe('block 9 direction', () => {
 
     expect(paid.type).toBe(Direction.Payable);
     expect(received.split.parts).toEqual([{ kind: SplitPartKind.User, userId: 'u1' }]);
-  });
-
-  it('refuses a Pix key without a contact to file it under', () => {
-    expect(() => normalizeBillingInput({ ...base, pix: { keyType: PixKeyType.Email, key: 'x@example.com' } })).toThrow(
-      'Chave Pix só com um contato que recebe.'
-    );
   });
 
   it('lets a conta a pagar point at one of the receiving contact keys', () => {

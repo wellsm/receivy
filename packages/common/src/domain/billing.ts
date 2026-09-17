@@ -1,6 +1,6 @@
 import type { UserAvatar } from './avatar';
 import type { BillingCategory } from './billing-category';
-import type { ChargeDetail, Direction, Money, PixKeyType, PixSnapshot, SplitMode } from './contracts';
+import type { ChargeDetail, Direction, Money, PixSnapshot, SplitMode } from './contracts';
 import type { BillingSplit } from './split';
 
 export const enum BillingRecurrence {
@@ -51,9 +51,6 @@ export const enum EditScope {
 
 export type BillingReminder = { offsetDays: number; enabled: boolean };
 
-/** A Pix key typed on a conta a pagar: it belongs to whoever receives, never to a wallet. */
-export type BillingPixInput = { keyType: PixKeyType; key: string; label?: string };
-
 export const DEFAULT_BILLING_REMINDERS: BillingReminder[] = [{ offsetDays: 0, enabled: true }];
 
 export const MAX_FINITE_OCCURRENCES = 120;
@@ -75,8 +72,6 @@ export type BillingInput = {
   category?: BillingCategory;
   /** Block 9: who receives (a contact of the owner). Absent means the owner receives. */
   contactId?: string;
-  /** Conta a pagar only: the key of the receiving contact, filed under it as a payment method. */
-  pix?: BillingPixInput;
   /** 'record' is a registro: the owner already received or paid it, every charge settles on its due date and nobody is notified. */
   kind?: BillingKind;
 };
@@ -89,7 +84,6 @@ export type BillingPatch = {
   split?: BillingSplit;
   paymentMethodId?: string;
   clearPaymentMethod?: boolean;
-  pix?: BillingPixInput;
   /** Block 9: who receives (a contact of the owner), replacing the current one. */
   contactId?: string;
   /** Recorrente only: the next due date; occurrences already generated keep theirs. */

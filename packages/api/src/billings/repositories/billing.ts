@@ -11,7 +11,6 @@ import {
   type BillingGuest,
   type BillingInput,
   type BillingPatch,
-  type BillingPixInput,
   type BillingPreview,
   type BillingReminder,
   type BillingSplit,
@@ -56,7 +55,6 @@ import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
 import { activeInvite, type InviteLinkContext } from '../../invites/services/links';
 import { announceCharges, type NoticeContext } from '../../notifications/services/send';
-import { PaymentMethodRepository } from '../../payment-methods/repositories/payment-method';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import { billingDirection, billingKind, billingRecurrence, billingRegistered } from '../utils/columns';
 import {
@@ -149,13 +147,6 @@ async function chargeCounterpart(
   }
 
   return payable.contactId ? contactUserId(db, ownerId, payable.contactId) : undefined;
-}
-
-/** The key typed on a conta a pagar, filed under the contact who receives it; the label is what the charge shows. */
-async function contactKey(db: DbClient, ownerId: string, contactId: string, pix: BillingPixInput): Promise<string> {
-  const key = { keyType: pix.keyType, key: pix.key, label: pix.label ?? 'Pix' };
-
-  return PaymentMethodRepository.upsertContactKey(db, ownerId, contactId, key);
 }
 
 /**
@@ -720,7 +711,6 @@ function touchesCharges(patch: BillingPatch): boolean {
     patch.description !== undefined ||
     patch.paymentMethodId !== undefined ||
     patch.clearPaymentMethod !== undefined ||
-    patch.pix !== undefined ||
     patch.contactId !== undefined ||
     patch.startDate !== undefined ||
     patch.dueRule !== undefined
@@ -753,7 +743,7 @@ async function rewriteMonthCharges(
   }
 
   const rescheduled = patch.startDate !== undefined || patch.dueRule !== undefined;
-  const pixTouched = patch.paymentMethodId !== undefined || patch.clearPaymentMethod || patch.pix !== undefined;
+  const pixTouched = patch.paymentMethodId !== undefined || Boolean(patch.clearPaymentMethod);
 
   // Monthly and yearly rules have one occurrence per month: only a reschedule looks for a new day inside
   // the month; otherwise the stale start_date/due_rule from an earlier NextMonth edit must not leak in.
@@ -880,7 +870,6 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
   const crowded =
     patch.split !== undefined ||
     patch.paymentMethodId !== undefined ||
-    patch.pix !== undefined ||
     patch.contactId !== undefined ||
     patch.reminders !== undefined ||
     patch.clearPaymentMethod !== undefined;
@@ -912,11 +901,6 @@ function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch) {
 
   // A conta a receber already charges other people: it never turns into the owner's own bill.
   if (!payable && patch.contactId !== undefined) {
-    throw new ReceivableHasNoPayeeError();
-  }
-
-  // A key always belongs to whoever receives, so it needs a contact: the stored one, or the patched one.
-  if (!patch.contactId && !row.contact_id && patch.pix !== undefined) {
     throw new ReceivableHasNoPayeeError();
   }
 
@@ -975,7 +959,6 @@ function billingInputFrom(row: BillingRepository.Row, split: BillingSplit): Bill
     split: direction === Direction.Payable ? undefined : split,
     category: row.category,
     contactId: row.contact_id,
-    // No `pix`: the key is already filed under the contact, and `paymentMethodId` is what the billing points at.
     kind: billingKind(row)
   };
 }
@@ -1287,12 +1270,12 @@ export namespace BillingRepository {
         throw new RangeError('O início não pode estar no passado.');
       }
 
-      // A conta a pagar names its receiving contact outside the split; the key it types is filed under that contact.
+      // A conta a pagar names its receiving contact outside the split; the key it points at is filed under that contact.
       const contact = input.contactId ? await ContactRepository.user(tx, ownerId, input.contactId) : undefined;
       const payable: PayableMaterialization | undefined = contact ? { payer: ChargePayer.Owner, contactId: contact.contactId } : undefined;
-      const paymentMethodId = contact && input.pix ? await contactKey(tx, ownerId, contact.contactId, input.pix) : input.paymentMethodId;
+      const { paymentMethodId } = input;
 
-      if (contact && !input.pix && paymentMethodId) {
+      if (contact && paymentMethodId) {
         await assertContactKey(tx, ownerId, contact.contactId, paymentMethodId);
       }
 
@@ -1486,14 +1469,12 @@ export namespace BillingRepository {
       const totalCents = patch.totalCents ?? row.total_cents;
       const split = patch.split ?? (await splitFor(tx, row)).split;
       const description = patch.description === undefined ? row.description : patch.description.normalize('NFC').trim() || 'Conta';
-      const pixPatched = patch.pix !== undefined;
       const normalized =
-        patch.reminders !== undefined || patch.pix !== undefined
+        patch.reminders !== undefined
           ? normalizeBillingInput({
               ...billingInputFrom(row, split),
               ...(patch.contactId !== undefined ? { contactId: patch.contactId } : {}),
-              ...(patch.reminders !== undefined ? { reminders: patch.reminders } : {}),
-              ...(patch.pix !== undefined ? { pix: patch.pix } : {})
+              reminders: patch.reminders
             })
           : undefined;
       const reminders = patch.reminders === undefined ? undefined : normalized?.reminders;
@@ -1503,20 +1484,18 @@ export namespace BillingRepository {
       const contactId = named?.contactId ?? row.contact_id;
       const contactPatched = named !== undefined && named.contactId !== row.contact_id;
       const payable: PayableMaterialization | undefined = contactId ? { payer: ChargePayer.Owner, contactId } : undefined;
-      // A typed key is filed under the contact and becomes the method the billing points at; clearing it leaves the scope default.
-      const keyed = contactId && normalized?.pix ? await contactKey(tx, ownerId, contactId, normalized.pix) : undefined;
       // A key belongs to the contact it was filed under: moving to another one drops the key the billing pointed at.
       const kept = contactPatched ? undefined : row.payment_method_id;
-      const paymentMethodId = patch.clearPaymentMethod ? undefined : (keyed ?? patch.paymentMethodId ?? kept);
+      const paymentMethodId = patch.clearPaymentMethod ? undefined : (patch.paymentMethodId ?? kept);
 
-      if (contactId && !keyed && paymentMethodId) {
+      if (contactId && paymentMethodId) {
         await assertContactKey(tx, ownerId, contactId, paymentMethodId);
       }
 
       // Only newly introduced recipients/Pix need revalidation; materializeNextOccurrence re-checks the stored
       // split at occurrence time, so an already-persisted split must not block unrelated edits (e.g. ending
       // a billing whose recipient was archived later).
-      if (patch.split !== undefined || patch.paymentMethodId !== undefined || patch.clearPaymentMethod || pixPatched || contactPatched) {
+      if (patch.split !== undefined || patch.paymentMethodId !== undefined || patch.clearPaymentMethod || contactPatched) {
         const counterpartId = await chargeCounterpart(tx, ownerId, payable, split);
         const counterparts = payable ? (counterpartId ? [counterpartId] : []) : userIds(split);
 

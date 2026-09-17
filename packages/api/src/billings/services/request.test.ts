@@ -1,4 +1,4 @@
-import { BillingRecurrence, Direction, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
+import { BillingRecurrence, Direction, SplitMode, SplitPartKind } from '@receivy/common';
 import { describe, expect, it } from 'vitest';
 import { billingRequestFingerprint } from './request';
 
@@ -38,7 +38,7 @@ describe('billing request fingerprint', () => {
 });
 
 describe('conta a pagar fingerprint', () => {
-  it('tells a conta a pagar apart by direction, contact and typed key', () => {
+  it('tells a conta a pagar apart by direction, contact and the key it points at', () => {
     const payable = {
       ...input,
       type: Direction.Payable as const,
@@ -46,8 +46,6 @@ describe('conta a pagar fingerprint', () => {
     };
     expect(billingRequestFingerprint(payable)).not.toBe(billingRequestFingerprint(input));
     expect(billingRequestFingerprint({ ...payable, contactId: 'p9' })).not.toBe(billingRequestFingerprint(payable));
-    expect(billingRequestFingerprint({ ...payable, pix: { keyType: PixKeyType.Email, key: 'pay@example.com' } })).not.toBe(
-      billingRequestFingerprint(payable)
-    );
+    expect(billingRequestFingerprint({ ...payable, paymentMethodId: 'method-1' })).not.toBe(billingRequestFingerprint(payable));
   });
 });

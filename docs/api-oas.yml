@@ -1611,26 +1611,6 @@ components:
         contactId:
           type: string
           format: uuid
-        pix:
-          type: object
-          additionalProperties: false
-          properties:
-            keyType:
-              enum: 
-                - 'cpf'
-                - 'cnpj'
-                - 'email'
-                - 'phone'
-                - 'random'
-            key:
-              type: string
-              maxLength: 254
-            label:
-              type: string
-              maxLength: 120
-          required:
-            - keyType
-            - key
         category:
           enum: 
             - 'food'
@@ -1722,26 +1702,6 @@ components:
           format: uuid
         clearPaymentMethod:
           type: boolean
-        pix:
-          type: object
-          additionalProperties: false
-          properties:
-            keyType:
-              enum: 
-                - 'cpf'
-                - 'cnpj'
-                - 'email'
-                - 'phone'
-                - 'random'
-            key:
-              type: string
-              maxLength: 254
-            label:
-              type: string
-              maxLength: 120
-          required:
-            - keyType
-            - key
         contactId:
           type: string
           format: uuid

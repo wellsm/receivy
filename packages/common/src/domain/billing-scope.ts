@@ -1,6 +1,6 @@
-import { type BillingDetail, BillingDueRule, type BillingPatch, type BillingPixInput, BillingRecurrence } from './billing';
+import { type BillingDetail, BillingDueRule, type BillingPatch, BillingRecurrence } from './billing';
 import { endOfMonth } from './billing-calendar';
-import { type ChargeDetail, ChargeState, type PixSnapshot, ProofState } from './contracts';
+import { type ChargeDetail, ChargeState, ProofState } from './contracts';
 import type { BillingSplit } from './split';
 
 const MONTHS = [
@@ -51,10 +51,6 @@ function splitKey(split: BillingSplit): string {
   return `${split.mode}|${parts.sort().join(',')}`;
 }
 
-function pixKey(pix: BillingPixInput | PixSnapshot | null | undefined): string {
-  return pix ? `${pix.keyType}:${pix.key}:${pix.label ?? ''}` : '';
-}
-
 /** True when a recorrente patch changes what its charges carry: text, amount, split, Pix, payee or due day. */
 export function patchTouchesCharges(billing: BillingDetail, patch: BillingPatch): boolean {
   if (billing.recurrence !== BillingRecurrence.Indefinite) {
@@ -67,7 +63,6 @@ export function patchTouchesCharges(billing: BillingDetail, patch: BillingPatch)
     patch.split !== undefined && splitKey(patch.split) !== splitKey(billing.split),
     patch.paymentMethodId !== undefined && patch.paymentMethodId !== billing.paymentMethodId,
     Boolean(patch.clearPaymentMethod) && Boolean(billing.paymentMethodId),
-    patch.pix !== undefined && pixKey(patch.pix) !== pixKey(billing.pix),
     patch.contactId !== undefined && patch.contactId !== billing.contact?.id,
     patch.startDate !== undefined && patch.startDate !== billing.startDate,
     patch.dueRule !== undefined && patch.dueRule !== (billing.dueRule ?? BillingDueRule.Fixed)

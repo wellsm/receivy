@@ -3,13 +3,12 @@ import { BillingDueRule, BillingFrequency, BillingRecurrence, SplitPartKind } fr
 import { BillingCategory } from './billing-category';
 import { type BillingDraft, EMPTY_SPLIT_VALUES } from './billing-draft';
 import { draftTotalCents, previewBillingSplit, splitParties, splitPartyKey } from './billing-preview';
-import { Direction, PixKeyType, SplitMode } from './contracts';
+import { Direction, SplitMode } from './contracts';
 import { formatMoney } from './money';
 
 const base: BillingDraft = {
   direction: Direction.Receivable,
   payee: '',
-  pixInline: { type: PixKeyType.Email, key: '', label: '' },
   type: BillingRecurrence.Once,
   selected: ['p1', 'p2'],
   owner: true,

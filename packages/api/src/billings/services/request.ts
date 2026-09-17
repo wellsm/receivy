@@ -20,7 +20,6 @@ export function billingRequestFingerprint(input: NormalizedBillingInput): string
       split: input.split,
       direction: input.type,
       contactId: input.contactId ?? null,
-      pix: input.pix ?? null,
       // Only a registro adds its field, so replays of older requests keep their fingerprint.
       ...(input.kind === BillingKind.Record ? { settled: true } : {})
     },

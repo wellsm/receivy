@@ -10,8 +10,7 @@ import {
 } from './billing';
 import { billingDates, normalizeBillingInput } from './billing-calendar';
 import { BillingCategory } from './billing-category';
-import { pixKeyField } from './contact-format';
-import { Direction, PixKeyType, SplitMode } from './contracts';
+import { Direction, SplitMode } from './contracts';
 import { parseBRLCents, parsePercentageBasisPoints } from './financial-form';
 import type { SplitParty } from './split';
 
@@ -32,15 +31,11 @@ export function EMPTY_SPLIT_VALUES(): SplitValues {
   return { fixed: {}, percentage: {}, shares: {} };
 }
 
-/** The Pix key typed on a conta a pagar, kept as the user sees it; `buildBillingInput` normalizes it. */
-export type PixDraft = { type: PixKeyType; key: string; label: string };
-
 export type BillingDraft = {
   /** 'receivable' collects from contacts; 'payable' is the owner's own bill, optionally owed to one contact. */
   direction: Direction;
   /** Conta a pagar: the contact who receives (contacts.id). Empty only while the seat is still being picked. */
   payee: string;
-  pixInline: PixDraft;
   type: BillingRecurrence;
   selected: string[];
   owner: boolean;
@@ -71,7 +66,6 @@ export function EMPTY_BILLING_DRAFT(timezone: string, today: string): BillingDra
   return {
     direction: Direction.Receivable,
     payee: '',
-    pixInline: { type: PixKeyType.Email, key: '', label: '' },
     type: BillingRecurrence.Once,
     selected: [],
     owner: true,
@@ -306,18 +300,8 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
   };
 
   if (draft.direction === Direction.Payable) {
-    const contactId = payeeOf(draft);
-    // The key is kept as typed (masked); the field spec turns it into the canonical form before validation.
-    const key = pixKeyField(draft.pixInline.type).unformat(draft.pixInline.key).trim();
-
-    return normalizeBillingInput(
-      {
-        ...base,
-        contactId,
-        pix: key ? { keyType: draft.pixInline.type, key, label: draft.pixInline.label.trim() || undefined } : undefined
-      },
-      now
-    );
+    // Whoever receives owns the key: the draft points at one of their payment methods, or at none.
+    return normalizeBillingInput({ ...base, contactId: payeeOf(draft), paymentMethodId: draft.pix || undefined }, now);
   }
 
   if (!draft.selected.length) {

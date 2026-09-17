@@ -9,7 +9,6 @@ import type {
   BillingRecurrence,
   EditScope,
   PendingChargesAction,
-  PixKeyType,
   SplitMode,
   SplitPartKind
 } from '@receivy/common';
@@ -28,12 +27,6 @@ export declare class SplitBody {
         shares?: Integer.Range<1, 1000>;
       }
   )[];
-}
-
-export declare class PixBody {
-  keyType: PixKeyType;
-  key: String.Max<254>;
-  label?: String.Max<120>;
 }
 
 export declare class ReminderBody {
@@ -56,7 +49,6 @@ export declare class BillingBody implements Http.JsonBody {
   split?: SplitBody;
   /** Block 9: who receives (a contact of the owner). Absent means the owner receives. */
   contactId?: String.UUID;
-  pix?: PixBody;
   category?: BillingCategory;
   /** Registro: already received or paid; the owner alone, no Pix or reminders. */
   kind?: BillingKind;
@@ -68,7 +60,6 @@ export declare class PatchBody implements Http.JsonBody {
   split?: SplitBody;
   paymentMethodId?: String.UUID;
   clearPaymentMethod?: boolean;
-  pix?: PixBody;
   /** Block 9: who receives (a contact of the owner), replacing the current one. */
   contactId?: String.UUID;
   startDate?: String.Date;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BillingFrequency, BillingRecurrence } from './billing';
 import { type BillingDraft, EMPTY_BILLING_DRAFT, EMPTY_SPLIT_VALUES } from './billing-draft';
 import { billingDraftSummary, billingDraftSummaryText } from './billing-footer';
-import { Direction, PixKeyType, SplitMode } from './contracts';
+import { Direction, SplitMode } from './contracts';
 
 const TODAY = new Date('2026-09-10T12:00:00Z');
 
@@ -50,8 +50,7 @@ describe('billing draft summary', () => {
       ...base,
       direction: Direction.Payable,
       payee: 'p1',
-      selected: [],
-      pixInline: { type: PixKeyType.Email, key: 'pix@example.com', label: '' }
+      selected: []
     };
     const summary = billingDraftSummary(draft, TODAY);
 

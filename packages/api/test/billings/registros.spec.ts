@@ -48,6 +48,8 @@ let pixId: string;
 /** The contact who pays the owner on a registro a receber, and the one who receives a registro a pagar. */
 let empresaId: string;
 let imobiliariaId: string;
+/** A key of the contact a registro a pagar names: a registro pays through nothing, not even that one. */
+let imobiliariaKeyId: string;
 let otherEmpresaId: string;
 let otherImobiliariaId: string;
 
@@ -98,6 +100,14 @@ describe('registros on native PostgreSQL', () => {
     pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
     empresaId = (await ContactRepository.save(db, OWNER, { name: 'Empresa X' })).userId;
     imobiliariaId = (await ContactRepository.save(db, OWNER, { name: 'Imobiliária' })).id;
+    imobiliariaKeyId = (
+      await PaymentMethodRepository.save(db, OWNER, {
+        pixKeyType: PixKeyType.Email,
+        pixKey: 'loja@example.com',
+        label: 'Imobiliária',
+        contactId: imobiliariaId
+      })
+    ).id;
     // A registro only ever names contacts of whoever owns it: the other owner keeps their own agenda.
     otherEmpresaId = (await ContactRepository.save(db, OTHER, { name: 'Empresa X' })).userId;
     otherImobiliariaId = (await ContactRepository.save(db, OTHER, { name: 'Imobiliária' })).id;
@@ -105,7 +115,7 @@ describe('registros on native PostgreSQL', () => {
 
   after(async () => cleanupUsers(db, [OWNER, OTHER]));
 
-  it('refuses a registro without a counterpart, with a wallet key, Pix or reminders, and a recorrente in the past', async () => {
+  it('refuses a registro without a counterpart, with a wallet key, a contact key or reminders, and a recorrente in the past', async () => {
     const now = date('2026-03-05');
     const refuse = (key: string, input: BillingInput, message: string) =>
       rejects(() => BillingRepository.create(db, OWNER, key, input, now), { name: 'RangeError', message });
@@ -113,7 +123,7 @@ describe('registros on native PostgreSQL', () => {
 
     await refuse('registro-no-name', registro('Sem nome', { split: undefined }), 'Selecione ao menos um contato.');
     await refuse('registro-wallet', registro('Com chave', { paymentMethodId: pixId }), crowded);
-    await refuse('registro-pix', registroPago('Com Pix', { pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } }), crowded);
+    await refuse('registro-contact-key', registroPago('Com chave do contato', { paymentMethodId: imobiliariaKeyId }), crowded);
     await refuse('registro-reminders', registro('Com lembrete', { reminders: [{ offsetDays: 0, enabled: true }] }), crowded);
     await refuse(
       'registro-monthly-past',
@@ -415,7 +425,6 @@ describe('registros on native PostgreSQL', () => {
     };
 
     await refuse('split', { split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: anaId }] } });
-    await refuse('pix', { pix: { keyType: PixKeyType.Email, key: 'loja@example.com' } });
     await refuse('contactId', { contactId: imobiliariaId });
     await refuse('paymentMethodId', { paymentMethodId: pixId });
     await refuse('reminders', { reminders: [{ offsetDays: 0, enabled: true }] });

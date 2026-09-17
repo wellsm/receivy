@@ -33,6 +33,11 @@ const SECRET = 'payable-spec-secret-with-enough-length-0123456789';
 let payeeContactId: string;
 /** A contact nobody uses the app for: the bill is the owner's, and only the name says who receives it. */
 let soloContactId: string;
+/** Keys of the receiving contact: a conta a pagar may only ever point at one of these. */
+let payeeKeyId: string;
+let payeeOtherKeyId: string;
+/** A key of the owner's own wallet: out of scope for a conta a pagar. */
+let ownKeyId: string;
 
 function payable(overrides: Partial<BillingInput> = {}): BillingInput {
   return {
@@ -42,14 +47,14 @@ function payable(overrides: Partial<BillingInput> = {}): BillingInput {
     totalCents: 150_000,
     startDate: '2026-11-05',
     timezone: 'America/Sao_Paulo',
-    pix: { keyType: PixKeyType.Email, key: 'Imobiliaria@Example.com', label: 'Imobiliária' },
+    paymentMethodId: payeeKeyId,
     ...overrides
   };
 }
 
-/** The same bill with nobody to confirm it: a contact without an account, and no key typed. */
+/** The same bill with nobody to confirm it: a contact without an account, and no key to pay through. */
 function solo(overrides: Partial<BillingInput> = {}): BillingInput {
-  return payable({ contactId: soloContactId, pix: undefined, ...overrides });
+  return payable({ contactId: soloContactId, paymentMethodId: undefined, ...overrides });
 }
 
 describe('contas a pagar on native PostgreSQL', () => {
@@ -60,6 +65,23 @@ describe('contas a pagar on native PostgreSQL', () => {
       await ContactRepository.save(db, OWNER, { name: 'Credora', email: 'payable-payee@example.com', nickname: 'Imobiliária' })
     ).id;
     soloContactId = (await ContactRepository.save(db, OWNER, { name: 'Netflix' })).id;
+    payeeKeyId = (
+      await PaymentMethodRepository.save(db, OWNER, {
+        pixKeyType: PixKeyType.Email,
+        pixKey: 'Imobiliaria@Example.com',
+        label: 'Imobiliária',
+        contactId: payeeContactId
+      })
+    ).id;
+    payeeOtherKeyId = (
+      await PaymentMethodRepository.save(db, OWNER, {
+        pixKeyType: PixKeyType.Cpf,
+        pixKey: '529.982.247-25',
+        label: 'Nova',
+        contactId: payeeContactId
+      })
+    ).id;
+    ownKeyId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'dona@example.com' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, PAYEE]));
@@ -95,7 +117,7 @@ describe('contas a pagar on native PostgreSQL', () => {
     ok(!(await BillingRepository.list(db, OWNER, { type: Direction.Receivable })).billings.some((row) => row.id === created.id));
   });
 
-  it('ignores a split, refuses a key of somebody else and an invalid typed key on a conta a pagar', async () => {
+  it('ignores a split and refuses any key outside the receiving contact scope', async () => {
     const ignored = await BillingRepository.create(
       db,
       OWNER,
@@ -118,10 +140,8 @@ describe('contas a pagar on native PostgreSQL', () => {
         ),
       HttpNotFoundError
     );
-    await rejects(
-      () => BillingRepository.create(db, OWNER, 'payable-bad-pix', payable({ pix: { keyType: PixKeyType.Cpf, key: '123' } })),
-      /Chave Pix inválida/
-    );
+    // The owner's own key is not the receiving contact's: a conta a pagar may only point inside their scope.
+    await rejects(() => BillingRepository.create(db, OWNER, 'payable-own-key', payable({ paymentMethodId: ownKeyId })), HttpNotFoundError);
   });
 
   it('shows the payee the same charge as receivable, with settle powers only', async () => {
@@ -185,7 +205,7 @@ describe('contas a pagar on native PostgreSQL', () => {
       db,
       OWNER,
       'payable-confirm-pending',
-      payable({ ...due, contactId: placeholder.id, description: 'Sem app', pix: undefined })
+      payable({ ...due, contactId: placeholder.id, description: 'Sem app', paymentMethodId: undefined })
     );
     const alone = await BillingRepository.create(db, OWNER, 'payable-confirm-alone', solo({ ...due, description: 'Só minha' }));
 
@@ -218,7 +238,7 @@ describe('contas a pagar on native PostgreSQL', () => {
     equal((await ProofRepository.review(db, chargeId, PAYEE, { decision: ProofState.Accepted })).state, 'paid');
   });
 
-  it('lets the owner settle their own bill and swap the typed key', async () => {
+  it('lets the owner settle their own bill and repoint it at another key of the contact', async () => {
     const created = await BillingRepository.create(
       db,
       OWNER,
@@ -226,9 +246,7 @@ describe('contas a pagar on native PostgreSQL', () => {
       payable({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2099-01-05', description: 'Assinatura' })
     );
 
-    const patched = await BillingRepository.patch(db, OWNER, created.id, {
-      pix: { keyType: PixKeyType.Cpf, key: '529.982.247-25', label: 'Nova' }
-    });
+    const patched = await BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: payeeOtherKeyId });
 
     deepEqual(patched.pix, { keyType: PixKeyType.Cpf, key: '52998224725', label: 'Nova' });
 
@@ -237,15 +255,14 @@ describe('contas a pagar on native PostgreSQL', () => {
 
     equal((await BillingRepository.get(db, OWNER, created.id)).pix, null);
 
-    const repointed = await BillingRepository.patch(db, OWNER, created.id, {
-      pix: { keyType: PixKeyType.Email, key: 'Imobiliaria@Example.com' }
-    });
+    const repointed = await BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: payeeKeyId });
 
     deepEqual(repointed.pix, { keyType: PixKeyType.Email, key: 'imobiliaria@example.com', label: 'Imobiliária' });
     await rejects(
       () => BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: 'a1111111-1111-4111-8111-111111111111' }),
       HttpNotFoundError
     );
+    await rejects(() => BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: ownKeyId }), HttpNotFoundError);
 
     const once = await BillingRepository.create(db, OWNER, 'payable-self-once', solo({ description: 'Luz', totalCents: 12_000 }));
     const settled = await ChargeRepository.pay(db, OWNER, once.charges[0]!.id);

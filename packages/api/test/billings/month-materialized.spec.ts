@@ -30,6 +30,8 @@ const date = (value: string) => new Date(`${value}T12:00:00Z`);
 const { context, sent } = fakeNotice();
 
 let pixId: string;
+/** A key of Ana, the contact a conta a pagar pays: only her own keys are in scope for it. */
+let anaKeyId: string;
 let anaId: string;
 let anaContactId: string;
 let brunoId: string;
@@ -92,6 +94,14 @@ describe('month materialized: pending charges and current month edits', () => {
     carlaId = carla.userId;
     carlaContactId = carla.id;
     pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    anaKeyId = (
+      await PaymentMethodRepository.save(db, OWNER, {
+        pixKeyType: PixKeyType.Email,
+        pixKey: 'month-landlord@example.com',
+        label: 'Imobiliária',
+        contactId: anaContactId
+      })
+    ).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER]));
@@ -493,7 +503,7 @@ describe('month materialized: pending charges and current month edits', () => {
         totalCents: 10_000,
         startDate: '2026-03-20',
         timezone: TZ,
-        pix: { keyType: PixKeyType.Email, key: 'month-landlord@example.com', label: 'Imobiliária' }
+        paymentMethodId: anaKeyId
       },
       date('2026-03-05')
     );
@@ -501,11 +511,7 @@ describe('month materialized: pending charges and current month edits', () => {
 
     ok(anaCharge);
     equal(anaCharge.creditor_id, anaId, 'the contact receives: she sits on the creditor side');
-    equal(
-      anaCharge.payment_snapshot?.value,
-      'month-landlord@example.com',
-      'the typed key is filed under the contact and travels to the charge'
-    );
+    equal(anaCharge.payment_snapshot?.value, 'month-landlord@example.com', 'the key of the contact travels to the charge');
 
     const moved = await BillingRepository.patch(
       db,

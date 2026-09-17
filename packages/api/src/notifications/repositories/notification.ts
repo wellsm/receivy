@@ -2,6 +2,7 @@ import { HttpBadRequestError, HttpForbiddenError, HttpNotFoundError } from '@ez4
 import { ChargePayer, ChargeState, DevicePlatform, type DeviceRegistration, Direction, type NotificationDevice } from '@receivy/common';
 import { ChargeClosedError, ChargeInReviewError, SettledNoRemindersError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
+import { currentProof } from '../../proofs/repositories/proof-row';
 import { StoredProofState } from '../../charges/schemas/charge';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
@@ -119,7 +120,7 @@ export namespace NotificationRepository {
         throw new SettledNoRemindersError();
       }
 
-      if (row.proof_state === StoredProofState.Pending) {
+      if ((await currentProof(tx, row.id))?.state === StoredProofState.Pending) {
         throw new ChargeInReviewError();
       }
 

@@ -13,6 +13,7 @@ import {
   ChargeState,
   DEFAULT_BILLING_REMINDERS,
   PixKeyType,
+  ProofKind,
   ProofMime,
   resolveBillingSplit,
   SplitMode,
@@ -411,18 +412,22 @@ describe('billings on native PostgreSQL', () => {
       where: { id: charges.records[0]!.id },
       data: { state: ChargeState.Paid, paid_at: instant, updated_at: instant }
     });
-    await db.charges.updateOne({
-      where: { id: charges.records[1]!.id },
+    await db.proofs.insertOne({
       data: {
-        proof_state: StoredProofState.Pending,
-        proof_file: {
+        id: crypto.randomUUID(),
+        charge: { id: charges.records[1]!.id },
+        state: StoredProofState.Pending,
+        kind: ProofKind.File,
+        file: {
           key: `proofs/${sharesId}/counter.pdf`,
           name: 'counter.pdf',
           mime: ProofMime.Pdf,
           size: 1_024,
           sha256: 'a'.repeat(64)
         },
-        proof_sent_at: instant,
+        actor_hash: 'billings-spec-counter',
+        sent_at: instant,
+        created_at: instant,
         updated_at: instant
       }
     });
@@ -592,18 +597,22 @@ describe('billings on native PostgreSQL', () => {
     const instant = new Date().toISOString();
     const listed = async () => (await BillingRepository.list(db, OWNER, { search: 'comprovante cancelado' })).billings[0]!;
 
-    await db.charges.updateOne({
-      where: { id: charge.id },
+    await db.proofs.insertOne({
       data: {
-        proof_state: StoredProofState.Pending,
-        proof_file: {
+        id: crypto.randomUUID(),
+        charge: { id: charge.id },
+        state: StoredProofState.Pending,
+        kind: ProofKind.File,
+        file: {
           key: `proofs/${created.id}/cancelled.pdf`,
           name: 'cancelado.pdf',
           mime: ProofMime.Pdf,
           size: 1_024,
           sha256: 'b'.repeat(64)
         },
-        proof_sent_at: instant,
+        actor_hash: 'billings-spec-cancelled',
+        sent_at: instant,
+        created_at: instant,
         updated_at: instant
       }
     });

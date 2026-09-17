@@ -1,20 +1,29 @@
 import type { Http } from '@ez4/gateway';
+import type { NamingStyle } from '@ez4/schema';
 import type { sessionAuthorizer } from '../common/authorizers/session';
 import type { cancelChargeHandler } from './endpoints/cancel';
 import type { getChargeHandler } from './endpoints/get';
 import type { listChargesHandler } from './endpoints/list';
+import type { setChargeNotifyHandler } from './endpoints/notify';
 import type { payChargeHandler } from './endpoints/pay';
 import type { reopenChargeHandler } from './endpoints/reopen';
-import type { setChargeNotifyHandler } from './endpoints/notify';
 
 export type ChargeRoutes = [
-  Http.UseRoute<{ 
-    name: 'listCharges'; 
-    path: 'GET /charges'; 
-    authorizer: typeof sessionAuthorizer; 
-    handler: typeof listChargesHandler 
+  Http.UseRoute<{
+    name: 'listCharges';
+    path: 'GET /charges';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof listChargesHandler;
+    preferences: {
+      namingStyle: NamingStyle.Preserve;
+    };
   }>,
-  Http.UseRoute<{ name: 'getCharge'; path: 'GET /charges/{id}'; authorizer: typeof sessionAuthorizer; handler: typeof getChargeHandler }>,
+  Http.UseRoute<{
+    name: 'getCharge';
+    path: 'GET /charges/{id}';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof getChargeHandler;
+  }>,
   Http.UseRoute<{
     name: 'cancelCharge';
     path: 'POST /charges/{id}/cancel';

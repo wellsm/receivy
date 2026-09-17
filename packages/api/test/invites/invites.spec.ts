@@ -9,6 +9,7 @@ import {
   BillingType,
   ChargeState,
   PixKeyType,
+  ProofKind,
   ProofMime,
   SplitMode,
   SplitPartKind,
@@ -209,7 +210,7 @@ describe('billing invites on native PostgreSQL', () => {
     ok(await db.events.count({ where: { eventable_id: billing.id, type: 'billings.invite_accepted' } }));
 
     const publicId = tokenOf(invite.url).split('.')[0]!;
-    const row = await db.billing_invites.findOne({ select: { accepted_count: true }, where: { public_id: publicId } });
+    const row = await db.links.findOne({ select: { accepted_count: true }, where: { public_id: publicId } });
 
     equal(row?.accepted_count, 1);
 
@@ -316,12 +317,16 @@ describe('billing invites on native PostgreSQL', () => {
     const proofed = await BillingRepository.create(db, OWNER, 'invite-proofed', once(), now);
     const proofedInvite = await createInvite(db, OWNER, proofed.id, SECRET, ORIGIN, now);
 
-    await db.charges.updateOne({
-      where: { id: proofed.charges[0]!.id },
+    await db.proofs.insertOne({
       data: {
-        proof_state: StoredProofState.Pending,
-        proof_file: { key: `invite-spec/${proofed.charges[0]!.id}.pdf`, name: 'comprovante.pdf', mime: ProofMime.Pdf, size: 1_024 },
-        proof_sent_at: now.toISOString(),
+        id: crypto.randomUUID(),
+        charge: { id: proofed.charges[0]!.id },
+        state: StoredProofState.Pending,
+        kind: ProofKind.File,
+        file: { key: `invite-spec/${proofed.charges[0]!.id}.pdf`, name: 'comprovante.pdf', mime: ProofMime.Pdf, size: 1_024 },
+        actor_hash: 'invite-spec-actor',
+        sent_at: now.toISOString(),
+        created_at: now.toISOString(),
         updated_at: now.toISOString()
       }
     });

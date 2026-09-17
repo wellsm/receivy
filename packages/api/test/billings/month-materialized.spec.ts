@@ -12,7 +12,8 @@ import {
   PixKeyType,
   SplitMode,
   SplitPartKind,
-  type SplitParty
+  type SplitParty,
+  ProofKind
 } from '@receivy/common';
 import { EditScopeNotRecurringError, PendingChargesWithoutStateError } from '../../src/billings/errors';
 import { BillingRepository } from '../../src/billings/repositories/billing';
@@ -254,7 +255,17 @@ describe('month materialized: pending charges and current month edits', () => {
     );
     const [row] = await chargeRows(reviewed.id);
 
-    await db.charges.updateOne({ where: { id: row!.id }, data: { proof_state: StoredProofState.Pending } });
+    await db.proofs.insertOne({
+      data: {
+        id: crypto.randomUUID(),
+        charge: { id: row!.id },
+        state: StoredProofState.Pending,
+        kind: ProofKind.File,
+        actor_hash: 'month-materialized-spec',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    });
     await BillingRepository.patch(db, OWNER, reviewed.id, { totalCents: 5_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
     equal((await chargeRows(reviewed.id))[0]?.amount_cents, 10_000);
 

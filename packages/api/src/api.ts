@@ -57,7 +57,7 @@ import type { PixRequiredError, PixSnapshotLockedError } from './public/errors';
 import type { PublicRoutes } from './public/routes';
 import type { TimelineOverflowError } from './timeline/errors';
 import type { TimelineRoutes } from './timeline/routes';
-import type { AvatarInvalidError } from './users/errors';
+import type { AvatarInvalidError, StaleSessionError } from './users/errors';
 import type { UserRoutes } from './users/routes';
 
 /** Receivy HTTP API. */
@@ -107,7 +107,8 @@ export declare class Api extends Http.Service {
         ProofReviewedError,
         ProofMissingError,
         PixRequiredError,
-        PixSnapshotLockedError
+        PixSnapshotLockedError,
+        StaleSessionError
       ];
       422: [
         AvatarInvalidError,

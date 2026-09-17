@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-import { Order } from '@ez4/database';
 import { HttpNotFoundError } from '@ez4/gateway';
 import {
   type BillingCategory,
@@ -12,6 +10,8 @@ import {
 import { SettledLockedError } from '../../billings/errors';
 import { lockOwner } from '../../charges/services/materialize';
 import type { DbClient } from '../../database';
+import { type LinkRow, LinkRepository } from '../../public/repositories/link';
+import { LinkableType } from '../../public/schemas/link';
 import {
   assertPublicLinkSecretConfigured,
   issuePublicChargeToken,
@@ -23,27 +23,11 @@ import { InviteBillingInactiveError, PayableHasNoInviteError } from '../errors';
 /** Secret and web origin the detail needs to re-issue the active invite URL. */
 export type InviteLinkContext = { secret: string; webOrigin: string };
 
-export const INVITE_SELECT = {
-  id: true,
-  billing_id: true,
-  owner_id: true,
-  public_id: true,
-  expires_at: true,
-  revoked_at: true,
-  accepted_count: true,
-  created_at: true
-} as const;
-
-export type InviteRow = {
-  id: string;
-  billing_id: string;
-  owner_id: string;
-  public_id: string;
-  expires_at: string;
-  revoked_at?: string;
-  accepted_count: number;
-  created_at: string;
-};
+/**
+ * An invite is a row in `links` pointing at the billing. What used to be its own table is the same handle,
+ * the same deadline and the same revocation, so the two public links share one place and one token service.
+ */
+export type InviteRow = LinkRow & { billing_id: string };
 
 /** The narrowest billing shape createInvite/revokeInvite need, so this module never depends on billings/repository. */
 const OWNED_BILLING_SELECT = { id: true, state: true, direction: true, settled: true } as const;
@@ -69,8 +53,6 @@ type PublicBillingRow = {
   state: BillingState;
 };
 
-/** The token is deterministic, so the invite row only stores the handle and its deadline. */
-const TOKEN_VERSION = 1;
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Verification must not fail on age alone; expiry is compared against the stored deadline instead. */
@@ -80,17 +62,22 @@ function seconds(instant: string): number {
   return Math.floor(new Date(instant).getTime() / 1000);
 }
 
-function inviteToken(row: Pick<InviteRow, 'public_id' | 'expires_at'>, secret: string): string {
+/** The link row as the invite code reads it: the billing it points at, under its old name. */
+function asInvite(link: LinkRow): InviteRow {
+  return { ...link, billing_id: link.linkable_id };
+}
+
+function inviteToken(row: Pick<InviteRow, 'public_id' | 'version' | 'expires_at'>, secret: string): string {
   return issuePublicChargeToken({
     publicId: row.public_id,
-    version: TOKEN_VERSION,
+    version: row.version,
     expiresAtSeconds: seconds(row.expires_at),
     secret,
     purpose: PublicTokenPurpose.Invite
   });
 }
 
-function inviteResponse(row: Pick<InviteRow, 'public_id' | 'expires_at'>, secret: string, webOrigin: string): BillingInvite {
+function inviteResponse(row: Pick<InviteRow, 'public_id' | 'version' | 'expires_at'>, secret: string, webOrigin: string): BillingInvite {
   return { url: `${webOrigin.replace(/\/+$/, '')}/join/${inviteToken(row, secret)}`, expiresAt: row.expires_at };
 }
 
@@ -102,10 +89,6 @@ async function ownedBilling(db: DbClient, ownerId: string, billingId: string, lo
   }
 
   return row;
-}
-
-async function revokeActive(db: DbClient, billingId: string, now: string): Promise<void> {
-  await db.billing_invites.updateMany({ where: { billing_id: billingId, revoked_at: { isNull: true } }, data: { revoked_at: now } });
 }
 
 export async function createInvite(
@@ -138,21 +121,16 @@ export async function createInvite(
     }
 
     const instant = now.toISOString();
-
-    await revokeActive(tx, billing.id, instant);
-
-    const created = await tx.billing_invites.insertOne({
-      select: INVITE_SELECT,
-      data: {
-        id: crypto.randomUUID(),
-        billing: { id: billing.id },
-        owner: { id: ownerId },
-        public_id: randomBytes(16).toString('base64url'),
-        expires_at: new Date(now.getTime() + TTL_MS).toISOString(),
-        accepted_count: 0,
-        created_at: instant
-      }
-    });
+    const created = await LinkRepository.issue(
+      tx,
+      {
+        linkableType: LinkableType.BillingInvite,
+        linkableId: billing.id,
+        expiresAt: new Date(now.getTime() + TTL_MS).toISOString(),
+        acceptedCount: 0
+      },
+      instant
+    );
 
     return inviteResponse(created, secret, webOrigin);
   });
@@ -164,7 +142,7 @@ export async function revokeInvite(db: DbClient, ownerId: string, billingId: str
 
     const billing = await ownedBilling(tx, ownerId, billingId, true);
 
-    await revokeActive(tx, billing.id, now.toISOString());
+    await LinkRepository.revokeLive(tx, LinkableType.BillingInvite, billing.id, now.toISOString());
   });
 }
 
@@ -180,16 +158,9 @@ export async function activeInvite(
     return null;
   }
 
-  const { records } = await db.billing_invites.findMany({
-    select: INVITE_SELECT,
-    where: { billing_id: billingId, revoked_at: { isNull: true }, expires_at: { gt: now.toISOString() } },
-    order: { created_at: Order.Desc },
-    take: 1
-  });
+  const link = await LinkRepository.live(db, LinkableType.BillingInvite, billingId, Math.floor(now.getTime() / 1000));
 
-  const row = records[0];
-
-  return row ? inviteResponse(row, secret, webOrigin) : null;
+  return link ? inviteResponse(link, secret, webOrigin) : null;
 }
 
 /** Resolves the signed handle; a bad signature or an unknown handle is indistinguishable from a miss. */
@@ -202,9 +173,9 @@ export async function resolveInvite(db: DbClient, token: string, secret: string)
     throw new HttpNotFoundError();
   }
 
-  const row = await db.billing_invites.findOne({ select: INVITE_SELECT, where: { public_id: publicId } });
+  const link = await LinkRepository.byPublicId(db, publicId);
 
-  if (!row) {
+  if (!link || link.linkable_type !== LinkableType.BillingInvite) {
     throw new HttpNotFoundError();
   }
 
@@ -212,7 +183,7 @@ export async function resolveInvite(db: DbClient, token: string, secret: string)
 
   try {
     capability = verifyPublicChargeToken(token, {
-      version: TOKEN_VERSION,
+      version: link.version,
       nowSeconds: IGNORE_EXPIRY,
       secret,
       purpose: PublicTokenPurpose.Invite
@@ -221,11 +192,11 @@ export async function resolveInvite(db: DbClient, token: string, secret: string)
     throw new HttpNotFoundError();
   }
 
-  if (capability.expiresAtSeconds !== seconds(row.expires_at)) {
+  if (capability.expiresAtSeconds !== seconds(link.expires_at)) {
     throw new HttpNotFoundError();
   }
 
-  return row;
+  return asInvite(link);
 }
 
 export async function getPublicInvite(db: DbClient, token: string, secret: string, now = new Date()): Promise<PublicInviteView> {
@@ -248,15 +219,18 @@ export async function publicInviteView(db: DbClient, invite: InviteRow, now = ne
     return { expired: true };
   }
 
-  const owner = await db.users.findOne({ select: { name: true }, where: { id: invite.owner_id } });
+  const owner = await db.billings.findOne({ select: { owner_id: true }, where: { id: billing.id } });
+  const user = owner ? await db.users.findOne({ select: { name: true }, where: { id: owner.owner_id } }) : undefined;
 
   return {
     expired: false,
-    creditorFirstName: owner?.name?.trim().split(/\s+/)[0] || 'Pessoa',
+    creditorFirstName: user?.name?.trim().split(/\s+/)[0] || 'Pessoa',
     description: billing.description,
     amount: { amountCents: billing.total_cents, currency: 'BRL' },
     type: billing.type,
-    participantCount: await db.allocations.count({ where: { billing_id: billing.id, user_id: { not: invite.owner_id } } }),
+    participantCount: owner
+      ? await db.allocations.count({ where: { billing_id: billing.id, user_id: { not: owner.owner_id } } })
+      : 0,
     category: billing.category
   };
 }

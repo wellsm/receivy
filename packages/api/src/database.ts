@@ -11,7 +11,9 @@ import type { ContactSchema } from './contacts/schemas/contact';
 import type { BillingInviteSchema } from './invites/schemas/invite';
 import type { DeviceTokenSchema } from './notifications/schemas/notification';
 import type { PaymentMethodSchema } from './payment-methods/schemas/payment-method';
+import type { ProofSchema } from './proofs/schemas/proof';
 import type { ProofThrottleSchema } from './proofs/schemas/proof-throttle';
+import type { LinkSchema } from './public/schemas/link';
 import type { AuthIdentitySchema } from './users/schemas/auth-identity';
 import type { LoginCodeSchema } from './users/schemas/login-code';
 import type { OauthAttemptSchema } from './users/schemas/oauth-attempt';
@@ -107,6 +109,29 @@ export declare class Db extends Database.Service<PostgresEngine> {
         id: Index.Primary;
         public_id: Index.Unique;
         billing_id: Index.Secondary;
+      };
+    }>,
+    Database.UseTable<{
+      name: 'proofs';
+      schema: ProofSchema;
+      relations: {
+        'charge_id@charge': 'charges:id';
+        'sender_user_id@sender': 'users:id';
+      };
+      indexes: {
+        id: Index.Primary;
+        charge_id: Index.Secondary;
+        sender_user_id: Index.Secondary;
+      };
+    }>,
+    Database.UseTable<{
+      name: 'links';
+      schema: LinkSchema;
+      // No relation: `linkable_id` points at a charge or a billing invite, so it cannot be a foreign key.
+      indexes: {
+        id: Index.Primary;
+        public_id: Index.Unique;
+        linkable_id: Index.Secondary;
       };
     }>,
     Database.UseTable<{

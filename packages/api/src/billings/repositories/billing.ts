@@ -43,6 +43,7 @@ import {
 import { SilenceUnavailableError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { PaymentMethodKind, StoredProofState } from '../../charges/schemas/charge';
+import { proofsByCharge } from '../../proofs/repositories/proof-row';
 import {
   lockOwner,
   type PayableMaterialization,
@@ -257,7 +258,8 @@ async function summaryAggregates(db: DbClient, rows: BillingRepository.Row[], no
     proofs AS (
       SELECT p.billing_id, COUNT(*) AS proofs_pending
       FROM page p
-      JOIN charges c ON c.billing_id = p.billing_id AND c.state <> 'cancelled' AND c.proof_state = 'pending'
+      JOIN charges c ON c.billing_id = p.billing_id AND c.state <> 'cancelled'
+      JOIN proofs pr ON pr.charge_id = c.id AND pr.state = 'pending'
       GROUP BY p.billing_id
     ),
     share AS (
@@ -623,7 +625,12 @@ async function rewriteMonthCharges(
     where: { billing_id: row.id, state: ChargeState.Pending, due_date: { gt: today, lte: monthEnd } },
     lock: true
   });
-  const editable = records.filter((charge) => !charge.proof_state || charge.proof_state === StoredProofState.Rejected);
+  const proofs = await proofsByCharge(db, records.map((charge) => charge.id));
+  const editable = records.filter((charge) => {
+    const state = proofs.get(charge.id)?.state;
+
+    return !state || state === StoredProofState.Rejected;
+  });
 
   if (!editable.length) {
     return [];

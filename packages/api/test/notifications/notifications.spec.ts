@@ -24,6 +24,8 @@ import {
   sendChargeNotice
 } from '../../src/notifications/services/send';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
+import { LinkRepository } from '../../src/public/repositories/link';
+import { LinkableType } from '../../src/public/schemas/link';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
 import { fakeNotice } from '../fixtures/scheduling';
 
@@ -138,13 +140,36 @@ async function registroCharge(direction: Direction = Direction.Receivable) {
 
 async function chargeRow(id: string) {
   const row = await db.charges.findOne({
-    select: { id: true, billing_id: true, due_date: true, state: true, public_id: true },
+    select: { id: true, billing_id: true, due_date: true, state: true },
     where: { id }
   });
 
   ok(row);
 
-  return row;
+  // The public handle lives in `links` now; the assertions still read it off the charge shape.
+  const link = await LinkRepository.live(db, LinkableType.Charge, id);
+
+  return { ...row, public_id: link?.public_id };
+}
+
+/** Puts a charge into a proof state the flow would have produced; replacing means a new row, as in production. */
+async function putProof(chargeId: string, state: StoredProofState, kind = ProofKind.File, sentAt?: string, reason?: string) {
+  const stamp = new Date(clock).toISOString();
+
+  await db.proofs.deleteMany({ where: { charge_id: chargeId } });
+  await db.proofs.insertOne({
+    data: {
+      id: crypto.randomUUID(),
+      charge: { id: chargeId },
+      state,
+      kind,
+      actor_hash: `notifications-spec:${chargeId}`,
+      ...(sentAt ? { sent_at: sentAt } : {}),
+      ...(reason ? { reason } : {}),
+      created_at: stamp,
+      updated_at: stamp
+    }
+  });
 }
 
 /** Notices fan out to every active device, so each push case starts from a clean registration. */
@@ -425,11 +450,11 @@ describe('charge notices, follow-ups and devices', () => {
     const reviewing = await charge(OWNER, DEBTOR_EMAIL);
     const event: ChargeNotifyEvent = { chargeId: reviewing.id, template: NoticeTemplate.Initial, stage: 'followup' };
 
-    await db.charges.updateOne({ where: { id: reviewing.id }, data: { proof_state: StoredProofState.Pending } });
+    await putProof(reviewing.id, StoredProofState.Pending);
     deepEqual(await followUpCharge(db, context, event, clock), { channels: [] });
     equal((await EventRepository.list(db, reviewing.id, 'notice.skipped')).length, 0, 'silence is not a skip');
 
-    await db.charges.updateOne({ where: { id: reviewing.id }, data: { proof_state: StoredProofState.Rejected } });
+    await putProof(reviewing.id, StoredProofState.Rejected);
     deepEqual(await followUpCharge(db, context, event, clock), { channels: ['email'] });
 
     // A settled charge sends nothing at all.
@@ -445,10 +470,7 @@ describe('charge notices, follow-ups and devices', () => {
   it('sends nothing while a payment waits in review and refuses the manual reminder', async () => {
     const { id } = await charge();
 
-    await db.charges.updateOne({
-      where: { id },
-      data: { proof_state: StoredProofState.Pending, proof_kind: ProofKind.Declaration, proof_sent_at: new Date(clock).toISOString() }
-    });
+    await putProof(id, StoredProofState.Pending, ProofKind.Declaration, new Date(clock).toISOString());
     sent.reset();
 
     deepEqual(await send(id, NoticeTemplate.Reminder, 0), { channels: [] });
@@ -571,7 +593,7 @@ describe('charge notices, follow-ups and devices', () => {
 
     const reviewing = await registroCharge();
 
-    await db.charges.updateOne({ where: { id: reviewing }, data: { proof_state: StoredProofState.Pending } });
+    await putProof(reviewing, StoredProofState.Pending);
 
     await rejects(() => NotificationRepository.manualReminder(db, OWNER, reviewing, context, () => clock), SettledNoRemindersError);
   });
@@ -582,10 +604,7 @@ describe('charge notices, follow-ups and devices', () => {
 
     await soleDevice(OWNER, 'ExponentPushToken[owner-self]', 'owner-self');
     await soleDevice(userId, 'ExponentPushToken[debtor-self]', 'debtor-self');
-    await db.charges.updateOne({
-      where: { id },
-      data: { proof_state: StoredProofState.Accepted, proof_kind: ProofKind.File, proof_sent_at: new Date(clock).toISOString() }
-    });
+    await putProof(id, StoredProofState.Accepted, ProofKind.File, new Date(clock).toISOString());
     sent.reset();
 
     // The payer settled it themselves: a confirmation of their own act is nobody's news.
@@ -606,10 +625,7 @@ describe('charge notices, follow-ups and devices', () => {
 
     await soleDevice(OWNER, 'ExponentPushToken[owner-review]', 'owner-review');
     await soleDevice(userId, 'ExponentPushToken[debtor-review]', 'debtor-review');
-    await db.charges.updateOne({
-      where: { id },
-      data: { proof_state: StoredProofState.Pending, proof_kind: ProofKind.Declaration, proof_sent_at: new Date(clock).toISOString() }
-    });
+    await putProof(id, StoredProofState.Pending, ProofKind.Declaration, new Date(clock).toISOString());
     sent.reset();
 
     await pushPaymentNotice(db, payments, id, PaymentNotice.Declared);
@@ -621,7 +637,7 @@ describe('charge notices, follow-ups and devices', () => {
     ok(/^Recipient disse que pagou .+ · R\$\s12,34\. Confirme o recebimento\.$/.test(sent.pushes[0]?.body ?? ''));
     equal(sent.pushes[0]?.url, `https://receivy.example/charges/${id}`);
 
-    await db.charges.updateOne({ where: { id }, data: { proof_state: StoredProofState.Rejected, proof_reason: 'Não caiu' } });
+    await putProof(id, StoredProofState.Rejected, ProofKind.Declaration, new Date(clock).toISOString(), 'Não caiu');
     await pushPaymentNotice(db, payments, id, PaymentNotice.NotIdentified);
 
     equal(sent.pushes.length, 2);

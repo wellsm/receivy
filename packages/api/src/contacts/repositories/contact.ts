@@ -377,7 +377,7 @@ export namespace ContactRepository {
       `UPDATE billings SET payee_user_id = :to::uuid, updated_at = :now::timestamptz WHERE payee_user_id = :from::uuid`,
       params
     );
-    await tx.rawQuery(`UPDATE charges SET proof_sender_user_id = :to::uuid WHERE proof_sender_user_id = :from::uuid`, params);
+    await tx.rawQuery(`UPDATE proofs SET sender_user_id = :to::uuid WHERE sender_user_id = :from::uuid`, params);
     await tx.rawQuery(`UPDATE events SET actor_user_id = :to::uuid WHERE actor_user_id = :from::uuid`, params);
     await tx.users.deleteOne({ where: { id: placeholder.id } });
   }

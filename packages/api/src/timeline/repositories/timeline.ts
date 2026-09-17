@@ -13,6 +13,7 @@ import {
   type TimelinePage
 } from '@receivy/common';
 import { ChargeRepository } from '../../charges/repositories/charge';
+import { type ProofRow, proofsByCharge } from '../../proofs/repositories/proof-row';
 import { StoredProofState } from '../../charges/schemas/charge';
 import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
@@ -135,8 +136,8 @@ function directionFor(row: ChargeRepository.Row, userId: string): Direction {
 }
 
 /** What the feed shows about the attached file: a reserved slot is nobody's business yet. */
-function visibleProofState(row: ChargeRepository.Row): ChargeSummary['proofState'] {
-  return ChargeRepository.visibleProofState(row);
+function visibleProofState(proof: ProofRow | null): ChargeSummary['proofState'] {
+  return ChargeRepository.visibleProofState(proof);
 }
 
 export namespace TimelineRepository {
@@ -172,6 +173,8 @@ export namespace TimelineRepository {
     const page = remaining.slice(0, 50);
     const next = remaining.length > 50 ? page.at(-1) : undefined;
     const items: TimelineItem[] = [];
+    // One query for the whole page: the proof moved to its own table and this list must not go row by row.
+    const proofs = await proofsByCharge(db, [...new Set([...page.map((row) => row.id), ...active.map((row) => row.id)])]);
 
     for (const row of page) {
       const record = await ChargeRepository.settledBilling(db, row);
@@ -191,11 +194,11 @@ export namespace TimelineRepository {
           installmentCount: row.installment_count ?? null,
           counterpartName: await ChargeRepository.counterpartName(db, row, userId),
           counterpartAvatar: await ChargeRepository.counterpartAvatar(db, row, userId),
-          proofState: visibleProofState(row),
+          proofState: visibleProofState(proofs.get(row.id) ?? null),
           payer: ChargeRepository.payer(row),
           ownedByViewer: ChargeRepository.owns(row, userId),
           hasPix: !!ChargeRepository.paymentOf(row),
-          proofKind: ChargeRepository.proofKind(row),
+          proofKind: ChargeRepository.proofKind(proofs.get(row.id) ?? null),
           confirmationRequired: await ChargeRepository.confirmationRequired(db, row),
           notify: !ChargeRepository.owns(row, userId) || row.notify,
           settled: record.settled,
@@ -205,7 +208,7 @@ export namespace TimelineRepository {
     }
 
     const proofsToReview = active.filter(
-      (row) => directionFor(row, userId) === Direction.Receivable && row.proof_state === StoredProofState.Pending
+      (row) => directionFor(row, userId) === Direction.Receivable && proofs.get(row.id)?.state === StoredProofState.Pending
     ).length;
     // Paid rows never carry over from an earlier month, so `all` already bounds these to the selected month.
     const settled = all.filter((row) => row.state === ChargeState.Paid);

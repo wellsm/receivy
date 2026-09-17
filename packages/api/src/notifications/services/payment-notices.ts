@@ -1,5 +1,6 @@
 import { ChargePayer, formatMoney } from '@receivy/common';
 import { EventRepository } from '../../common/repositories/events';
+import { currentProof } from '../../proofs/repositories/proof-row';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
 import { pushToUser } from './direct';
@@ -56,9 +57,7 @@ export async function pushPaymentNotice(
         debtor_user_id: true,
         payer: true,
         description: true,
-        amount_cents: true,
-        proof_reason: true,
-        proof_sent_at: true
+        amount_cents: true
       },
       where: { id: chargeId }
     });
@@ -66,6 +65,8 @@ export async function pushPaymentNotice(
     if (!charge) {
       return;
     }
+
+    const proof = await currentProof(db, chargeId);
 
     const ownerPays = charge.payer === ChargePayer.Owner;
     const payerId = ownerPays ? charge.creditor_id : charge.debtor_user_id;
@@ -84,7 +85,7 @@ export async function pushPaymentNotice(
     }
 
     // Completing an upload and the bucket event may both report the same file.
-    const key = `${notice}:${charge.proof_sent_at ?? ''}`;
+    const key = `${notice}:${proof?.sent_at ?? ''}`;
 
     if ((await EventRepository.list(db, chargeId, 'notice.payment')).some((event) => event.payload['key'] === key)) {
       return;
@@ -95,7 +96,7 @@ export async function pushPaymentNotice(
     const what = `${charge.description} · ${formatMoney({ amountCents: charge.amount_cents, currency: 'BRL' })}`;
 
     await pushToUser(db, context.transport, recipientId, {
-      ...copy(notice, name, what, charge.proof_reason),
+      ...copy(notice, name, what, proof?.reason),
       url: `${context.origin.replace(/\/+$/, '')}/charges/${chargeId}`
     });
     await EventRepository.record(db, {

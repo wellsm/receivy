@@ -19,8 +19,10 @@ import { lockOwner, persistChargePlan, prepareChargeMaterialization } from '../.
 import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
 import { announceCharges, type NoticeContext } from '../../notifications/services/send';
+import { proofsByCharge } from '../../proofs/repositories/proof-row';
+import { LinkRepository } from '../../public/repositories/link';
 import { InviteOwnerError, SplitClosedError, SplitInProgressError } from '../errors';
-import { INVITE_SELECT, resolveInvite } from '../services/links';
+import { resolveInvite } from '../services/links';
 
 const sqlNull = null as unknown as undefined;
 
@@ -49,13 +51,15 @@ function withParticipant(split: BillingSplit, userId: string): BillingSplit {
 }
 
 /** Every charge of a finite billing must still be untouched before its amounts can be reshaped. */
-function assertSplitReshapable(charges: ChargeRepository.Row[]): void {
+async function assertSplitReshapable(db: DbClient, charges: ChargeRepository.Row[]): Promise<void> {
+  const proofs = await proofsByCharge(db, charges.map((charge) => charge.id));
+
   for (const charge of charges) {
     if (charge.state !== ChargeState.Pending) {
       throw new SplitInProgressError();
     }
 
-    if (charge.proof_state) {
+    if (proofs.has(charge.id)) {
       throw new SplitInProgressError();
     }
   }
@@ -191,7 +195,7 @@ export namespace InviteRepository {
             })
           ).records;
 
-    assertSplitReshapable(charges);
+    await assertSplitReshapable(tx, charges);
     await BillingRepository.saveAllocations(tx, billing, billing.total_cents, next, instant);
 
     const chargeId = charges.length ? await reshapeOccurrences(tx, billing, charges, next, userId, instant, noticeChargeIds) : null;
@@ -215,23 +219,30 @@ export namespace InviteRepository {
     const preview = await resolveInvite(db, token, secret);
     const noticeChargeIds: string[] = [];
 
-    const result = await db.transaction(async (tx) => {
-      await lockOwner(tx, preview.owner_id);
+    // A link does not know who owns the target, so the billing comes first and the owner lock follows it.
+    const target = await db.billings.findOne({ select: { owner_id: true }, where: { id: preview.billing_id } });
 
-      const invite = await tx.billing_invites.findOne({ select: INVITE_SELECT, where: { id: preview.id }, lock: true });
+    if (!target) {
+      throw new HttpNotFoundError();
+    }
+
+    const result = await db.transaction(async (tx) => {
+      await lockOwner(tx, target.owner_id);
+
+      const invite = await LinkRepository.byId(tx, preview.id, true);
 
       if (!invite || invite.revoked_at || new Date(invite.expires_at) <= now) {
         throw new HttpNotFoundError();
       }
 
-      if (invite.owner_id === userId) {
-        throw new InviteOwnerError();
-      }
-
-      const billing = await tx.billings.findOne({ select: BillingRepository.SELECT, where: { id: invite.billing_id }, lock: true });
+      const billing = await tx.billings.findOne({ select: BillingRepository.SELECT, where: { id: invite.linkable_id }, lock: true });
 
       if (billing?.state !== BillingState.Active) {
         throw new HttpNotFoundError();
+      }
+
+      if (billing.owner_id === userId) {
+        throw new InviteOwnerError();
       }
 
       // An invite made before registros refused them still cannot put anyone into one.
@@ -285,7 +296,7 @@ export namespace InviteRepository {
           });
         }
 
-        await tx.billing_invites.updateOne({ where: { id: invite.id }, data: { accepted_count: invite.accepted_count + 1 } });
+        await tx.links.updateOne({ where: { id: invite.id }, data: { accepted_count: (invite.accepted_count ?? 0) + 1 } });
         await BillingRepository.audit(tx, billing.owner_id, billing.id, 'billings.guest_waiting', instant, { userId });
 
         return {
@@ -317,7 +328,7 @@ export namespace InviteRepository {
         noticeChargeIds
       );
 
-      await tx.billing_invites.updateOne({ where: { id: invite.id }, data: { accepted_count: invite.accepted_count + 1 } });
+      await tx.links.updateOne({ where: { id: invite.id }, data: { accepted_count: (invite.accepted_count ?? 0) + 1 } });
       await BillingRepository.audit(tx, billing.owner_id, billing.id, 'billings.invite_accepted', instant, { userId, joinedSplit });
 
       return { billingId: billing.id, chargeId, joinedSplit, awaitingOwner: false };

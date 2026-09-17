@@ -17,6 +17,7 @@ import {
   SplitPartKind
 } from '@receivy/common';
 import { SettledLockedError } from '../../src/billings/errors';
+import { LinkableType } from '../../src/public/schemas/link';
 import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { EventRepository } from '../../src/common/repositories/events';
@@ -405,18 +406,23 @@ describe('registros on native PostgreSQL', () => {
     );
 
     await rejects(() => createInvite(db, OWNER, freela.id, SECRET, ORIGIN), SettledLockedError);
-    equal(await db.billing_invites.count({ where: { billing_id: freela.id } }), 0, 'no invite was stored');
+    equal(
+      await db.links.count({ where: { linkable_type: LinkableType.BillingInvite, linkable_id: freela.id } }),
+      0,
+      'no invite was stored'
+    );
 
     // An invite that already exists must not let anyone into a registro either.
     const publicId = crypto.randomUUID().replaceAll('-', '');
     const expiresAt = new Date(Math.floor(Date.now() / 1000) * 1000 + 24 * 60 * 60 * 1000).toISOString();
 
-    await db.billing_invites.insertOne({
+    await db.links.insertOne({
       data: {
         id: crypto.randomUUID(),
-        billing: { id: freela.id },
-        owner: { id: OWNER },
+        linkable_type: LinkableType.BillingInvite,
+        linkable_id: freela.id,
         public_id: publicId,
+        version: 1,
         expires_at: expiresAt,
         accepted_count: 0,
         created_at: new Date().toISOString()

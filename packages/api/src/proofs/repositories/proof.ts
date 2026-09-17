@@ -34,6 +34,7 @@ import {
 } from '../errors';
 import type { UploadExpiryClient } from '../schedulers/upload-expiry';
 import type { ProofStorage } from '../services/storage';
+import { currentProof, type ProofRow } from './proof-row';
 import { MAX_PROOF_BYTES, validateProof } from '../services/validation';
 import { uploadExpiryIdentifier } from '../utils/expiry';
 
@@ -44,18 +45,10 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 
 const userId = (actor: ProofRepository.Actor) => ('userId' in actor ? actor.userId : undefined);
 
-/** Every proof column back to "nothing attached". */
-const CLEARED = {
-  proof_state: sqlNull,
-  proof_file: sqlNull,
-  proof_kind: sqlNull,
-  ...{ proof_sender_user_id: sqlNull },
-  proof_actor_hash: sqlNull,
-  proof_expires_at: sqlNull,
-  proof_sent_at: sqlNull,
-  proof_reviewed_at: sqlNull,
-  proof_reason: sqlNull
-} as const;
+/** "Nothing attached" is the absence of the row; what was there lives on in `events`. */
+async function clearProof(db: DbClient, chargeId: string): Promise<void> {
+  await db.proofs.deleteMany({ where: { charge_id: chargeId } });
+}
 
 async function authorize(
   db: DbClient,
@@ -86,22 +79,22 @@ function pending(row: ChargeRepository.Row) {
   }
 }
 
-function ownsProof(row: ChargeRepository.Row, actor: ProofRepository.Actor): boolean {
-  return row.proof_actor_hash === ProofRepository.actorHash(actor);
+function ownsProof(proof: ProofRow | null, actor: ProofRepository.Actor): boolean {
+  return !!proof && proof.actor_hash === ProofRepository.actorHash(actor);
 }
 
 /** A file on its way over the sender's own declaration: the declaration stays under review until the bytes land. */
-function declarationSlot(row: ChargeRepository.Row): boolean {
-  return row.proof_state === StoredProofState.Pending && row.proof_kind === ProofKind.Declaration && !!row.proof_file;
+function declarationSlot(proof: ProofRow | null): boolean {
+  return proof?.state === StoredProofState.Pending && proof.kind === ProofKind.Declaration && !!proof.file;
 }
 
 /** Whether the charge still waits for `key`: a reserved upload, or a file on its way over a declaration. */
-function awaits(row: ChargeRepository.Row, key: string): boolean {
-  if (row.proof_file?.key !== key) {
+function awaits(proof: ProofRow | null, key: string): boolean {
+  if (proof?.file?.key !== key) {
     return false;
   }
 
-  return row.proof_state === StoredProofState.Uploading || declarationSlot(row);
+  return proof.state === StoredProofState.Uploading || declarationSlot(proof);
 }
 
 export namespace ProofRepository {
@@ -144,6 +137,7 @@ export namespace ProofRepository {
 
     const previousKey = await db.transaction(async (tx) => {
       const { row, direction } = await authorize(tx, id, actor, true);
+      const proof = await currentProof(tx, id, true);
 
       pending(row);
 
@@ -154,15 +148,15 @@ export namespace ProofRepository {
 
       // A file under review may not be replaced, except the sender's own declaration, which the file completes.
       const ownDeclaration =
-        row.proof_state === StoredProofState.Pending && row.proof_kind === ProofKind.Declaration && ownsProof(row, actor);
+        proof?.state === StoredProofState.Pending && proof.kind === ProofKind.Declaration && ownsProof(proof, actor);
 
-      if (row.proof_state === StoredProofState.Accepted || (row.proof_state === StoredProofState.Pending && !ownDeclaration)) {
+      if (proof?.state === StoredProofState.Accepted || (proof?.state === StoredProofState.Pending && !ownDeclaration)) {
         throw new ProofPendingError();
       }
 
-      const liveUpload = row.proof_state === StoredProofState.Uploading && !!row.proof_expires_at && Date.parse(row.proof_expires_at) > now;
+      const liveUpload = proof?.state === StoredProofState.Uploading && !!proof.expires_at && Date.parse(proof.expires_at) > now;
 
-      if (liveUpload && !ownsProof(row, actor)) {
+      if (liveUpload && !ownsProof(proof, actor)) {
         throw new UploadInProgressError();
       }
 
@@ -170,26 +164,30 @@ export namespace ProofRepository {
 
       // The declaration stays under review, sent time and all, until the file actually lands.
       if (ownDeclaration) {
-        await tx.charges.updateOne({ where: { id }, data: { proof_file: file, proof_expires_at: expiresAt, updated_at: stamp } });
+        await tx.proofs.updateOne({ where: { id: proof!.id }, data: { file, expires_at: expiresAt, updated_at: stamp } });
+        await tx.charges.updateOne({ where: { id }, data: { updated_at: stamp } });
 
-        return row.proof_file?.key ?? null;
+        return proof!.file?.key ?? null;
       }
 
-      await tx.charges.updateOne({
-        where: { id },
+      await clearProof(tx, id);
+      await tx.proofs.insertOne({
         data: {
-          ...CLEARED,
-          proof_state: StoredProofState.Uploading,
-          proof_kind: ProofKind.File,
-          proof_file: file,
-          ...(userId(actor) ? { proof_sender: { id: userId(actor)! } } : {}),
-          proof_actor_hash: actorHash(actor),
-          proof_expires_at: expiresAt,
+          id: crypto.randomUUID(),
+          charge: { id },
+          state: StoredProofState.Uploading,
+          kind: ProofKind.File,
+          file,
+          ...(userId(actor) ? { sender: { id: userId(actor)! } } : {}),
+          actor_hash: actorHash(actor),
+          expires_at: expiresAt,
+          created_at: stamp,
           updated_at: stamp
         }
       });
+      await tx.charges.updateOne({ where: { id }, data: { updated_at: stamp } });
 
-      return row.proof_file?.key ?? null;
+      return proof?.file?.key ?? null;
     });
 
     // The previous file (a rejected one, or an abandoned upload) has no row pointing at it any more.
@@ -215,17 +213,18 @@ export namespace ProofRepository {
   export async function receiveObject(db: DbClient, storage: ProofStorage, key: string, now = Date.now()): Promise<ObjectOutcome> {
     const chargeId = KEY.exec(key)?.[1];
     const charge = chargeId ? await db.charges.findOne({ select: ChargeRepository.SELECT, where: { id: chargeId } }) : undefined;
+    const proof = charge ? await currentProof(db, charge.id) : null;
 
-    if (!charge || !awaits(charge, key)) {
+    if (!charge || !awaits(proof, key)) {
       // A redelivered event for the file already attached must leave it alone; any other object is a stray.
-      if (charge?.proof_file?.key !== key) {
+      if (proof?.file?.key !== key) {
         await storage.delete(key).catch(() => undefined);
       }
 
       return ObjectOutcome.Ignored;
     }
 
-    const declared = charge.proof_file!;
+    const declared = proof!.file!;
     const stamp = new Date(now).toISOString();
 
     let validated: ReturnType<typeof validateProof> | undefined;
@@ -245,21 +244,25 @@ export namespace ProofRepository {
       }
 
       await db.transaction(async (tx) => {
-        const current = await tx.charges.findOne({ select: ChargeRepository.SELECT, where: { id: charge.id }, lock: true });
+        const current = await currentProof(tx, charge.id, true);
 
-        if (!current || !awaits(current, key)) {
+        if (!awaits(current, key)) {
           return;
         }
 
         // Over a declaration only the file goes: the declaration stands as it was sent.
-        const release = declarationSlot(current) ? { proof_file: sqlNull, proof_expires_at: sqlNull } : CLEARED;
+        if (declarationSlot(current)) {
+          await tx.proofs.updateOne({ where: { id: current!.id }, data: { file: sqlNull, expires_at: sqlNull, updated_at: stamp } });
+        } else {
+          await clearProof(tx, charge.id);
+        }
 
-        await tx.charges.updateOne({ where: { id: charge.id }, data: { ...release, updated_at: stamp } });
+        await tx.charges.updateOne({ where: { id: charge.id }, data: { updated_at: stamp } });
         await EventRepository.record(tx, {
           type: 'proof.invalid',
           eventableType: EventableType.Charge,
           eventableId: charge.id,
-          actorId: charge.proof_sender_user_id ?? null,
+          actorId: proof?.sender_user_id ?? null,
           payload: { name: declared.name, mime: declared.mime, size: declared.size, reason: failure.message },
           at: stamp
         });
@@ -271,29 +274,30 @@ export namespace ProofRepository {
     }
 
     const outcome = await db.transaction(async (tx): Promise<'accepted' | 'attached' | 'stray'> => {
-      const current = await tx.charges.findOne({ select: ChargeRepository.SELECT, where: { id: charge.id }, lock: true });
+      const current = await currentProof(tx, charge.id, true);
 
-      if (!current || !awaits(current, key)) {
-        return current?.proof_file?.key === key ? 'attached' : 'stray';
+      if (!awaits(current, key)) {
+        return current?.file?.key === key ? 'attached' : 'stray';
       }
 
       // The file replaces a declaration it was sent over.
-      await tx.charges.updateOne({
-        where: { id: charge.id },
+      await tx.proofs.updateOne({
+        where: { id: current!.id },
         data: {
-          proof_state: StoredProofState.Pending,
-          proof_kind: ProofKind.File,
-          proof_file: { ...declared, sha256: validated!.sha256 },
-          proof_expires_at: sqlNull,
-          proof_sent_at: stamp,
+          state: StoredProofState.Pending,
+          kind: ProofKind.File,
+          file: { ...declared, sha256: validated!.sha256 },
+          expires_at: sqlNull,
+          sent_at: stamp,
           updated_at: stamp
         }
       });
+      await tx.charges.updateOne({ where: { id: charge.id }, data: { updated_at: stamp } });
       await EventRepository.record(tx, {
         type: 'proof.uploaded',
         eventableType: EventableType.Charge,
         eventableId: charge.id,
-        actorId: charge.proof_sender_user_id ?? null,
+        actorId: proof?.sender_user_id ?? null,
         payload: { name: declared.name, mime: declared.mime, size: declared.size },
         at: stamp
       });
@@ -319,18 +323,17 @@ export namespace ProofRepository {
     actor: Actor,
     now = Date.now()
   ): Promise<ChargeRepository.Row> {
-    const { row } = await authorize(db, id, actor);
-    const key = row.proof_file?.key;
+    // Authorizes the actor against the charge; the proof itself is what the rest of this reads.
+    await authorize(db, id, actor);
 
-    if (
-      !key ||
-      !ownsProof(row, actor) ||
-      (row.proof_state !== StoredProofState.Uploading && row.proof_state !== StoredProofState.Pending)
-    ) {
+    const proof = await currentProof(db, id);
+    const key = proof?.file?.key;
+
+    if (!key || !ownsProof(proof, actor) || (proof!.state !== StoredProofState.Uploading && proof!.state !== StoredProofState.Pending)) {
       throw new UploadMissingError();
     }
 
-    if (awaits(row, key)) {
+    if (awaits(proof, key)) {
       if (!(await storage.exists(key))) {
         throw new UploadMissingError('O arquivo não chegou ao armazenamento. Envie novamente.');
       }
@@ -340,10 +343,16 @@ export namespace ProofRepository {
       }
     }
 
+    const settled = await currentProof(db, id);
+
+    if (settled?.state !== StoredProofState.Pending || settled.file?.key !== key || declarationSlot(settled)) {
+      throw new UploadMissingError();
+    }
+
     const current = await db.charges.findOne({ select: ChargeRepository.SELECT, where: { id } });
 
-    if (current?.proof_state !== StoredProofState.Pending || current.proof_file?.key !== key || declarationSlot(current)) {
-      throw new UploadMissingError();
+    if (!current) {
+      throw new HttpNotFoundError();
     }
 
     return current;
@@ -352,17 +361,23 @@ export namespace ProofRepository {
   /** Releases a reserved slot nobody filled; the scheduler calls it, and a retry finds nothing to do. */
   export async function expireUpload(db: DbClient, storage: ProofStorage, chargeId: string, key: string): Promise<boolean> {
     const outcome = await db.transaction(async (tx): Promise<'released' | 'attached' | 'stray'> => {
-      const current = await tx.charges.findOne({ select: ChargeRepository.SELECT, where: { id: chargeId }, lock: true });
+      const current = await currentProof(tx, chargeId, true);
 
-      if (!current || !awaits(current, key)) {
+      if (!awaits(current, key)) {
         // The bytes landed in time and the file is the charge's proof now: the schedule fires anyway, harmlessly.
-        return current?.proof_file?.key === key ? 'attached' : 'stray';
+        return current?.file?.key === key ? 'attached' : 'stray';
       }
 
-      // Over a declaration only the file goes: the declaration stands as it was sent, still in review.
-      const release = declarationSlot(current) ? { proof_file: sqlNull, proof_expires_at: sqlNull } : CLEARED;
+      const stamp = new Date().toISOString();
 
-      await tx.charges.updateOne({ where: { id: chargeId }, data: { ...release, updated_at: new Date().toISOString() } });
+      // Over a declaration only the file goes: the declaration stands as it was sent, still in review.
+      if (declarationSlot(current)) {
+        await tx.proofs.updateOne({ where: { id: current!.id }, data: { file: sqlNull, expires_at: sqlNull, updated_at: stamp } });
+      } else {
+        await clearProof(tx, chargeId);
+      }
+
+      await tx.charges.updateOne({ where: { id: chargeId }, data: { updated_at: stamp } });
 
       return 'released';
     });
@@ -378,30 +393,32 @@ export namespace ProofRepository {
   export async function withdraw(db: DbClient, storage: ProofStorage, id: string, actor: Actor, now = Date.now()): Promise<void> {
     const key = await db.transaction(async (tx) => {
       const { row } = await authorize(tx, id, actor, true);
+      const proof = await currentProof(tx, id, true);
 
       pending(row);
 
-      if (!row.proof_state || !ownsProof(row, actor)) {
+      if (!proof || !ownsProof(proof, actor)) {
         throw new HttpNotFoundError();
       }
 
-      if (row.proof_state !== StoredProofState.Pending && row.proof_state !== StoredProofState.Uploading) {
+      if (proof.state !== StoredProofState.Pending && proof.state !== StoredProofState.Uploading) {
         throw new ProofReviewedError();
       }
 
       const stamp = new Date(now).toISOString();
 
-      await tx.charges.updateOne({ where: { id }, data: { ...CLEARED, updated_at: stamp } });
+      await clearProof(tx, id);
+      await tx.charges.updateOne({ where: { id }, data: { updated_at: stamp } });
       await EventRepository.record(tx, {
         type: 'proof.withdrawn',
         eventableType: EventableType.Charge,
         eventableId: id,
         actorId: userId(actor) ?? null,
-        payload: { name: row.proof_file?.name, mime: row.proof_file?.mime, size: row.proof_file?.size },
+        payload: { name: proof.file?.name, mime: proof.file?.mime, size: proof.file?.size },
         at: stamp
       });
 
-      return row.proof_file?.key ?? null;
+      return proof.file?.key ?? null;
     });
 
     if (key) {
@@ -422,6 +439,7 @@ export namespace ProofRepository {
   ): Promise<ChargeRepository.Row> {
     const { declared, previousKey } = await db.transaction(async (tx) => {
       const { row, direction } = await authorize(tx, id, actor, true);
+      const proof = await currentProof(tx, id, true);
 
       pending(row);
 
@@ -435,30 +453,33 @@ export namespace ProofRepository {
         throw new ProofDeclarationForbiddenError();
       }
 
-      if (row.proof_state === StoredProofState.Pending || row.proof_state === StoredProofState.Accepted) {
+      if (proof?.state === StoredProofState.Pending || proof?.state === StoredProofState.Accepted) {
         throw new ChargeInReviewError();
       }
 
-      const liveUpload = row.proof_state === StoredProofState.Uploading && !!row.proof_expires_at && Date.parse(row.proof_expires_at) > now;
+      const liveUpload = proof?.state === StoredProofState.Uploading && !!proof.expires_at && Date.parse(proof.expires_at) > now;
 
-      if (liveUpload && !ownsProof(row, actor)) {
+      if (liveUpload && !ownsProof(proof, actor)) {
         throw new UploadInProgressError();
       }
 
       const stamp = new Date(now).toISOString();
 
-      await tx.charges.updateOne({
-        where: { id },
+      await clearProof(tx, id);
+      await tx.proofs.insertOne({
         data: {
-          ...CLEARED,
-          proof_state: StoredProofState.Pending,
-          proof_kind: ProofKind.Declaration,
-          ...(userId(actor) ? { proof_sender: { id: userId(actor)! } } : {}),
-          proof_actor_hash: actorHash(actor),
-          proof_sent_at: stamp,
+          id: crypto.randomUUID(),
+          charge: { id },
+          state: StoredProofState.Pending,
+          kind: ProofKind.Declaration,
+          ...(userId(actor) ? { sender: { id: userId(actor)! } } : {}),
+          actor_hash: actorHash(actor),
+          sent_at: stamp,
+          created_at: stamp,
           updated_at: stamp
         }
       });
+      await tx.charges.updateOne({ where: { id }, data: { updated_at: stamp } });
       await EventRepository.record(tx, {
         type: 'proof.declared',
         eventableType: EventableType.Charge,
@@ -474,7 +495,7 @@ export namespace ProofRepository {
       }
 
       // A rejected file or an abandoned slot has no row pointing at it any more.
-      return { declared: current, previousKey: row.proof_file?.key ?? null };
+      return { declared: current, previousKey: proof?.file?.key ?? null };
     });
 
     if (previousKey) {
@@ -498,6 +519,7 @@ export namespace ProofRepository {
 
     return db.transaction(async (tx) => {
       const { row, direction } = await ChargeRepository.findForActor(tx, actorId, id, true);
+      const proof = await currentProof(tx, id, true);
 
       if (direction !== Direction.Receivable) {
         throw new HttpForbiddenError();
@@ -505,22 +527,28 @@ export namespace ProofRepository {
 
       pending(row);
 
-      if (row.proof_state !== StoredProofState.Pending) {
+      if (proof?.state !== StoredProofState.Pending) {
         throw new ProofMissingError();
       }
 
       const stamp = new Date(now).toISOString();
       const reason = input.reason?.trim() || undefined;
-      const declaration = row.proof_kind === ProofKind.Declaration;
+      const declaration = proof.kind === ProofKind.Declaration;
 
+      await tx.proofs.updateOne({
+        where: { id: proof.id },
+        data: {
+          state: input.decision === ProofState.Accepted ? StoredProofState.Accepted : StoredProofState.Rejected,
+          reviewed_at: stamp,
+          reason: reason ?? sqlNull,
+          // A file still on its way over the answered declaration has nothing left to attach to: its bytes go as a stray.
+          ...(declaration ? { file: sqlNull, expires_at: sqlNull } : {}),
+          updated_at: stamp
+        }
+      });
       await tx.charges.updateOne({
         where: { id },
         data: {
-          proof_state: input.decision === ProofState.Accepted ? StoredProofState.Accepted : StoredProofState.Rejected,
-          proof_reviewed_at: stamp,
-          proof_reason: reason ?? sqlNull,
-          // A file still on its way over the answered declaration has nothing left to attach to: its bytes go as a stray.
-          ...(declaration ? { proof_file: sqlNull, proof_expires_at: sqlNull } : {}),
           ...(input.decision === ProofState.Accepted ? { state: ChargeState.Paid, paid_at: stamp } : {}),
           updated_at: stamp
         }
@@ -530,7 +558,7 @@ export namespace ProofRepository {
         eventableType: EventableType.Charge,
         eventableId: id,
         actorId,
-        payload: { name: declaration ? undefined : row.proof_file?.name, ...(reason ? { reason } : {}) },
+        payload: { name: declaration ? undefined : proof.file?.name, ...(reason ? { reason } : {}) },
         at: stamp
       });
 
@@ -562,36 +590,39 @@ export namespace ProofRepository {
     id: string,
     actorId: string
   ): Promise<{ url: string; expiresIn: number }> {
-    const { row, direction } = await ChargeRepository.findForActor(db, actorId, id);
+    const { direction } = await ChargeRepository.findForActor(db, actorId, id);
+    const proof = await currentProof(db, id);
 
-    if (!row.proof_file || !row.proof_state || row.proof_state === StoredProofState.Uploading || declarationSlot(row)) {
+    if (!proof?.file || proof.state === StoredProofState.Uploading || declarationSlot(proof)) {
       throw new HttpNotFoundError();
     }
 
-    if (direction === Direction.Payable && row.proof_sender_user_id !== actorId) {
+    if (direction === Direction.Payable && proof.sender_user_id !== actorId) {
       throw new HttpNotFoundError();
     }
 
-    return { url: await storage.downloadUrl(row.proof_file.key, row.proof_file.mime), expiresIn: 60 };
+    return { url: await storage.downloadUrl(proof.file.key, proof.file.mime), expiresIn: 60 };
   }
 
   /** What the public page may learn: the state of its own upload, nothing about anyone else's. */
   export async function publicState(db: DbClient, token: string, secret: string): Promise<PublicProofState> {
-    return stateView(await PublicLinkRepository.resolveCharge(db, token, secret), token, secret);
+    const charge = await PublicLinkRepository.resolveCharge(db, token, secret);
+
+    return stateView(await currentProof(db, charge.id), token, secret);
   }
 
-  export function stateView(charge: ChargeRepository.Row, token: string, secret: string): PublicProofState {
-    if (!charge.proof_state || charge.proof_actor_hash !== actorHash({ token, secret })) {
+  export function stateView(proof: ProofRow | null, token: string, secret: string): PublicProofState {
+    if (!proof || proof.actor_hash !== actorHash({ token, secret })) {
       return { state: null, kind: null, reason: null, file: null };
     }
 
     // A file still on its way over the declaration is not the proof yet.
-    const file = declarationSlot(charge) ? undefined : charge.proof_file;
+    const file = declarationSlot(proof) ? undefined : proof.file;
 
     return {
-      state: charge.proof_state === StoredProofState.Uploading ? 'uploading' : ChargeRepository.visibleProofState(charge),
-      kind: ChargeRepository.proofKind(charge),
-      reason: charge.proof_reason ?? null,
+      state: proof.state === StoredProofState.Uploading ? 'uploading' : ChargeRepository.visibleProofState(proof),
+      kind: ChargeRepository.proofKind(proof),
+      reason: proof.reason ?? null,
       file: file ? { name: file.name, mime: file.mime, size: file.size } : null
     };
   }

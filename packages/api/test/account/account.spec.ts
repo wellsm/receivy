@@ -3,9 +3,10 @@ import { after, before, describe, it } from 'node:test';
 import type { Service } from '@ez4/common';
 import { HttpForbiddenError, HttpUnauthorizedError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
-import { DevicePlatform, PixKeyType, ProofMime } from '@receivy/common';
+import { DevicePlatform, PixKeyType, ProofKind, ProofMime } from '@receivy/common';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { StoredProofState } from '../../src/charges/schemas/charge';
+import { currentProof } from '../../src/proofs/repositories/proof-row';
 import type { SessionAuthorizerProvider } from '../../src/common/authorizers/session';
 import { sessionAuthorizer } from '../../src/common/authorizers/session';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
@@ -46,26 +47,27 @@ async function attachProof(
   state: StoredProofState.Pending | StoredProofState.Accepted = StoredProofState.Accepted
 ) {
   const now = new Date().toISOString();
-  await db.charges.updateOne({
-    where: { id: chargeId },
+  await db.proofs.deleteMany({ where: { charge_id: chargeId } });
+  await db.proofs.insertOne({
     data: {
-      proof_state: state,
-      proof_file: { key, name: 'fixture.pdf', mime: ProofMime.Pdf, size: 16, sha256: '0'.repeat(64) },
-      ...(sender ? { proof_sender: { id: sender } } : {}),
-      proof_actor_hash: sender
+      id: crypto.randomUUID(),
+      charge: { id: chargeId },
+      state,
+      kind: ProofKind.File,
+      file: { key, name: 'fixture.pdf', mime: ProofMime.Pdf, size: 16, sha256: '0'.repeat(64) },
+      ...(sender ? { sender: { id: sender } } : {}),
+      actor_hash: sender
         ? ProofRepository.actorHash({ userId: sender })
         : ProofRepository.actorHash({ token: 'public-fixture', secret }),
-      proof_sent_at: now,
+      sent_at: now,
+      created_at: now,
       updated_at: now
     }
   });
 }
 async function proofColumns(chargeId: string) {
-  const row = await db.charges.findOne({
-    select: { proof_state: true, proof_file: true, proof_sender_user_id: true },
-    where: { id: chargeId }
-  });
-  return { state: row?.proof_state ?? null, key: row?.proof_file?.key ?? null, sender: row?.proof_sender_user_id ?? null };
+  const row = await currentProof(db, chargeId);
+  return { state: row?.state ?? null, key: row?.file?.key ?? null, sender: row?.sender_user_id ?? null };
 }
 
 describe('account lifecycle on dedicated PostgreSQL', () => {

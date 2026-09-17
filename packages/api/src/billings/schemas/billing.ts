@@ -25,7 +25,7 @@ export interface BillingSchema extends Database.Schema {
   due_rule: BillingDueRule;
   payment_method_id?: String.UUID;
   /** 'payable' is the owner's own bill; null (legacy) or 'receivable' means the owner collects from contacts. */
-  direction?: Direction;
+  direction: Direction;
   /** Conta a pagar only: the person who receives (users.id); null when the bill is the owner's alone. */
   payee_user_id?: String.UUID;
   /** Conta a pagar only: the key typed on the billing (it belongs to whoever receives, not to a wallet). */

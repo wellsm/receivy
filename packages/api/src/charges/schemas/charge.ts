@@ -71,7 +71,10 @@ export interface ChargeSchema extends Database.Schema {
   proof_sent_at?: String.DateTime;
   proof_reviewed_at?: String.DateTime;
   proof_reason?: String.Max<500>;
-  /** The public payment link, versioned: rotating bumps the version and kills the previous token. */
+  /**
+   * @deprecated Moved to the `links` table, where rotating means a new row instead of a bumped version.
+   * Kept until the block 7 backfill runs; `link_version` is what the migrated tokens still verify against.
+   */
   public_id?: String.Max<64>;
   link_version?: number;
   link_expires_at?: String.DateTime;

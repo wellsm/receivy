@@ -15,6 +15,7 @@ import { publicStartProofUploadHandler } from '../../src/proofs/endpoints/public
 import { publicWithdrawProofHandler } from '../../src/proofs/endpoints/public-withdraw';
 import { ProofDeclarationForbiddenError, ProofInvalidFileError, UploadMissingError } from '../../src/proofs/errors';
 import { ProofRepository } from '../../src/proofs/repositories/proof';
+import { currentProof } from '../../src/proofs/repositories/proof-row';
 
 import type { UploadExpirySchedule } from '../../src/proofs/schedulers/upload-expiry';
 import { bucketProofStorage } from '../../src/proofs/services/bucket-storage';
@@ -51,27 +52,29 @@ async function charge(dueDate = '2027-01-01') {
   return (await createOnceCharge(db, OWNER, `proof-${++counter}`, { userId: debtorId, amountCents: 1234, dueDate })).chargeId;
 }
 
+/**
+ * The charge plus its proof, still flattened under the old column names: the proof moved to its own table,
+ * and keeping the shape here is what lets every assertion in this file stay as it was written.
+ */
 async function row(id: string) {
-  const found = await db.charges.findOne({
-    select: {
-      state: true,
-      paid_at: true,
-      proof_state: true,
-      proof_kind: true,
-      proof_file: true,
-      proof_sender_user_id: true,
-      proof_actor_hash: true,
-      proof_expires_at: true,
-      proof_sent_at: true,
-      proof_reviewed_at: true,
-      proof_reason: true
-    },
-    where: { id }
-  });
+  const found = await db.charges.findOne({ select: { state: true, paid_at: true }, where: { id } });
 
   ok(found);
 
-  return found;
+  const proof = await currentProof(db, id);
+
+  return {
+    ...found,
+    proof_state: proof?.state,
+    proof_kind: proof?.kind,
+    proof_file: proof?.file,
+    proof_sender_user_id: proof?.sender_user_id,
+    proof_actor_hash: proof?.actor_hash,
+    proof_expires_at: proof?.expires_at,
+    proof_sent_at: proof?.sent_at,
+    proof_reviewed_at: proof?.reviewed_at,
+    proof_reason: proof?.reason
+  };
 }
 
 /** Reserves the slot and returns the key the bucket event will name. */
@@ -229,12 +232,14 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
     await bucket.write(key, PDF);
 
     await rejects(() => ProofRepository.completeUpload(db, storage, id, { userId: OTHER }));
-    equal((await ProofRepository.completeUpload(db, storage, id, actor)).proof_state, 'pending');
+    await ProofRepository.completeUpload(db, storage, id, actor);
+    equal((await row(id)).proof_state, 'pending');
     equal((await row(id)).proof_file?.sha256, createHash('sha256').update(PDF).digest('hex'));
 
     // The late bucket event and a retried complete both find nothing to do.
     equal(await ProofRepository.receiveObject(db, storage, key), 'ignored');
-    equal((await ProofRepository.completeUpload(db, storage, id, actor)).proof_state, 'pending');
+    await ProofRepository.completeUpload(db, storage, id, actor);
+    equal((await row(id)).proof_state, 'pending');
     equal((await EventRepository.list(db, id, 'proof.uploaded')).length, 1);
 
     // A file that fails validation releases the slot and says why.
@@ -439,7 +444,9 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
     await rejects(() => ProofRepository.declare(db, storage, id, { userId: OWNER }), ProofDeclarationForbiddenError);
     await rejects(() => ProofRepository.declare(db, storage, id, { userId: OTHER }), HttpForbiddenError);
 
-    const declared = await ProofRepository.declare(db, storage, id, actor);
+    await ProofRepository.declare(db, storage, id, actor);
+
+    const declared = await row(id);
 
     equal(declared.proof_state, 'pending');
     equal(declared.proof_kind, 'declaration');
@@ -513,7 +520,9 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
 
   it('keeps a declaration under review while its file is on the way and restores it when the upload fails', async () => {
     const id = await charge();
-    const declared = await ProofRepository.declare(db, storage, id, actor);
+    await ProofRepository.declare(db, storage, id, actor);
+
+    const declared = await row(id);
     const { context } = fakeNotice();
 
     // The slot rides on the declaration: it stays pending, with its sent time, for both sides.
@@ -568,7 +577,9 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
 
     await bucket.write(landed.key, PDF);
 
-    const attached = await ProofRepository.completeUpload(db, storage, id, actor);
+    await ProofRepository.completeUpload(db, storage, id, actor);
+
+    const attached = await row(id);
 
     equal(attached.proof_state, 'pending');
     equal(attached.proof_kind, 'file');

@@ -6,6 +6,7 @@ import { throttlePublicRead } from '../../common/utils/throttle';
 import { PublicLinkRepository } from '../../public/repositories/public-link';
 import type { ProofProvider } from '../provider';
 import { ProofRepository } from '../repositories/proof';
+import { currentProof } from '../repositories/proof-row';
 
 declare class PublicRequest implements Http.Request {
   parameters: { token: String.Max<200> };
@@ -23,5 +24,5 @@ export async function publicProofStateHandler(
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
   const charge = await PublicLinkRepository.resolveCharge(db, request.parameters.token, secret);
   await throttlePublicRead(db, charge.public_id ?? charge.id);
-  return { status: 200, body: ProofRepository.stateView(charge, request.parameters.token, secret) };
+  return { status: 200, body: ProofRepository.stateView(await currentProof(db, charge.id), request.parameters.token, secret) };
 }

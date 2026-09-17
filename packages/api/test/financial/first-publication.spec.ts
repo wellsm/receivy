@@ -1,6 +1,7 @@
 import { deepEqual, equal, rejects } from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
+import { Order } from '@ez4/database';
 import { HttpNotFoundError } from '@ez4/gateway';
 import { PixKeyType } from '@receivy/common';
 import { ChargeRepository } from '../../src/charges/repositories/charge';
@@ -9,6 +10,7 @@ import { EventRepository } from '../../src/common/repositories/events';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { PublicLinkRepository } from '../../src/public/repositories/public-link';
+import { LinkableType } from '../../src/public/schemas/link';
 import { cleanupUsers, createOnceCharge, createUser, db } from '../fixtures/financial';
 import { fakeNotice } from '../fixtures/scheduling';
 
@@ -20,8 +22,15 @@ const { context, sent } = notice;
 let chargeId: string;
 
 async function linkColumns() {
-  const row = await db.charges.findOne({ select: { public_id: true, link_revoked_at: true }, where: { id: chargeId } });
-  return { publicId: row?.public_id ?? null, revoked: !!row?.link_revoked_at };
+  // The link is a row of its own now: "revoked" means the live one is gone, not a column on the charge.
+  const { records } = await db.links.findMany({
+    select: { public_id: true, revoked_at: true },
+    where: { linkable_type: LinkableType.Charge, linkable_id: chargeId },
+    order: { created_at: Order.Desc },
+    take: 1
+  });
+  const row = records[0];
+  return { publicId: row?.public_id ?? null, revoked: !!row?.revoked_at };
 }
 
 describe('explicit first Pix publication', () => {

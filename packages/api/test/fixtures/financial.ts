@@ -45,10 +45,12 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
   const chargeIds = charges.records.map((row) => row.id);
   if (chargeIds.length) {
     await client.events.deleteMany({ where: { eventable_id: { isIn: chargeIds } } });
+    await client.proofs.deleteMany({ where: { charge_id: { isIn: chargeIds } } });
+    await client.links.deleteMany({ where: { linkable_id: { isIn: chargeIds } } });
     await client.charges.deleteMany({ where: { id: { isIn: chargeIds } } });
   }
   if (billingIds.length) {
-    await client.billing_invites.deleteMany({ where: { billing_id: { isIn: billingIds } } });
+    await client.links.deleteMany({ where: { linkable_id: { isIn: billingIds } } });
     await client.billing_guests.deleteMany({ where: { billing_id: { isIn: billingIds } } });
     await client.allocations.deleteMany({ where: { billing_id: { isIn: billingIds } } });
     await client.events.deleteMany({ where: { eventable_id: { isIn: billingIds } } });

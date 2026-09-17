@@ -3,23 +3,19 @@ import { ChargePayer, ChargeState, Direction, type PublicChargeView, type Public
 import { ChargeClosedError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { PaymentMethodKind, StoredProofState } from '../../charges/schemas/charge';
+import { currentProof } from '../../proofs/repositories/proof-row';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
 import { announceCharges, type NoticeContext, NoticeTemplate } from '../../notifications/services/send';
 import { PixRequiredError, PixSnapshotLockedError } from '../errors';
+import { type LinkRow, LinkRepository } from './link';
+import { LinkableType } from '../schemas/link';
 import { assertPublicLinkSecretConfigured, PublicTokenPurpose, verifyPublicChargeToken } from '../services/capability';
 import { ensurePublicLink, linkToken } from '../services/links';
 
-function response(row: ChargeRepository.Row, secret: string): PublicLink {
-  if (!row.public_id || !row.link_expires_at) {
-    throw new Error('Charge has no public link.');
-  }
-
-  return {
-    token: linkToken({ public_id: row.public_id, link_expires_at: row.link_expires_at, link_version: row.link_version }, secret),
-    expiresAt: row.link_expires_at
-  };
+function response(link: LinkRow, secret: string): PublicLink {
+  return { token: linkToken(link, secret), expiresAt: link.expires_at };
 }
 
 export namespace PublicLinkRepository {
@@ -48,9 +44,11 @@ export namespace PublicLinkRepository {
 
       let current = row;
       let published = false;
+      // A charge published once without a key stays refused even after that link was revoked.
+      const everPublished = await LinkRepository.everIssued(tx, LinkableType.Charge, row.id);
 
       if (!ChargeRepository.paymentOf(row)) {
-        if (row.public_id || !paymentMethodId) throw new PixRequiredError();
+        if (everPublished || !paymentMethodId) throw new PixRequiredError();
         const method = await tx.payment_methods.findOne({
           select: { pix_key: true, pix_key_type: true, label: true },
           where: { id: paymentMethodId, owner_id: creditorId, archived_at: { isNull: true } },
@@ -92,7 +90,7 @@ export namespace PublicLinkRepository {
         if (method.pix_key !== published?.value || method.pix_key_type !== published?.type) throw new PixSnapshotLockedError();
       }
 
-      const linked = await ensurePublicLink(tx, current, nowSeconds, rotate);
+      const linked = await ensurePublicLink(tx, current.id, nowSeconds, rotate);
 
       return { link: response(linked, secret), announce: published };
     });
@@ -108,9 +106,10 @@ export namespace PublicLinkRepository {
     await db.transaction(async (tx) => {
       const { row, direction } = await ChargeRepository.findForActor(tx, creditorId, chargeId, true);
       if (direction !== Direction.Receivable || ChargeRepository.payer(row) === ChargePayer.Owner) throw new HttpForbiddenError();
-      if (!row.public_id || row.link_revoked_at) return;
+      if (!(await LinkRepository.live(tx, LinkableType.Charge, row.id))) return;
       const stamp = new Date().toISOString();
-      await tx.charges.updateOne({ where: { id: row.id }, data: { link_revoked_at: stamp, updated_at: stamp } });
+      await LinkRepository.revokeLive(tx, LinkableType.Charge, row.id, stamp);
+      await tx.charges.updateOne({ where: { id: row.id }, data: { updated_at: stamp } });
     });
   }
 
@@ -135,7 +134,7 @@ export namespace PublicLinkRepository {
       dueDate: charge.due_date,
       state: charge.state,
       pix: payment ? { keyType: payment.type, key: payment.value, label: payment.label } : null,
-      uploadsEnabled: charge.state === ChargeState.Pending && charge.proof_state !== StoredProofState.Pending
+      uploadsEnabled: charge.state === ChargeState.Pending && (await currentProof(db, charge.id))?.state !== StoredProofState.Pending
     };
   }
 
@@ -149,21 +148,18 @@ export namespace PublicLinkRepository {
     assertPublicLinkSecretConfigured(secret);
     const publicId = token.split('.')[0];
     if (!publicId) throw new HttpNotFoundError();
-    const charge = await db.charges.findOne({ select: ChargeRepository.SELECT, where: { public_id: publicId } });
-    if (!charge?.link_expires_at || charge.link_revoked_at) throw new HttpNotFoundError();
+    const link = await LinkRepository.byPublicId(db, publicId);
+    if (!link || link.linkable_type !== LinkableType.Charge || link.revoked_at) throw new HttpNotFoundError();
     let capability: { publicId: string; expiresAtSeconds: number };
     try {
-      capability = verifyPublicChargeToken(token, {
-        version: charge.link_version ?? 1,
-        nowSeconds,
-        secret,
-        purpose: PublicTokenPurpose.Charge
-      });
+      capability = verifyPublicChargeToken(token, { version: link.version, nowSeconds, secret, purpose: PublicTokenPurpose.Charge });
     } catch {
       throw new HttpNotFoundError();
     }
-    const storedExpiry = Math.floor(Date.parse(charge.link_expires_at) / 1000);
+    const storedExpiry = Math.floor(Date.parse(link.expires_at) / 1000);
     if (capability.expiresAtSeconds !== storedExpiry || storedExpiry <= nowSeconds) throw new HttpNotFoundError();
+    const charge = await db.charges.findOne({ select: ChargeRepository.SELECT, where: { id: link.linkable_id } });
+    if (!charge) throw new HttpNotFoundError();
     return charge;
   }
 }

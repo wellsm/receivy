@@ -23,6 +23,9 @@ import { EventableType } from '../../common/schemas/event';
 import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
 import { ProofDeclarationForbiddenError } from '../../proofs/errors';
+import { currentProof, type ProofRow } from '../../proofs/repositories/proof-row';
+import { LinkRepository } from '../../public/repositories/link';
+import { LinkableType } from '../../public/schemas/link';
 import { lockAccountReferences } from '../../users/services/locking';
 import { ChargeClosedError, ChargeNotPaidError, SilenceUnavailableError } from '../errors';
 import { PaymentMethodKind, StoredProofState } from '../schemas/charge';
@@ -87,6 +90,7 @@ export namespace ChargeRepository {
     state: true,
     cancelled_at: true,
     paid_at: true,
+    // @deprecated Moved to the `proofs` table; selected only until the block 7 backfill runs and they go.
     proof_state: true,
     proof_kind: true,
     proof_file: true,
@@ -165,6 +169,7 @@ export namespace ChargeRepository {
     state: ChargeState;
     cancelled_at?: string;
     paid_at?: string;
+    /** @deprecated Moved to the `proofs` table; nothing reads these nine any more. */
     proof_state?: StoredProofState;
     proof_kind?: ProofKind;
     proof_file?: ProofFileColumns;
@@ -248,8 +253,8 @@ export namespace ChargeRepository {
   }
 
   /** The stored proof state as anyone may see it: a reserved slot (`uploading`) is nobody's business yet. */
-  export function visibleProofState(row: Pick<Row, 'proof_state'>): ProofState | null {
-    switch (row.proof_state) {
+  export function visibleProofState(proof: Pick<ProofRow, 'state'> | null): ProofState | null {
+    switch (proof?.state) {
       case StoredProofState.Pending:
         return ProofState.Pending;
 
@@ -265,13 +270,13 @@ export namespace ChargeRepository {
   }
 
   /** The attached proof as the viewer may see it: a reserved slot is nobody's business yet, and a declaration has no file. */
-  export function proofOf(row: Row, viewerId: string): ChargeProof | null {
-    const state = visibleProofState(row);
-    const kind = row.proof_kind ?? ProofKind.File;
+  export function proofOf(proof: ProofRow | null, viewerId: string): ChargeProof | null {
+    const state = visibleProofState(proof);
+    const kind = proof?.kind ?? ProofKind.File;
     // A declaration has no file, not even one still on its way over it.
-    const file = kind === ProofKind.File ? row.proof_file : undefined;
+    const file = kind === ProofKind.File ? proof?.file : undefined;
 
-    if (!state || !row.proof_sent_at || (kind === ProofKind.File && !file)) {
+    if (!proof || !state || !proof.sent_at || (kind === ProofKind.File && !file)) {
       return null;
     }
 
@@ -279,16 +284,16 @@ export namespace ChargeRepository {
       state,
       kind,
       file: file ? { name: file.name, mime: file.mime, size: file.size } : null,
-      sentAt: row.proof_sent_at,
-      reviewedAt: row.proof_reviewed_at ?? null,
-      reason: row.proof_reason ?? null,
-      sentByViewer: row.proof_sender_user_id === viewerId
+      sentAt: proof.sent_at,
+      reviewedAt: proof.reviewed_at ?? null,
+      reason: proof.reason ?? null,
+      sentByViewer: proof.sender_user_id === viewerId
     };
   }
 
   /** What is under review, when anything is. Rows written before declarations existed carry files. */
-  export function proofKind(row: Pick<Row, 'proof_state' | 'proof_kind'>): ProofKind | null {
-    return row.proof_state ? (row.proof_kind ?? ProofKind.File) : null;
+  export function proofKind(proof: Pick<ProofRow, 'kind'> | null): ProofKind | null {
+    return proof ? (proof.kind ?? ProofKind.File) : null;
   }
 
   /**
@@ -371,6 +376,9 @@ export namespace ChargeRepository {
     const payer = ChargeRepository.payer(row);
     const payment = paymentOf(row);
     const hasPix = !!payment;
+    const proof = await currentProof(db, row.id);
+    // "Published once, without a key" is a link that exists at all — a revoked one still counts.
+    const published = await LinkRepository.everIssued(db, LinkableType.Charge, row.id);
     const record = await settledBilling(db, row);
 
     return {
@@ -386,8 +394,8 @@ export namespace ChargeRepository {
       counterpartName: await counterpartName(db, row, userId),
       counterpartAvatar: await counterpartAvatar(db, row, userId),
       counterpartReachable: await reachable(db, row),
-      proofState: visibleProofState(row),
-      proofKind: proofKind(row),
+      proofState: visibleProofState(proof),
+      proofKind: proofKind(proof),
       confirmationRequired: await confirmationRequired(db, row),
       // Only the creditor sees the switch: whoever owes reads every charge the same.
       notify: !owns(row, userId) || row.notify,
@@ -405,11 +413,11 @@ export namespace ChargeRepository {
           ? SharingState.Closed
           : hasPix
             ? SharingState.Ready
-            : row.public_id
+            : published
               ? SharingState.LegacyWithoutPix
               : SharingState.PixRequired,
       pix: payment ? { keyType: payment.type, key: payment.value, label: payment.label } : null,
-      proof: proofOf(row, userId),
+      proof: proofOf(proof, userId),
       cancelledAt: row.cancelled_at ?? null,
       paidAt: row.paid_at ?? null,
       createdAt: row.created_at
@@ -536,17 +544,30 @@ export namespace ChargeRepository {
       if (row.state !== ChargeState.Pending) throw new ChargeClosedError();
       if (direction === Direction.Payable && (await confirmationRequired(tx, row))) throw new ProofDeclarationForbiddenError();
       const stamp = now.toISOString();
-      const answering = row.proof_state === StoredProofState.Pending;
-      const declaration = row.proof_kind === ProofKind.Declaration;
+      const proof = await currentProof(tx, id, true);
+      const answering = proof?.state === StoredProofState.Pending;
+      const declaration = proof?.kind === ProofKind.Declaration;
+
+      if (answering) {
+        await tx.proofs.updateOne({
+          where: { id: proof!.id },
+          data: {
+            state: StoredProofState.Accepted,
+            reviewed_at: stamp,
+            reason: sqlNull,
+            // A file still on its way over the answered declaration has nothing left to attach to.
+            ...(declaration ? { file: sqlNull, expires_at: sqlNull } : {}),
+            updated_at: stamp
+          }
+        });
+      }
+
       const changed = await tx.charges.updateOne({
         select: { id: true },
         where: { id },
         data: {
           state: ChargeState.Paid,
           paid_at: stamp,
-          ...(answering ? { proof_state: StoredProofState.Accepted, proof_reviewed_at: stamp, proof_reason: sqlNull } : {}),
-          // A file still on its way over the answered declaration has nothing left to attach to.
-          ...(answering && declaration ? { proof_file: sqlNull, proof_expires_at: sqlNull } : {}),
           updated_at: stamp
         }
       });
@@ -559,7 +580,7 @@ export namespace ChargeRepository {
           row: updated,
           type: 'proof.accepted',
           now: stamp,
-          payload: { name: declaration ? undefined : row.proof_file?.name }
+          payload: { name: declaration ? undefined : proof?.file?.name }
         });
       }
       let via = 'manual';
@@ -584,16 +605,22 @@ export namespace ChargeRepository {
       if (direction !== Direction.Receivable && !owns(row, actorId)) throw new HttpForbiddenError();
       if (row.state !== ChargeState.Paid) throw new ChargeNotPaidError();
       const now = new Date().toISOString();
+      const proof = await currentProof(tx, id, true);
+
       // A file the settlement had accepted goes back under review; a manual settlement never touched it.
+      if (proof?.state === StoredProofState.Accepted) {
+        await tx.proofs.updateOne({
+          where: { id: proof.id },
+          data: { state: StoredProofState.Pending, reviewed_at: sqlNull, reason: sqlNull, updated_at: now }
+        });
+      }
+
       const changed = await tx.charges.updateOne({
         select: { id: true },
         where: { id },
         data: {
           state: ChargeState.Pending,
           paid_at: sqlNull,
-          ...(row.proof_state === StoredProofState.Accepted
-            ? { proof_state: StoredProofState.Pending, proof_reviewed_at: sqlNull, proof_reason: sqlNull }
-            : {}),
           updated_at: now
         }
       });

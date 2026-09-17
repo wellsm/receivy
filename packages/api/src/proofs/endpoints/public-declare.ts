@@ -5,6 +5,7 @@ import type { PublicProofState } from '@receivy/common';
 import { PaymentNotice, paymentNoticeContext, pushPaymentNotice } from '../../notifications/services/payment-notices';
 import type { ProofProvider } from '../provider';
 import { ProofRepository } from '../repositories/proof';
+import { currentProof } from '../repositories/proof-row';
 import { bucketProofStorage } from '../services/bucket-storage';
 import { resolveThrottledActor } from '../utils/actor';
 
@@ -26,5 +27,5 @@ export async function publicDeclarePaymentHandler(
 
   await pushPaymentNotice(db, paymentNoticeContext(variables), row.id, PaymentNotice.Declared);
 
-  return { status: 200, body: ProofRepository.stateView(row, actor.token, actor.secret) };
+  return { status: 200, body: ProofRepository.stateView(await currentProof(db, row.id), actor.token, actor.secret) };
 }

@@ -2,11 +2,12 @@ import type { Client } from '@ez4/scheduler';
 import { addCalendarDays, ChargePayer, ChargeState } from '@receivy/common';
 import { effectiveReminders } from '../../billings/services/reminders';
 import { ChargeRepository } from '../../charges/repositories/charge';
+import { currentProof, proofsByCharge } from '../../proofs/repositories/proof-row';
 import { StoredProofState } from '../../charges/schemas/charge';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
-import { ensurePublicLink, linkAlive } from '../../public/services/links';
+import { ensurePublicLink } from '../../public/services/links';
 import { EMAIL_FOLLOWUP_MS, instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
 import { NoticeTemplate, renderNotice } from './render';
 import type { NotificationTransport } from './transport';
@@ -64,7 +65,7 @@ export async function sendChargeNotice(
   }
 
   // Somebody said it was paid, with a file or without: nothing chases them while the other side answers.
-  if (charge.proof_state === StoredProofState.Pending) {
+  if ((await currentProof(db, chargeId))?.state === StoredProofState.Pending) {
     await EventRepository.record(db, {
       type: 'notice.skipped',
       eventableType: EventableType.Charge,
@@ -129,17 +130,18 @@ export async function sendChargeNotice(
   }
 
   const nowSeconds = Math.floor(now / 1000);
-  const published = ownerPays || linkAlive(charge, nowSeconds) ? charge : await ensurePublicLink(db, charge, nowSeconds);
+  // The owner pays their own bill: no link is minted for them, and the notice carries none.
+  const link = ownerPays ? null : await ensurePublicLink(db, charge.id, nowSeconds);
   const rendered = renderNotice(
     {
       email: ownerPays ? undefined : target.email,
       name: target.name?.trim() || target.email || 'Conta excluída',
-      description: published.description,
-      cents: published.amount_cents,
-      dueDate: published.due_date,
-      publicId: published.public_id ?? '',
-      version: published.link_version ?? 0,
-      expires: published.link_expires_at ? Math.floor(Date.parse(published.link_expires_at) / 1000) : 0,
+      description: charge.description,
+      cents: charge.amount_cents,
+      dueDate: charge.due_date,
+      publicId: link?.public_id ?? '',
+      version: link?.version ?? 0,
+      expires: link ? Math.floor(Date.parse(link.expires_at) / 1000) : 0,
       origin: context.config.publicOrigin,
       from: context.config.from ?? 'disabled',
       self: ownerPays
@@ -227,11 +229,15 @@ export async function followUpCharge(
   now = Date.now()
 ): Promise<SendResult> {
   const charge = await db.charges.findOne({
-    select: { state: true, proof_state: true, notify: true, billing_id: true },
+    select: { state: true, notify: true, billing_id: true },
     where: { id: event.chargeId }
   });
 
-  if (!charge || charge.state !== ChargeState.Pending || charge.proof_state === StoredProofState.Pending) {
+  if (!charge || charge.state !== ChargeState.Pending) {
+    return { channels: [] };
+  }
+
+  if ((await currentProof(db, event.chargeId))?.state === StoredProofState.Pending) {
     return { channels: [] };
   }
 
@@ -324,15 +330,17 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
   const from = new Date(now - 100 * 86400_000).toISOString().slice(0, 10);
   const to = new Date(now + 100 * 86400_000).toISOString().slice(0, 10);
   const { records } = await db.charges.findMany({
-    select: { id: true, billing_id: true, due_date: true, proof_state: true, notify: true },
+    select: { id: true, billing_id: true, due_date: true, notify: true },
     where: { state: ChargeState.Pending, due_date: { gte: from, lte: to } }
   });
+  // One query for the sweep: the proof moved to its own table and this loop must not go charge by charge.
+  const proofs = await proofsByCharge(db, records.map((charge) => charge.id));
   const billings = new Map<string, { timezone: string; reminders?: string; settled?: boolean }>();
 
   let planned = 0;
 
   for (const charge of records) {
-    if (charge.proof_state === StoredProofState.Pending) {
+    if (proofs.get(charge.id)?.state === StoredProofState.Pending) {
       continue;
     }
 

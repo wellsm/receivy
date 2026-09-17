@@ -4,6 +4,9 @@ import { ChargeRepository } from '../../charges/repositories/charge';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
+import { chargeIdsWithProofFrom, currentProof } from '../../proofs/repositories/proof-row';
+import { LinkRepository } from '../../public/repositories/link';
+import { LinkableType } from '../../public/schemas/link';
 import { AvatarRepository } from '../repositories/avatar';
 import { SessionRepository } from '../repositories/sessions';
 import { lockAccountReferences } from './locking';
@@ -32,8 +35,11 @@ export async function eraseAccount(
     if (families.records.length) await tx.refresh_tokens.deleteMany({ where: { family_id: { isIn: families.records.map((x) => x.id) } } });
     // Stop future generation before touching historical records. Existing amounts/state stay unchanged.
     const billings = await tx.billings.findMany({ select: { id: true }, where: { owner_id: userId }, lock: true });
-    // No surviving link may still add participants to an erased owner's billings.
-    await tx.billing_invites.updateMany({ where: { owner_id: userId }, data: { revoked_at: now } });
+    // No surviving link may still add participants to an erased owner's billings. A link points at the
+    // billing, not at the owner, so the billings just read above are the way in.
+    for (const billing of billings.records) {
+      await LinkRepository.revokeLive(tx, LinkableType.BillingInvite, billing.id, now);
+    }
     for (const billing of billings.records) {
       await tx.billings.updateOne({
         where: { id: billing.id },
@@ -46,9 +52,18 @@ export async function eraseAccount(
         }
       });
     }
+    // Whoever sent a proof is reached through the proofs table now, so their charges come in by id.
+    const proofChargeIds = await chargeIdsWithProofFrom(tx, userId);
     const charges = await tx.charges.findMany({
       select: { id: true },
-      where: { OR: [{ creditor_id: userId }, { debtor_user_id: userId }, { proof_sender_user_id: userId }] },
+      where: {
+        OR: [
+          { creditor_id: userId },
+          { debtor_user_id: userId },
+          // An empty list would be a where clause with nothing in it: the arm only goes in when there is one.
+          ...(proofChargeIds.length ? [{ id: { isIn: proofChargeIds } }] : [])
+        ]
+      },
       lock: true
     });
     await SessionRepository.disableDevices(tx, userId);
@@ -56,9 +71,21 @@ export async function eraseAccount(
       const charge = await tx.charges.findOne({ select: ChargeRepository.SELECT, where: { id: chargeId }, lock: true });
       if (!charge) continue;
       const creditorDeleted = charge.creditor_id === userId;
-      const senderDeleted = charge.proof_sender_user_id === userId;
+
+      // The public link of a charge whose creditor is gone must stop opening.
+      if (creditorDeleted) {
+        await LinkRepository.revokeLive(tx, LinkableType.Charge, chargeId, now);
+      }
+
+      const proof = await currentProof(tx, chargeId, true);
+      const senderDeleted = proof?.sender_user_id === userId;
       // A file the erased person sent goes with them; the charge itself stays for the other side to read.
-      if (senderDeleted && charge.proof_file) objectKeys.push(charge.proof_file.key);
+      if (senderDeleted && proof?.file) objectKeys.push(proof.file.key);
+
+      if (senderDeleted) {
+        await tx.proofs.deleteMany({ where: { charge_id: chargeId } });
+      }
+
       await tx.charges.updateOne({
         where: { id: chargeId },
         data: {
@@ -67,21 +94,7 @@ export async function eraseAccount(
                 payment_snapshot: sqlNull,
                 pix_key_snapshot: sqlNull,
                 pix_key_type_snapshot: sqlNull,
-                pix_label_snapshot: sqlNull,
-                link_revoked_at: now
-              }
-            : {}),
-          ...(senderDeleted
-            ? {
-                proof_state: sqlNull,
-                proof_file: sqlNull,
-                proof_kind: sqlNull,
-                ...{ proof_sender_user_id: sqlNull },
-                proof_actor_hash: sqlNull,
-                proof_expires_at: sqlNull,
-                proof_sent_at: sqlNull,
-                proof_reviewed_at: sqlNull,
-                proof_reason: sqlNull
+                pix_label_snapshot: sqlNull
               }
             : {}),
           updated_at: now
@@ -94,7 +107,7 @@ export async function eraseAccount(
     await tx.contacts.updateMany({ where: { user_id: userId }, data: { nickname: sqlNull, archived_at: now, updated_at: now } });
     for (const billing of billings.records)
       if (!(await tx.charges.count({ where: { billing_id: billing.id } }))) {
-        await tx.billing_invites.deleteMany({ where: { billing_id: billing.id } });
+        await tx.links.deleteMany({ where: { linkable_type: LinkableType.BillingInvite, linkable_id: billing.id } });
         await tx.allocations.deleteMany({ where: { billing_id: billing.id } });
         await tx.billings.deleteOne({ where: { id: billing.id } });
       }

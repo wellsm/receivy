@@ -23,7 +23,7 @@ declare class DetailResponse implements Http.Response {
 
 export async function patchBillingHandler(
   request: PatchRequest,
-  { db, variables, email, chargeNotifyScheduler, proofFiles }: Service.Context<BillingProvider>
+  { db, variables, email, chargeNotifyScheduler, avatarFiles }: Service.Context<BillingProvider>
 ): Promise<DetailResponse> {
   const body = await validation(() =>
     BillingRepository.patch(
@@ -37,5 +37,5 @@ export async function patchBillingHandler(
     )
   );
 
-  return { status: 200, body: await AvatarRepository.sign(proofFiles, body) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, body) };
 }

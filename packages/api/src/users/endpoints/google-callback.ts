@@ -25,7 +25,7 @@ declare class GoogleCallbackResponse implements Http.Response {
 
 export async function googleCallbackHandler(
   request: GoogleCallbackRequest,
-  { db, variables, proofFiles }: Service.Context<UserProvider>
+  { db, variables, avatarFiles }: Service.Context<UserProvider>
 ): Promise<GoogleCallbackResponse> {
   const dependencies = oauthDependencies(OauthProvider.Google, { variables });
   if (!dependencies.client) {
@@ -46,7 +46,7 @@ export async function googleCallbackHandler(
           const userId = await commitOauthIdentity(db, input);
           await adoptProviderPicture({
             db,
-            bucket: proofFiles,
+            bucket: avatarFiles,
             userId,
             picture: input.identity.picture
           });

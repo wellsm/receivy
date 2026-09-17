@@ -78,7 +78,7 @@ O passo a passo completo, com a origem de cada variável, está em
 `docs/deploy-guide.md`; este resumo mostra só as dependências entre etapas.
 
 1. `pnpm --filter @receivy/api deploy:dev` com `dev.env` completo (o EZ4 imprime a
-   URL do API Gateway e o nome do bucket; `pnpm output:dev` repete).
+   URL do API Gateway e os nomes dos buckets; `pnpm output:dev` repete).
 2. Publicar o web (imagem `packages/web/Dockerfile`) em `receivy.wellsm.dev` com
    `EZ4_API_URL`, `WEB_APP_URL=https://receivy.wellsm.dev` e `PROOF_UPLOAD_ORIGIN`.
 3. Google Cloud → cliente OAuth web → redirect URI

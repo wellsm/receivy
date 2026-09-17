@@ -17,9 +17,9 @@ declare class ItemResponse implements Http.Response {
   body: ChargeDetail;
 }
 
-export async function getChargeHandler(request: IdRequest, { db, proofFiles }: Service.Context<ChargeProvider>): Promise<ItemResponse> {
+export async function getChargeHandler(request: IdRequest, { db, avatarFiles }: Service.Context<ChargeProvider>): Promise<ItemResponse> {
   return {
     status: 200,
-    body: await AvatarRepository.sign(proofFiles, await ChargeRepository.get(db, request.identity.userId, request.parameters.id))
+    body: await AvatarRepository.sign(avatarFiles, await ChargeRepository.get(db, request.identity.userId, request.parameters.id))
   };
 }

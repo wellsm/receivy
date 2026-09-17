@@ -20,12 +20,12 @@ declare class CreateResponse implements Http.Response {
 
 export async function createContactHandler(
   request: CreateRequest,
-  { db, proofFiles }: Service.Context<ContactProvider>
+  { db, avatarFiles }: Service.Context<ContactProvider>
 ): Promise<CreateResponse> {
   return {
     status: 201,
     body: await AvatarRepository.sign(
-      proofFiles,
+      avatarFiles,
       await ContactRepository.save(db, request.identity.userId, parseContactInput(request.body))
     )
   };

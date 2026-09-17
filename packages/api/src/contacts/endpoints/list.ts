@@ -20,12 +20,12 @@ declare class ListResponse implements Http.Response {
 
 export async function listContactsHandler(
   request: ListRequest,
-  { db, proofFiles }: Service.Context<ContactProvider>
+  { db, avatarFiles }: Service.Context<ContactProvider>
 ): Promise<ListResponse> {
   return {
     status: 200,
     body: await AvatarRepository.sign(
-      proofFiles,
+      avatarFiles,
       await ContactRepository.list(
         db,
         request.identity.userId,

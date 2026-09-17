@@ -2,12 +2,14 @@ import type { Environment } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { EmailService } from '../common/services/email/service';
 import type { Db } from '../database';
-import type { ProofFiles } from '../storage';
+import type { AvatarFiles, ProofFiles } from '../storage';
 
 export declare class UserProvider implements Http.Provider {
   services: {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
+    avatarFiles: Environment.Service<AvatarFiles>;
+    // Erasing an account still deletes the proof files the person sent.
     proofFiles: Environment.Service<ProofFiles>;
     variables: Environment.ServiceVariables;
   };

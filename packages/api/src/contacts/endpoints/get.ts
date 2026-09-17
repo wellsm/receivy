@@ -17,9 +17,9 @@ declare class GetResponse implements Http.Response {
   body: Contact;
 }
 
-export async function getContactHandler(request: GetRequest, { db, proofFiles }: Service.Context<ContactProvider>): Promise<GetResponse> {
+export async function getContactHandler(request: GetRequest, { db, avatarFiles }: Service.Context<ContactProvider>): Promise<GetResponse> {
   return {
     status: 200,
-    body: await AvatarRepository.sign(proofFiles, await ContactRepository.get(db, request.identity.userId, request.parameters.id))
+    body: await AvatarRepository.sign(avatarFiles, await ContactRepository.get(db, request.identity.userId, request.parameters.id))
   };
 }

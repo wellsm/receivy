@@ -21,12 +21,12 @@ declare class UpdateResponse implements Http.Response {
 
 export async function updateContactHandler(
   request: UpdateRequest,
-  { db, proofFiles }: Service.Context<ContactProvider>
+  { db, avatarFiles }: Service.Context<ContactProvider>
 ): Promise<UpdateResponse> {
   return {
     status: 200,
     body: await AvatarRepository.sign(
-      proofFiles,
+      avatarFiles,
       await ContactRepository.save(db, request.identity.userId, parseContactInput(request.body), request.parameters.id)
     )
   };

@@ -20,12 +20,12 @@ declare class LedgerResponse implements Http.Response {
 
 export async function contactLedgerHandler(
   request: LedgerRequest,
-  { db, proofFiles }: Service.Context<TimelineProvider>
+  { db, avatarFiles }: Service.Context<TimelineProvider>
 ): Promise<LedgerResponse> {
   return {
     status: 200,
     body: await AvatarRepository.sign(
-      proofFiles,
+      avatarFiles,
       await TimelineRepository.contactLedger(db, request.identity.userId, request.parameters.id, request.query.cursor)
     )
   };

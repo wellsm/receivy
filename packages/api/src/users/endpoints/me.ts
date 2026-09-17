@@ -16,10 +16,10 @@ declare class MeResponse implements Http.Response {
   body: { user: AuthUser };
 }
 
-export async function meHandler(request: MeRequest, { db, proofFiles }: Service.Context<UserProvider>): Promise<MeResponse> {
+export async function meHandler(request: MeRequest, { db, avatarFiles }: Service.Context<UserProvider>): Promise<MeResponse> {
   const user = await AuthRepository.findUserById(db, request.identity.userId);
   if (!user) {
     throw new HttpUnauthorizedError();
   }
-  return { status: 200, body: await AvatarRepository.sign(proofFiles, { user }) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, { user }) };
 }

@@ -2,8 +2,8 @@
 
 Como subir a API (`packages/api`) na AWS via EZ4 em dois stages, publicar o web
 (`packages/web`) no domínio de cada ambiente e apontar o mobile. O EZ4 provisiona
-Lambda (arm64, Node 24), API Gateway, o bucket privado `ProofFiles`, os quatro
-crons e o state remoto em S3; o Postgres fica fora (Neon). Os domínios estão em
+Lambda (arm64, Node 24), API Gateway, os buckets privados `ProofFiles` e
+`AvatarFiles`, os quatro crons e o state remoto em S3; o Postgres fica fora (Neon). Os domínios estão em
 `docs/environments.md`: `https://receivy.wellsm.dev` no dev, o domínio real na prd.
 
 Ordem na primeira vez, sem pular etapa, porque cada uma produz um valor que a
@@ -100,9 +100,16 @@ O comando compila (`tsc --noEmit`) e sobe o stage. Anote da saída:
 (`stateFile.remote`), não em arquivo local; mesmo assim, não rode dois deploys
 do mesmo stage em paralelo.
 
-A API usa o bucket pelo serviço `ProofFiles` ligado ao provider; nenhuma variável
-de storage é necessária. O bucket é privado, sem expiração global; a única lifecycle rule
-permitida é em `temporary/` (`docs/proof-storage.md`).
+A API usa os dois buckets pelos serviços `ProofFiles` e `AvatarFiles` ligados aos
+providers; nenhuma variável de storage é necessária, e só o de comprovantes tem o nome
+exposto ao web (`PROOF_UPLOAD_ORIGIN`). Os dois são privados, sem expiração global; a
+única lifecycle rule permitida é em `temporary/` (`docs/proof-storage.md`).
+
+Os comprovantes não se movem na separação dos buckets: a classe `ProofFiles` manteve o
+nome, então continua sendo o mesmo bucket. Já o `AvatarFiles` nasce vazio, e os avatares
+que ficaram no bucket antigo **não** são copiados — por decisão, a foto cai e cada pessoa
+reenvia, com a inicial no lugar enquanto isso. Depois do deploy, os prefixos `avatars/` e
+`avatar-uploads/` podem ser apagados do bucket de comprovantes.
 
 Verifique: `curl https://<url-da-api>/health` responde 200.
 

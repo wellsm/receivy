@@ -22,12 +22,12 @@ declare class ChargeResponse implements Http.Response {
 
 export async function declarePaymentHandler(
   request: DeclareRequest,
-  { db, proofFiles, variables }: Service.Context<ProofProvider>
+  { db, avatarFiles, proofFiles, variables }: Service.Context<ProofProvider>
 ): Promise<ChargeResponse> {
   const { userId } = request.identity;
   const row = await ProofRepository.declare(db, bucketProofStorage(proofFiles), request.parameters.id, { userId });
 
   await pushPaymentNotice(db, paymentNoticeContext(variables), row.id, PaymentNotice.Declared);
 
-  return { status: 200, body: await AvatarRepository.sign(proofFiles, await ChargeRepository.dto(db, row, userId)) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, await ChargeRepository.dto(db, row, userId)) };
 }

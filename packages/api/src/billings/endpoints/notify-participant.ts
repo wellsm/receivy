@@ -21,7 +21,7 @@ declare class DetailResponse implements Http.Response {
 
 export async function setParticipantNotifyHandler(
   request: NotifyParticipantRequest,
-  { db, variables, proofFiles }: Service.Context<BillingProvider>
+  { db, variables, avatarFiles }: Service.Context<BillingProvider>
 ): Promise<DetailResponse> {
   const detail = await BillingRepository.setParticipantNotify(
     db,
@@ -33,5 +33,5 @@ export async function setParticipantNotifyHandler(
     inviteLink({ variables })
   );
 
-  return { status: 200, body: await AvatarRepository.sign(proofFiles, detail) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, detail) };
 }

@@ -17,10 +17,10 @@ declare class ProfileResponse implements Http.Response {
   body: { user: AuthUser };
 }
 
-export async function profileHandler(request: ProfileRequest, { db, proofFiles }: Service.Context<UserProvider>): Promise<ProfileResponse> {
+export async function profileHandler(request: ProfileRequest, { db, avatarFiles }: Service.Context<UserProvider>): Promise<ProfileResponse> {
   return {
     status: 200,
-    body: await AvatarRepository.sign(proofFiles, {
+    body: await AvatarRepository.sign(avatarFiles, {
       user: await AccountRepository.updateProfile(db, request.identity.userId, request.body)
     })
   };

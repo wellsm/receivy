@@ -21,12 +21,12 @@ declare class ChargeResponse implements Http.Response {
 
 export async function reviewProofHandler(
   request: ReviewRequest,
-  { db, proofFiles, variables }: Service.Context<ProofProvider>
+  { db, avatarFiles, variables }: Service.Context<ProofProvider>
 ): Promise<ChargeResponse> {
   const detail = await ProofRepository.review(db, request.parameters.id, request.identity.userId, request.body);
   const notice = detail.state === ChargeState.Paid ? PaymentNotice.Confirmed : PaymentNotice.NotIdentified;
 
   await pushPaymentNotice(db, paymentNoticeContext(variables), detail.id, notice);
 
-  return { status: 200, body: await AvatarRepository.sign(proofFiles, detail) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, detail) };
 }

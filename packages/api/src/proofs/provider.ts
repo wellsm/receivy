@@ -1,12 +1,14 @@
 import type { Environment } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { Db } from '../database';
-import type { ProofFiles } from '../storage';
+import type { AvatarFiles, ProofFiles } from '../storage';
 import type { UploadExpiryScheduler } from './schedulers/upload-expiry';
 
 export declare class ProofProvider implements Http.Provider {
   services: {
     db: Environment.Service<Db>;
+    // Both buckets: the proof object lives in one, the avatars the response signs live in the other.
+    avatarFiles: Environment.Service<AvatarFiles>;
     proofFiles: Environment.Service<ProofFiles>;
     uploadExpiryScheduler: Environment.Service<UploadExpiryScheduler>;
     variables: Environment.ServiceVariables;

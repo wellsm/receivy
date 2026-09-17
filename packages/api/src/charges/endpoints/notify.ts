@@ -20,9 +20,9 @@ declare class ItemResponse implements Http.Response {
 
 export async function setChargeNotifyHandler(
   request: NotifyRequest,
-  { db, proofFiles }: Service.Context<ChargeProvider>
+  { db, avatarFiles }: Service.Context<ChargeProvider>
 ): Promise<ItemResponse> {
   const detail = await ChargeRepository.setNotify(db, request.identity.userId, request.parameters.id, request.body.notify);
 
-  return { status: 200, body: await AvatarRepository.sign(proofFiles, detail) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, detail) };
 }

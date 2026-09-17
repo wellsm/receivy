@@ -22,7 +22,7 @@ declare class DetailResponse implements Http.Response {
 
 export async function resolveGuestHandler(
   request: GuestRequest,
-  { db, variables, email, chargeNotifyScheduler, proofFiles }: Service.Context<BillingProvider>
+  { db, variables, email, chargeNotifyScheduler, avatarFiles }: Service.Context<BillingProvider>
 ): Promise<DetailResponse> {
   const body = await resolveGuest(
     db,
@@ -35,5 +35,5 @@ export async function resolveGuestHandler(
     noticeContext({ chargeNotifyScheduler, email, variables })
   );
 
-  return { status: 200, body: await AvatarRepository.sign(proofFiles, body) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, body) };
 }

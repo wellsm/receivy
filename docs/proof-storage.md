@@ -39,14 +39,22 @@ under review.
 
 ## Storage
 
-The API talks to one bucket only: the `ProofFiles` service linked through
-`ApiProvider.proofFiles` (also given to `UploadExpiryScheduler` and to the bucket's
-own event handler). On a deployed stage that is the private S3 bucket EZ4
-provisions; under `serve --local` it is the emulator, which serves the same bucket
-on the API host (`http://localhost:3735/local-receivy-proof-files`, files under
-`.ez4/proof-files`), answers the CORS preflight from the origins declared in
-`src/storage.ts` and fires the `proofs/*` event on every PUT. The web only needs
-`PROOF_UPLOAD_ORIGIN` for the public page CSP (`http://localhost:3735` locally, the
+The API talks to two buckets, split by what they hold. `ProofFiles` keeps the retained
+proofs and nothing else: it is linked through `ProofProvider.proofFiles`, and also given
+to `UploadExpiryScheduler`, to the bucket's own event handler and to `UserProvider`,
+which deletes the files of whoever erases their account. `AvatarFiles` keeps the profile
+photos (`avatars/<userId>` published, `avatar-uploads/<userId>` staged) and reaches every
+endpoint that signs an avatar, as `avatarFiles`.
+
+Only the proof bucket has an event: the `proofs/*` handler is how the API learns a file
+landed. The avatar flow needs none, because the client calls `POST /account/avatar/complete`
+once the PUT finishes.
+
+On a deployed stage each is a private S3 bucket EZ4 provisions, named after its class;
+under `serve --local` the emulator serves them on the API host
+(`http://localhost:3735/local-receivy-proof-files`, files under `.ez4/proof-files`) and
+answers the CORS preflight from the origins declared in `src/storage.ts`. The web only
+needs `PROOF_UPLOAD_ORIGIN` for the public page CSP (`http://localhost:3735` locally, the
 S3 origin when deployed).
 
 Download links are authenticated, last 60 seconds and come from

@@ -23,7 +23,7 @@ declare class CreateResponse implements Http.Response {
 
 export async function createBillingHandler(
   request: CreateRequest,
-  { db, variables, email, chargeNotifyScheduler, proofFiles }: Service.Context<BillingProvider>
+  { db, variables, email, chargeNotifyScheduler, avatarFiles }: Service.Context<BillingProvider>
 ): Promise<CreateResponse> {
   const body = await validation(() =>
     BillingRepository.create(
@@ -37,5 +37,5 @@ export async function createBillingHandler(
     )
   );
 
-  return { status: 201, body: await AvatarRepository.sign(proofFiles, body) };
+  return { status: 201, body: await AvatarRepository.sign(avatarFiles, body) };
 }

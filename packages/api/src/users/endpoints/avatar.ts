@@ -26,14 +26,14 @@ declare class AvatarCompleteResponse implements Http.Response {
 
 export async function startAvatarUploadHandler(
   request: AvatarUploadRequest,
-  { proofFiles }: Service.Context<UserProvider>
+  { avatarFiles }: Service.Context<UserProvider>
 ): Promise<AvatarUploadResponse> {
-  return { status: 200, body: await AvatarRepository.startUpload(proofFiles, request.identity.userId, request.body.mime) };
+  return { status: 200, body: await AvatarRepository.startUpload(avatarFiles, request.identity.userId, request.body.mime) };
 }
 
 export async function completeAvatarUploadHandler(
   request: AvatarCompleteRequest,
-  { db, proofFiles }: Service.Context<UserProvider>
+  { db, avatarFiles }: Service.Context<UserProvider>
 ): Promise<AvatarCompleteResponse> {
-  return { status: 200, body: await AvatarRepository.complete(db, proofFiles, request.identity.userId) };
+  return { status: 200, body: await AvatarRepository.complete(db, avatarFiles, request.identity.userId) };
 }

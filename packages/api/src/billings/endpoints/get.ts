@@ -20,12 +20,12 @@ declare class DetailResponse implements Http.Response {
 
 export async function getBillingHandler(
   request: ReadRequest,
-  { db, variables, proofFiles }: Service.Context<BillingProvider>
+  { db, variables, avatarFiles }: Service.Context<BillingProvider>
 ): Promise<DetailResponse> {
   return {
     status: 200,
     body: await AvatarRepository.sign(
-      proofFiles,
+      avatarFiles,
       await BillingRepository.get(db, request.identity.userId, request.parameters.id, new Date(), inviteLink({ variables }))
     )
   };

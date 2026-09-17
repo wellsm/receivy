@@ -59,7 +59,7 @@ function parseList<T extends string>(field: string, raw: string | undefined, all
 
 export async function timelineHandler(
   { identity, query }: TimelineRequest,
-  { db, proofFiles }: Service.Context<TimelineProvider>
+  { db, avatarFiles }: Service.Context<TimelineProvider>
 ): Promise<TimelineResponse> {
   const { cursor, direction, status, type, from, to, month } = query;
 
@@ -73,5 +73,5 @@ export async function timelineHandler(
     type: parseList('type', type, TYPES)
   };
 
-  return { status: 200, body: await AvatarRepository.sign(proofFiles, await TimelineRepository.get(db, identity.userId, filters)) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, await TimelineRepository.get(db, identity.userId, filters)) };
 }

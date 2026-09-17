@@ -20,7 +20,7 @@ declare class ItemResponse implements Http.Response {
 
 export async function payChargeHandler(
   request: IdRequest,
-  { db, proofFiles, variables }: Service.Context<ChargeProvider>
+  { db, avatarFiles, variables }: Service.Context<ChargeProvider>
 ): Promise<ItemResponse> {
   const { userId } = request.identity;
   const detail = await ChargeRepository.pay(db, userId, request.parameters.id);
@@ -30,5 +30,5 @@ export async function payChargeHandler(
     await pushPaymentNotice(db, paymentNoticeContext(variables), detail.id, PaymentNotice.Confirmed, userId);
   }
 
-  return { status: 200, body: await AvatarRepository.sign(proofFiles, detail) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, detail) };
 }

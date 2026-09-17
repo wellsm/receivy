@@ -39,11 +39,11 @@ describe('googleCallbackHandler', () => {
   it('calls adoptProviderPicture with picture from the identity', async () => {
     const { adoptProviderPicture } = await import('../services/provider-picture');
     const db = { transaction: vi.fn() } as unknown as DbClient;
-    const proofFiles = { write: vi.fn() } as unknown as Client;
+    const avatarFiles = { write: vi.fn() } as unknown as Client;
     const context = {
       db,
       variables: { GOOGLE_CLIENT_ID: 'cid', GOOGLE_CLIENT_SECRET: 'cs' },
-      proofFiles
+      avatarFiles
     } as unknown as Service.Context<UserProvider>;
     const request = {
       query: { code: 'code', state: 'state' }
@@ -54,7 +54,7 @@ describe('googleCallbackHandler', () => {
     expect(response.status).toBe(302);
     expect(adoptProviderPicture).toHaveBeenCalledWith({
       db,
-      bucket: proofFiles,
+      bucket: avatarFiles,
       userId: 'u1',
       picture: 'https://lh3.test/p.jpg'
     });

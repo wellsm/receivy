@@ -120,14 +120,14 @@ describe('account erasure versus cross-account materialization', () => {
         equal(outcomes[1].status, 'rejected', 'archived recipient prevents a new post-erasure charge');
       }
       const charges = await db.charges.findMany({
-        select: { amount_cents: true, state: true, debtor_user_id: true },
-        where: { creditor_id: creditor }
+        select: { amount_cents: true, state: true, debtor_id: true },
+        where: { owner_id: creditor }
       });
       equal(charges.records.length, first === 'materialization' ? 1 : 0);
       for (const charge of charges.records) {
         equal(charge.amount_cents, 1234);
         equal(charge.state, 'pending');
-        equal(charge.debtor_user_id, recipient, 'the erased account keeps its id on the charge');
+        equal(charge.debtor_id, recipient, 'the erased account keeps its id on the charge');
       }
     });
   }

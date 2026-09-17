@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import {
   type ChargeDetail,
-  ChargePayer,
   ChargeState,
   Direction,
   ProofKind,
@@ -449,7 +448,7 @@ export namespace ProofRepository {
       }
 
       // The owner of a conta a pagar declares only to a payee who can confirm; otherwise the bill is settled by hand.
-      if (ChargeRepository.payer(row) === ChargePayer.Owner && !(await ChargeRepository.confirmationRequired(tx, row))) {
+      if (ChargeRepository.ownerPays(row) && !(await ChargeRepository.confirmationRequired(tx, row))) {
         throw new ProofDeclarationForbiddenError();
       }
 

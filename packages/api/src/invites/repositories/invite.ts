@@ -29,7 +29,7 @@ const sqlNull = null as unknown as undefined;
 async function nearestPendingCharge(db: DbClient, billingId: string, userId: string): Promise<string | null> {
   const { records } = await db.charges.findMany({
     select: { id: true },
-    where: { billing_id: billingId, debtor_user_id: userId, state: ChargeState.Pending },
+    where: { billing_id: billingId, OR: [{ debtor_id: userId }, { debtor_user_id: userId }], state: ChargeState.Pending },
     order: { due_date: Order.Asc },
     take: 1
   });
@@ -94,7 +94,8 @@ async function reshapeOccurrences(
   for (const group of occurrences.values()) {
     for (const charge of group) {
       // Invite acceptance only touches contas a receber, whose charges always name a contact.
-      const amountCents = charge.debtor_user_id ? resolved.get(charge.debtor_user_id) : undefined;
+      const debtorId = ChargeRepository.debtorOf(charge);
+      const amountCents = debtorId ? resolved.get(debtorId) : undefined;
 
       // Reshaping must never leave a stale amount behind; the whole acceptance rolls back instead.
       if (amountCents === undefined) {

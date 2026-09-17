@@ -379,6 +379,17 @@ function userIds(split: BillingSplit): string[] {
   return split.parts.flatMap((part) => (part.kind === SplitPartKind.User ? [part.userId] : []));
 }
 
+/**
+ * Whether the billing already has a charge for this counterpart on this date, cancelled or not. Read through the
+ * axis helpers rather than a column: the counterpart sits on either side of the money, and rows from before the
+ * flip keep it elsewhere until the block 8 backfill runs.
+ */
+async function chargeTaken(db: DbClient, billingId: string, counterpartId: string | null, dueDate: string): Promise<boolean> {
+  const { records } = await db.charges.findMany({ select: ChargeRepository.SELECT, where: { billing_id: billingId, due_date: dueDate } });
+
+  return records.some((charge) => (ChargeRepository.counterpartId(charge) ?? null) === counterpartId);
+}
+
 /** The raw number of a stored part; `equal` is the one mode that keeps none. */
 function splitValue(row: { value?: number }): number {
   return row.value ?? 0;
@@ -432,7 +443,7 @@ function notifyFor(part: SplitParty, before: Map<string, boolean>): boolean {
 /** A participant's switch lands on their pending charges of the billing; paid and cancelled ones keep theirs. */
 async function setPendingChargesNotify(db: DbClient, billingId: string, userId: string, notify: boolean, now: string): Promise<void> {
   await db.charges.updateMany({
-    where: { billing_id: billingId, debtor_user_id: userId, state: ChargeState.Pending },
+    where: { billing_id: billingId, OR: [{ debtor_id: userId }, { debtor_user_id: userId }], state: ChargeState.Pending },
     data: { notify, updated_at: now }
   });
 }
@@ -471,7 +482,7 @@ async function notifyChange(
 
   const { records } = await db.charges.findMany({
     select: { notify: true },
-    where: { billing_id: billingId, debtor_user_id: part.userId, state: ChargeState.Pending }
+    where: { billing_id: billingId, OR: [{ debtor_id: part.userId }, { debtor_user_id: part.userId }], state: ChargeState.Pending }
   });
 
   if (!records.some((row) => row.notify !== notify)) {
@@ -659,7 +670,7 @@ async function rewriteMonthCharges(
   });
   const existing: MonthCharge[] = editable.map((charge) => ({
     id: charge.id,
-    debtorUserId: charge.debtor_user_id ?? null,
+    debtorUserId: ChargeRepository.counterpartId(charge) ?? null,
     dueDate: charge.due_date
   }));
   const changes = monthChanges(existing, plan.charges);
@@ -675,11 +686,7 @@ async function rewriteMonthCharges(
 
   for (const { charge, planned } of changes.update) {
     const moving = rescheduled && planned.dueDate !== charge.dueDate;
-    const blocked =
-      moving &&
-      (await db.charges.count({
-        where: { billing_id: row.id, debtor_user_id: charge.debtorUserId ?? sqlNull, due_date: planned.dueDate }
-      }));
+    const blocked = moving && (await chargeTaken(db, row.id, charge.debtorUserId, planned.dueDate));
 
     if (blocked) {
       continue;
@@ -731,11 +738,7 @@ async function rewriteMonthCharges(
 
   for (const planned of changes.create) {
     // A cancelled charge of the same person on the same date holds the unique index: the person joins next month.
-    const taken = await db.charges.count({
-      where: { billing_id: row.id, debtor_user_id: planned.userId ?? sqlNull, due_date: planned.dueDate }
-    });
-
-    if (!taken) {
+    if (!(await chargeTaken(db, row.id, planned.userId, planned.dueDate))) {
       creatable.push(planned);
     }
   }

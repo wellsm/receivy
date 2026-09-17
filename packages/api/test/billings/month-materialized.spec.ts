@@ -56,7 +56,8 @@ async function chargeRows(billingId: string) {
       due_date: true,
       state: true,
       amount_cents: true,
-      debtor_user_id: true,
+      creditor_id: true,
+      debtor_id: true,
       payment_snapshot: true
     },
     where: { billing_id: billingId },
@@ -207,7 +208,7 @@ describe('month materialized: pending charges and current month edits', () => {
       recurring('Casa', '2026-03-20', [anaId, brunoId]),
       date('2026-03-05')
     );
-    const [anaCharge] = (await chargeRows(billing.id)).filter((row) => row.debtor_user_id === anaId);
+    const [anaCharge] = (await chargeRows(billing.id)).filter((row) => row.debtor_id === anaId);
 
     ok(anaCharge);
 
@@ -226,9 +227,9 @@ describe('month materialized: pending charges and current month edits', () => {
     );
 
     const rows = await chargeRows(billing.id);
-    const ana = rows.find((row) => row.debtor_user_id === anaId);
-    const bruno = rows.find((row) => row.debtor_user_id === brunoId);
-    const carla = rows.find((row) => row.debtor_user_id === carlaId);
+    const ana = rows.find((row) => row.debtor_id === anaId);
+    const bruno = rows.find((row) => row.debtor_id === brunoId);
+    const carla = rows.find((row) => row.debtor_id === carlaId);
 
     equal(ana?.id, anaCharge.id, 'the charge keeps its id and public link');
     equal(ana?.amount_cents, 6_000);
@@ -322,7 +323,7 @@ describe('month materialized: pending charges and current month edits', () => {
     await BillingRepository.patch(db, OWNER, back.id, { split: onlyAna, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
     await BillingRepository.patch(db, OWNER, back.id, { split: both, applyTo: EditScope.CurrentMonth }, date('2026-03-07'));
 
-    const brunoRows = (await chargeRows(back.id)).filter((row) => row.debtor_user_id === brunoId);
+    const brunoRows = (await chargeRows(back.id)).filter((row) => row.debtor_id === brunoId);
 
     deepEqual(
       brunoRows.map((row) => row.state),
@@ -448,7 +449,7 @@ describe('month materialized: pending charges and current month edits', () => {
 
     const rows = await chargeRows(paused.id);
 
-    ok(!rows.some((row) => row.debtor_user_id === carlaId), 'a paused billing never materializes a new occurrence');
+    ok(!rows.some((row) => row.debtor_id === carlaId), 'a paused billing never materializes a new occurrence');
   });
 
   it('CurrentMonth updating an existing charge does not fail because another participant was archived later', async () => {
@@ -465,7 +466,7 @@ describe('month materialized: pending charges and current month edits', () => {
     // totalCents-only: neither Ana nor Bruno enters this month, so neither needs revalidation.
     await BillingRepository.patch(db, OWNER, billing.id, { totalCents: 12_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
 
-    const ana = (await chargeRows(billing.id)).find((row) => row.debtor_user_id === anaId);
+    const ana = (await chargeRows(billing.id)).find((row) => row.debtor_id === anaId);
 
     equal(ana?.amount_cents, 6_000);
   });
@@ -491,7 +492,7 @@ describe('month materialized: pending charges and current month edits', () => {
     const [anaCharge] = await chargeRows(billing.id);
 
     ok(anaCharge);
-    equal(anaCharge.debtor_user_id, anaId);
+    equal(anaCharge.creditor_id, anaId, 'the payee receives: she sits on the creditor side');
 
     await BillingRepository.patch(db, OWNER, billing.id, { clearPayee: true, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
 
@@ -502,12 +503,12 @@ describe('month materialized: pending charges and current month edits', () => {
     deepEqual((await EventRepository.list(db, anaCharge.id, 'charge.cancelled'))[0]?.payload, { reason: 'billing_edited' });
 
     // Clearing the payee plans a charge with userId: null (planBillingCharges, payer: owner). monthChanges
-    // matches planned charges by debtor id, so Ana's charge (debtor_user_id: anaId) does not match the
-    // planned null id: it is cancelled above and the null-debtor occurrence lands in `changes.create`
-    // instead of `changes.update`. The billing_id:debtor_user_id:due_date unique index has no existing
-    // row for (billing, null, 2026-03-20) - only Ana's row held that date - so the create is not skipped
-    // as "taken" and a fresh owner-only charge is persisted alongside the cancelled one.
-    const ownerOnly = rows.find((row) => row.debtor_user_id === null);
+    // matches planned charges by counterpart, so Ana's charge (creditor_id: anaId) does not match the
+    // planned null id: it is cancelled above and the payee-less occurrence lands in `changes.create`
+    // instead of `changes.update`. The billing_id:creditor_id:debtor_id:due_date unique index has no
+    // existing row for (billing, null, owner, 2026-03-20) - only Ana's row held that date - so the create
+    // is not skipped as "taken" and a fresh owner-only charge is persisted alongside the cancelled one.
+    const ownerOnly = rows.find((row) => row.creditor_id === null);
 
     ok(ownerOnly, 'the owner keeps paying the bill even without a payee on record');
     equal(ownerOnly?.state, 'pending');

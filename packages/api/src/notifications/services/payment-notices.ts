@@ -1,4 +1,5 @@
-import { ChargePayer, formatMoney } from '@receivy/common';
+import { formatMoney } from '@receivy/common';
+import { ChargeRepository } from '../../charges/repositories/charge';
 import { EventRepository } from '../../common/repositories/events';
 import { currentProof } from '../../proofs/repositories/proof-row';
 import { EventableType } from '../../common/schemas/event';
@@ -53,7 +54,9 @@ export async function pushPaymentNotice(
   try {
     const charge = await db.charges.findOne({
       select: {
+        owner_id: true,
         creditor_id: true,
+        debtor_id: true,
         debtor_user_id: true,
         payer: true,
         description: true,
@@ -68,9 +71,9 @@ export async function pushPaymentNotice(
 
     const proof = await currentProof(db, chargeId);
 
-    const ownerPays = charge.payer === ChargePayer.Owner;
-    const payerId = ownerPays ? charge.creditor_id : charge.debtor_user_id;
-    const reviewerId = ownerPays ? charge.debtor_user_id : charge.creditor_id;
+    // Whoever pays sends the proof; whoever receives reviews it.
+    const payerId = ChargeRepository.debtorOf(charge);
+    const reviewerId = ChargeRepository.creditorOf(charge);
     const toReviewer = notice === PaymentNotice.Declared || notice === PaymentNotice.ProofReceived;
     const recipientId = toReviewer ? reviewerId : payerId;
     const actorId = toReviewer ? payerId : reviewerId;

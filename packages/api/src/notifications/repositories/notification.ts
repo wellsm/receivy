@@ -1,5 +1,5 @@
 import { HttpBadRequestError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import { ChargePayer, ChargeState, DevicePlatform, type DeviceRegistration, Direction, type NotificationDevice } from '@receivy/common';
+import { ChargeState, DevicePlatform, type DeviceRegistration, Direction, type NotificationDevice } from '@receivy/common';
 import { ChargeClosedError, ChargeInReviewError, SettledNoRemindersError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { currentProof } from '../../proofs/repositories/proof-row';
@@ -105,7 +105,7 @@ export namespace NotificationRepository {
       const { row, direction } = await ChargeRepository.findForActor(tx, userId, chargeId, true);
 
       // Reminders belong to the creditor of a conta a receber; a conta a pagar reminds its own owner on schedule.
-      if (direction !== Direction.Receivable || ChargeRepository.payer(row) === ChargePayer.Owner) {
+      if (direction !== Direction.Receivable || ChargeRepository.ownerPays(row)) {
         throw new HttpForbiddenError();
       }
 

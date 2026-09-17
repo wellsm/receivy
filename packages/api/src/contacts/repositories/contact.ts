@@ -42,11 +42,18 @@ async function lastBilledDates(db: DbClient, ownerId: string, userIds: string[])
 
 /** Pending charges between the owner and each person of the page, on either side of the money. */
 async function pendingCharges(db: DbClient, ownerId: string, userIds: string[]): Promise<Map<string, number>> {
+  // The same reading as ChargeRepository.counterpartId: rows from before the flip keep the counterpart in
+  // debtor_user_id; on the money's axis it is whichever side is not the owner.
   const rows = await db.rawQuery(
-    `SELECT c.debtor_user_id AS user_id, COUNT(*) AS active
-    FROM charges c WHERE c.creditor_id = :ownerId::uuid
-    AND c.debtor_user_id = ANY(string_to_array(:ids::text, ',')::uuid[])
-    AND c.state = 'pending' GROUP BY c.debtor_user_id`,
+    `SELECT p.user_id, COUNT(*) AS active FROM (
+      SELECT CASE
+        WHEN c.payer = 'owner' THEN c.debtor_user_id
+        WHEN COALESCE(c.debtor_id, c.debtor_user_id) = COALESCE(c.owner_id, c.creditor_id) THEN c.creditor_id
+        ELSE COALESCE(c.debtor_id, c.debtor_user_id) END AS user_id
+      FROM charges c
+      WHERE COALESCE(c.owner_id, c.creditor_id) = :ownerId::uuid AND c.state = 'pending'
+    ) p WHERE p.user_id = ANY(string_to_array(:ids::text, ',')::uuid[])
+    GROUP BY p.user_id`,
     { ownerId, ids: userIds.join(',') }
   );
   return new Map(rows.map((row) => [String(row['user_id']), Number(row['active'])]));
@@ -368,10 +375,13 @@ export namespace ContactRepository {
       ...params,
       contactId: contact.id
     });
+    // A placeholder sits on either side of the money once it is a payee; the owner is never one.
     await tx.rawQuery(
       `UPDATE charges SET debtor_user_id = :to::uuid, updated_at = :now::timestamptz WHERE debtor_user_id = :from::uuid`,
       params
     );
+    await tx.rawQuery(`UPDATE charges SET debtor_id = :to::uuid, updated_at = :now::timestamptz WHERE debtor_id = :from::uuid`, params);
+    await tx.rawQuery(`UPDATE charges SET creditor_id = :to::uuid, updated_at = :now::timestamptz WHERE creditor_id = :from::uuid`, params);
     await tx.rawQuery(`UPDATE allocations SET user_id = :to::uuid WHERE user_id = :from::uuid`, params);
     await tx.rawQuery(
       `UPDATE billings SET payee_user_id = :to::uuid, updated_at = :now::timestamptz WHERE payee_user_id = :from::uuid`,

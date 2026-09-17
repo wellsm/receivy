@@ -58,7 +58,9 @@ export async function eraseAccount(
       select: { id: true },
       where: {
         OR: [
+          { owner_id: userId },
           { creditor_id: userId },
+          { debtor_id: userId },
           { debtor_user_id: userId },
           // An empty list would be a where clause with nothing in it: the arm only goes in when there is one.
           ...(proofChargeIds.length ? [{ id: { isIn: proofChargeIds } }] : [])
@@ -70,7 +72,8 @@ export async function eraseAccount(
     for (const { id: chargeId } of [...charges.records].sort((a, b) => a.id.localeCompare(b.id))) {
       const charge = await tx.charges.findOne({ select: ChargeRepository.SELECT, where: { id: chargeId }, lock: true });
       if (!charge) continue;
-      const creditorDeleted = charge.creditor_id === userId;
+      // Whoever receives holds the key the charge is paid with: with them gone, the link and the snapshot go too.
+      const creditorDeleted = ChargeRepository.creditorOf(charge) === userId;
 
       // The public link of a charge whose creditor is gone must stop opening.
       if (creditorDeleted) {

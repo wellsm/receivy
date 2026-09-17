@@ -188,13 +188,17 @@ export async function persistChargePlan(
       throw new HttpNotFoundError('Contato indisponível.');
     }
 
+    const ownerPays = context.payer === ChargePayer.Owner;
+    // The money's own axis: whoever receives sits in creditor_id, whoever pays in debtor_id, the owner in owner_id.
+    const creditorId = ownerPays ? recipient?.userId : ownerId;
+    const debtorId = ownerPays ? ownerId : recipient?.userId;
     const inserted = await db.charges.insertOne({
       select: ChargeRepository.SELECT,
       data: {
         id: crypto.randomUUID(),
-        creditor: { id: ownerId },
-        ...(recipient ? { debtor: { id: recipient.userId } } : {}),
-        payer: context.payer,
+        owner_id: ownerId,
+        ...(creditorId ? { creditor: { id: creditorId } } : {}),
+        ...(debtorId ? { debtor_id: debtorId } : {}),
         billing: { id: billing.id },
         description: item.description,
         amount_cents: item.amountCents,

@@ -32,9 +32,9 @@ import { StoredProofState } from '../schemas/charge';
 
 const sqlNull = null as unknown as undefined;
 
-/** A reminder needs an address: the debtor's e-mail or phone; a bill with no debtor has nobody to remind. */
+/** A reminder needs an address: the counterpart's e-mail or phone; a bill with nobody on the other side has nobody to remind. */
 async function reachable(db: DbClient, row: ChargeRepository.Row): Promise<boolean> {
-  const person = await ContactRepository.counterpartOf(db, row.debtor_user_id);
+  const person = await ContactRepository.counterpartOf(db, ChargeRepository.counterpartId(row));
   return !!person && !!(person.email || person.phone);
 }
 
@@ -54,10 +54,11 @@ async function activity(
 
 /** The person on the other side of the money, read live; a registro names its counterpart, a bill that is the owner's alone names the owner. */
 async function recipientOf(db: DbClient, row: ChargeRepository.Row): Promise<ChargeDetail['recipient']> {
-  const person = await ContactRepository.counterpartOf(db, row.debtor_user_id);
+  const counterpartId = ChargeRepository.counterpartId(row);
+  const person = await ContactRepository.counterpartOf(db, counterpartId);
 
   if (person) {
-    return { userId: row.debtor_user_id!, name: person.name, email: person.email, avatar: person.avatar };
+    return { userId: counterpartId!, name: person.name, email: person.email, avatar: person.avatar };
   }
 
   const { counterpartLabel } = await ChargeRepository.settledBilling(db, row);
@@ -66,7 +67,7 @@ async function recipientOf(db: DbClient, row: ChargeRepository.Row): Promise<Cha
     return { userId: null, name: counterpartLabel, email: null, avatar: null };
   }
 
-  const owner = await ContactRepository.counterpartOf(db, row.creditor_id);
+  const owner = await ContactRepository.counterpartOf(db, ChargeRepository.ownerOf(row));
 
   return { userId: null, name: owner?.name ?? 'Conta excluída', email: null, avatar: owner?.avatar ?? null };
 }
@@ -74,7 +75,10 @@ async function recipientOf(db: DbClient, row: ChargeRepository.Row): Promise<Cha
 export namespace ChargeRepository {
   export const SELECT = {
     id: true,
+    owner_id: true,
     creditor_id: true,
+    debtor_id: true,
+    // @deprecated Read only to interpret rows from before the flip; both go with the block 8 backfill.
     debtor_user_id: true,
     payer: true,
     billing_id: true,
@@ -106,11 +110,14 @@ export namespace ChargeRepository {
 
   export type Row = {
     id: string;
-    /** The billing owner, whichever side of the money they are on. */
-    creditor_id: string;
-    /** The person on the other side (users.id); undefined only on a conta a pagar without a payee. */
+    /** The billing owner, whichever side of the money they are on; undefined only until the block 8 backfill runs. */
+    owner_id?: string;
+    /** Who receives; undefined on a conta a pagar without a payee. Read it through `creditorOf`. */
+    creditor_id?: string;
+    /** Who pays; undefined on a registro with nobody on the other side. Read it through `debtorOf`. */
+    debtor_id?: string;
+    /** @deprecated Rows from before the flip: the counterpart, and which side pays. Never read them directly. */
     debtor_user_id?: string;
-    /** Who pays: undefined or 'person' on a conta a receber, 'owner' on a conta a pagar. */
     payer?: ChargePayer;
     billing_id: string;
     description: string;
@@ -239,22 +246,59 @@ export namespace ChargeRepository {
    * Whether a payment the paying side declares waits for the other side. The owner of a conta a receber can
    * always answer; the payee of a conta a pagar only with an active account, otherwise the bill settles at once.
    */
-  export async function confirmationRequired(db: DbClient, row: Pick<Row, 'payer' | 'debtor_user_id'>): Promise<boolean> {
-    if (payer(row) !== ChargePayer.Owner) {
+  export async function confirmationRequired(db: DbClient, row: Axis): Promise<boolean> {
+    if (!ownerPays(row)) {
       return true;
     }
 
-    return (await ContactRepository.counterpartOf(db, row.debtor_user_id))?.status === UserStatus.Active;
+    return (await ContactRepository.counterpartOf(db, creditorOf(row)))?.status === UserStatus.Active;
   }
 
-  /** `payer` is null on rows written before contas a pagar existed; they are contact-paid. */
-  export function payer(row: Pick<Row, 'payer'>): ChargePayer {
-    return row.payer ?? ChargePayer.Person;
+  /** The columns that say who is who on a charge. */
+  export type Axis = Pick<Row, 'owner_id' | 'creditor_id' | 'debtor_id' | 'debtor_user_id' | 'payer'>;
+
+  /**
+   * A row from before the flip: the owner sat in `creditor_id` whichever way the money went, the counterpart in
+   * `debtor_user_id`, and `payer` said which side paid. The backfill rewrites them and clears `payer`.
+   */
+  function unflipped(row: Axis): boolean {
+    return row.payer === ChargePayer.Owner;
   }
 
   /** The owner of the billing behind the charge: every owner power keys on this, never on direction. */
-  export function owns(row: Pick<Row, 'creditor_id'>, userId: string): boolean {
-    return row.creditor_id === userId;
+  export function ownerOf(row: Axis): string {
+    return row.owner_id ?? row.creditor_id!;
+  }
+
+  /** Who receives; undefined on a conta a pagar without a payee. */
+  export function creditorOf(row: Axis): string | undefined {
+    return unflipped(row) ? row.debtor_user_id : row.creditor_id;
+  }
+
+  /** Who pays; undefined on a registro with nobody on the other side. */
+  export function debtorOf(row: Axis): string | undefined {
+    return unflipped(row) ? row.creditor_id : (row.debtor_id ?? row.debtor_user_id);
+  }
+
+  /** The person on the other side of the owner, whichever side of the money they are on; undefined when there is none. */
+  export function counterpartId(row: Axis): string | undefined {
+    return ownerPays(row) ? creditorOf(row) : debtorOf(row);
+  }
+
+  /** A conta a pagar: the owner is the one who pays. */
+  export function ownerPays(row: Axis): boolean {
+    const debtorId = debtorOf(row);
+
+    return debtorId !== undefined && debtorId === ownerOf(row);
+  }
+
+  /** The contract still says who pays as an enum; it is derived from the axis now. */
+  export function payer(row: Axis): ChargePayer {
+    return ownerPays(row) ? ChargePayer.Owner : ChargePayer.Person;
+  }
+
+  export function owns(row: Axis, userId: string): boolean {
+    return ownerOf(row) === userId;
   }
 
   /** The billing behind a charge: its type, whether it is a registro, and the counterpart it names. */
@@ -274,34 +318,30 @@ export namespace ChargeRepository {
     return { settled: billing.settled === true, counterpartLabel: billing.counterpart_label ?? null, type: billing.type };
   }
 
-  /**
-   * Direction is derived, never stored: the owner side of a conta a receber collects, the owner side of a
-   * conta a pagar pays, and the counterpart (recipient) side is always the inverse.
-   */
-  export function direction(row: Pick<Row, 'creditor_id' | 'payer'>, userId: string): Direction {
-    const ownerSide = owns(row, userId);
-    const ownerPays = payer(row) === ChargePayer.Owner;
-
-    return ownerSide !== ownerPays ? Direction.Receivable : Direction.Payable;
+  /** Direction is derived, never stored: whoever sits in `creditor_id` collects, anyone else on the charge pays. */
+  export function direction(row: Axis, userId: string): Direction {
+    return creditorOf(row) === userId ? Direction.Receivable : Direction.Payable;
   }
 
   /** Name shown on the other side of a charge, as the viewer knows that person (nickname first). */
   export async function counterpartName(db: DbClient, row: Row, userId: string): Promise<string> {
     if (!owns(row, userId)) {
-      return ContactRepository.displayNameFor(db, userId, row.creditor_id);
+      return ContactRepository.displayNameFor(db, userId, ownerOf(row));
     }
 
+    const otherId = counterpartId(row);
+
     // Nobody on the other side: a registro names its counterpart; a conta a pagar without a payee is the owner's alone.
-    if (!row.debtor_user_id) {
+    if (!otherId) {
       return (await settledBilling(db, row)).counterpartLabel ?? 'Você';
     }
 
-    return ContactRepository.displayNameFor(db, userId, row.debtor_user_id);
+    return ContactRepository.displayNameFor(db, userId, otherId);
   }
 
   /** Photo of the person `counterpartName` names; null on a bill that is the owner's alone. */
   export async function counterpartAvatar(db: DbClient, row: Row, userId: string): Promise<UserAvatar | null> {
-    const otherId = owns(row, userId) ? row.debtor_user_id : row.creditor_id;
+    const otherId = owns(row, userId) ? counterpartId(row) : ownerOf(row);
 
     if (!otherId) {
       return null;
@@ -345,7 +385,7 @@ export namespace ChargeRepository {
       hasPix,
       direction,
       recipient: await recipientOf(db, row),
-      debtorUserId: row.debtor_user_id ?? null,
+      debtorUserId: counterpartId(row) ?? null,
       // A conta a pagar never publishes a link: the owner already holds the Pix key they typed.
       sharingState:
         row.state !== ChargeState.Pending || payer === ChargePayer.Owner || record.settled
@@ -375,8 +415,7 @@ export namespace ChargeRepository {
       throw new HttpForbiddenError();
     const row = await db.charges.findOne({ select: SELECT, where: { id }, ...(lock ? { lock: true } : {}) });
     if (!row) throw new HttpNotFoundError();
-    if (owns(row, actorId)) return { row, direction: direction(row, actorId) };
-    if (row.debtor_user_id === actorId) return { row, direction: direction(row, actorId) };
+    if (owns(row, actorId) || creditorOf(row) === actorId || debtorOf(row) === actorId) return { row, direction: direction(row, actorId) };
     throw new HttpForbiddenError();
   }
 
@@ -389,7 +428,7 @@ export namespace ChargeRepository {
     return db.transaction(async (tx) => {
       const { row } = await findForActor(tx, creditorId, id, true);
       // Only the owner cancels a single charge, and a conta a pagar is ended as a whole instead.
-      if (!owns(row, creditorId) || payer(row) === ChargePayer.Owner) throw new HttpForbiddenError();
+      if (!owns(row, creditorId) || ownerPays(row)) throw new HttpForbiddenError();
       if (row.state === ChargeState.Cancelled) return dto(tx, row, creditorId);
       if (row.state !== ChargeState.Pending) throw new ChargeClosedError();
       const now = new Date().toISOString();
@@ -414,13 +453,13 @@ export namespace ChargeRepository {
     return db.transaction(async (tx) => {
       await lockAccountReferences(tx, 'write');
 
-      const row = await tx.charges.findOne({ select: SELECT, where: { id, creditor_id: creditorId }, lock: true });
+      const row = await tx.charges.findOne({ select: SELECT, where: { id }, lock: true });
 
-      if (!row) {
+      if (!row || !owns(row, creditorId)) {
         throw new HttpNotFoundError();
       }
 
-      if (payer(row) === ChargePayer.Owner) {
+      if (ownerPays(row)) {
         throw new SilenceUnavailableError();
       }
 
@@ -467,7 +506,7 @@ export namespace ChargeRepository {
       throw new HttpNotFoundError();
     }
 
-    await activity(db, { actorId: row.creditor_id, row: updated, type: 'charge.paid', now, payload: { via: 'registered' } });
+    await activity(db, { actorId: ownerOf(row), row: updated, type: 'charge.paid', now, payload: { via: 'registered' } });
 
     return updated;
   }

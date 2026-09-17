@@ -62,7 +62,7 @@ function recurring(key: string, overrides: Partial<BillingInput> = {}): BillingI
 
 async function chargeRows(billingId: string) {
   const { records } = await db.charges.findMany({
-    select: { id: true, debtor_user_id: true, due_date: true, state: true, notify: true },
+    select: { id: true, debtor_id: true, due_date: true, state: true, notify: true },
     where: { billing_id: billingId },
     order: { due_date: Order.Asc }
   });
@@ -155,8 +155,8 @@ describe('sem avisos on native PostgreSQL', () => {
     const rows = await chargeRows(created.id);
 
     equal(rows.length, 4);
-    ok(rows.filter((row) => row.debtor_user_id === anaId).every((row) => row.notify === false));
-    ok(rows.filter((row) => row.debtor_user_id === brunoId).every((row) => row.notify !== false));
+    ok(rows.filter((row) => row.debtor_id === anaId).every((row) => row.notify === false));
+    ok(rows.filter((row) => row.debtor_id === brunoId).every((row) => row.notify !== false));
 
     const anaCharge = created.charges.find((charge) => charge.debtorUserId === anaId)!;
 
@@ -178,8 +178,8 @@ describe('sem avisos on native PostgreSQL', () => {
     const rows = await chargeRows(billing.id);
 
     equal(rows.length, 2);
-    equal(rows.find((row) => row.debtor_user_id === anaId)?.notify, false);
-    equal(rows.find((row) => row.debtor_user_id === brunoId)?.notify === false, false);
+    equal(rows.find((row) => row.debtor_id === anaId)?.notify, false);
+    equal(rows.find((row) => row.debtor_id === brunoId)?.notify === false, false);
   });
 
   it('keeps the value of whoever stays, applies the one sent and moves their pending charges', async () => {
@@ -215,7 +215,7 @@ describe('sem avisos on native PostgreSQL', () => {
       [false, false, false]
     );
     equal(
-      (await chargeRows(billing.id)).find((row) => row.debtor_user_id === brunoId)?.notify,
+      (await chargeRows(billing.id)).find((row) => row.debtor_id === brunoId)?.notify,
       false,
       'the value sent reaches the pending charge'
     );
@@ -241,7 +241,7 @@ describe('sem avisos on native PostgreSQL', () => {
       date('2026-02-11')
     );
 
-    equal((await chargeRows(billing.id)).find((row) => row.debtor_user_id === anaId)?.notify, true);
+    equal((await chargeRows(billing.id)).find((row) => row.debtor_id === anaId)?.notify, true);
     deepEqual(
       (await EventRepository.list(db, billing.id, 'billing.participant_unsilenced')).map((event) => event.payload),
       [{ userId: anaId }]
@@ -403,7 +403,7 @@ describe('sem avisos on native PostgreSQL', () => {
       date('2026-02-10')
     );
 
-    const leftover = (await chargeRows(billing.id)).find((row) => row.debtor_user_id === brunoId);
+    const leftover = (await chargeRows(billing.id)).find((row) => row.debtor_id === brunoId);
 
     equal(leftover?.state, ChargeState.Pending, 'a next-month edit keeps the charge of whoever left');
     equal(leftover?.notify === false, false);
@@ -429,7 +429,7 @@ describe('sem avisos on native PostgreSQL', () => {
       [brunoId, false]
     ]);
     equal(
-      (await chargeRows(billing.id)).find((row) => row.debtor_user_id === brunoId)?.notify,
+      (await chargeRows(billing.id)).find((row) => row.debtor_id === brunoId)?.notify,
       false,
       'the value sent reaches the leftover charge'
     );
@@ -457,9 +457,9 @@ describe('sem avisos on native PostgreSQL', () => {
     const rows = await chargeRows(billing.id);
 
     equal(rows.length, 3);
-    equal(rows.find((row) => row.debtor_user_id === anaId)?.notify, false);
-    equal(rows.find((row) => row.debtor_user_id === brunoId)?.notify === false, false);
-    equal(rows.find((row) => row.debtor_user_id === GUEST)?.notify === false, false);
+    equal(rows.find((row) => row.debtor_id === anaId)?.notify, false);
+    equal(rows.find((row) => row.debtor_id === brunoId)?.notify === false, false);
+    equal(rows.find((row) => row.debtor_id === GUEST)?.notify === false, false);
   });
 
   it('copies the participant value to the charges an edit of the current month creates', async () => {
@@ -488,8 +488,8 @@ describe('sem avisos on native PostgreSQL', () => {
     const rows = await chargeRows(billing.id);
 
     equal(rows.length, 3, 'the month gains the charge of whoever entered');
-    equal(rows.find((row) => row.debtor_user_id === anaId)?.notify, false);
-    equal(rows.find((row) => row.debtor_user_id === brunoId)?.notify === false, false);
-    equal(rows.find((row) => row.debtor_user_id === carlaId)?.notify, false);
+    equal(rows.find((row) => row.debtor_id === anaId)?.notify, false);
+    equal(rows.find((row) => row.debtor_id === brunoId)?.notify === false, false);
+    equal(rows.find((row) => row.debtor_id === carlaId)?.notify, false);
   });
 });

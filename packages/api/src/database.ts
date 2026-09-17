@@ -89,9 +89,13 @@ export declare class Db extends Database.Service<PostgresEngine> {
       };
       indexes: {
         id: Index.Primary;
+        owner_id: Index.Secondary;
         creditor_id: Index.Secondary;
+        debtor_id: Index.Secondary;
         debtor_user_id: Index.Secondary;
         billing_id: Index.Secondary;
+        // One charge per pair and date. On a conta a pagar the debtor is always the owner, so the payee has to be in it.
+        'billing_id:creditor_id:debtor_id:due_date': Index.Unique;
         'billing_id:debtor_user_id:due_date': Index.Unique;
       };
     }>,

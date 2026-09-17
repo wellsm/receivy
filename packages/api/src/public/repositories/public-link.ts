@@ -1,5 +1,5 @@
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import { ChargePayer, ChargeState, Direction, type PublicChargeView, type PublicLink } from '@receivy/common';
+import { ChargeState, Direction, type PublicChargeView, type PublicLink } from '@receivy/common';
 import { ChargeClosedError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { PaymentMethodKind, StoredProofState } from '../../charges/schemas/charge';
@@ -39,7 +39,7 @@ export namespace PublicLinkRepository {
       const { row, direction } = await ChargeRepository.findForActor(tx, creditorId, chargeId, true);
 
       // A conta a pagar never gets a public link: the owner pays with the key they typed.
-      if (direction !== Direction.Receivable || ChargeRepository.payer(row) === ChargePayer.Owner) throw new HttpForbiddenError();
+      if (direction !== Direction.Receivable || ChargeRepository.ownerPays(row)) throw new HttpForbiddenError();
       if (row.state !== ChargeState.Pending) throw new ChargeClosedError();
 
       let current = row;
@@ -105,7 +105,7 @@ export namespace PublicLinkRepository {
   export async function revoke(db: DbClient, creditorId: string, chargeId: string): Promise<void> {
     await db.transaction(async (tx) => {
       const { row, direction } = await ChargeRepository.findForActor(tx, creditorId, chargeId, true);
-      if (direction !== Direction.Receivable || ChargeRepository.payer(row) === ChargePayer.Owner) throw new HttpForbiddenError();
+      if (direction !== Direction.Receivable || ChargeRepository.ownerPays(row)) throw new HttpForbiddenError();
       if (!(await LinkRepository.live(tx, LinkableType.Charge, row.id))) return;
       const stamp = new Date().toISOString();
       await LinkRepository.revokeLive(tx, LinkableType.Charge, row.id, stamp);
@@ -123,7 +123,8 @@ export namespace PublicLinkRepository {
   }
 
   export async function chargeView(db: DbClient, charge: ChargeRepository.Row): Promise<PublicChargeView> {
-    const user = await db.users.findOne({ select: { name: true }, where: { id: charge.creditor_id } });
+    const creditorId = ChargeRepository.creditorOf(charge);
+    const user = creditorId ? await db.users.findOne({ select: { name: true }, where: { id: creditorId } }) : undefined;
     const firstName = user?.name?.trim().split(/\s+/)[0] || 'Pessoa';
     const payment = ChargeRepository.paymentOf(charge);
 

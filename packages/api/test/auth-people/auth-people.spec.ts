@@ -175,7 +175,7 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
       );
     }
 
-    const charges = await db.charges.findMany({ select: { id: true }, where: { debtor_user_id: plain.userId } });
+    const charges = await db.charges.findMany({ select: { id: true }, where: { debtor_id: plain.userId } });
     equal(charges.records.length, 3);
     await db.charges.updateOne({
       select: { id: true },

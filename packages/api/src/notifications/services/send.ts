@@ -1,5 +1,5 @@
 import type { Client } from '@ez4/scheduler';
-import { addCalendarDays, ChargePayer, ChargeState } from '@receivy/common';
+import { addCalendarDays, ChargeState } from '@receivy/common';
 import { effectiveReminders } from '../../billings/services/reminders';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { currentProof, proofsByCharge } from '../../proofs/repositories/proof-row';
@@ -99,8 +99,9 @@ export async function sendChargeNotice(
     return { channels: [] };
   }
 
-  const ownerPays = ChargeRepository.payer(charge) === ChargePayer.Owner;
-  const targetId = ownerPays ? charge.creditor_id : charge.debtor_user_id;
+  const ownerPays = ChargeRepository.ownerPays(charge);
+  // Whoever has to pay hears about it: the debtor, which on a conta a pagar is the owner.
+  const targetId = ChargeRepository.debtorOf(charge);
   const target = targetId
     ? await db.users.findOne({ select: { id: true, name: true, email: true }, where: { id: targetId, deleted_at: { isNull: true } } })
     : undefined;
@@ -269,12 +270,12 @@ export async function followUpCharge(
 export async function announceCharges(db: DbClient, context: NoticeContext, chargeIds: string[], now = Date.now()): Promise<void> {
   for (const chargeId of chargeIds) {
     const charge = await db.charges.findOne({
-      select: { payer: true, due_date: true, billing_id: true, notify: true },
+      select: { owner_id: true, creditor_id: true, debtor_id: true, debtor_user_id: true, payer: true, due_date: true, billing_id: true, notify: true },
       where: { id: chargeId }
     });
 
     // The owner of a conta a pagar just typed it: only the scheduled reminders reach them.
-    if (!charge || ChargeRepository.payer(charge) === ChargePayer.Owner) {
+    if (!charge || ChargeRepository.ownerPays(charge)) {
       continue;
     }
 

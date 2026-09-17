@@ -42,7 +42,7 @@ async function actor(db: DbClient, userId: string) {
 }
 
 function accessWhere(userId: string) {
-  return { OR: [{ creditor_id: userId }, { debtor_user_id: userId }] };
+  return { OR: [{ owner_id: userId }, { creditor_id: userId }, { debtor_id: userId }, { debtor_user_id: userId }] };
 }
 
 function cursorDate(cursor?: string): { dueDate: string; id: string } | undefined {
@@ -60,14 +60,13 @@ function cursorDate(cursor?: string): { dueDate: string; id: string } | undefine
  * conta a receber collects and the owner of a conta a pagar pays; the counterpart is the inverse.
  */
 function directionWhere(userId: string, direction: Direction) {
-  const ownerSide = { creditor_id: userId };
-  const counterpartSide = { debtor_user_id: userId };
-  const contactPays = { OR: [{ payer: ChargePayer.Person }, { payer: { isNull: true } }] };
-  const ownerPays = { payer: ChargePayer.Owner };
+  // Rows from before the flip keep the owner in creditor_id and say who pays in `payer`; the rest sit on the money's axis.
+  const flipped = { OR: [{ payer: ChargePayer.Person }, { payer: { isNull: true } }] };
+  const unflipped = { payer: ChargePayer.Owner };
 
   return direction === Direction.Receivable
-    ? { OR: [{ AND: [ownerSide, contactPays] }, { AND: [counterpartSide, ownerPays] }] }
-    : { OR: [{ AND: [ownerSide, ownerPays] }, { AND: [counterpartSide, contactPays] }] };
+    ? { OR: [{ AND: [{ creditor_id: userId }, flipped] }, { AND: [{ debtor_user_id: userId }, unflipped] }] }
+    : { OR: [{ debtor_id: userId }, { AND: [{ debtor_user_id: userId }, flipped] }, { AND: [{ creditor_id: userId }, unflipped] }] };
 }
 
 /** `overdue` is not stored: it is a pending charge the due date already passed. */
@@ -235,6 +234,9 @@ export namespace TimelineRepository {
     const { userId: otherId } = await ContactRepository.user(db, userId, contactId);
     const baseWhere = {
       OR: [
+        { creditor_id: userId, debtor_id: otherId },
+        { creditor_id: otherId, debtor_id: userId },
+        // Rows from before the flip: the owner in creditor_id, the counterpart in debtor_user_id.
         { creditor_id: userId, debtor_user_id: otherId },
         { creditor_id: otherId, debtor_user_id: userId }
       ]

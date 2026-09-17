@@ -67,7 +67,7 @@ async function contactFor(ownerId: string, userId: string) {
 
 async function chargesOf(billingId: string) {
   const { records } = await db.charges.findMany({
-    select: { id: true, debtor_user_id: true, amount_cents: true, due_date: true, installment: true, installment_count: true },
+    select: { id: true, debtor_id: true, amount_cents: true, due_date: true, installment: true, installment_count: true },
     where: { billing_id: billingId },
     order: { due_date: Order.Asc, amount_cents: Order.Asc }
   });
@@ -202,7 +202,7 @@ describe('billing invites on native PostgreSQL', () => {
         [4_000, '2026-11-20', 1, 1]
       ]
     );
-    equal(after.find((charge) => charge.debtor_user_id === GUEST)?.id, result.chargeId);
+    equal(after.find((charge) => charge.debtor_id === GUEST)?.id, result.chargeId);
 
     // Only the newly inserted charge announces itself; the repriced one keeps its original event.
     equal(await db.events.count({ where: { eventable_id: result.chargeId!, type: 'charge.created', actor_user_id: OWNER } }), 1);
@@ -269,8 +269,8 @@ describe('billing invites on native PostgreSQL', () => {
       );
     }
 
-    const guestCharges = after.filter((charge) => charge.debtor_user_id === GUEST);
-    const ownerContactCharges = after.filter((charge) => charge.debtor_user_id === debtorId);
+    const guestCharges = after.filter((charge) => charge.debtor_id === GUEST);
+    const ownerContactCharges = after.filter((charge) => charge.debtor_id === debtorId);
 
     deepEqual(
       guestCharges.map((charge) => [charge.due_date, charge.amount_cents, charge.installment, charge.installment_count]),
@@ -520,7 +520,7 @@ describe('billing invites on native PostgreSQL', () => {
     equal((await db.contacts.findOne({ select: { nickname: true }, where: { id: placeholder.id } }))?.nickname, 'Zezinho');
     equal(await db.users.count({ where: { id: placeholder.userId } }), 0, 'the placeholder account is gone');
     deepEqual(
-      (await chargesOf(billing.id)).map((charge) => [charge.debtor_user_id, charge.amount_cents]),
+      (await chargesOf(billing.id)).map((charge) => [charge.debtor_id, charge.amount_cents]),
       [[PARKED, 8_000]]
     );
     ok(await db.events.count({ where: { eventable_id: billing.id, type: 'billings.guest_linked' } }));

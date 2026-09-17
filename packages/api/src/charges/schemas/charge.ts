@@ -31,11 +31,17 @@ export interface ProofFileSchema {
 
 export interface ChargeSchema extends Database.Schema {
   id: String.UUID;
-  /** The billing owner, whichever side of the money they are on. */
-  creditor_id: String.UUID;
-  /** The person on the other side (users.id); null only on a conta a pagar without a payee. Name and e-mail are read live. */
+  /** The billing owner, whichever side of the money they are on. Null only until the block 8 backfill runs. */
+  owner_id?: String.UUID;
+  /** Who receives (users.id); null on a conta a pagar without a payee. Name and e-mail are read live. */
+  creditor_id?: String.UUID;
+  /** Who pays (users.id); null on a registro with nobody on the other side. */
+  debtor_id?: String.UUID;
+  /**
+   * @deprecated Rows from before the flip keep the owner in `creditor_id` whichever way the money goes, the
+   * counterpart here and `payer` saying which side pays. Both go once the block 8 backfill has run.
+   */
   debtor_user_id?: String.UUID;
-  /** Who pays: null or 'person' (the contact) on a conta a receber, 'owner' on a conta a pagar. */
   payer?: ChargePayer;
   billing_id: String.UUID;
   description: String.Max<500>;

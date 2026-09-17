@@ -1,3 +1,4 @@
+import { HttpNotFoundError } from '@ez4/gateway';
 import { PixKeyType } from '@receivy/common';
 import { describe, expect, it, vi } from 'vitest';
 import type { DbClient } from '../../database';
@@ -36,7 +37,12 @@ describe('pixSnapshot', () => {
     expect((await pixSnapshot(db, owner, undefined, padaria))?.key).toBe('padaria@example.com');
   });
 
-  it('keeps an explicit method id above every default', async () => {
-    expect((await pixSnapshot(db, owner, 'theirs'))?.key).toBe('padaria@example.com');
+  it('keeps an explicit method id above the default of the same scope', async () => {
+    expect((await pixSnapshot(db, owner, 'theirs', padaria))?.key).toBe('padaria@example.com');
+    expect((await pixSnapshot(db, owner, 'mine'))?.key).toBe('dona@example.com');
+  });
+
+  it('refuses an explicit contact key on a conta a receber', async () => {
+    await expect(pixSnapshot(db, owner, 'theirs')).rejects.toThrow(HttpNotFoundError);
   });
 });

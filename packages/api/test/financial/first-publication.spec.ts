@@ -57,6 +57,14 @@ describe('explicit first Pix publication', () => {
     const first = await PaymentMethodRepository.save(db, owner, { pixKeyType: PixKeyType.Email, pixKey: 'first@example.com' });
     const second = await PaymentMethodRepository.save(db, owner, { pixKeyType: PixKeyType.Email, pixKey: 'second@example.com' });
     await rejects(() => PublicLinkRepository.createOrRotate(db, owner, chargeId, secret, false, undefined, foreign.id), HttpNotFoundError);
+    // A key the owner keeps about a contact ("how I pay this person") is private and never published.
+    const padaria = await ContactRepository.save(db, owner, { name: 'Padaria' });
+    const contactKey = await PaymentMethodRepository.save(db, owner, {
+      pixKeyType: PixKeyType.Email,
+      pixKey: 'publication-padaria@example.com',
+      contactId: padaria.id
+    });
+    await rejects(() => PublicLinkRepository.createOrRotate(db, owner, chargeId, secret, false, undefined, contactKey.id), HttpNotFoundError);
     const [a, b] = await Promise.all(
       [1, 2].map(() => PublicLinkRepository.createOrRotate(db, owner, chargeId, secret, false, undefined, first.id, context))
     );

@@ -51,7 +51,9 @@ export namespace PublicLinkRepository {
         if (everPublished || !paymentMethodId) throw new PixRequiredError();
         const method = await tx.payment_methods.findOne({
           select: { pix_key: true, pix_key_type: true, label: true },
-          where: { id: paymentMethodId, owner_id: creditorId, archived_at: { isNull: true } },
+          // Only a conta a receber reaches this far (a conta a pagar is refused above), so the billing
+          // has no contact: the key published here is the owner's own, never one kept about a contact.
+          where: { id: paymentMethodId, owner_id: creditorId, contact_id: { isNull: true }, archived_at: { isNull: true } },
           lock: true
         });
         if (!method) throw new HttpNotFoundError();
@@ -83,7 +85,7 @@ export namespace PublicLinkRepository {
       } else if (paymentMethodId) {
         const method = await tx.payment_methods.findOne({
           select: { pix_key: true, pix_key_type: true },
-          where: { id: paymentMethodId, owner_id: creditorId, archived_at: { isNull: true } }
+          where: { id: paymentMethodId, owner_id: creditorId, contact_id: { isNull: true }, archived_at: { isNull: true } }
         });
         if (!method) throw new HttpNotFoundError();
         const published = ChargeRepository.paymentOf(row);

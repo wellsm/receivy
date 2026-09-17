@@ -83,7 +83,9 @@ export async function pixSnapshot(
   if (paymentMethodId) {
     const row = await db.payment_methods.findOne({
       select: { pix_key_type: true, pix_key: true, label: true, archived_at: true },
-      where: { id: paymentMethodId, owner_id: ownerId },
+      // An explicit id still has to live in the billing's own scope: a conta a receber publishes the
+      // owner's key, never one the owner keeps about a contact.
+      where: { id: paymentMethodId, owner_id: ownerId, contact_id: contactId ? contactId : { isNull: true } },
       lock: true
     });
 

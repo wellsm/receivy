@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PixKeyType } from './contracts';
 import { canNotifyContact, normalizeContact } from './contacts';
 
 describe('contacts', () => {
@@ -27,6 +28,10 @@ describe('contacts', () => {
   it('keeps a contact without e-mail: the person is reachable by link only', () => {
     expect(normalizeContact({ name: 'Ana', email: '' })).toEqual({ name: 'Ana' });
     expect(normalizeContact({ name: 'Ana' })).toEqual({ name: 'Ana' });
+  });
+  it('keeps the payment method untouched: the repository normalizes the key, not this function', () => {
+    const paymentMethod = { pixKeyType: PixKeyType.Email, pixKey: 'ana@example.com', label: 'Ana' };
+    expect(normalizeContact({ name: 'Ana', paymentMethod })).toEqual({ name: 'Ana', paymentMethod });
   });
   it.each([
     { name: ' ', email: 'ana@example.com' },

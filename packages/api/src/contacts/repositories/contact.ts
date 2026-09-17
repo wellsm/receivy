@@ -2,6 +2,7 @@ import { Order } from '@ez4/database';
 import { HttpBadRequestError, HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import { type Contact, type ContactInput, type ContactsPage, type LinkableContact, type UserAvatar, UserStatus } from '@receivy/common';
 import type { DbClient } from '../../database';
+import { PaymentMethodRepository } from '../../payment-methods/repositories/payment-method';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import { lockAccountReferences } from '../../users/services/locking';
 import { DuplicateContactError, EmailTakenError, LinkedContactError, NotLinkableError, OwnEmailError } from '../errors';
@@ -315,6 +316,15 @@ export namespace ContactRepository {
           data: { id: contactId, owner: { id: ownerId }, user: { id: userId! }, ...data, created_at: now }
         });
       }
+      if (input.paymentMethod) {
+        const keyId = await PaymentMethodRepository.upsertContactKey(tx, ownerId, contactId, {
+          keyType: input.paymentMethod.pixKeyType,
+          key: input.paymentMethod.pixKey,
+          label: input.paymentMethod.label ?? 'Pix'
+        });
+        await PaymentMethodRepository.electDefault(tx, ownerId, keyId);
+      }
+
       const saved = await tx.contacts.findOne({ select: SELECT, where: { id: contactId, owner_id: ownerId } });
       if (!saved) throw new HttpNotFoundError();
       return (await details(tx, [saved]))[0]!;

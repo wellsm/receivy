@@ -115,22 +115,26 @@ export namespace PaymentMethodRepository {
     });
   }
 
+  /** Makes `id` the default of its own scope; runs inside the caller's transaction. */
+  export async function electDefault(db: DbClient, ownerId: string, id: string): Promise<void> {
+    const target = await db.payment_methods.findOne({ select: SELECT, where: { id, owner_id: ownerId } });
+    if (!target || target.archived_at) throw new HttpNotFoundError();
+    await db.payment_methods.updateMany({
+      select: { id: true },
+      where: { ...scopeWhere(ownerId, target.contact_id), is_default: true },
+      data: { is_default: false }
+    });
+    await db.payment_methods.updateOne({
+      select: { id: true },
+      where: { id, owner_id: ownerId },
+      data: { is_default: true, updated_at: new Date().toISOString() }
+    });
+  }
+
   export async function makeDefault(db: DbClient, ownerId: string, id: string): Promise<PaymentMethod> {
     return db.transaction(async (tx) => {
       await lockOwner(tx, ownerId);
-      const target = await tx.payment_methods.findOne({ select: SELECT, where: { id, owner_id: ownerId }, lock: true });
-      if (!target || target.archived_at) throw new HttpNotFoundError();
-      await tx.payment_methods.updateMany({
-        select: { id: true },
-        where: { ...scopeWhere(ownerId, target.contact_id), is_default: true },
-        data: { is_default: false }
-      });
-      const changed = await tx.payment_methods.updateOne({
-        select: { id: true },
-        where: { id, owner_id: ownerId },
-        data: { is_default: true, updated_at: new Date().toISOString() }
-      });
-      if (!changed) throw new HttpNotFoundError();
+      await electDefault(tx, ownerId, id);
       const row = await tx.payment_methods.findOne({ select: SELECT, where: { id } });
       if (!row) throw new HttpNotFoundError();
       return dto(row);

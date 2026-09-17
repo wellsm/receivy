@@ -6,11 +6,12 @@ import type { SessionIdentity } from '../../common/authorizers/session';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ContactProvider } from '../provider';
 import { ContactRepository } from '../repositories/contact';
+import type { ContactPaymentMethodBody } from '../utils/body';
 import { parseContactInput } from '../utils/parse';
 
 declare class CreateRequest implements Http.Request {
   identity: SessionIdentity;
-  body: { name: String.Max<120>; nickname?: String.Max<60>; email?: String.Max<254> };
+  body: { name: String.Max<120>; nickname?: String.Max<60>; email?: String.Max<254>; paymentMethod?: ContactPaymentMethodBody };
 }
 
 declare class CreateResponse implements Http.Response {

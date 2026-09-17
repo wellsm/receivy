@@ -1,5 +1,6 @@
 import { normalizeEmail } from '../auth/auth';
 import type { UserAvatar } from './avatar';
+import type { PaymentMethodInput } from './contracts';
 
 /** A person as one agenda knows them: the account is the identity, the nickname is the owner's. */
 export const enum UserStatus {
@@ -14,7 +15,17 @@ export const enum UserStatus {
  * A contact for an account that already exists (`active`) only accepts the nickname; name and e-mail belong
  * to that person.
  */
-export type ContactInput = { name: string; nickname?: string; email?: string };
+
+/** What the contact form types for how the owner pays this person; the same shape `POST /payment-methods` takes. */
+export type ContactPaymentMethodInput = Omit<PaymentMethodInput, 'contactId'>;
+
+export type ContactInput = {
+  name: string;
+  nickname?: string;
+  email?: string;
+  /** Block 9.1: filed under this contact and made its default; the billing form only picks among them. */
+  paymentMethod?: ContactPaymentMethodInput;
+};
 
 export type Contact = {
   /** The agenda entry (contacts table). */
@@ -61,5 +72,10 @@ export function normalizeContact(input: ContactInput): ContactInput {
   // An empty e-mail is how the clients leave it out; only a filled one has to look like an address.
   const email = normalizeEmail(input.email ?? '');
   if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw new Error('Informe um e-mail válido.');
-  return { name, ...(nickname ? { nickname } : {}), ...(email ? { email } : {}) };
+  return {
+    name,
+    ...(nickname ? { nickname } : {}),
+    ...(email ? { email } : {}),
+    ...(input.paymentMethod ? { paymentMethod: input.paymentMethod } : {})
+  };
 }

@@ -1402,6 +1402,26 @@ components:
         email:
           type: string
           maxLength: 254
+        paymentMethod:
+          type: object
+          additionalProperties: false
+          properties:
+            pixKeyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            pixKey:
+              type: string
+              maxLength: 254
+            label:
+              type: string
+              maxLength: 120
+          required:
+            - pixKeyType
+            - pixKey
       required:
         - name
     updateContactHandler:
@@ -1417,6 +1437,26 @@ components:
         email:
           type: string
           maxLength: 254
+        paymentMethod:
+          type: object
+          additionalProperties: false
+          properties:
+            pixKeyType:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            pixKey:
+              type: string
+              maxLength: 254
+            label:
+              type: string
+              maxLength: 120
+          required:
+            - pixKeyType
+            - pixKey
       required:
         - name
     createPaymentMethodHandler:

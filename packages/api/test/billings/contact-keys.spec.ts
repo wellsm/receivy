@@ -146,4 +146,29 @@ describe('contact keys', () => {
     equal(detail.pix, null, 'an archived key shows nothing instead of failing the whole read');
     equal(detail.paymentMethodId, billing.paymentMethodId, 'the billing still points at the key it was created with');
   });
+
+  it('files the key typed on the contact form under the contact and makes it the default', async () => {
+    const contact = await ContactRepository.save(db, OWNER, { name: 'Mercado', paymentMethod: { pixKeyType: PixKeyType.Email, pixKey: 'mercado@example.com', label: 'Mercado' } });
+    const keys = await PaymentMethodRepository.list(db, OWNER, false, contact.id);
+
+    equal(keys.length, 1);
+    equal(keys[0]!.pixKey, 'mercado@example.com');
+    equal(keys[0]!.isDefault, true);
+  });
+
+  it('a key typed on edit becomes the new default and leaves the older key in place', async () => {
+    const contact = await ContactRepository.save(db, OWNER, { name: 'Farmácia', paymentMethod: { pixKeyType: PixKeyType.Email, pixKey: 'farmacia@example.com' } });
+    await ContactRepository.save(db, OWNER, { name: 'Farmácia', paymentMethod: { pixKeyType: PixKeyType.Phone, pixKey: '+5511988887777' } }, contact.id);
+    const keys = await PaymentMethodRepository.list(db, OWNER, false, contact.id);
+
+    equal(keys.length, 2);
+    equal(keys.find((key) => key.isDefault)?.pixKey, '+5511988887777');
+  });
+
+  it('editing without a key touches no key', async () => {
+    const contact = await ContactRepository.save(db, OWNER, { name: 'Papelaria', paymentMethod: { pixKeyType: PixKeyType.Email, pixKey: 'papelaria@example.com' } });
+    await ContactRepository.save(db, OWNER, { name: 'Papelaria', nickname: 'Papel' }, contact.id);
+
+    equal((await PaymentMethodRepository.list(db, OWNER, false, contact.id)).length, 1);
+  });
 });

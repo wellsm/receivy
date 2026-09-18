@@ -13,6 +13,7 @@ mobile fala com a API diretamente e abre o web para links públicos.
 | E-mail | `mailpit`: caixa em <http://127.0.0.1:8025> (`file` grava `.eml` em `packages/api/.ez4/emails/`) | Resend, remetente `@receivy.wellsm.dev` | Resend, remetente no domínio real |
 | Comprovantes | adaptador local explícito | bucket `ProofFiles` do stage | bucket `ProofFiles` do stage |
 | Push | `disabled` | `disabled` até haver projeto Expo/APNs/FCM | idem |
+| Links de pagamento | `fake` | InfinitePay | InfinitePay |
 
 `wellsm.dev` é um domínio pessoal compartilhado por vários apps em dev; cada app
 usa um subdomínio (`receivy.wellsm.dev`). O TLD `.dev` está na lista de HSTS
@@ -38,6 +39,14 @@ API (`packages/api/dev.env.example` → `dev.env`, git-ignored; `prd.env` análo
   `<web>/api/auth/<provedor>/callback` (ver `docs/oauth-setup.md`).
 - `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`. O mesmo
   `EMAIL_TRANSPORT` vale para código de login e para notificações.
+- Links de pagamento InfinitePay: `PAYMENT_METHOD_LINK=live` fala com a InfinitePay (cria
+  link de verdade, sem precisar de chave de API), `fake` responde em processo e aponta o
+  link para a página `/dev/infinitepay` do web, `disabled` (padrão quando ausente) falha
+  todo link com `PAYMENT_LINK_UNAVAILABLE`. `fake` no local/test, `live` no dev/prd.
+- `PUBLIC_API_ORIGIN`: origem pública da API, base do `webhook_url` que a API manda
+  à InfinitePay. No local vale `http://127.0.0.1:3735/local-receivy-api`, que a
+  InfinitePay não alcança — localmente é o retorno do pagador e o transporte
+  `fake` que fecham a cobrança.
 - CORS da API e do bucket são declarações estáticas do EZ4 (`src/api.ts`,
   `src/storage.ts`): incluem `localhost:3000` e `receivy.wellsm.dev`; adicionar o
   domínio real antes do primeiro deploy de produção.

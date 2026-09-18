@@ -1,7 +1,7 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpForbiddenError } from '@ez4/gateway';
-import { BillingKind, BillingRecurrence, DevicePlatform, Direction, PixKeyType, ProofKind, SplitMode, SplitPartKind } from '@receivy/common';
+import { BillingKind, BillingRecurrence, DevicePlatform, Direction, PaymentProvider, PixKeyType, ProofKind, SplitMode, SplitPartKind } from '@receivy/common';
 import { createBilling } from '../../src/billings/services/billing';
 import { ChargeInReviewError, SettledNoRemindersError } from '../../src/charges/errors';
 import { StoredProofState } from '../../src/charges/schemas/charge';
@@ -102,8 +102,9 @@ async function payableCharge(announce = false) {
 
   const contactId = await contactOf(`Imobiliária ${count}`);
   const key = await paymentMethods.save(OWNER, {
-    pixKeyType: PixKeyType.Email,
-    pixKey: `landlord-${count}@example.com`,
+    provider: PaymentProvider.Pix,
+    kind: PixKeyType.Email,
+    value: `landlord-${count}@example.com`,
     label: 'Imobiliária',
     contactId
   });
@@ -215,7 +216,7 @@ describe('charge notices, follow-ups and devices', () => {
     equal(row?.['name'], 'receivy_tests');
 
     await createUser(db, { id: OWNER, email: 'notify-owner@example.com', name: 'Owner' });
-    await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'notify-owner@example.com' });
+    await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'notify-owner@example.com' });
     await createUser(db, { id: DEBTOR, email: DEBTOR_EMAIL, name: 'Debtor' });
     await createUser(db, { id: OTHER, email: 'notify-other@example.com', name: 'Other' });
     await createUser(db, { id: NOPIX, email: 'notify-nopix@example.com', name: 'No Pix' });

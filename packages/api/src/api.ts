@@ -37,7 +37,7 @@ import type {
 import type { InviteRoutes } from './invites/routes';
 import type { DeviceOwnedElsewhereError, DeviceRegisteredError, ReminderQuotaError } from './notifications/errors';
 import type { NotificationRoutes } from './notifications/routes';
-import type { PixKeyTakenError } from './payment-methods/errors';
+import type { InfinitePayCheckoutDisabledError, PaymentLinkUnavailableError, PaymentMethodTakenError } from './payment-methods/errors';
 import type { PaymentMethodRoutes } from './payment-methods/routes';
 import type {
   ProofDeclarationForbiddenError,
@@ -58,6 +58,7 @@ import type { TimelineOverflowError } from './timeline/errors';
 import type { TimelineRoutes } from './timeline/routes';
 import type { AvatarInvalidError, StaleSessionError } from './users/errors';
 import type { UserRoutes } from './users/routes';
+import type { WebhookRoutes } from './webhooks/routes';
 
 /** Receivy HTTP API. */
 export declare class Api extends Http.Service {
@@ -98,7 +99,7 @@ export declare class Api extends Http.Service {
         PayableHasNoInviteError,
         DeviceOwnedElsewhereError,
         DeviceRegisteredError,
-        PixKeyTakenError,
+        PaymentMethodTakenError,
         ProofPendingError,
         UploadInProgressError,
         UploadMissingError,
@@ -116,9 +117,11 @@ export declare class Api extends Http.Service {
         ProofReviewInvalidError,
         TimelineOverflowError,
         PendingChargesWithoutStateError,
-        EditScopeNotRecurringError
+        EditScopeNotRecurringError,
+        InfinitePayCheckoutDisabledError
       ];
       429: [TooManyRequestsError, ReminderQuotaError];
+      503: [PaymentLinkUnavailableError];
     };
   }>;
 
@@ -133,7 +136,8 @@ export declare class Api extends Http.Service {
     ...InviteRoutes,
     ...TimelineRoutes,
     ...ProofRoutes,
-    ...NotificationRoutes
+    ...NotificationRoutes,
+    ...WebhookRoutes
   ];
 
   // Browsers reach the API only through the Next BFF; this list matters for tooling and

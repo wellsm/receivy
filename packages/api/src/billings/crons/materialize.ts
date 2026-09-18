@@ -1,5 +1,6 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Cron } from '@ez4/scheduler';
+import { paymentLinkProvider } from '../../charges/services/payment-link';
 import type { EmailService } from '../../common/services/email/service';
 import type { Db } from '../../database';
 import type { ChargeNotifyScheduler } from '../../notifications/schedulers/charge-notify';
@@ -34,12 +35,14 @@ export declare class BillingCron extends Cron.Service {
 
   variables: {
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
+    PAYMENT_METHOD_LINK: Environment.VariableOrValue<'PAYMENT_METHOD_LINK', 'disabled'>;
     EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
     RESEND_API_KEY: Environment.Variable<'RESEND_API_KEY'>;
     RESEND_FROM_EMAIL: Environment.VariableOrValue<'RESEND_FROM_EMAIL', 'disabled'>;
     EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
     NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
     PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
+    PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
   };
 }
@@ -52,7 +55,8 @@ export async function handler(
   const notice = {
     config: notificationConfigFrom(variables),
     transport: notificationTransport(variables, globalThis.fetch, email),
-    notify: chargeNotifyScheduler
+    notify: chargeNotifyScheduler,
+    links: paymentLinkProvider(variables)
   };
 
   const materialized = await materializeDueBillings(db, notice, now);

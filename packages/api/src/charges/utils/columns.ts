@@ -1,5 +1,4 @@
-import { Direction, type PixKeyType } from '@receivy/common';
-import type { PaymentMethodKind } from '../schemas/charge';
+import { Direction, type PaymentLink, PaymentLinkState, PaymentProvider, type PaymentSnapshot, type PixKeyType } from '@receivy/common';
 
 /**
  * Readers of the charge columns that say who is who and how it is paid. They live outside the repository so
@@ -17,8 +16,8 @@ export type Axis = {
 };
 
 export type PaymentSnapshotColumns = {
-  method: PaymentMethodKind;
-  type: PixKeyType;
+  provider: PaymentProvider;
+  kind?: PixKeyType | null;
   value: string;
   label: string;
 };
@@ -26,6 +25,20 @@ export type PaymentSnapshotColumns = {
 /** How this charge is paid, frozen at the moment it was published. */
 export function paymentOf(row: { payment_snapshot?: PaymentSnapshotColumns }): PaymentSnapshotColumns | null {
   return row.payment_snapshot ?? null;
+}
+
+/** The snapshot as clients read it. */
+export function snapshotDto(payment: PaymentSnapshotColumns | null): PaymentSnapshot | null {
+  return payment ? { provider: payment.provider, kind: payment.kind ?? null, value: payment.value, label: payment.label } : null;
+}
+
+/** The checkout link of an InfinitePay charge; a Pix charge has none. A link never asked for reads as pending. */
+export function paymentLinkOf(row: { payment_snapshot?: PaymentSnapshotColumns; payment_link_url?: string; payment_link_state?: PaymentLinkState }): PaymentLink | null {
+  if (row.payment_snapshot?.provider !== PaymentProvider.InfinitePay) {
+    return null;
+  }
+
+  return { url: row.payment_link_url ?? null, state: row.payment_link_state ?? PaymentLinkState.Pending };
 }
 
 /** The owner of the billing behind the charge: every owner power keys on this, never on direction. */

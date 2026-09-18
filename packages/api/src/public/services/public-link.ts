@@ -1,15 +1,17 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import { ChargeState, Direction, type PublicChargeView, type PublicLink } from '@receivy/common';
+import { ChargeState, Direction, PaymentLinkState, type PublicChargeView, type PublicLink } from '@receivy/common';
 import { ChargeClosedError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
-import { PaymentMethodKind, StoredProofState } from '../../charges/schemas/charge';
+import { StoredProofState } from '../../charges/schemas/charge';
 import { chargeForActor } from '../../charges/services/access';
-import { creditorOf, ownerPays, paymentOf } from '../../charges/utils/columns';
+import { ensurePaymentLink, paymentLinkConfigFrom, paymentLinkProvider } from '../../charges/services/payment-link';
+import { creditorOf, ownerPays, paymentLinkOf, paymentOf, snapshotDto } from '../../charges/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { EmailService } from '../../common/services/email/service';
+import { throttlePublicRead } from '../../common/utils/throttle';
 import type { Db, DbClient } from '../../database';
 import type { ChargeNotifyScheduler } from '../../notifications/schedulers/charge-notify';
 import { noticeContext } from '../../notifications/services/context';
@@ -40,10 +42,12 @@ export declare class PublicLinkService extends Factory.Service<PublicLinkClient>
 
   variables: {
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
+    PAYMENT_METHOD_LINK: Environment.VariableOrValue<'PAYMENT_METHOD_LINK', 'disabled'>;
     EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
     RESEND_FROM_EMAIL: Environment.Variable<'RESEND_FROM_EMAIL'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
     PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
+    PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
     NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
     EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
   };
@@ -61,7 +65,7 @@ function response(link: LinkRow, secret: string): PublicLink {
 }
 
 /** The owner's own live key a conta a receber may publish; never one kept about a contact, never an archived one. */
-async function ownKey(tx: DbClient, ownerId: string, paymentMethodId: string, lock: boolean) {
+async function ownMethod(tx: DbClient, ownerId: string, paymentMethodId: string, lock: boolean) {
   const key = await PaymentMethodRepository.pointer(tx, ownerId, paymentMethodId, true, lock);
 
   if (!key || key.archivedAt) {
@@ -105,18 +109,18 @@ export async function publishChargeLink(
         throw new PixRequiredError();
       }
 
-      const key = await ownKey(tx, creditorId, paymentMethodId, true);
+      const method = await ownMethod(tx, creditorId, paymentMethodId, true);
       const stamp = new Date(nowSeconds * 1000).toISOString();
 
-      await ChargeRepository.setPayment(tx, row.id, { method: PaymentMethodKind.Pix, type: key.keyType, value: key.key, label: key.label }, stamp);
+      await ChargeRepository.setPayment(tx, row.id, { provider: method.provider, ...(method.kind ? { kind: method.kind } : {}), value: method.value, label: method.label }, stamp);
       await EventRepository.record(tx, { type: 'charge.pix_published', eventableType: EventableType.Charge, eventableId: row.id, actorId: creditorId, at: stamp });
 
       // The creation notice was skipped for lack of a key; it goes out once the link exists.
       published = !(await EventRepository.list(tx, row.id, 'notice.sent')).some((event) => event.payload.template === NoticeTemplate.Initial);
     } else if (paymentMethodId) {
-      const key = await ownKey(tx, creditorId, paymentMethodId, false);
+      const method = await ownMethod(tx, creditorId, paymentMethodId, false);
 
-      if (key.key !== payment.value || key.keyType !== payment.type) {
+      if (method.value !== payment.value || method.provider !== payment.provider) {
         throw new PixSnapshotLockedError();
       }
     }
@@ -165,7 +169,9 @@ export async function publicChargeView(db: DbClient, charge: ChargeRepository.Ro
     amount: { amountCents: charge.amount_cents, currency: 'BRL' },
     dueDate: charge.due_date,
     state: charge.state,
-    pix: payment ? { keyType: payment.type, key: payment.value, label: payment.label } : null,
+    payment: snapshotDto(payment),
+    paymentLink: paymentLinkOf(charge),
+    receiptUrl: charge.provider_receipt_url ?? null,
     uploadsEnabled: charge.state === ChargeState.Pending && (await ProofRepository.current(db, charge.id))?.state !== StoredProofState.Pending
   };
 }
@@ -220,6 +226,8 @@ export async function publicChargeByToken(db: DbClient, token: string, secret: s
 
 export function createService({ db, email, chargeNotifyScheduler, variables }: Service.Context<PublicLinkService>): PublicLinkClient {
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
+  const links = paymentLinkProvider(variables);
+  const linkConfig = paymentLinkConfigFrom(variables);
 
   return {
     publish: (creditorId, chargeId, paymentMethodId) =>
@@ -227,6 +235,15 @@ export function createService({ db, email, chargeNotifyScheduler, variables }: S
     rotate: (creditorId, chargeId) => publishChargeLink(db, creditorId, chargeId, secret, true),
     view: async (token) => {
       const charge = await resolvePublicCharge(db, token, secret);
+
+      await throttlePublicRead(db, charge.id);
+
+      const link = paymentLinkOf(charge);
+
+      // Last resort for a link that failed at creation and at notice time: the payer is here now. A Pix charge has no link to chase.
+      if (link && link.state !== PaymentLinkState.Ready && (await ensurePaymentLink(db, links, linkConfig, charge.id)) === PaymentLinkState.Ready) {
+        return { charge, view: await publicChargeView(db, (await ChargeRepository.get(db, charge.id))!) };
+      }
 
       return { charge, view: await publicChargeView(db, charge) };
     }

@@ -1,4 +1,4 @@
-import { chargeDateText } from '@receivy/common';
+import { chargeDateText, PaymentProvider } from '@receivy/common';
 import { buttonRow, chargeRow, emailDocument, noticeRow } from '../../common/services/email/layout';
 import { issuePublicChargeToken, PublicTokenPurpose } from '../../public/services/capability';
 
@@ -23,6 +23,8 @@ export interface RenderInputs {
   from: string;
   /** A conta a pagar reminding its own owner: no public link, no "you received a charge" framing. */
   self?: boolean;
+  /** Changes the footnote: an InfinitePay charge is paid through its checkout link, not Pix directly. */
+  provider?: PaymentProvider;
 }
 
 /**
@@ -59,7 +61,10 @@ export function renderNotice(input: RenderInputs, template: NoticeTemplate, secr
     heading: opening,
     lead: initial ? 'Abra o link para ver os detalhes e pagar.' : 'Nada mudou desde o último aviso. O link de pagamento continua o mesmo.',
     body: [chargeRow(input.description, `R$ ${amount}`, due), buttonRow(url, 'Confira os detalhes'), noticeRow(CLOSING)].join(''),
-    footnote: 'O pagamento acontece direto entre vocês, pela chave Pix de quem cobra.',
+    footnote:
+      input.provider === PaymentProvider.InfinitePay
+        ? 'O pagamento acontece pelo link da InfinitePay de quem cobra.'
+        : 'O pagamento acontece direto entre vocês, pela chave Pix de quem cobra.',
     preheader: opening
   });
 

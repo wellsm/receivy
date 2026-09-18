@@ -1,7 +1,7 @@
 import { deepEqual, equal, notEqual, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpBadRequestError, HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import { BillingFrequency, BillingRecurrence, chargeTotals, Direction, PixKeyType, SplitMode, SplitPartKind, shiftMonth } from '@receivy/common';
+import { BillingFrequency, BillingRecurrence, chargeTotals, Direction, PaymentProvider, PixKeyType, SplitMode, SplitPartKind, shiftMonth } from '@receivy/common';
 import { createBilling } from '../../src/billings/services/billing';
 import { getBilling } from '../../src/billings/services/detail';
 import { ApiError } from '../../src/common/errors';
@@ -42,8 +42,9 @@ describe('financial repositories on PostgreSQL', () => {
 
   it('keeps payment methods owner-scoped and returns post-update default state', async () => {
     const first = await paymentMethods.save(OWNER, {
-      pixKeyType: PixKeyType.Cpf,
-      pixKey: '529.982.247-25',
+      provider: PaymentProvider.Pix,
+      kind: PixKeyType.Cpf,
+      value: '529.982.247-25',
       label: 'Principal'
     });
 
@@ -51,15 +52,16 @@ describe('financial repositories on PostgreSQL', () => {
 
     const edited = await paymentMethods.save(
       OWNER,
-      { pixKeyType: PixKeyType.Random, pixKey: '123e4567-e89b-12d3-a456-426614174000', label: 'Editada' },
+      { provider: PaymentProvider.Pix, kind: PixKeyType.Random, value: '123e4567-e89b-12d3-a456-426614174000', label: 'Editada' },
       first.id
     );
 
-    equal(edited.pixKey, '123e4567-e89b-12d3-a456-426614174000');
+    equal(edited.value, '123e4567-e89b-12d3-a456-426614174000');
 
     const second = await paymentMethods.save(OWNER, {
-      pixKeyType: PixKeyType.Phone,
-      pixKey: '+55 (11) 99876-5432',
+      provider: PaymentProvider.Pix,
+      kind: PixKeyType.Phone,
+      value: '+55 (11) 99876-5432',
       label: 'Telefone'
     });
     const madeDefault = await paymentMethods.makeDefault(OWNER, second.id);
@@ -82,7 +84,7 @@ describe('financial repositories on PostgreSQL', () => {
   it('binds idempotency to payload, reads the recipient live and keeps the Pix snapshot', async () => {
     const person = await contacts.save(OWNER, { name: 'Bruno Original', email: 'bruno@example.com' });
     const debtor = person.userId;
-    const pix = await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '111.444.777-35', label: 'Despesa' });
+    const pix = await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Cpf, value: '111.444.777-35', label: 'Despesa' });
     const input = {
       recurrence: BillingRecurrence.Once as const,
       totalCents: 9_000,
@@ -115,14 +117,14 @@ describe('financial repositories on PostgreSQL', () => {
     await contacts.save(OWNER, { name: 'Contato Editado', email: 'bruno@example.com' }, person.id);
     await paymentMethods.save(
       OWNER,
-      { pixKeyType: PixKeyType.Random, pixKey: '9f1c5dd7-95d6-4a8a-a859-2d941eb3d28a', label: 'Nova' },
+      { provider: PaymentProvider.Pix, kind: PixKeyType.Random, value: '9f1c5dd7-95d6-4a8a-a859-2d941eb3d28a', label: 'Nova' },
       pix.id
     );
 
     const snapshot = await charges.get(OWNER, created.charges[0]!.id);
 
     deepEqual(snapshot.recipient, { userId: debtor, name: 'Contato Editado', email: 'bruno@example.com', avatar: null });
-    equal(snapshot.pix?.key, '11144477735');
+    equal(snapshot.payment?.value, '11144477735');
 
     await rejects(() => charges.get(STRANGER, snapshot.id), HttpForbiddenError);
     await rejects(() => contactLedger(db, STRANGER, person.id), HttpNotFoundError);
@@ -248,7 +250,7 @@ describe('financial repositories on PostgreSQL', () => {
 
     deepEqual(
       Object.keys(await publicChargeByToken(db, first.token, SECRET, 1_001)).sort(),
-      ['amount', 'creditorFirstName', 'description', 'dueDate', 'pix', 'state', 'uploadsEnabled'].sort()
+      ['amount', 'creditorFirstName', 'description', 'dueDate', 'payment', 'paymentLink', 'receiptUrl', 'state', 'uploadsEnabled'].sort()
     );
 
     const expiresAt = Math.floor(new Date(first.expiresAt).getTime() / 1000);

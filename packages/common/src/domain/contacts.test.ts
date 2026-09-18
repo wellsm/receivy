@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PixKeyType } from './contracts';
-import { canNotifyContact, normalizeContact } from './contacts';
+import { PaymentProvider, PixKeyType } from './contracts';
+import { canNotifyContact, type ContactPaymentMethodInput, normalizeContact } from './contacts';
 
 describe('contacts', () => {
   it('normalizes the name and the e-mail without changing e-mail aliases', () => {
@@ -30,7 +30,7 @@ describe('contacts', () => {
     expect(normalizeContact({ name: 'Ana' })).toEqual({ name: 'Ana' });
   });
   it('keeps the payment method untouched: the repository normalizes the key, not this function', () => {
-    const paymentMethod = { pixKeyType: PixKeyType.Email, pixKey: 'ana@example.com', label: 'Ana' };
+    const paymentMethod: ContactPaymentMethodInput = { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'ana@example.com', label: 'Ana' };
 
     expect(normalizeContact({ name: 'Ana', paymentMethod })).toEqual({ name: 'Ana', paymentMethod });
   });

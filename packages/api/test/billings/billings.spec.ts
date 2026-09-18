@@ -12,6 +12,7 @@ import {
   billingDueLabel,
   ChargeState,
   DEFAULT_BILLING_REMINDERS,
+  PaymentProvider,
   PixKeyType,
   ProofKind,
   ProofMime,
@@ -62,7 +63,7 @@ describe('billings on native PostgreSQL', () => {
 
     debtorId = debtor.userId;
     debtorContactId = debtor.id;
-    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    pixId = (await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Cpf, value: '52998224725', label: 'Principal' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, OTHER]));
@@ -88,7 +89,7 @@ describe('billings on native PostgreSQL', () => {
 
     deepEqual(snapshot.recipient, { userId: debtorId, name: 'Bruno Editado', email: 'billing-edited@example.com', avatar: null });
     equal(snapshot.debtorId, debtorId);
-    equal(snapshot.pix?.key, '52998224725');
+    equal(snapshot.payment?.value, '52998224725');
 
     await contacts.save(OWNER, { name: 'Bruno', email: 'billing-debtor@example.com' }, debtorContactId);
 

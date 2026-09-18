@@ -13,12 +13,13 @@ import {
   billingDates,
   calendarDate,
   Direction,
+  PaymentProvider,
   resolveBillingSplit,
   SplitPartKind,
   UserStatus
 } from '@receivy/common';
 import { ChargeRepository } from '../../charges/repositories/charge';
-import { pixSnapshot } from '../../charges/services/materialize';
+import { paymentSnapshot } from '../../charges/services/materialize';
 import { ContactRepository } from '../../contacts/repositories/contact';
 import { personName, personOf } from '../../contacts/utils/person';
 import type { DbClient } from '../../database';
@@ -106,7 +107,10 @@ async function billingPix(db: DbClient, row: BillingRepository.Row): Promise<Bil
   }
 
   try {
-    return await pixSnapshot(db, row.owner_id, row.payment_method_id, row.contact_id);
+    const method = await paymentSnapshot(db, row.owner_id, row.payment_method_id, row.contact_id);
+
+    // A contact key is always Pix; anything else here is a broken pointer, shown as nothing.
+    return method?.provider === PaymentProvider.Pix && method.kind ? { keyType: method.kind, key: method.value, label: method.label } : null;
   } catch (error) {
     if (error instanceof HttpNotFoundError) {
       return null;

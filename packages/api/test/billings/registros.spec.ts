@@ -12,6 +12,7 @@ import {
   calendarDate,
   Direction,
   EditScope,
+  PaymentProvider,
   PixKeyType,
   SharingState,
   SplitMode,
@@ -97,13 +98,14 @@ describe('registros on native PostgreSQL', () => {
     await createUser(db, { id: OTHER, email: 'registros-other@example.com', name: 'Outra' });
 
     anaId = (await contacts.save(OWNER, { name: 'Ana', email: 'registros-ana@example.com' })).userId;
-    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    pixId = (await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Cpf, value: '52998224725', label: 'Principal' })).id;
     empresaId = (await contacts.save(OWNER, { name: 'Empresa X' })).userId;
     imobiliariaId = (await contacts.save(OWNER, { name: 'Imobiliária' })).id;
     imobiliariaKeyId = (
       await paymentMethods.save(OWNER, {
-        pixKeyType: PixKeyType.Email,
-        pixKey: 'loja@example.com',
+        provider: PaymentProvider.Pix,
+        kind: PixKeyType.Email,
+        value: 'loja@example.com',
         label: 'Imobiliária',
         contactId: imobiliariaId
       })
@@ -181,7 +183,7 @@ describe('registros on native PostgreSQL', () => {
     equal(detail.recipient.name, 'Empresa X');
     equal(detail.kind, BillingKind.Record);
     equal(detail.sharingState, SharingState.Closed);
-    equal(detail.pix, null);
+    equal(detail.payment, null);
 
     const rent = await createBilling(
       db,

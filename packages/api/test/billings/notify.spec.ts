@@ -8,6 +8,7 @@ import {
   BillingRecurrence,
   ChargeState,
   EditScope,
+  PaymentProvider,
   PixKeyType,
   SplitMode,
   SplitPartKind
@@ -105,7 +106,7 @@ describe('sem avisos on native PostgreSQL', () => {
     anaContactId = ana.id;
     brunoId = (await contacts.save(OWNER, { name: 'Bruno', email: 'silenced-bruno@example.com' })).userId;
     carlaId = (await contacts.save(OWNER, { name: 'Carla', email: 'silenced-carla@example.com' })).userId;
-    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    pixId = (await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Cpf, value: '52998224725', label: 'Principal' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, OTHER, GUEST]));

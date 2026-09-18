@@ -1,15 +1,14 @@
 import { HttpNotFoundError } from '@ez4/gateway';
-import { type BillingKind, type BillingPlan, type BillingRecurrence, ChargePayer, calendarDate, type PixKeyType, UserStatus } from '@receivy/common';
+import { type BillingKind, type BillingPlan, type BillingRecurrence, ChargePayer, calendarDate, UserStatus } from '@receivy/common';
 import { AllocationRepository } from '../../billings/repositories/allocation';
 import { billingRegistered } from '../../billings/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
-import { PaymentMethodRepository } from '../../payment-methods/repositories/payment-method';
+import { type MethodSnapshot, PaymentMethodRepository } from '../../payment-methods/repositories/payment-method';
 import { AccountRepository } from '../../users/repositories/account';
 import { ChargeRepository } from '../repositories/charge';
-import { PaymentMethodKind } from '../schemas/charge';
 import { counterpartId } from '../utils/columns';
 import { markRegistered } from './charge';
 
@@ -18,7 +17,7 @@ export type ChargeRecipientMaterialization = { userId: string; active: boolean }
 
 export type ChargeMaterializationContext = {
   recipients: Map<string, ChargeRecipientMaterialization>;
-  pix: { keyType: PixKeyType; key: string; label: string } | null;
+  payment: MethodSnapshot | null;
   /** 'owner' materializes a conta a pagar: the owner pays, the (optional) payee is the counterpart. */
   payer: ChargePayer;
 };
@@ -52,12 +51,12 @@ async function recipientSnapshots(db: DbClient, ownerId: string, userIds: string
 }
 
 /** An explicit method wins; otherwise the default of the scope: the contact's keys, or the owner's own. */
-export async function pixSnapshot(
+export async function paymentSnapshot(
   db: DbClient,
   ownerId: string,
   paymentMethodId?: string,
   contactId?: string
-): Promise<ChargeMaterializationContext['pix']> {
+): Promise<MethodSnapshot | null> {
   if (!paymentMethodId) {
     return PaymentMethodRepository.defaultOf(db, ownerId, contactId);
   }
@@ -68,10 +67,10 @@ export async function pixSnapshot(
   const key = await PaymentMethodRepository.pointer(db, ownerId, paymentMethodId, !contactId, true);
 
   if (!key || key.archivedAt) {
-    throw new HttpNotFoundError('Chave Pix indisponível.');
+    throw new HttpNotFoundError('Meio de pagamento indisponível.');
   }
 
-  return { keyType: key.keyType, key: key.key, label: key.label };
+  return { provider: key.provider, kind: key.kind, value: key.value, label: key.label };
 }
 
 /** Validates owner-scoped people/payment method and captures values before materialization. */
@@ -86,12 +85,12 @@ export async function prepareChargeMaterialization(
 
   if (payable) {
     // A conta a pagar without a contact is the owner's alone: no key, no notice.
-    const pix = payable.contactId ? await pixSnapshot(db, ownerId, paymentMethodId, payable.contactId) : null;
+    const payment = payable.contactId ? await paymentSnapshot(db, ownerId, paymentMethodId, payable.contactId) : null;
 
-    return { recipients, pix, payer: ChargePayer.Owner };
+    return { recipients, payment, payer: ChargePayer.Owner };
   }
 
-  return { recipients, pix: await pixSnapshot(db, ownerId, paymentMethodId), payer: ChargePayer.Person };
+  return { recipients, payment: await paymentSnapshot(db, ownerId, paymentMethodId), payer: ChargePayer.Person };
 }
 
 /** How the billing behind new charges settles: a registro pays each charge due by today, in its own timezone. */
@@ -143,8 +142,8 @@ export async function persistChargePlan(
       ...(item.installment !== null && item.installmentCount !== null ? { installment: item.installment, installmentCount: item.installmentCount } : {}),
       // A registro is never paid through a link, so the wallet key stays out of it.
       payment:
-        context.pix && !settlement.settled
-          ? { method: PaymentMethodKind.Pix, type: context.pix.keyType, value: context.pix.key, label: context.pix.label }
+        context.payment && !settlement.settled
+          ? { provider: context.payment.provider, ...(context.payment.kind ? { kind: context.payment.kind } : {}), value: context.payment.value, label: context.payment.label }
           : null,
       notify: !recipient || !quiet.has(recipient.userId),
       now

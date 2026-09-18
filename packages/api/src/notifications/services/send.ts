@@ -1,15 +1,17 @@
 import type { Client } from '@ez4/scheduler';
-import { addCalendarDays, ChargeState } from '@receivy/common';
+import { addCalendarDays, ChargeState, PaymentLinkState, PaymentProvider } from '@receivy/common';
 import { billingRegistered } from '../../billings/utils/columns';
 import { effectiveReminders } from '../../billings/utils/reminders';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { StoredProofState } from '../../charges/schemas/charge';
+import { ensurePaymentLink } from '../../charges/services/payment-link';
 import { ownerPays, paymentOf } from '../../charges/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
 import { ProofRepository } from '../../proofs/repositories/proof';
 import { ensurePublicLink } from '../../public/services/links';
+import type { PaymentLinkProvider } from '../../vendors/infinitepay/types';
 import { DeviceRepository } from '../repositories/device';
 import { EMAIL_FOLLOWUP_MS, instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
 import { NoticeTemplate, renderNotice } from './render';
@@ -35,6 +37,7 @@ export type NoticeContext = {
   config: NotificationConfig;
   transport: NotificationTransport;
   notify: NotifyScheduler;
+  links: PaymentLinkProvider;
 };
 
 export const notifyIdentifier = (chargeId: string) => `charge:${chargeId}:notify`;
@@ -52,10 +55,16 @@ const enum SkipReason {
   Settled = 'settled',
   NoRecipient = 'no_recipient',
   PixRequired = 'pix_required',
+  LinkPending = 'link_pending',
   NoChannel = 'no_channel'
 }
 
 const NOTHING: SendResult = { channels: [] };
+
+/** What `ensurePaymentLink` needs, read off the notice config. */
+function linkConfig(config: NotificationConfig) {
+  return { apiOrigin: config.apiOrigin, webOrigin: config.publicOrigin, secret: config.secret };
+}
 
 function noticePayload(template: NoticeTemplate, offsetDays?: number): Record<string, unknown> {
   return { template, ...(offsetDays === undefined ? {} : { offsetDays }) };
@@ -154,6 +163,15 @@ export async function sendChargeNotice(
     return skipped(db, chargeId, payload, SkipReason.PixRequired);
   }
 
+  // An InfinitePay charge is announced with its checkout link ready; a link still failing is tried once more here.
+  if (!ownBill && paymentOf(charge)?.provider === PaymentProvider.InfinitePay) {
+    const state = await ensurePaymentLink(db, context.links, linkConfig(context.config), chargeId, now, context.transport);
+
+    if (state !== PaymentLinkState.Ready) {
+      return skipped(db, chargeId, payload, SkipReason.LinkPending);
+    }
+  }
+
   // The owner pays their own bill: no link is minted for them, and the notice carries none.
   const link = ownBill ? null : await ensurePublicLink(db, charge.id, Math.floor(now / 1000));
   const rendered = renderNotice(
@@ -167,7 +185,8 @@ export async function sendChargeNotice(
       expires: link ? Math.floor(Date.parse(link.expires_at) / 1000) : 0,
       origin: context.config.publicOrigin,
       from: context.config.from ?? 'disabled',
-      self: ownBill
+      self: ownBill,
+      provider: paymentOf(charge)?.provider
     },
     template,
     context.config.secret
@@ -262,6 +281,13 @@ export async function followUpCharge(db: DbClient, context: NoticeContext, event
 /** Fired at charge creation (after the transaction): the first notice, with its follow-up rule. */
 export async function announceCharges(db: DbClient, context: NoticeContext, chargeIds: string[], now = Date.now()): Promise<void> {
   for (const chargeId of chargeIds) {
+    // Created a moment ago, outside the transaction: the checkout link is asked for now, whether or not the notice is due yet.
+    try {
+      await ensurePaymentLink(db, context.links, linkConfig(context.config), chargeId, now, context.transport);
+    } catch (error) {
+      console.error('Payment link creation failed after commit', { chargeId, error: error instanceof Error ? error.message : 'unknown' });
+    }
+
     const charge = await ChargeRepository.forNotice(db, chargeId);
 
     // The owner of a conta a pagar just typed it: only the scheduled reminders reach them.

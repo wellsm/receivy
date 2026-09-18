@@ -8,6 +8,7 @@ import {
   BillingRecurrence,
   Direction,
   EditScope,
+  PaymentProvider,
   PendingChargesAction,
   PixKeyType,
   SplitMode,
@@ -91,11 +92,12 @@ describe('month materialized: pending charges and current month edits', () => {
 
     carlaId = carla.userId;
     carlaContactId = carla.id;
-    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    pixId = (await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Cpf, value: '52998224725', label: 'Principal' })).id;
     anaKeyId = (
       await paymentMethods.save(OWNER, {
-        pixKeyType: PixKeyType.Email,
-        pixKey: 'month-landlord@example.com',
+        provider: PaymentProvider.Pix,
+        kind: PixKeyType.Email,
+        value: 'month-landlord@example.com',
         label: 'Imobiliária',
         contactId: anaContactId
       })
@@ -430,8 +432,9 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(before.payment_snapshot?.value, '52998224725', 'picked up the only default payment method at creation');
 
     const alternate = await paymentMethods.save(OWNER, {
-      pixKeyType: PixKeyType.Email,
-      pixKey: 'alt@example.com',
+      provider: PaymentProvider.Pix,
+      kind: PixKeyType.Email,
+      value: 'alt@example.com',
       label: 'Alternativo'
     });
 

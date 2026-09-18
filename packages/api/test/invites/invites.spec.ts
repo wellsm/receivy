@@ -9,6 +9,7 @@ import {
   type BillingInput,
   BillingRecurrence,
   ChargeState,
+  PaymentProvider,
   PixKeyType,
   ProofKind,
   ProofMime,
@@ -106,7 +107,7 @@ describe('billing invites on native PostgreSQL', () => {
 
     debtorId = (await contacts.save(OWNER, { name: 'Caio', email: 'invite-debtor@example.com' })).userId;
     otherDebtorId = (await contacts.save(OTHER_OWNER, { name: 'Caio', email: 'invite-other-debtor@example.com' })).userId;
-    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    pixId = (await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Cpf, value: '52998224725', label: 'Principal' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, OTHER_OWNER, LINKED_OWNER, GUEST, STRANGER, OUTSIDER, PARKED]));

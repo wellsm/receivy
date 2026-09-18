@@ -1,7 +1,7 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { Order } from '@ez4/database';
-import { BillingFrequency, type BillingSplit, BillingState, BillingRecurrence, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
+import { BillingFrequency, type BillingSplit, BillingState, BillingRecurrence, PaymentProvider, PixKeyType, SplitMode, SplitPartKind } from '@receivy/common';
 import { createBilling, patchBilling } from '../../src/billings/services/billing';
 import { materializeDue, materializeDueBillings } from '../../src/billings/services/materialize';
 import { EventRepository } from '../../src/common/repositories/events';
@@ -89,7 +89,7 @@ describe('daily cron: materialization and reminder plan', () => {
     await createUser(db, { id: OWNER, email: 'daily-cron-owner@example.com', name: 'Dona' });
 
     debtorId = (await contacts.save(OWNER, { name: 'Bruno', email: DEBTOR_EMAIL })).userId;
-    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    pixId = (await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Cpf, value: '52998224725', label: 'Principal' })).id;
     monthlyId = (
       await createBilling(
         db,

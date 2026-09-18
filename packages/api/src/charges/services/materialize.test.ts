@@ -1,8 +1,8 @@
 import { HttpNotFoundError } from '@ez4/gateway';
-import { PixKeyType } from '@receivy/common';
+import { PaymentProvider, PixKeyType } from '@receivy/common';
 import { describe, expect, it, vi } from 'vitest';
 import type { DbClient } from '../../database';
-import { pixSnapshot } from './materialize';
+import { paymentSnapshot } from './materialize';
 
 function dbWith(rows: { id: string; contact_id?: string; is_default: boolean; pix_key: string }[]): DbClient {
   const match = (where: Record<string, unknown>) =>
@@ -25,13 +25,17 @@ function dbWith(rows: { id: string; contact_id?: string; is_default: boolean; pi
 
   return {
     payment_methods: {
-      findOne: vi.fn(async ({ where }) => match(where)[0] && { pix_key_type: PixKeyType.Email, pix_key: match(where)[0]!.pix_key, label: 'Pix' }),
-      findMany: vi.fn(async ({ where }) => ({ records: match(where).filter((row) => row.is_default).map((row) => ({ pix_key_type: PixKeyType.Email, pix_key: row.pix_key, label: 'Pix' })) }))
+      findOne: vi.fn(async ({ where }) => match(where)[0] && { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: match(where)[0]!.pix_key, label: 'Pix' }),
+      findMany: vi.fn(async ({ where }) => ({
+        records: match(where)
+          .filter((row) => row.is_default)
+          .map((row) => ({ provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: row.pix_key, label: 'Pix' }))
+      }))
     }
   } as unknown as DbClient;
 }
 
-describe('pixSnapshot', () => {
+describe('paymentSnapshot', () => {
   const owner = 'owner';
   const padaria = 'contact-padaria';
   const mercado = 'contact-mercado';
@@ -42,26 +46,26 @@ describe('pixSnapshot', () => {
   ]);
 
   it('falls back to the owner default when nobody receives on their behalf', async () => {
-    expect((await pixSnapshot(db, owner))?.key).toBe('dona@example.com');
+    expect((await paymentSnapshot(db, owner))?.value).toBe('dona@example.com');
   });
 
   it('falls back to the receiving contact default on a conta a pagar', async () => {
-    expect((await pixSnapshot(db, owner, undefined, padaria))?.key).toBe('padaria@example.com');
+    expect((await paymentSnapshot(db, owner, undefined, padaria))?.value).toBe('padaria@example.com');
   });
 
   it('keeps an explicit method id above the default of the same scope', async () => {
-    expect((await pixSnapshot(db, owner, 'theirs', padaria))?.key).toBe('padaria@example.com');
-    expect((await pixSnapshot(db, owner, 'mine'))?.key).toBe('dona@example.com');
+    expect((await paymentSnapshot(db, owner, 'theirs', padaria))?.value).toBe('padaria@example.com');
+    expect((await paymentSnapshot(db, owner, 'mine'))?.value).toBe('dona@example.com');
   });
 
   it('refuses an explicit contact key on a conta a receber', async () => {
-    await expect(pixSnapshot(db, owner, 'theirs')).rejects.toThrow(HttpNotFoundError);
+    await expect(paymentSnapshot(db, owner, 'theirs')).rejects.toThrow(HttpNotFoundError);
   });
 
   // A conta a pagar keeps paying through whatever key it points at: the legacy pointers the bloco 9
   // backfill leaves out of scope on purpose are counted for the owner, never broken.
   it('takes any key of the owner on a conta a pagar', async () => {
-    expect((await pixSnapshot(db, owner, 'mine', padaria))?.key).toBe('dona@example.com');
-    expect((await pixSnapshot(db, owner, 'others', padaria))?.key).toBe('mercado@example.com');
+    expect((await paymentSnapshot(db, owner, 'mine', padaria))?.value).toBe('dona@example.com');
+    expect((await paymentSnapshot(db, owner, 'others', padaria))?.value).toBe('mercado@example.com');
   });
 });

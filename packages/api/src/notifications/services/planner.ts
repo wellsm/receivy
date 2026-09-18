@@ -2,6 +2,8 @@ import { addCalendarDays, type BillingReminder } from '@receivy/common';
 
 export interface NotificationConfig {
   publicOrigin: string;
+  /** Public origin of this API: the base of the webhook url InfinitePay posts to. */
+  apiOrigin: string;
   secret: string;
   from?: string;
   pushAvailable?: boolean;
@@ -10,9 +12,12 @@ export interface NotificationConfig {
 /** Only the fields the notice pipeline reads; the HTTP provider and every scheduler expose them. */
 export interface NotificationVariables {
   PUBLIC_WEB_ORIGIN: string;
+  PUBLIC_API_ORIGIN?: string;
   PUBLIC_LINK_HMAC_SECRET: string;
   RESEND_FROM_EMAIL?: string;
   NOTIFICATION_PUSH_TRANSPORT?: string;
+  APP_STAGE?: string;
+  PAYMENT_METHOD_LINK?: string;
 }
 
 /** Reminders reach the recipient at 06:00 of the billing timezone. */
@@ -27,6 +32,7 @@ export const PLAN_WINDOW_MS = 24 * 3600_000;
 export function notificationConfigFrom(variables: NotificationVariables): NotificationConfig {
   return {
     publicOrigin: variables.PUBLIC_WEB_ORIGIN,
+    apiOrigin: (variables.PUBLIC_API_ORIGIN ?? 'http://127.0.0.1:3735/local-receivy-api').replace(/\/+$/, ''),
     secret: variables.PUBLIC_LINK_HMAC_SECRET,
     from: variables.RESEND_FROM_EMAIL,
     pushAvailable: variables.NOTIFICATION_PUSH_TRANSPORT === 'expo'

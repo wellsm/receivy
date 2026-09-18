@@ -551,9 +551,9 @@ function buildSeed(ownerId) {
       rows.payment_methods.push({
         id,
         owner_id: userIdOf(holder),
-        type: 'pix',
-        pix_key_type: pix.type,
-        pix_key: pix.key,
+        provider: 'pix',
+        kind: pix.type,
+        value: pix.key,
         label: pix.label,
         is_default: !!pix.preferred,
         archived_at: pix.archived ? instant(monthDay(-3, 1)) : null,
@@ -656,9 +656,9 @@ function buildSeed(ownerId) {
           due_date: dueDate,
           installment: billing.type === 'indefinite' ? null : index + 1,
           installment_count: billing.type === 'indefinite' ? null : dates.length,
-          pix_key_type_snapshot: snapshot?.type ?? null,
-          pix_key_snapshot: snapshot?.key ?? null,
-          pix_label_snapshot: snapshot?.label ?? null,
+          payment_snapshot: snapshot
+            ? JSON.stringify({ provider: 'pix', kind: snapshot.type, value: snapshot.key, label: snapshot.label })
+            : null,
           state,
           cancelled_at: state === 'cancelled' ? later(createdAtCharge, instant(earlier(dueDate, today), 19)) : null,
           paid_at: null,

@@ -1,6 +1,6 @@
 import { normalizeEmail } from '../auth/auth';
 import type { UserAvatar } from './avatar';
-import type { PaymentMethodInput } from './contracts';
+import type { PixMethodInput } from './contracts';
 
 /** A person as one agenda knows them: the account is the identity, the nickname is the owner's. */
 export const enum UserStatus {
@@ -16,8 +16,8 @@ export const enum UserStatus {
  * to that person.
  */
 
-/** What the contact form types for how the owner pays this person; the same shape `POST /payment-methods` takes. */
-export type ContactPaymentMethodInput = Omit<PaymentMethodInput, 'contactId'>;
+/** What the contact form types for how the owner pays this person; a contact key is always Pix. */
+export type ContactPaymentMethodInput = Omit<PixMethodInput, 'contactId'>;
 
 export type ContactInput = {
   name: string;

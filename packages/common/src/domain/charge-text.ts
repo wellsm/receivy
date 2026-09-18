@@ -208,7 +208,7 @@ export function canRemind(charge: ChargeDetail): boolean {
     charge.state === ChargeState.Pending &&
     charge.direction === Direction.Receivable &&
     !ownerPays(charge) &&
-    !!charge.pix &&
+    !!charge.payment &&
     charge.counterpartReachable !== false &&
     // A file under review is the debtor's move already made; nagging now would be noise.
     charge.proofState !== ProofState.Pending
@@ -226,7 +226,7 @@ export function canShare(charge: ChargeDetail): boolean {
     charge.state === ChargeState.Pending &&
     charge.direction === Direction.Receivable &&
     !ownerPays(charge) &&
-    !!charge.pix
+    !!charge.payment
   );
 }
 

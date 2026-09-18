@@ -97,6 +97,8 @@ export default {
     PUBLIC_LINK_HMAC_SECRET,
     NOTIFICATION_PUSH_TRANSPORT: process.env.NOTIFICATION_PUSH_TRANSPORT ?? 'disabled',
     EXPO_ACCESS_TOKEN: process.env.EXPO_ACCESS_TOKEN ?? 'disabled',
-    PUBLIC_WEB_ORIGIN: process.env.PUBLIC_WEB_ORIGIN ?? 'http://localhost:3000'
+    PUBLIC_WEB_ORIGIN: process.env.PUBLIC_WEB_ORIGIN ?? 'http://localhost:3000',
+    PUBLIC_API_ORIGIN: process.env.PUBLIC_API_ORIGIN ?? 'http://127.0.0.1:3735/local-receivy-api',
+    PAYMENT_METHOD_LINK: process.env.PAYMENT_METHOD_LINK ?? 'disabled'
   }
 };

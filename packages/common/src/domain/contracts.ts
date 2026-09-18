@@ -144,26 +144,50 @@ export enum PixKeyType {
   Random = 'random'
 }
 
+export enum PaymentProvider {
+  Pix = 'pix',
+  InfinitePay = 'infinitepay'
+}
+
+/** Where the checkout link of an InfinitePay charge stands; null on a charge paid through a Pix key. */
+export enum PaymentLinkState {
+  Pending = 'pending',
+  Ready = 'ready',
+  Failed = 'failed'
+}
+
 export type PaymentMethod = {
   id: string;
-  type: 'pix';
-  pixKeyType: PixKeyType;
-  pixKey: string;
+  provider: PaymentProvider;
+  /** The Pix key type; null on any other provider. */
+  kind: PixKeyType | null;
+  /** The canonical Pix key, or the InfiniteTag without `$`. */
+  value: string;
   label: string;
   isDefault: boolean;
-  /** Block 9: the contact this key pays; null is one of the owner's own keys. */
+  /** Block 9: the contact this key pays; null is one of the owner's own methods. Only Pix is ever filed under a contact. */
   contactId: string | null;
   archivedAt: string | null;
   createdAt: string;
 };
 
-export type PaymentMethodInput = {
-  pixKeyType: PixKeyType;
-  pixKey: string;
+export type PixMethodInput = {
+  provider: PaymentProvider.Pix;
+  kind: PixKeyType;
+  value: string;
   label?: string;
   /** Block 9: file the key under this contact of the owner; absent means the owner's own key. */
   contactId?: string;
 };
+
+export type InfinitePayMethodInput = {
+  provider: PaymentProvider.InfinitePay;
+  /** The InfiniteTag, with or without `$`. */
+  value: string;
+  label?: string;
+};
+
+export type PaymentMethodInput = PixMethodInput | InfinitePayMethodInput;
 
 export type PaymentMethodsPage = { paymentMethods: PaymentMethod[] };
 
@@ -181,12 +205,30 @@ export type PixSnapshot = {
   label: string;
 };
 
+/** How a charge is paid, frozen when it was published: the same four names the `payment_methods` row carries. */
+export type PaymentSnapshot = {
+  provider: PaymentProvider;
+  kind: PixKeyType | null;
+  value: string;
+  label: string;
+};
+
+/** The checkout link of an InfinitePay charge; `url` is null until the provider answered. */
+export type PaymentLink = {
+  url: string | null;
+  state: PaymentLinkState;
+};
+
 export type ChargeDetail = ChargeSummary & {
   direction: Direction;
   recipient: ChargeCounterpart;
   /** The person on the other side of the owner: who owes, or on a conta a pagar who receives; null when the bill is the owner's alone. */
   debtorId: string | null;
-  pix: PixSnapshot | null;
+  payment: PaymentSnapshot | null;
+  /** Only an InfinitePay charge has one; null otherwise. */
+  paymentLink: PaymentLink | null;
+  /** The provider's receipt once it confirmed the payment. */
+  receiptUrl: string | null;
   sharingState: SharingState;
   proof: ChargeProof | null;
   cancelledAt: string | null;
@@ -202,7 +244,11 @@ export type PublicChargeView = {
   amount: Money;
   dueDate: string;
   state: ChargeState;
-  pix: PixSnapshot | null;
+  payment: PaymentSnapshot | null;
+  /** Only an InfinitePay charge has one; null otherwise. */
+  paymentLink: PaymentLink | null;
+  /** The provider's receipt once it confirmed the payment. */
+  receiptUrl: string | null;
   uploadsEnabled: boolean;
 };
 

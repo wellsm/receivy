@@ -46,7 +46,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
       relations: { 'owner_id@owner': 'users:id'; 'contact_id@contact': 'contacts:id' };
       indexes: {
         id: Index.Primary;
-        'owner_id:pix_key_type:pix_key': Index.Unique;
+        'owner_id:provider:value': Index.Unique;
         owner_id: Index.Secondary;
       };
     }>,

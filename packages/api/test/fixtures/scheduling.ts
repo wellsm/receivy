@@ -2,6 +2,7 @@ import type { Client, Cron } from '@ez4/scheduler';
 import type { NotificationConfig } from '../../src/notifications/services/planner';
 import type { ChargeNotifyEvent, NoticeContext } from '../../src/notifications/services/send';
 import type { NotificationTransport } from '../../src/notifications/services/transport';
+import { createFakePaymentLinkProvider } from '../../src/vendors/infinitepay/fake';
 
 export type ScheduledEvent<T> = { date: Date; event: T };
 
@@ -71,6 +72,7 @@ export function fakeTransport() {
 
 export const TEST_CONFIG: NotificationConfig = {
   publicOrigin: 'https://receivy.example',
+  apiOrigin: 'https://api.receivy.example',
   secret: 'notification-test-secret-with-enough-entropy',
   from: 'fixture@example.invalid',
   pushAvailable: true
@@ -80,7 +82,12 @@ export const TEST_CONFIG: NotificationConfig = {
 export function fakeNotice(config: Partial<NotificationConfig> = {}) {
   const sent = fakeTransport();
   const notify = fakeScheduler<ChargeNotifyEvent>();
-  const context: NoticeContext = { config: { ...TEST_CONFIG, ...config }, transport: sent.transport, notify };
+  const context: NoticeContext = {
+    config: { ...TEST_CONFIG, ...config },
+    transport: sent.transport,
+    notify,
+    links: createFakePaymentLinkProvider('https://receivy.example')
+  };
 
   return { context, sent, notify };
 }

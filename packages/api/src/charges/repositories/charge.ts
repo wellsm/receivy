@@ -8,6 +8,7 @@ import {
   calendarDate,
   endOfMonth,
   isMonth,
+  PaymentLinkState,
   SharingState,
   startOfMonth,
   UserStatus
@@ -18,10 +19,25 @@ import type { DbClient } from '../../database';
 import type { ProofRow } from '../../proofs/repositories/proof';
 import { LinkRepository } from '../../public/repositories/link';
 import { LinkableType } from '../../public/schemas/link';
-import { counterpartId, directionOf, ownerOf, ownerPays, owns, type PaymentSnapshotColumns, paymentOf } from '../utils/columns';
+import {
+  counterpartId,
+  directionOf,
+  ownerOf,
+  ownerPays,
+  owns,
+  paymentLinkOf,
+  type PaymentSnapshotColumns,
+  paymentOf,
+  snapshotDto
+} from '../utils/columns';
 import { proofKind, proofOf, visibleProofState } from '../utils/proof';
 
 const sqlNull = null as unknown as undefined;
+
+/** The snapshot shaped for a write: `kind` only when the method carries one, the schema never stores `null`. */
+function paymentSnapshotWrite(payment: PaymentSnapshotColumns) {
+  return { provider: payment.provider, ...(payment.kind ? { kind: payment.kind } : {}), value: payment.value, label: payment.label };
+}
 
 /** Everything one charge detail needs from its joins, read in a single query per page. */
 type DetailRow = ChargeRepository.Row & {
@@ -88,7 +104,9 @@ function detailOf(row: DetailRow, userId: string, nicknames: Map<string, string>
           : published
             ? SharingState.LegacyWithoutPix
             : SharingState.PixRequired,
-    pix: payment ? { keyType: payment.type, key: payment.value, label: payment.label } : null,
+    payment: snapshotDto(payment),
+    paymentLink: paymentLinkOf(row),
+    receiptUrl: row.provider_receipt_url ?? null,
     proof: proofOf(proof, userId),
     cancelledAt: row.cancelled_at ?? null,
     paidAt: row.paid_at ?? null,
@@ -112,6 +130,10 @@ export namespace ChargeRepository {
     installment?: number;
     installment_count?: number;
     payment_snapshot?: PaymentSnapshotColumns;
+    payment_link_url?: string;
+    payment_link_state?: PaymentLinkState;
+    provider_transaction_id?: string;
+    provider_receipt_url?: string;
     state: ChargeState;
     cancelled_at?: string;
     paid_at?: string;
@@ -134,6 +156,10 @@ export namespace ChargeRepository {
         installment: true,
         installment_count: true,
         payment_snapshot: true,
+        payment_link_url: true,
+        payment_link_state: true,
+        provider_transaction_id: true,
+        provider_receipt_url: true,
         state: true,
         cancelled_at: true,
         paid_at: true,
@@ -168,6 +194,10 @@ export namespace ChargeRepository {
         installment: true,
         installment_count: true,
         payment_snapshot: true,
+        payment_link_url: true,
+        payment_link_state: true,
+        provider_transaction_id: true,
+        provider_receipt_url: true,
         state: true,
         cancelled_at: true,
         paid_at: true,
@@ -216,6 +246,10 @@ export namespace ChargeRepository {
         installment: true,
         installment_count: true,
         payment_snapshot: true,
+        payment_link_url: true,
+        payment_link_state: true,
+        provider_transaction_id: true,
+        provider_receipt_url: true,
         state: true,
         cancelled_at: true,
         paid_at: true,
@@ -253,6 +287,10 @@ export namespace ChargeRepository {
         installment: true,
         installment_count: true,
         payment_snapshot: true,
+        payment_link_url: true,
+        payment_link_state: true,
+        provider_transaction_id: true,
+        provider_receipt_url: true,
         state: true,
         cancelled_at: true,
         paid_at: true,
@@ -353,6 +391,10 @@ export namespace ChargeRepository {
         installment: true,
         installment_count: true,
         payment_snapshot: true,
+        payment_link_url: true,
+        payment_link_state: true,
+        provider_transaction_id: true,
+        provider_receipt_url: true,
         state: true,
         cancelled_at: true,
         paid_at: true,
@@ -372,7 +414,7 @@ export namespace ChargeRepository {
         ...(input.installment !== undefined && input.installmentCount !== undefined
           ? { installment: input.installment, installment_count: input.installmentCount }
           : {}),
-        ...(input.payment ? { payment_snapshot: input.payment } : {}),
+        ...(input.payment ? { payment_snapshot: paymentSnapshotWrite(input.payment) } : {}),
         state: ChargeState.Pending,
         notify: input.notify,
         created_at: input.now,
@@ -407,7 +449,7 @@ export namespace ChargeRepository {
         description: input.description,
         amount_cents: input.amountCents,
         ...(input.dueDate ? { due_date: input.dueDate } : {}),
-        ...(input.payment !== undefined ? { payment_snapshot: input.payment ?? sqlNull } : {}),
+        ...(input.payment !== undefined ? { payment_snapshot: input.payment ? paymentSnapshotWrite(input.payment) : sqlNull } : {}),
         updated_at: input.now
       }
     });
@@ -489,7 +531,29 @@ export namespace ChargeRepository {
 
   /** Freezes the key the charge is paid through; published once, it never changes again. */
   export async function setPayment(db: DbClient, id: string, payment: PaymentSnapshotColumns, now: string): Promise<void> {
-    await db.charges.updateOne({ where: { id }, data: { payment_snapshot: payment, updated_at: now } });
+    await db.charges.updateOne({ where: { id }, data: { payment_snapshot: paymentSnapshotWrite(payment), updated_at: now } });
+  }
+
+  /** Where the checkout link stands; `url` only comes with `ready`. */
+  export async function setPaymentLink(db: DbClient, id: string, input: { url?: string; state: PaymentLinkState }, now: string): Promise<void> {
+    await db.charges.updateOne({
+      where: { id },
+      data: { payment_link_state: input.state, ...(input.url ? { payment_link_url: input.url } : {}), updated_at: now }
+    });
+  }
+
+  /** Settled by the provider: the transaction id is what makes a replayed webhook a no-op. */
+  export async function markPaidByProvider(db: DbClient, id: string, input: { paidAt: string; transactionId: string; receiptUrl?: string }, now: string): Promise<void> {
+    await db.charges.updateOne({
+      where: { id },
+      data: {
+        state: ChargeState.Paid,
+        paid_at: input.paidAt,
+        provider_transaction_id: input.transactionId,
+        ...(input.receiptUrl ? { provider_receipt_url: input.receiptUrl } : {}),
+        updated_at: now
+      }
+    });
   }
 
   export async function touch(db: DbClient, id: string, now: string): Promise<void> {
@@ -526,6 +590,10 @@ export namespace ChargeRepository {
         installment: true,
         installment_count: true,
         payment_snapshot: true,
+        payment_link_url: true,
+        payment_link_state: true,
+        provider_transaction_id: true,
+        provider_receipt_url: true,
         state: true,
         cancelled_at: true,
         paid_at: true,

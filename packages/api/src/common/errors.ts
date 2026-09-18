@@ -30,6 +30,10 @@ export abstract class RateLimitedError extends ApiError {
   readonly status = 429;
 }
 
+export abstract class ServiceUnavailableError extends ApiError {
+  readonly status = 503;
+}
+
 export class TooManyRequestsError extends RateLimitedError {
   constructor(message = 'Muitas tentativas. Aguarde alguns minutos e tente novamente.') {
     super(message, 'RATE_LIMITED');

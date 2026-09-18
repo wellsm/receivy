@@ -25,6 +25,7 @@ export * from './domain/feed';
 export * from './domain/feed-filters';
 export * from './domain/feed-month';
 export * from './domain/financial-form';
+export * from './domain/handle';
 export * from './domain/money';
 export * from './domain/notifications';
 export * from './domain/pix-key';

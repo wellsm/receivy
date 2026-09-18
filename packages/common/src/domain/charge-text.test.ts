@@ -26,6 +26,7 @@ import {
   type ChargeProof,
   ChargeState,
   Direction,
+  PaymentProvider,
   PixKeyType,
   ProofKind,
   ProofMime,
@@ -49,7 +50,9 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
     proofState: null,
     recipient: { userId: 'ana', name: 'Ana', email: null },
     debtorId: 'ana',
-    pix: null,
+    payment: null,
+    paymentLink: null,
+    receiptUrl: null,
     sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
@@ -140,10 +143,10 @@ describe('charge text', () => {
 });
 
 describe('action gates on a conta a pagar', () => {
-  const pix = { keyType: PixKeyType.Email, key: 'pay@example.com', label: 'Pix' };
-  const owner = charge({ direction: Direction.Payable, ownedByViewer: true, pix, counterpartName: 'Ana' });
-  const payee = charge({ direction: Direction.Receivable, ownedByViewer: false, pix, counterpartName: 'Lucas' });
-  const creditor = charge({ direction: Direction.Receivable, ownedByViewer: true, pix });
+  const payment = { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'pay@example.com', label: 'Pix' };
+  const owner = charge({ direction: Direction.Payable, ownedByViewer: true, payment, counterpartName: 'Ana' });
+  const payee = charge({ direction: Direction.Receivable, ownedByViewer: false, payment, counterpartName: 'Lucas' });
+  const creditor = charge({ direction: Direction.Receivable, ownedByViewer: true, payment });
 
   it('lets the owner settle their own bill but never remind, share or cancel a single charge', () => {
     expect(canMarkPaid(owner)).toBe(true);
@@ -241,11 +244,11 @@ describe('silenced charges', () => {
 });
 
 describe('registros', () => {
-  const pix = { keyType: PixKeyType.Email, key: 'pay@example.com', label: 'Pix' };
+  const payment = { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'pay@example.com', label: 'Pix' };
   const received = charge({
     direction: Direction.Receivable,
     ownedByViewer: true,
-    pix,
+    payment,
     debtorId: null,
     kind: BillingKind.Record
   });

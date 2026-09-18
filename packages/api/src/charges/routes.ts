@@ -1,6 +1,7 @@
 import type { Http } from '@ez4/gateway';
 import type { sessionAuthorizer } from '../common/authorizers/session';
 import type { cancelChargeHandler } from './endpoints/cancel';
+import type { ensurePaymentLinkHandler } from './endpoints/payment-link';
 import type { getChargeHandler } from './endpoints/get';
 import type { listChargesHandler } from './endpoints/list';
 import type { setChargeNotifyHandler } from './endpoints/notify';
@@ -31,6 +32,12 @@ export type ChargeRoutes = [
     path: 'POST /charges/{id}/pay';
     authorizer: typeof sessionAuthorizer;
     handler: typeof payChargeHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'ensurePaymentLink';
+    path: 'POST /charges/{id}/payment-link';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof ensurePaymentLinkHandler;
   }>,
   Http.UseRoute<{
     name: 'reopenCharge';

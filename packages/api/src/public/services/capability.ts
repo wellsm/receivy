@@ -3,7 +3,9 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 /** Bound into the signature so a charge link can never be replayed as an invite link. */
 export const enum PublicTokenPurpose {
   Charge = 'charge',
-  Invite = 'invite'
+  Invite = 'invite',
+  /** The path segment InfinitePay posts to: names the charge, never trusted for the money (payment_check does). */
+  ProviderWebhook = 'provider_webhook'
 }
 
 type IssueInput = { publicId: string; expiresAtSeconds: number; secret: string; purpose: PublicTokenPurpose };

@@ -1,11 +1,11 @@
 import { equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { HttpNotFoundError } from '@ez4/gateway';
-import { BillingRecurrence, Direction, PixKeyType } from '@receivy/common';
+import { BillingRecurrence, Direction, PaymentProvider, PixKeyType } from '@receivy/common';
 import { createBilling } from '../../src/billings/services/billing';
 import { getBilling } from '../../src/billings/services/detail';
 import { ContactRepository } from '../../src/contacts/repositories/contact';
-import { PixKeyTakenError } from '../../src/payment-methods/errors';
+import { PaymentMethodTakenError } from '../../src/payment-methods/errors';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { upsertContactKey } from '../../src/payment-methods/services/payment-method';
 import { cleanupUsers, contacts, createUser, db, monthCharges, paymentMethods } from '../fixtures/financial';
@@ -25,8 +25,8 @@ describe('contact keys', () => {
   });
 
   it('keeps a contact key apart from the owner keys and defaults each scope on its own', async () => {
-    const mine = await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'dona@example.com' });
-    const theirs = await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'padaria@example.com', contactId: padaria });
+    const mine = await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'dona@example.com' });
+    const theirs = await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'padaria@example.com', contactId: padaria });
 
     equal(mine.contactId, null);
     equal(mine.isDefault, true);
@@ -38,7 +38,7 @@ describe('contact keys', () => {
 
   it('makes a second contact key the default without touching the owner default', async () => {
     const mine = (await PaymentMethodRepository.list(db, OWNER))[0]!;
-    const second = await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Phone, pixKey: '+5511999990000', contactId: padaria });
+    const second = await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Phone, value: '+5511999990000', contactId: padaria });
 
     await paymentMethods.makeDefault(OWNER, second.id);
 
@@ -57,7 +57,7 @@ describe('contact keys', () => {
 
   it('refuses a key for a contact the owner does not have', async () => {
     await rejects(
-      () => paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'x@example.com', contactId: crypto.randomUUID() }),
+      () => paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'x@example.com', contactId: crypto.randomUUID() }),
       HttpNotFoundError
     );
   });
@@ -65,7 +65,7 @@ describe('contact keys', () => {
   it('refuses to file under a contact a key the owner already holds elsewhere', async () => {
     await rejects(
       () => upsertContactKey(db, OWNER, padaria, { keyType: PixKeyType.Email, key: 'dona@example.com', label: 'Dona' }),
-      PixKeyTakenError
+      PaymentMethodTakenError
     );
   });
 
@@ -84,8 +84,9 @@ describe('contact keys', () => {
 
   it('creates a conta a pagar pointing at a key of the contact and pays the contact user', async () => {
     const key = await paymentMethods.save(OWNER, {
-      pixKeyType: PixKeyType.Email,
-      pixKey: 'padaria-pao@example.com',
+      provider: PaymentProvider.Pix,
+      kind: PixKeyType.Email,
+      value: 'padaria-pao@example.com',
       label: 'Padaria',
       contactId: padaria
     });
@@ -141,8 +142,9 @@ describe('contact keys', () => {
 
   it('still reads a billing whose key was archived, with no Pix to show', async () => {
     const key = await paymentMethods.save(OWNER, {
-      pixKeyType: PixKeyType.Random,
-      pixKey: '223e4567-e89b-12d3-a456-426614174111',
+      provider: PaymentProvider.Pix,
+      kind: PixKeyType.Random,
+      value: '223e4567-e89b-12d3-a456-426614174111',
       label: 'Padaria',
       contactId: padaria
     });
@@ -168,36 +170,49 @@ describe('contact keys', () => {
   });
 
   it('files the key typed on the contact form under the contact and makes it the default', async () => {
-    const contact = await contacts.save(OWNER, { name: 'Mercado', paymentMethod: { pixKeyType: PixKeyType.Email, pixKey: 'mercado@example.com', label: 'Mercado' } });
+    const contact = await contacts.save(OWNER, {
+      name: 'Mercado',
+      paymentMethod: { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'mercado@example.com', label: 'Mercado' }
+    });
     const keys = await PaymentMethodRepository.list(db, OWNER, contact.id);
 
     equal(keys.length, 1);
-    equal(keys[0]!.pixKey, 'mercado@example.com');
+    equal(keys[0]!.value, 'mercado@example.com');
     equal(keys[0]!.isDefault, true);
   });
 
   it('a key typed on edit becomes the new default and leaves the older key in place', async () => {
-    const contact = await contacts.save(OWNER, { name: 'Farmácia', paymentMethod: { pixKeyType: PixKeyType.Email, pixKey: 'farmacia@example.com' } });
+    const contact = await contacts.save(OWNER, {
+      name: 'Farmácia',
+      paymentMethod: { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'farmacia@example.com' }
+    });
 
-    await contacts.save(OWNER, { name: 'Farmácia', paymentMethod: { pixKeyType: PixKeyType.Phone, pixKey: '+5511988887777' } }, contact.id);
+    await contacts.save(
+      OWNER,
+      { name: 'Farmácia', paymentMethod: { provider: PaymentProvider.Pix, kind: PixKeyType.Phone, value: '+5511988887777' } },
+      contact.id
+    );
 
     const keys = await PaymentMethodRepository.list(db, OWNER, contact.id);
 
     equal(keys.length, 2);
     equal(keys.filter((key) => key.isDefault).length, 1);
-    equal(keys.find((key) => key.pixKey === 'farmacia@example.com')?.isDefault, false);
-    equal(keys.find((key) => key.pixKey === '+5511988887777')?.isDefault, true);
+    equal(keys.find((key) => key.value === 'farmacia@example.com')?.isDefault, false);
+    equal(keys.find((key) => key.value === '+5511988887777')?.isDefault, true);
   });
 
   it('editing without a key touches no key', async () => {
-    const contact = await contacts.save(OWNER, { name: 'Papelaria', paymentMethod: { pixKeyType: PixKeyType.Email, pixKey: 'papelaria@example.com' } });
+    const contact = await contacts.save(OWNER, {
+      name: 'Papelaria',
+      paymentMethod: { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'papelaria@example.com' }
+    });
 
     await contacts.save(OWNER, { name: 'Papelaria', nickname: 'Papel' }, contact.id);
 
     const keys = await PaymentMethodRepository.list(db, OWNER, contact.id);
 
     equal(keys.length, 1);
-    equal(keys[0]!.pixKey, 'papelaria@example.com');
+    equal(keys[0]!.value, 'papelaria@example.com');
     equal(keys[0]!.isDefault, true);
   });
 });

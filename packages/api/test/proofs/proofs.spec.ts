@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
-import { PixKeyType, ProofMime, ProofState } from '@receivy/common';
+import { PaymentProvider, PixKeyType, ProofMime, ProofState } from '@receivy/common';
 import { ChargeInReviewError } from '../../src/charges/errors';
 import { ApiError, TooManyRequestsError } from '../../src/common/errors';
 import { EventRepository } from '../../src/common/repositories/events';
@@ -110,7 +110,7 @@ describe('proof slot, bucket event and review on PostgreSQL', () => {
     equal(database?.['name'], 'receivy_tests');
 
     await createUser(db, { id: OWNER, email: 'proof-owner@example.com', name: 'Proof Owner' });
-    await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'proof-owner@example.com' });
+    await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'proof-owner@example.com' });
     await createUser(db, { id: DEBTOR, email: 'proof-debtor@example.com', name: 'Proof Debtor' });
     await createUser(db, { id: OTHER, email: 'proof-other@example.com', name: 'Other' });
   });

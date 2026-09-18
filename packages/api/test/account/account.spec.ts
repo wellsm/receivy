@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Service } from '@ez4/common';
 import { HttpForbiddenError, HttpUnauthorizedError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
-import { DevicePlatform, PixKeyType, ProofKind, ProofMime } from '@receivy/common';
+import { DevicePlatform, PaymentProvider, PixKeyType, ProofKind, ProofMime } from '@receivy/common';
 import { StoredProofState } from '../../src/charges/schemas/charge';
 import type { SessionAuthorizerProvider } from '../../src/common/authorizers/session';
 import { sessionAuthorizer } from '../../src/common/authorizers/session';
@@ -78,7 +78,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     equal(database?.['name'], 'receivy_tests');
 
     await createUser(db, { id: owner, email: 'account-owner@example.com', name: 'Account Owner' });
-    await paymentMethods.save(owner, { pixKeyType: PixKeyType.Email, pixKey: 'account-owner@example.com' });
+    await paymentMethods.save(owner, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'account-owner@example.com' });
     await createUser(db, { id: debtor, email: 'account-debtor@example.com', name: 'Account Debtor' });
   });
   after(async () => {
@@ -279,7 +279,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
       'a pre-authorized request cannot recreate contacts after erasure'
     );
     await rejects(
-      () => paymentMethods.save(debtor, { pixKeyType: PixKeyType.Email, pixKey: 'stale@example.com' }),
+      () => paymentMethods.save(debtor, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'stale@example.com' }),
       HttpUnauthorizedError
     );
   });

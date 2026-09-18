@@ -8,6 +8,7 @@ import {
   BillingRecurrence,
   Direction,
   ownerPays,
+  PaymentProvider,
   PixKeyType,
   ProofState,
   SplitMode,
@@ -67,21 +68,23 @@ describe('contas a pagar on native PostgreSQL', () => {
     soloContactId = (await contacts.save(OWNER, { name: 'Netflix' })).id;
     payeeKeyId = (
       await paymentMethods.save(OWNER, {
-        pixKeyType: PixKeyType.Email,
-        pixKey: 'Imobiliaria@Example.com',
+        provider: PaymentProvider.Pix,
+        kind: PixKeyType.Email,
+        value: 'Imobiliaria@Example.com',
         label: 'Imobiliária',
         contactId: payeeContactId
       })
     ).id;
     payeeOtherKeyId = (
       await paymentMethods.save(OWNER, {
-        pixKeyType: PixKeyType.Cpf,
-        pixKey: '529.982.247-25',
+        provider: PaymentProvider.Pix,
+        kind: PixKeyType.Cpf,
+        value: '529.982.247-25',
         label: 'Nova',
         contactId: payeeContactId
       })
     ).id;
-    ownKeyId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'dona@example.com' })).id;
+    ownKeyId = (await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'dona@example.com' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, PAYEE]));

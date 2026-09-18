@@ -363,11 +363,6 @@ paths:
       security:
         - sessionAuthorizer: []
       parameters:
-        - name: archived
-          in: query
-          required: false
-          schema:
-            type: boolean
         - name: contactId
           in: query
           required: false
@@ -484,14 +479,6 @@ paths:
       security:
         - sessionAuthorizer: []
       parameters:
-        - name: state
-          in: query
-          required: false
-          schema:
-            enum: 
-              - 'active'
-              - 'paused'
-              - 'ended'
         - name: type
           in: query
           required: false
@@ -560,25 +547,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/patchBillingHandler'
-  /billings/{id}/preview:
-    get:
-      operationId: previewBilling
-      security:
-        - sessionAuthorizer: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        200:
-          description: "Successful response."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responseSchemes/previewBillingHandler'
   /billings/{id}/guests/{guestId}:
     post:
       operationId: resolveBillingGuest
@@ -715,6 +683,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/payChargeHandler'
+  /charges/{id}/payment-link:
+    post:
+      operationId: ensurePaymentLink
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/ensurePaymentLinkHandler'
   /charges/{id}/reopen:
     post:
       operationId: reopenCharge
@@ -782,20 +769,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/createPublicLinkHandler'
-    delete:
-      operationId: revokePublicLink
-      security:
-        - sessionAuthorizer: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        204:
-          description: "Successful response."
   /charges/{id}/public-link/rotate:
     post:
       operationId: rotatePublicLink
@@ -832,6 +805,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/publicChargeHandler'
+  /public/charges/{token}/provider-return:
+    post:
+      operationId: providerReturn
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/providerReturnHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/providerReturnHandler'
   /billings/{id}/invite:
     post:
       operationId: createInvite
@@ -901,61 +896,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/acceptInviteHandler'
-  /timeline:
-    get:
-      operationId: timeline
-      security:
-        - sessionAuthorizer: []
-      parameters:
-        - name: cursor
-          in: query
-          required: false
-          schema:
-            type: string
-            maxLength: 500
-        - name: direction
-          in: query
-          required: false
-          schema:
-            type: string
-            maxLength: 64
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-            maxLength: 64
-        - name: recurrence
-          in: query
-          required: false
-          schema:
-            type: string
-            maxLength: 64
-        - name: from
-          in: query
-          required: false
-          schema:
-            type: string
-            format: date
-        - name: to
-          in: query
-          required: false
-          schema:
-            type: string
-            format: date
-        - name: month
-          in: query
-          required: false
-          schema:
-            type: string
-            maxLength: 7
-      responses:
-        200:
-          description: "Successful response."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responseSchemes/timelineHandler'
   /contacts/{id}/ledger:
     get:
       operationId: contactLedger
@@ -1220,6 +1160,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/manualReminderHandler'
+  /webhooks/infinitepay/{token}:
+    post:
+      operationId: infinitePayWebhook
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 300
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/infinitePayWebhookHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/infinitePayWebhookHandler'
 
 components:
   securitySchemes:
@@ -1406,22 +1368,27 @@ components:
           type: object
           additionalProperties: false
           properties:
-            pixKeyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            pixKey:
+            value:
               type: string
               maxLength: 254
             label:
               type: string
               maxLength: 120
           required:
-            - pixKeyType
-            - pixKey
+            - provider
+            - kind
+            - value
       required:
         - name
     updateContactHandler:
@@ -1441,36 +1408,45 @@ components:
           type: object
           additionalProperties: false
           properties:
-            pixKeyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            pixKey:
+            value:
               type: string
               maxLength: 254
             label:
               type: string
               maxLength: 120
           required:
-            - pixKeyType
-            - pixKey
+            - provider
+            - kind
+            - value
       required:
         - name
     createPaymentMethodHandler:
       type: object
       additionalProperties: false
       properties:
-        pixKeyType:
+        provider:
+          enum: 
+            - 'pix'
+            - 'infinitepay'
+        kind:
           enum: 
             - 'cpf'
             - 'cnpj'
             - 'email'
             - 'phone'
             - 'random'
-        pixKey:
+        value:
           type: string
           maxLength: 254
         label:
@@ -1480,20 +1456,24 @@ components:
           type: string
           format: uuid
       required:
-        - pixKeyType
-        - pixKey
+        - provider
+        - value
     editPaymentMethodHandler:
       type: object
       additionalProperties: false
       properties:
-        pixKeyType:
+        provider:
+          enum: 
+            - 'pix'
+            - 'infinitepay'
+        kind:
           enum: 
             - 'cpf'
             - 'cnpj'
             - 'email'
             - 'phone'
             - 'random'
-        pixKey:
+        value:
           type: string
           maxLength: 254
         label:
@@ -1503,8 +1483,8 @@ components:
           type: string
           format: uuid
       required:
-        - pixKeyType
-        - pixKey
+        - provider
+        - value
     createBillingHandler:
       type: object
       additionalProperties: false
@@ -1812,6 +1792,23 @@ components:
           paymentMethodId:
             type: string
             format: uuid
+    providerReturnHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        orderNsu:
+          type: string
+          maxLength: 200
+        transactionNsu:
+          type: string
+          maxLength: 200
+        slug:
+          type: string
+          maxLength: 200
+      required:
+        - orderNsu
+        - transactionNsu
+        - slug
     startProofUploadHandler:
       type: object
       additionalProperties: false
@@ -1881,6 +1878,31 @@ components:
         - token
         - installationId
         - platform
+    infinitePayWebhookHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        invoice_slug:
+          type: string
+          maxLength: 200
+        transaction_nsu:
+          type: string
+          maxLength: 200
+        order_nsu:
+          type: string
+          maxLength: 200
+        receipt_url:
+          type: string
+          maxLength: 500
+        amount:
+          type: number
+        paid_amount:
+          type: number
+        installments:
+          type: number
+        capture_method:
+          type: string
+          maxLength: 40
 
   responseSchemes:
     healthHandler:
@@ -2497,17 +2519,18 @@ components:
             properties:
               id:
                 type: string
-              type:
-                type: string
-                enum: ["pix"]
-              pixKeyType:
+              provider:
+                enum: 
+                  - 'pix'
+                  - 'infinitepay'
+              kind:
                 enum: 
                   - 'cpf'
                   - 'cnpj'
                   - 'email'
                   - 'phone'
                   - 'random'
-              pixKey:
+              value:
                 type: string
               label:
                 type: string
@@ -2521,9 +2544,8 @@ components:
                 type: string
             required:
               - id
-              - type
-              - pixKeyType
-              - pixKey
+              - provider
+              - value
               - label
               - isDefault
               - createdAt
@@ -2535,17 +2557,18 @@ components:
       properties:
         id:
           type: string
-        type:
-          type: string
-          enum: ["pix"]
-        pixKeyType:
+        provider:
+          enum: 
+            - 'pix'
+            - 'infinitepay'
+        kind:
           enum: 
             - 'cpf'
             - 'cnpj'
             - 'email'
             - 'phone'
             - 'random'
-        pixKey:
+        value:
           type: string
         label:
           type: string
@@ -2559,9 +2582,8 @@ components:
           type: string
       required:
         - id
-        - type
-        - pixKeyType
-        - pixKey
+        - provider
+        - value
         - label
         - isDefault
         - createdAt
@@ -2571,17 +2593,18 @@ components:
       properties:
         id:
           type: string
-        type:
-          type: string
-          enum: ["pix"]
-        pixKeyType:
+        provider:
+          enum: 
+            - 'pix'
+            - 'infinitepay'
+        kind:
           enum: 
             - 'cpf'
             - 'cnpj'
             - 'email'
             - 'phone'
             - 'random'
-        pixKey:
+        value:
           type: string
         label:
           type: string
@@ -2595,9 +2618,8 @@ components:
           type: string
       required:
         - id
-        - type
-        - pixKeyType
-        - pixKey
+        - provider
+        - value
         - label
         - isDefault
         - createdAt
@@ -2607,17 +2629,18 @@ components:
       properties:
         id:
           type: string
-        type:
-          type: string
-          enum: ["pix"]
-        pixKeyType:
+        provider:
+          enum: 
+            - 'pix'
+            - 'infinitepay'
+        kind:
           enum: 
             - 'cpf'
             - 'cnpj'
             - 'email'
             - 'phone'
             - 'random'
-        pixKey:
+        value:
           type: string
         label:
           type: string
@@ -2631,9 +2654,8 @@ components:
           type: string
       required:
         - id
-        - type
-        - pixKeyType
-        - pixKey
+        - provider
+        - value
         - label
         - isDefault
         - createdAt
@@ -3072,25 +3094,44 @@ components:
                   - name
               debtorId:
                 type: string
-              pix:
+              payment:
                 type: object
                 additionalProperties: false
                 properties:
-                  keyType:
+                  provider:
+                    enum: 
+                      - 'pix'
+                      - 'infinitepay'
+                  kind:
                     enum: 
                       - 'cpf'
                       - 'cnpj'
                       - 'email'
                       - 'phone'
                       - 'random'
-                  key:
+                  value:
                     type: string
                   label:
                     type: string
                 required:
-                  - keyType
-                  - key
+                  - provider
+                  - value
                   - label
+              paymentLink:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'ready'
+                      - 'failed'
+                required:
+                  - state
+              receiptUrl:
+                type: string
               sharingState:
                 enum: 
                   - 'ready'
@@ -3187,16 +3228,12 @@ components:
                   - currency
               occurrenceDate:
                 type: string
-              materializationDate:
-                type: string
             required:
               - billingId
               - type
               - description
               - amount
               - occurrenceDate
-        nextMaterialization:
-          type: string
         category:
           enum: 
             - 'food'
@@ -3887,25 +3924,44 @@ components:
                   - name
               debtorId:
                 type: string
-              pix:
+              payment:
                 type: object
                 additionalProperties: false
                 properties:
-                  keyType:
+                  provider:
+                    enum: 
+                      - 'pix'
+                      - 'infinitepay'
+                  kind:
                     enum: 
                       - 'cpf'
                       - 'cnpj'
                       - 'email'
                       - 'phone'
                       - 'random'
-                  key:
+                  value:
                     type: string
                   label:
                     type: string
                 required:
-                  - keyType
-                  - key
+                  - provider
+                  - value
                   - label
+              paymentLink:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'ready'
+                      - 'failed'
+                required:
+                  - state
+              receiptUrl:
+                type: string
               sharingState:
                 enum: 
                   - 'ready'
@@ -4002,16 +4058,12 @@ components:
                   - currency
               occurrenceDate:
                 type: string
-              materializationDate:
-                type: string
             required:
               - billingId
               - type
               - description
               - amount
               - occurrenceDate
-        nextMaterialization:
-          type: string
         category:
           enum: 
             - 'food'
@@ -4113,48 +4165,6 @@ components:
         - category
         - guests
         - linkableContacts
-    previewBillingHandler:
-      type: object
-      additionalProperties: false
-      properties:
-        previews:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              billingId:
-                type: string
-              type:
-                enum: 
-                  - 'receivable'
-                  - 'payable'
-              description:
-                type: string
-              amount:
-                type: object
-                additionalProperties: false
-                properties:
-                  amountCents:
-                    type: number
-                  currency:
-                    type: string
-                    enum: ["BRL"]
-                required:
-                  - amountCents
-                  - currency
-              occurrenceDate:
-                type: string
-              materializationDate:
-                type: string
-            required:
-              - billingId
-              - type
-              - description
-              - amount
-              - occurrenceDate
-      required:
-        - previews
     patchBillingHandler:
       type: object
       additionalProperties: false
@@ -4590,25 +4600,44 @@ components:
                   - name
               debtorId:
                 type: string
-              pix:
+              payment:
                 type: object
                 additionalProperties: false
                 properties:
-                  keyType:
+                  provider:
+                    enum: 
+                      - 'pix'
+                      - 'infinitepay'
+                  kind:
                     enum: 
                       - 'cpf'
                       - 'cnpj'
                       - 'email'
                       - 'phone'
                       - 'random'
-                  key:
+                  value:
                     type: string
                   label:
                     type: string
                 required:
-                  - keyType
-                  - key
+                  - provider
+                  - value
                   - label
+              paymentLink:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'ready'
+                      - 'failed'
+                required:
+                  - state
+              receiptUrl:
+                type: string
               sharingState:
                 enum: 
                   - 'ready'
@@ -4705,16 +4734,12 @@ components:
                   - currency
               occurrenceDate:
                 type: string
-              materializationDate:
-                type: string
             required:
               - billingId
               - type
               - description
               - amount
               - occurrenceDate
-        nextMaterialization:
-          type: string
         category:
           enum: 
             - 'food'
@@ -5251,25 +5276,44 @@ components:
                   - name
               debtorId:
                 type: string
-              pix:
+              payment:
                 type: object
                 additionalProperties: false
                 properties:
-                  keyType:
+                  provider:
+                    enum: 
+                      - 'pix'
+                      - 'infinitepay'
+                  kind:
                     enum: 
                       - 'cpf'
                       - 'cnpj'
                       - 'email'
                       - 'phone'
                       - 'random'
-                  key:
+                  value:
                     type: string
                   label:
                     type: string
                 required:
-                  - keyType
-                  - key
+                  - provider
+                  - value
                   - label
+              paymentLink:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'ready'
+                      - 'failed'
+                required:
+                  - state
+              receiptUrl:
+                type: string
               sharingState:
                 enum: 
                   - 'ready'
@@ -5366,16 +5410,12 @@ components:
                   - currency
               occurrenceDate:
                 type: string
-              materializationDate:
-                type: string
             required:
               - billingId
               - type
               - description
               - amount
               - occurrenceDate
-        nextMaterialization:
-          type: string
         category:
           enum: 
             - 'food'
@@ -5912,25 +5952,44 @@ components:
                   - name
               debtorId:
                 type: string
-              pix:
+              payment:
                 type: object
                 additionalProperties: false
                 properties:
-                  keyType:
+                  provider:
+                    enum: 
+                      - 'pix'
+                      - 'infinitepay'
+                  kind:
                     enum: 
                       - 'cpf'
                       - 'cnpj'
                       - 'email'
                       - 'phone'
                       - 'random'
-                  key:
+                  value:
                     type: string
                   label:
                     type: string
                 required:
-                  - keyType
-                  - key
+                  - provider
+                  - value
                   - label
+              paymentLink:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'ready'
+                      - 'failed'
+                required:
+                  - state
+              receiptUrl:
+                type: string
               sharingState:
                 enum: 
                   - 'ready'
@@ -6027,16 +6086,12 @@ components:
                   - currency
               occurrenceDate:
                 type: string
-              materializationDate:
-                type: string
             required:
               - billingId
               - type
               - description
               - amount
               - occurrenceDate
-        nextMaterialization:
-          type: string
         category:
           enum: 
             - 'food'
@@ -6146,28 +6201,50 @@ components:
         properties:
           id:
             type: string
+          billingId:
+            type: string
           description:
             type: string
           installment:
             type: number
-          installment_count:
+          installmentCount:
             type: number
           state:
+            enum: 
+              - 'pending'
+              - 'paid'
+              - 'cancelled'
+          dueDate:
             type: string
-          due_date:
-            type: string
-          amount_cents:
+          amountCents:
             type: number
-          has_payment:
+          type:
+            enum: 
+              - 'receivable'
+              - 'payable'
+          ownedByViewer:
+            type: boolean
+          hasPayment:
+            type: boolean
+          notify:
+            type: boolean
+          counterpartReachable:
+            type: boolean
+          confirmationRequired:
             type: boolean
           proof:
             type: object
             additionalProperties: false
             properties:
               state:
-                type: string
+                enum: 
+                  - 'pending'
+                  - 'accepted'
+                  - 'rejected'
               kind:
-                type: string
+                enum: 
+                  - 'file'
+                  - 'declaration'
             required:
               - state
               - kind
@@ -6176,9 +6253,14 @@ components:
             additionalProperties: false
             properties:
               recurrence:
-                type: string
+                enum: 
+                  - 'once'
+                  - 'until'
+                  - 'indefinite'
               kind:
-                type: string
+                enum: 
+                  - 'live'
+                  - 'record'
               contact:
                 type: object
                 additionalProperties: false
@@ -6205,25 +6287,25 @@ components:
             properties:
               name:
                 type: string
-              email:
-                type: string
           debtor:
             type: object
             additionalProperties: false
             properties:
               name:
                 type: string
-              email:
-                type: string
-              phone:
-                type: string
         required:
           - id
+          - billingId
           - description
           - state
-          - due_date
-          - amount_cents
-          - has_payment
+          - dueDate
+          - amountCents
+          - type
+          - ownedByViewer
+          - hasPayment
+          - notify
+          - counterpartReachable
+          - confirmationRequired
           - billing
     getChargeHandler:
       type: object
@@ -6328,25 +6410,44 @@ components:
             - name
         debtorId:
           type: string
-        pix:
+        payment:
           type: object
           additionalProperties: false
           properties:
-            keyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            key:
+            value:
               type: string
             label:
               type: string
           required:
-            - keyType
-            - key
+            - provider
+            - value
             - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
         sharingState:
           enum: 
             - 'ready'
@@ -6518,25 +6619,44 @@ components:
             - name
         debtorId:
           type: string
-        pix:
+        payment:
           type: object
           additionalProperties: false
           properties:
-            keyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            key:
+            value:
               type: string
             label:
               type: string
           required:
-            - keyType
-            - key
+            - provider
+            - value
             - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
         sharingState:
           enum: 
             - 'ready'
@@ -6708,25 +6828,253 @@ components:
             - name
         debtorId:
           type: string
-        pix:
+        payment:
           type: object
           additionalProperties: false
           properties:
-            keyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            key:
+            value:
               type: string
             label:
               type: string
           required:
-            - keyType
-            - key
+            - provider
+            - value
             - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
+        sharingState:
+          enum: 
+            - 'ready'
+            - 'pix_required'
+            - 'legacy_without_pix'
+            - 'closed'
+        proof:
+          type: object
+          additionalProperties: false
+          properties:
+            state:
+              enum: 
+                - 'pending'
+                - 'accepted'
+                - 'rejected'
+            kind:
+              enum: 
+                - 'file'
+                - 'declaration'
+            file:
+              type: object
+              additionalProperties: false
+              properties:
+                name:
+                  type: string
+                mime:
+                  enum: 
+                    - 'image/jpeg'
+                    - 'image/png'
+                    - 'application/pdf'
+                size:
+                  type: number
+              required:
+                - name
+                - mime
+                - size
+            sentAt:
+              type: string
+            reviewedAt:
+              type: string
+            reason:
+              type: string
+            sentByViewer:
+              type: boolean
+          required:
+            - state
+            - kind
+            - sentAt
+            - sentByViewer
+        cancelledAt:
+          type: string
+        paidAt:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - description
+        - amount
+        - dueDate
+        - state
+        - billingId
+        - recurrence
+        - counterpartName
+        - direction
+        - recipient
+        - sharingState
+        - createdAt
+    ensurePaymentLinkHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        billingId:
+          type: string
+        recurrence:
+          enum: 
+            - 'once'
+            - 'until'
+            - 'indefinite'
+        installment:
+          type: number
+        installmentCount:
+          type: number
+        counterpartName:
+          type: string
+        counterpartAvatar:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            version:
+              type: string
+          required:
+            - url
+            - version
+        proofState:
+          enum: 
+            - 'pending'
+            - 'accepted'
+            - 'rejected'
+        ownedByViewer:
+          type: boolean
+        hasPix:
+          type: boolean
+        counterpartReachable:
+          type: boolean
+        proofKind:
+          enum: 
+            - 'file'
+            - 'declaration'
+        confirmationRequired:
+          type: boolean
+        notify:
+          type: boolean
+        kind:
+          enum: 
+            - 'live'
+            - 'record'
+        direction:
+          enum: 
+            - 'receivable'
+            - 'payable'
+        recipient:
+          type: object
+          additionalProperties: false
+          properties:
+            userId:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+            avatar:
+              type: object
+              additionalProperties: false
+              properties:
+                url:
+                  type: string
+                version:
+                  type: string
+              required:
+                - url
+                - version
+          required:
+            - name
+        debtorId:
+          type: string
+        payment:
+          type: object
+          additionalProperties: false
+          properties:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            value:
+              type: string
+            label:
+              type: string
+          required:
+            - provider
+            - value
+            - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
         sharingState:
           enum: 
             - 'ready'
@@ -6898,25 +7246,44 @@ components:
             - name
         debtorId:
           type: string
-        pix:
+        payment:
           type: object
           additionalProperties: false
           properties:
-            keyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            key:
+            value:
               type: string
             label:
               type: string
           required:
-            - keyType
-            - key
+            - provider
+            - value
             - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
         sharingState:
           enum: 
             - 'ready'
@@ -7088,25 +7455,44 @@ components:
             - name
         debtorId:
           type: string
-        pix:
+        payment:
           type: object
           additionalProperties: false
           properties:
-            keyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            key:
+            value:
               type: string
             label:
               type: string
           required:
-            - keyType
-            - key
+            - provider
+            - value
             - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
         sharingState:
           enum: 
             - 'ready'
@@ -7224,25 +7610,118 @@ components:
             - 'pending'
             - 'paid'
             - 'cancelled'
-        pix:
+        payment:
           type: object
           additionalProperties: false
           properties:
-            keyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            key:
+            value:
               type: string
             label:
               type: string
           required:
-            - keyType
-            - key
+            - provider
+            - value
             - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
+        uploadsEnabled:
+          type: boolean
+      required:
+        - creditorFirstName
+        - description
+        - amount
+        - dueDate
+        - state
+        - uploadsEnabled
+    providerReturnHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        creditorFirstName:
+          type: string
+        description:
+          type: string
+        amount:
+          type: object
+          additionalProperties: false
+          properties:
+            amountCents:
+              type: number
+            currency:
+              type: string
+              enum: ["BRL"]
+          required:
+            - amountCents
+            - currency
+        dueDate:
+          type: string
+        state:
+          enum: 
+            - 'pending'
+            - 'paid'
+            - 'cancelled'
+        payment:
+          type: object
+          additionalProperties: false
+          properties:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
+              enum: 
+                - 'cpf'
+                - 'cnpj'
+                - 'email'
+                - 'phone'
+                - 'random'
+            value:
+              type: string
+            label:
+              type: string
+          required:
+            - provider
+            - value
+            - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
         uploadsEnabled:
           type: boolean
       required:
@@ -7340,209 +7819,6 @@ components:
         - billingId
         - joinedSplit
         - awaitingOwner
-    timelineHandler:
-      type: object
-      additionalProperties: false
-      properties:
-        items:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              kind:
-                type: string
-                enum: ["charge"]
-              direction:
-                enum: 
-                  - 'receivable'
-                  - 'payable'
-              charge:
-                type: object
-                additionalProperties: false
-                properties:
-                  id:
-                    type: string
-                  description:
-                    type: string
-                  amount:
-                    type: object
-                    additionalProperties: false
-                    properties:
-                      amountCents:
-                        type: number
-                      currency:
-                        type: string
-                        enum: ["BRL"]
-                    required:
-                      - amountCents
-                      - currency
-                  dueDate:
-                    type: string
-                  state:
-                    enum: 
-                      - 'pending'
-                      - 'paid'
-                      - 'cancelled'
-                  billingId:
-                    type: string
-                  recurrence:
-                    enum: 
-                      - 'once'
-                      - 'until'
-                      - 'indefinite'
-                  installment:
-                    type: number
-                  installmentCount:
-                    type: number
-                  counterpartName:
-                    type: string
-                  counterpartAvatar:
-                    type: object
-                    additionalProperties: false
-                    properties:
-                      url:
-                        type: string
-                      version:
-                        type: string
-                    required:
-                      - url
-                      - version
-                  proofState:
-                    enum: 
-                      - 'pending'
-                      - 'accepted'
-                      - 'rejected'
-                  ownedByViewer:
-                    type: boolean
-                  hasPix:
-                    type: boolean
-                  counterpartReachable:
-                    type: boolean
-                  proofKind:
-                    enum: 
-                      - 'file'
-                      - 'declaration'
-                  confirmationRequired:
-                    type: boolean
-                  notify:
-                    type: boolean
-                  kind:
-                    enum: 
-                      - 'live'
-                      - 'record'
-                required:
-                  - id
-                  - description
-                  - amount
-                  - dueDate
-                  - state
-                  - billingId
-                  - recurrence
-                  - counterpartName
-            required:
-              - kind
-              - direction
-              - charge
-        summary:
-          type: object
-          additionalProperties: false
-          properties:
-            receivable:
-              type: object
-              additionalProperties: false
-              properties:
-                amountCents:
-                  type: number
-                currency:
-                  type: string
-                  enum: ["BRL"]
-              required:
-                - amountCents
-                - currency
-            payable:
-              type: object
-              additionalProperties: false
-              properties:
-                amountCents:
-                  type: number
-                currency:
-                  type: string
-                  enum: ["BRL"]
-              required:
-                - amountCents
-                - currency
-            overdue:
-              type: object
-              additionalProperties: false
-              properties:
-                amountCents:
-                  type: number
-                currency:
-                  type: string
-                  enum: ["BRL"]
-              required:
-                - amountCents
-                - currency
-            pending:
-              type: object
-              additionalProperties: false
-              properties:
-                amountCents:
-                  type: number
-                currency:
-                  type: string
-                  enum: ["BRL"]
-              required:
-                - amountCents
-                - currency
-            proofsToReview:
-              type: number
-            receivableCount:
-              type: number
-            payableCount:
-              type: number
-            receivedTotal:
-              type: object
-              additionalProperties: false
-              properties:
-                amountCents:
-                  type: number
-                currency:
-                  type: string
-                  enum: ["BRL"]
-              required:
-                - amountCents
-                - currency
-            paidTotal:
-              type: object
-              additionalProperties: false
-              properties:
-                amountCents:
-                  type: number
-                currency:
-                  type: string
-                  enum: ["BRL"]
-              required:
-                - amountCents
-                - currency
-          required:
-            - receivable
-            - payable
-            - overdue
-            - pending
-            - proofsToReview
-            - receivableCount
-            - payableCount
-            - receivedTotal
-            - paidTotal
-        month:
-          type: string
-        nextCursor:
-          type: string
-      required:
-        - items
-        - summary
     contactLedgerHandler:
       type: object
       additionalProperties: false
@@ -7600,18 +7876,6 @@ components:
             - status
             - createdAt
             - activeCharges
-        balance:
-          type: object
-          additionalProperties: false
-          properties:
-            amountCents:
-              type: number
-            currency:
-              type: string
-              enum: ["BRL"]
-          required:
-            - amountCents
-            - currency
         receivable:
           type: object
           additionalProperties: false
@@ -7741,25 +8005,44 @@ components:
                   - name
               debtorId:
                 type: string
-              pix:
+              payment:
                 type: object
                 additionalProperties: false
                 properties:
-                  keyType:
+                  provider:
+                    enum: 
+                      - 'pix'
+                      - 'infinitepay'
+                  kind:
                     enum: 
                       - 'cpf'
                       - 'cnpj'
                       - 'email'
                       - 'phone'
                       - 'random'
-                  key:
+                  value:
                     type: string
                   label:
                     type: string
                 required:
-                  - keyType
-                  - key
+                  - provider
+                  - value
                   - label
+              paymentLink:
+                type: object
+                additionalProperties: false
+                properties:
+                  url:
+                    type: string
+                  state:
+                    enum: 
+                      - 'pending'
+                      - 'ready'
+                      - 'failed'
+                required:
+                  - state
+              receiptUrl:
+                type: string
               sharingState:
                 enum: 
                   - 'ready'
@@ -7833,7 +8116,6 @@ components:
       required:
         - contactId
         - contact
-        - balance
         - receivable
         - payable
         - charges
@@ -7951,25 +8233,44 @@ components:
             - name
         debtorId:
           type: string
-        pix:
+        payment:
           type: object
           additionalProperties: false
           properties:
-            keyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            key:
+            value:
               type: string
             label:
               type: string
           required:
-            - keyType
-            - key
+            - provider
+            - value
             - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
         sharingState:
           enum: 
             - 'ready'
@@ -8141,25 +8442,44 @@ components:
             - name
         debtorId:
           type: string
-        pix:
+        payment:
           type: object
           additionalProperties: false
           properties:
-            keyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            key:
+            value:
               type: string
             label:
               type: string
           required:
-            - keyType
-            - key
+            - provider
+            - value
             - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
         sharingState:
           enum: 
             - 'ready'
@@ -8419,25 +8739,44 @@ components:
             - name
         debtorId:
           type: string
-        pix:
+        payment:
           type: object
           additionalProperties: false
           properties:
-            keyType:
+            provider:
+              enum: 
+                - 'pix'
+                - 'infinitepay'
+            kind:
               enum: 
                 - 'cpf'
                 - 'cnpj'
                 - 'email'
                 - 'phone'
                 - 'random'
-            key:
+            value:
               type: string
             label:
               type: string
           required:
-            - keyType
-            - key
+            - provider
+            - value
             - label
+        paymentLink:
+          type: object
+          additionalProperties: false
+          properties:
+            url:
+              type: string
+            state:
+              enum: 
+                - 'pending'
+                - 'ready'
+                - 'failed'
+          required:
+            - state
+        receiptUrl:
+          type: string
         sharingState:
           enum: 
             - 'ready'
@@ -8566,3 +8905,12 @@ components:
           type: boolean
       required:
         - queued
+    infinitePayWebhookHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        received:
+          type: boolean
+          enum: [true]
+      required:
+        - received

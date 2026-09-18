@@ -171,8 +171,8 @@ async function save(db: DbClient, ownerId: string, input: ContactInput, id?: str
 
     if (input.paymentMethod) {
       const keyId = await upsertContactKey(tx, ownerId, contactId, {
-        keyType: input.paymentMethod.pixKeyType,
-        key: input.paymentMethod.pixKey,
+        keyType: input.paymentMethod.kind,
+        key: input.paymentMethod.value,
         label: input.paymentMethod.label ?? 'Pix'
       });
 

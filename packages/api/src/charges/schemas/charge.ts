@@ -1,6 +1,6 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
-import type { ChargeState, PixKeyType, ProofMime } from '@receivy/common';
+import type { ChargeState, PaymentLinkState, PaymentProvider, PixKeyType, ProofMime } from '@receivy/common';
 
 export const enum StoredProofState {
   Uploading = 'uploading',
@@ -9,14 +9,10 @@ export const enum StoredProofState {
   Rejected = 'rejected'
 }
 
-/** The only payment method today; the field exists so a second one does not need another column. */
-export const enum PaymentMethodKind {
-  Pix = 'pix'
-}
-
+/** The four names the `payment_methods` row carries; `kind` only on Pix. */
 export interface PaymentSnapshotSchema {
-  method: PaymentMethodKind;
-  type: PixKeyType;
+  provider: PaymentProvider;
+  kind?: PixKeyType;
   value: String.Max<254>;
   label: String.Max<120>;
 }
@@ -47,7 +43,7 @@ export interface ChargeSchema extends Database.Schema {
   payment_snapshot?: PaymentSnapshotSchema;
   /** InfinitePay checkout link of this charge; null on a charge paid through a Pix key. */
   payment_link_url?: String.Max<500>;
-  payment_link_state?: 'pending' | 'ready' | 'failed';
+  payment_link_state?: PaymentLinkState;
   /** `transaction_nsu` of the payment the provider confirmed: the idempotency key of the settlement. */
   provider_transaction_id?: String.Max<120>;
   provider_receipt_url?: String.Max<500>;

@@ -61,6 +61,30 @@ action commits and never retried:
 Each push opens `<PUBLIC_WEB_ORIGIN>/charges/<id>` and is recorded once per submission as
 `notice.payment { key, notice }`.
 
+## Link de pagamento (InfinitePay)
+
+A conta a receber billed through InfinitePay carries a checkout link instead of a Pix key. Before any
+notice goes out, `sendChargeNotice` calls `ensurePaymentLink`, which mints the link on first use (or
+retries a link that previously failed) and writes `charge.payment_link.created` or
+`charge.payment_link.failed { reason: 'checkout_disabled' | 'unavailable' }`. While the link is not
+`ready`, `notice.skipped { reason: 'link_pending' }` is recorded instead of sending — same as
+`pix_required` for a conta a receber without a Pix key.
+
+The payer's return and the webhook share one finalizer (`settleByProvider`), which never trusts the
+request body: it always confirms with InfinitePay before moving the charge. It records
+`charge.provider.rejected` (InfinitePay says not paid), `charge.provider.mismatch` (paid less than the
+charge), `charge.provider.ignored` (the charge already left `pending` — a race with a manual
+settlement), or `charge.paid { via: 'provider', provider: 'infinitepay', transactionNsu, receiptUrl? }`
+on success. These fire direct pushes, outside the notice pipeline:
+
+| When | To | Title |
+| --- | --- | --- |
+| the checkout link failed to mint (`checkout_disabled`) | the owner | Link de pagamento não criado |
+| InfinitePay confirmed less than the charge's amount (`mismatch`) | the owner | Valor divergente na InfinitePay |
+| InfinitePay confirmed a payment on a charge that already left `pending` (`ignored`) | the owner | Pagamento recebido pela InfinitePay |
+| the charge is marked paid by the provider | the creditor | Pagamento recebido pela InfinitePay |
+| the charge is marked paid by the provider | the debtor | Pagamento confirmado |
+
 ## Sem avisos
 
 The owner of a conta a receber can switch off the automatic notices of one participant or of one charge

@@ -10,6 +10,12 @@ export interface PaymentMethodSchema extends Database.Schema {
   type: 'pix';
   pix_key_type: PixKeyType;
   pix_key: String.Max<254>;
+  /** Nullable until the backfill fills it; every reader treats a missing provider as an unbackfilled row. */
+  provider?: 'pix' | 'infinitepay';
+  /** The Pix key type; absent on any other provider. */
+  kind?: PixKeyType;
+  /** The canonical Pix key, or the InfiniteTag without `$`. */
+  value?: String.Max<254>;
   label: String.Max<120>;
   is_default: boolean;
   archived_at?: String.DateTime;

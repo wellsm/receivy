@@ -45,6 +45,12 @@ export interface ChargeSchema extends Database.Schema {
   installment_count?: number;
   /** Frozen copy of how this charge is paid; never queried by content, so one object beats three columns. */
   payment_snapshot?: PaymentSnapshotSchema;
+  /** InfinitePay checkout link of this charge; null on a charge paid through a Pix key. */
+  payment_link_url?: String.Max<500>;
+  payment_link_state?: 'pending' | 'ready' | 'failed';
+  /** `transaction_nsu` of the payment the provider confirmed: the idempotency key of the settlement. */
+  provider_transaction_id?: String.Max<120>;
+  provider_receipt_url?: String.Max<500>;
   state: ChargeState;
   cancelled_at?: String.DateTime;
   paid_at?: String.DateTime;

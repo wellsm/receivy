@@ -49,6 +49,7 @@ export type BillingDraft = {
   /** "N vezes" shortcut for `until`: computes `end` when `end` is empty. */
   occurrences: string;
   timezone: string;
+  /** The key that pays this conta: the owner's own on a receivable, one of the seated contact's on a payable. */
   pix: string;
   mode: SplitMode;
   /** Raw text split values, one bucket per mode; `equal` reads none of them. */

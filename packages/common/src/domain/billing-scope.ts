@@ -51,7 +51,7 @@ function splitKey(split: BillingSplit): string {
   return `${split.mode}|${parts.sort().join(',')}`;
 }
 
-/** True when a recorrente patch changes what its charges carry: text, amount, split, Pix, payee or due day. */
+/** True when a recorrente patch changes what its charges carry: text, amount, split, payment method, payee or due day. */
 export function patchTouchesCharges(billing: BillingDetail, patch: BillingPatch): boolean {
   if (billing.recurrence !== BillingRecurrence.Indefinite) {
     return false;

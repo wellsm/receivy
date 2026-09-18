@@ -385,6 +385,16 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     update(payable ? { payee: "" } : { selected: [] });
   }
 
+  /**
+   * Each direction is paid through other keys: a conta a pagar through the seated
+   * contact's, a conta a receber through the owner's wallet. Carrying the chosen
+   * key across the flip would pay the wrong side, so it starts over — the wallet
+   * default for a conta a receber, the seat's own for a conta a pagar.
+   */
+  function pickDirection(direction: Direction) {
+    update({ direction, pix: direction === Direction.Payable ? "" : (wallet.find(item => item.isDefault)?.id ?? "") });
+  }
+
   const remember = useCallback((contacts: Contact[]) => {
     setDirectory(current => [...current, ...contacts.filter(contact => !current.some(known => known.id === contact.id))]);
   }, []);
@@ -700,7 +710,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
                   active ? "border-primary bg-primary text-on-primary" : "border-outline bg-surface text-muted"
                 }`}
               >
-                <input type="radio" className="sr-only" name="billing-direction" value={option.value} checked={active} onChange={() => update({ direction: option.value })} />
+                <input type="radio" className="sr-only" name="billing-direction" value={option.value} checked={active} onChange={() => pickDirection(option.value)} />
                 {option.label}
               </label>
             );

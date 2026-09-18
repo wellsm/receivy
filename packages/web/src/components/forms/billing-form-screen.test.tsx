@@ -836,6 +836,27 @@ it("switches the conta a pagar to another key of the same contact", async () => 
   expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toMatchObject({ paymentMethodId: "pix-ana-2" });
 });
 
+it("resets the key to the wallet default when the direction flips back from a conta a pagar", async () => {
+  const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
+  await seatAna(user);
+  // The seated contact's default key lands before the flip.
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Chave padrão"));
+
+  await user.click(await screen.findByRole("radio", { name: "Vou receber" }));
+  await pickAna(user);
+
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  const body = JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body));
+
+  // Ana's key travelled from "Vou pagar" must never pay this conta a receber; the wallet default does.
+  expect(body.paymentMethodId).toBe("pix-1");
+});
+
 it("re-picks the default key when the receiving seat moves to another contact", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
   const { user } = renderForm();

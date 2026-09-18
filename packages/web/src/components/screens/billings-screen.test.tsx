@@ -13,6 +13,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => router }));
 /** userEvent installs its own clipboard stub on setup, so ours has to land afterwards. */
 function setup(options: Parameters<typeof userEvent.setup>[0] = {}) {
   const user = userEvent.setup(options);
+
   Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
 
   return user;
@@ -53,7 +54,9 @@ function summary(overrides: Overrides = {}) {
 
 function shiftDays(days: number): string {
   const date = new Date();
+
   date.setDate(date.getDate() + days);
+
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
@@ -68,6 +71,7 @@ function mockApi(handler: Handler): string[] {
 
   vi.mocked(browserFetch).mockImplementation(async (path, init) => {
     calls.push(`${init?.method ?? "GET"} ${path}`);
+
     return handler(path, init) ?? Response.json({ billings: [], nextCursor: null });
   });
 
@@ -84,6 +88,7 @@ it("renders one card per billing with badges, relative due date, amount and next
   render(<BillingsScreen />);
 
   const card = await screen.findByRole("article", { name: "Cobrança Churrasco" });
+
   expect(within(card).getByText("Única")).toBeInTheDocument();
   expect(within(card).getByText("3 pessoas")).toBeInTheDocument();
   expect(within(card).getByText("R$ 120,00")).toBeInTheDocument();
@@ -92,11 +97,13 @@ it("renders one card per billing with badges, relative due date, amount and next
 
   const overdue = screen.getByRole("article", { name: "Cobrança Aluguel" });
   const overdueLabel = within(overdue).getByText("Atrasado 1 dia");
+
   expect(overdueLabel).toHaveClass("text-danger");
 });
 
 it("sends the search term after the debounce without a state filter", async () => {
   vi.useFakeTimers();
+
   const calls = listOnly([summary()]);
 
   render(<BillingsScreen />);
@@ -110,6 +117,7 @@ it("sends the search term after the debounce without a state filter", async () =
   });
 
   const searched = calls.filter((call) => call.includes("search="));
+
   expect(searched).toHaveLength(1);
   expect(searched[0]).toContain("search=churr");
   expect(searched[0]).not.toContain("state=");
@@ -123,6 +131,7 @@ it("shows only active billings by default and switches state without asking the 
   ]);
 
   render(<BillingsScreen />);
+
   const user = setup();
 
   expect(await screen.findByRole("article", { name: "Cobrança Churrasco" })).toBeInTheDocument();
@@ -144,6 +153,7 @@ it("explains an empty state filter instead of hiding everything silently", async
   listOnly([summary()]);
 
   render(<BillingsScreen />);
+
   const user = setup();
 
   await screen.findByRole("article", { name: "Cobrança Churrasco" });
@@ -158,12 +168,17 @@ it("shares the public link of the only pending charge", async () => {
     if (path === "/api/financial/charges/c9/public-link" && init?.method === "POST") {
       return Response.json({ token: "tk", expiresAt: "2026-10-08T00:00:00Z" });
     }
-    if (isList(path)) return Response.json({ billings: [summary({ shareChargeId: "c9" })], nextCursor: null });
+    if (isList(path)) {
+      return Response.json({ billings: [summary({ shareChargeId: "c9" })], nextCursor: null });
+    }
+
     return undefined;
   });
 
   render(<BillingsScreen />);
+
   const user = setup();
+
   await user.click(await screen.findByRole("button", { name: "Compartilhar" }));
 
   expect(calls).toContain("POST /api/financial/charges/c9/public-link");
@@ -176,12 +191,17 @@ it("opens the charge when the public link cannot be published", async () => {
     if (path === "/api/financial/charges/c9/public-link" && init?.method === "POST") {
       return Response.json({ message: "Cadastre uma chave Pix." }, { status: 422 });
     }
-    if (isList(path)) return Response.json({ billings: [summary({ shareChargeId: "c9" })], nextCursor: null });
+    if (isList(path)) {
+      return Response.json({ billings: [summary({ shareChargeId: "c9" })], nextCursor: null });
+    }
+
     return undefined;
   });
 
   render(<BillingsScreen />);
+
   const user = setup();
+
   await user.click(await screen.findByRole("button", { name: "Compartilhar" }));
 
   expect(router.push).toHaveBeenCalledWith("/charges/c9");
@@ -191,7 +211,9 @@ it("opens the billing detail route when there is no single charge to share, and 
   listOnly([summary()]);
 
   render(<BillingsScreen />);
+
   const user = setup();
+
   await user.click(await screen.findByRole("button", { name: "Compartilhar" }));
 
   expect(router.push).toHaveBeenCalledWith("/billings/b1");
@@ -206,9 +228,11 @@ it("asks the API for one direction when the filter changes", async () => {
   const calls = listOnly([summary()]);
 
   render(<BillingsScreen />);
+
   const user = setup();
 
   await screen.findByRole("article", { name: "Cobrança Churrasco" });
+
   expect(screen.getByRole("radio", { name: "Todas" })).toHaveAttribute("aria-checked", "true");
   expect(calls[0]).not.toContain("type=");
 
@@ -225,9 +249,11 @@ it("opens a conta a pagar from its card action instead of sharing a link", async
   const calls = listOnly([summary({ type: "payable", contact: ana, counterpart: ana, shareChargeId: "c9" })]);
 
   render(<BillingsScreen />);
+
   const user = setup();
 
   const card = await screen.findByRole("article", { name: "Cobrança Churrasco" });
+
   expect(within(card).getByText("A pagar")).toBeInTheDocument();
   expect(within(card).getByText("Ana")).toBeInTheDocument();
   expect(within(card).queryByRole("button", { name: "Compartilhar" })).not.toBeInTheDocument();
@@ -246,6 +272,7 @@ it("shows the empty state and keeps the sticky button to create a billing", asyn
   expect(await screen.findByText("Nenhuma conta ainda")).toBeInTheDocument();
 
   const links = screen.getAllByRole("link", { name: "Nova conta" });
+
   expect(links.length).toBeGreaterThan(1);
   expect(links.at(-1)).toHaveAttribute("href", "/billings/new");
   expect(links.at(-1)).toHaveTextContent("Cadastrar Nova Conta");
@@ -253,13 +280,20 @@ it("shows the empty state and keeps the sticky button to create a billing", asyn
 
 it("loads the next page when asked", async () => {
   const calls = mockApi((path) => {
-    if (path.includes("cursor=c2")) return Response.json({ billings: [summary({ id: "b2", description: "Aluguel" })], nextCursor: null });
-    if (isList(path)) return Response.json({ billings: [summary()], nextCursor: "c2" });
+    if (path.includes("cursor=c2")) {
+      return Response.json({ billings: [summary({ id: "b2", description: "Aluguel" })], nextCursor: null });
+    }
+    if (isList(path)) {
+      return Response.json({ billings: [summary()], nextCursor: "c2" });
+    }
+
     return undefined;
   });
 
   render(<BillingsScreen />);
+
   const user = setup();
+
   await user.click(await screen.findByRole("button", { name: "Carregar mais" }));
 
   expect(await screen.findByRole("article", { name: "Cobrança Aluguel" })).toBeInTheDocument();

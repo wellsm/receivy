@@ -80,6 +80,7 @@ describe("ChargeDetailScreen", () => {
     render(<ChargeDetailScreen id="charge" />);
 
     await screen.findByRole("option", { name: "EMAIL · pix@example.com" });
+
     fireEvent.change(await screen.findByLabelText("Pix para esta cobrança"), { target: { value: "method" } });
     fireEvent.click(screen.getByRole("button", { name: "Publicar com este Pix" }));
 
@@ -128,6 +129,7 @@ describe("ChargeDetailScreen", () => {
     let current = charge();
     const ticket = vi.fn(() => {
       current = charge({ proofState: ProofState.Pending, proof: proof({ sentByViewer: true }) });
+
       return Response.json({ uploadUrl: "https://bucket.test/put", expiresAt: "2026-09-05T14:40:00Z" });
     });
     const put = vi.fn(async () => new Response(null, { status: 200 }));
@@ -156,6 +158,7 @@ describe("ChargeDetailScreen", () => {
 
     await waitFor(() => expect(ticket).toHaveBeenCalled());
     await waitFor(() => expect(put).toHaveBeenCalledWith("https://bucket.test/put", expect.objectContaining({ method: "PUT" })));
+
     expect(await screen.findByText("Comprovante enviado para revisão.")).toBeInTheDocument();
     expect(routerMock.push).not.toHaveBeenCalled();
 
@@ -183,9 +186,11 @@ describe("ChargeDetailScreen", () => {
     expect(await screen.findByText("Valor a receber")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Marcar como pago" }));
     expect(review).not.toHaveBeenCalled();
+
     await confirmMarkPaid();
 
     await waitFor(() => expect(review).toHaveBeenCalled());
+
     expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/charges/charge/pay", expect.anything());
     expect(await screen.findByText("Comprovante aceito e pagamento registrado.")).toBeInTheDocument();
     expect(screen.getByText("Aceito")).toBeInTheDocument();
@@ -214,9 +219,11 @@ describe("ChargeDetailScreen", () => {
     expect(await screen.findByRole("button", { name: "Enviar comprovante" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar como pago" }));
+
     await confirmMarkPaid();
 
     await waitFor(() => expect(pay).toHaveBeenCalled());
+
     expect(await screen.findByText("Pagamento integral registrado.")).toBeInTheDocument();
   });
 
@@ -249,9 +256,11 @@ describe("ChargeDetailScreen", () => {
     expect(screen.queryByRole("button", { name: /Enviar comprovante/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar como pago" }));
+
     await confirmMarkPaid();
 
     await waitFor(() => expect(review).toHaveBeenCalled());
+
     expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/charges/charge/pay", expect.anything());
   });
 
@@ -267,6 +276,7 @@ describe("ChargeDetailScreen", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
 
     const remindDialog = await screen.findByRole("dialog", { name: "Enviar lembrete?" });
+
     expect(remind).not.toHaveBeenCalled();
 
     fireEvent.click(within(remindDialog).getByRole("button", { name: "Enviar lembrete" }));
@@ -274,9 +284,11 @@ describe("ChargeDetailScreen", () => {
     expect(remind).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Marcar como pago" }));
+
     await confirmMarkPaid();
 
     await waitFor(() => expect(pay).toHaveBeenCalled());
+
     expect(await screen.findByText("Pagamento integral registrado.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Marcar como pago" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -301,11 +313,13 @@ describe("ChargeDetailScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reabrir" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Reabrir cobrança?" });
+
     expect(reopen).not.toHaveBeenCalled();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Reabrir" }));
 
     await waitFor(() => expect(reopen).toHaveBeenCalled());
+
     expect(await screen.findByRole("button", { name: "Marcar como pago" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("Atrasado")).toBeInTheDocument();
@@ -335,6 +349,7 @@ describe("ChargeDetailScreen", () => {
     const text = chargeShareText(detail, `${window.location.origin}/pay/tk`);
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(text));
+
     expect(await screen.findByRole("status")).toHaveTextContent("Link copiado.");
   });
 
@@ -344,6 +359,7 @@ describe("ChargeDetailScreen", () => {
       proofKind: ProofKind.Declaration,
       proof: proof({ kind: ProofKind.Declaration, file: null, sentByViewer: true }),
     });
+
     serve(charge({ confirmationRequired: true }), {
       "POST /api/financial/charges/charge/proof/declaration": () => Response.json(declared),
     });
@@ -351,7 +367,9 @@ describe("ChargeDetailScreen", () => {
     render(<ChargeDetailScreen id="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Já paguei" }));
+
     const dialog = await screen.findByRole("dialog", { name: "Informar pagamento?" });
+
     fireEvent.click(within(dialog).getByRole("button", { name: "Já paguei" }));
 
     expect(await screen.findByText(/aguardando confirmação de Ana/)).toBeInTheDocument();
@@ -369,6 +387,7 @@ describe("ChargeDetailScreen", () => {
       proof: proof({ kind: ProofKind.Declaration, file: null }),
     });
     const refused = { ...declared, proofState: ProofState.Rejected, proof: proof({ kind: ProofKind.Declaration, file: null, state: ProofState.Rejected, reason: "Não caiu" }) };
+
     serve(declared, { "POST /api/financial/charges/charge/proof/review": () => Response.json(refused) });
 
     render(<ChargeDetailScreen id="charge" />);
@@ -377,7 +396,9 @@ describe("ChargeDetailScreen", () => {
     expect(screen.getByRole("button", { name: "Confirmar recebimento" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Não recebi" }));
+
     const dialog = await screen.findByRole("dialog", { name: "Não recebeu o pagamento?" });
+
     fireEvent.change(within(dialog).getByLabelText("Motivo (opcional)"), { target: { value: "Não caiu" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Não recebi" }));
 
@@ -406,6 +427,7 @@ describe("ChargeDetailScreen", () => {
     expect(await screen.findByText(/Ana informou que pagou/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Confirmar recebimento" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Marcar como pago" }));
+
     await confirmMarkPaid();
 
     await waitFor(() => expect(pay).toHaveBeenCalled());
@@ -425,12 +447,14 @@ describe("ChargeDetailScreen", () => {
     render(<ChargeDetailScreen id="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Não recebi" }));
+
     const dialog = await screen.findByRole("dialog", { name: "Não recebeu o pagamento?" });
 
     fireEvent.change(within(dialog).getByLabelText("Motivo (opcional)"), { target: { value: "Não caiu" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancelar" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Não recebi" }));
+
     const reopened = await screen.findByRole("dialog", { name: "Não recebeu o pagamento?" });
 
     expect(within(reopened).getByLabelText("Motivo (opcional)")).toHaveValue("");

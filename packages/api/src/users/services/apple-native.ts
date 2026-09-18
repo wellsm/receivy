@@ -1,17 +1,21 @@
 import { HttpUnauthorizedError } from '@ez4/gateway';
 import type { AuthSessionResponse } from '@receivy/common';
 import type { DbClient } from '../../database';
-import { AuthRepository } from '../repositories/auth';
-import { lockAccountReferences } from './locking';
+import { authStore } from '../services/auth-store';
 import { createOauthAttempt, hashOauthValue, OauthProvider } from './oauth';
 import type { OauthProviderClient } from './oauth-flow';
-import { issueAccessToken } from './session';
+import { DEFAULT_ACCESS_TOKEN_TTL_SECONDS, issueAccessToken } from './session';
 
 const DESTINATION = 'native:apple';
+
 export async function beginNativeApple(db: DbClient, clientChallenge: string) {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(clientChallenge)) throw new HttpUnauthorizedError();
+  if (!/^[A-Za-z0-9_-]{43}$/.test(clientChallenge)) {
+    throw new HttpUnauthorizedError();
+  }
+
   const values = createOauthAttempt();
-  await AuthRepository.create(db).createAttempt({
+
+  await authStore(db).createAttempt({
     clientChallenge,
     stateHash: hashOauthValue(values.state),
     nonce: values.nonce,
@@ -20,19 +24,27 @@ export async function beginNativeApple(db: DbClient, clientChallenge: string) {
     destination: DESTINATION,
     expiresAt: new Date(Date.now() + 10 * 60_000)
   });
+
   return { state: values.state, nonce: values.nonce };
 }
 export async function exchangeNativeApple(
   db: DbClient,
   input: { state: string; authorizationCode: string; codeVerifier: string; profile?: string; deviceName?: string },
   client: OauthProviderClient,
-  secret: string
+  secret: string,
+  ttlSeconds = DEFAULT_ACCESS_TOKEN_TTL_SECONDS
 ): Promise<AuthSessionResponse> {
-  if (!/^[A-Za-z0-9._~-]{43,128}$/.test(input.codeVerifier)) throw new HttpUnauthorizedError();
+  if (!/^[A-Za-z0-9._~-]{43,128}$/.test(input.codeVerifier)) {
+    throw new HttpUnauthorizedError();
+  }
+
   const attempt = await db.transaction(async (tx) => {
-    const row = await AuthRepository.create(tx).consumeAttempt({ provider: OauthProvider.Apple, stateHash: hashOauthValue(input.state) });
-    if (!row || row.destination !== DESTINATION || row.clientChallenge !== hashOauthValue(input.codeVerifier))
+    const row = await authStore(tx).consumeAttempt({ provider: OauthProvider.Apple, stateHash: hashOauthValue(input.state) });
+
+    if (!row || row.destination !== DESTINATION || row.clientChallenge !== hashOauthValue(input.codeVerifier)) {
       throw new HttpUnauthorizedError();
+    }
+
     return row;
   });
   // Provider code exchange is deliberately outside the account/row locks.
@@ -42,15 +54,16 @@ export async function exchangeNativeApple(
     nonce: attempt.nonce,
     profile: input.profile
   });
+
   return db.transaction(async (tx) => {
-    await lockAccountReferences(tx, 'write');
-    const repo = AuthRepository.create(tx),
+    const repo = authStore(tx),
       user = await repo.resolveUser({ provider: OauthProvider.Apple, identity });
     const session = await repo.issueSession(user.id, input.deviceName);
+
     return {
-      accessToken: issueAccessToken({ familyId: session.familyId, secret, userId: user.id }),
+      accessToken: issueAccessToken({ familyId: session.familyId, secret, ttlSeconds, userId: user.id }),
       refreshToken: session.refreshToken,
-      expiresIn: 900,
+      expiresIn: ttlSeconds,
       user
     };
   });

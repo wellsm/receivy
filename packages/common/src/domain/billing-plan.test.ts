@@ -17,6 +17,7 @@ describe('billing plan', () => {
       dueDates: ['2026-01-31', '2026-02-28'],
       numbered: true
     });
+
     expect(plan.description).toBe('Aluguel');
     expect(plan.allocations.map((a) => a.amountCents)).toEqual([34, 33, 33]);
     expect(plan.charges).toEqual([
@@ -67,7 +68,9 @@ describe('billing plan', () => {
       dueDates: ['2026-05-05'],
       numbered: false
     });
+
     expect(plan.charges).toEqual([]);
+
     const paid = planBillingCharges({
       description: 'Internet',
       totalCents: 1,
@@ -75,6 +78,7 @@ describe('billing plan', () => {
       dueDates: ['2026-05-05'],
       numbered: false
     });
+
     expect(paid.charges[0]).toMatchObject({ installment: null, installmentCount: null, amountCents: 1 });
   });
 

@@ -8,7 +8,7 @@ import { PaymentMethodRepository } from '../repositories/payment-method';
 
 declare class ListRequest implements Http.Request {
   identity: SessionIdentity;
-  query: { archived?: boolean; contactId?: String.UUID };
+  query: { contactId?: String.UUID };
 }
 
 declare class ListResponse implements Http.Response {
@@ -23,7 +23,7 @@ export async function listPaymentMethodsHandler(
   return {
     status: 200,
     body: {
-      paymentMethods: await PaymentMethodRepository.list(db, request.identity.userId, request.query.archived, request.query.contactId)
+      paymentMethods: await PaymentMethodRepository.list(db, request.identity.userId, request.query.contactId)
     }
   };
 }

@@ -5,7 +5,6 @@ import type { Contact } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ContactProvider } from '../provider';
-import { ContactRepository } from '../repositories/contact';
 import type { ContactPaymentMethodBody } from '../utils/body';
 import { parseContactInput } from '../utils/parse';
 
@@ -21,14 +20,11 @@ declare class UpdateResponse implements Http.Response {
 }
 
 export async function updateContactHandler(
-  request: UpdateRequest,
-  { db, avatarFiles }: Service.Context<ContactProvider>
+  { identity, parameters, body }: UpdateRequest,
+  { avatarFiles, contacts }: Service.Context<ContactProvider>
 ): Promise<UpdateResponse> {
   return {
     status: 200,
-    body: await AvatarRepository.sign(
-      avatarFiles,
-      await ContactRepository.save(db, request.identity.userId, parseContactInput(request.body), request.parameters.id)
-    )
+    body: await AvatarRepository.sign(avatarFiles, await contacts.save(identity.userId, parseContactInput(body), parameters.id))
   };
 }

@@ -14,15 +14,21 @@ const openapi = parse(readFileSync(join(repo, "docs/api-oas.yml"), "utf8")) as {
 const normalize = (path: string) => path.replace(/^\//, "").replace(/\{[^}]+\}/g, "{p}");
 const operations = new Set<string>();
 const paths = new Set<string>();
+
 for (const [path, methods] of Object.entries(openapi.paths)) {
   paths.add(normalize(path));
-  for (const method of Object.keys(methods)) operations.add(`${method.toUpperCase()} ${normalize(path)}`);
+
+  for (const method of Object.keys(methods)) {
+    operations.add(`${method.toUpperCase()} ${normalize(path)}`);
+  }
 }
+
 const UUID = "11111111-1111-4111-8111-111111111111";
 const concrete = (template: string) => template.replace(/\{p\}/g, UUID);
 /** A client template covers an API path when segments align and every `{p}` stands for one segment. */
 const covers = (template: string, path: string) => {
   const a = template.split("/"), b = path.split("/");
+
   return a.length === b.length && a.every((segment, i) => segment === "{p}" || segment === b[i]);
 };
 
@@ -34,6 +40,8 @@ const DEDICATED_BFF = [
   "GET contacts", "POST contacts", "GET contacts/{p}", "PATCH contacts/{p}", "POST contacts/{p}/archive",
   // The invite landing page (/join/[token]) is a server component and reads it with authApiFetch, like /pay.
   "GET public/invites/{p}",
+  // The feed page (/feed) is a server component and reads the month with sessionApiFetch.
+  "GET charges",
   "GET public/charges/{p}", "POST public/charges/{p}/proof", "GET public/charges/{p}/proof", "DELETE public/charges/{p}/proof", "POST public/charges/{p}/proof/complete",
   "POST public/charges/{p}/proof/declaration",
   // Provider callbacks land on the web domain and are bridged to the API (lib/auth/provider-callback.ts).
@@ -45,33 +53,39 @@ const WEB_EXCLUSIONS: Record<string, string> = {
   "POST devices": "push registration is native-only",
   "POST auth/apple/native/start": "native Sign in with Apple only",
   "POST auth/apple/native/exchange": "native Sign in with Apple only",
-  "GET charges": "query bench kept on purpose; no client calls it",
 };
 // Authenticated paths the native app deliberately does not call yet.
 const NATIVE_DEFERRED: Record<string, string> = {
-  "charges": "query bench kept on purpose; no client calls it",
-  "billings/{p}/preview": "native reads previews from the billing detail payload",
   "invites/{p}/accept": "an invite link always opens in the browser; there is no native join flow",
 };
 
 describe("OpenAPI × BFF", () => {
   it("proxies or dedicates a route for every API operation the browser needs", () => {
     const missing = [...operations].filter(operation => {
-      if (DEDICATED_BFF.includes(operation) || operation in WEB_EXCLUSIONS) return false;
+      if (DEDICATED_BFF.includes(operation) || operation in WEB_EXCLUSIONS) {
+        return false;
+      }
+
       const [method, template] = operation.split(" ") as [string, string];
+
       return !isAllowedFinancialRoute(method, concrete(template));
     });
+
     expect(missing).toEqual([]);
   });
   it("lists only real API operations in the dedicated routes and exclusions", () => {
-    for (const operation of [...DEDICATED_BFF, ...Object.keys(WEB_EXCLUSIONS)]) expect(operations, operation).toContain(operation);
+    for (const operation of [...DEDICATED_BFF, ...Object.keys(WEB_EXCLUSIONS)]) {
+      expect(operations, operation).toContain(operation);
+    }
   });
   it("has no allowlist entry that matches nothing in the API (dead or drifted route)", () => {
     const dead = ALLOWED_ROUTES.filter(([method, pattern]) =>
       ![...operations].some(operation => {
         const [opMethod, template] = operation.split(" ") as [string, string];
+
         return opMethod === method && pattern.test(concrete(template));
       }));
+
     expect(dead.map(([method, pattern]) => `${method} ${pattern.source}`)).toEqual([]);
   });
 });
@@ -80,41 +94,74 @@ describe("OpenAPI × BFF", () => {
  * expressions become `{p}`, and string literals inside an expression (e.g.
  * `${rotate ? "/rotate" : ""}`) expand into one candidate per alternative. */
 function extractPathTemplates(source: string): Set<string> {
-  const prefixes = /^(billings|timeline|payment-methods|charges|contacts|account|auth|devices|public)\b/;
+  const prefixes = /^(billings|payment-methods|charges|contacts|account|auth|devices|public)\b/;
   const found = new Set<string>();
   const finish = (candidate: string) => {
     const template = candidate.split("?")[0]!.trim().replace(/(?<!\/)\{p\}$/, "");
-    if (prefixes.test(template) && /^[a-z0-9/{}\-]+$/.test(template)) found.add(template);
+
+    if (prefixes.test(template) && /^[a-z0-9/{}\-]+$/.test(template)) {
+      found.add(template);
+    }
   };
-  for (const match of source.matchAll(/"([a-z][a-z0-9/?=&${}\-]*)"/g)) finish(match[1]!);
+
+  for (const match of source.matchAll(/"([a-z][a-z0-9/?=&${}\-]*)"/g)) {
+    finish(match[1]!);
+  }
   for (let i = source.indexOf("`"); i >= 0; i = source.indexOf("`", i + 1)) {
     // Walk to the matching backtick, tracking ${ } depth and nested templates.
     let depth = 0, j = i + 1;
     const parts: string[][] = [[]];
     let text = "", expr = "";
+
     for (; j < source.length; j++) {
       const ch = source[j]!;
+
       if (depth === 0) {
-        if (ch === "`") break;
-        if (ch === "$" && source[j + 1] === "{") { depth = 1; j++; parts[parts.length - 1]!.push(text); text = ""; expr = ""; continue; }
+        if (ch === "`") {
+          break;
+        }
+        if (ch === "$" && source[j + 1] === "{") { depth = 1; j++; parts[parts.length - 1]!.push(text); text = ""; expr = "";
+
+ continue; }
+
         text += ch;
       } else {
-        if (ch === "{") depth++;
-        else if (ch === "}") { depth--; if (depth === 0) { const literals = [...expr.matchAll(/"([^"]*)"/g)].map(m => m[1]!); parts.push(["{p}", ...literals]); parts.push([]); continue; } }
+        if (ch === "{") {
+          depth++;
+        }
+        else if (ch === "}") { depth--;
+
+ if (depth === 0) { const literals = [...expr.matchAll(/"([^"]*)"/g)].map(m => m[1]!);
+
+ parts.push(["{p}", ...literals]); parts.push([]);
+
+ continue; } }
+
         expr += ch;
       }
     }
-    if (depth !== 0 || j >= source.length) continue;
+
+    if (depth !== 0 || j >= source.length) {
+      continue;
+    }
+
     parts[parts.length - 1]!.push(text);
+
     // parts alternates [textChunk], [alternatives...], [textChunk] ...
     let candidates = [""];
+
     for (const chunk of parts) {
       const options = chunk.length ? chunk : [""];
+
       candidates = candidates.flatMap(prefix => options.map(option => prefix + option));
     }
-    for (const candidate of candidates) finish(candidate);
+    for (const candidate of candidates) {
+      finish(candidate);
+    }
+
     i = j;
   }
+
   return found;
 }
 
@@ -122,22 +169,30 @@ describe("OpenAPI × Expo client", () => {
   const clientDir = join(repo, "packages/mobile/src");
   const files = ["financial/client.ts", "contacts/client.ts", "account/client.ts", "notifications/client.ts", "auth/client.ts"];
   const templates = new Set<string>();
-  for (const file of files) for (const template of extractPathTemplates(readFileSync(join(clientDir, file), "utf8"))) templates.add(template);
+
+  for (const file of files) {for (const template of extractPathTemplates(readFileSync(join(clientDir, file), "utf8"))) {
+    templates.add(template);
+  }}
 
   it("parses a meaningful set of client paths", () => {
     expect(templates.size).toBeGreaterThanOrEqual(28);
     expect(templates).toContain("charges/{p}/public-link/rotate");
-    expect(templates).toContain("timeline");
+    expect(templates).toContain("charges");
   });
   it("only sends paths that exist in the API contract", () => {
     const unknown = [...templates].filter(template => ![...paths].some(path => covers(template, path)));
+
     expect(unknown).toEqual([]);
   });
   it("covers every authenticated API path (client parity), except documented deferrals", () => {
     const uncovered = [...paths].filter(path =>
       !path.startsWith("auth/") && !path.startsWith("public/") && path !== "health" && !(path in NATIVE_DEFERRED)
       && ![...templates].some(template => covers(template, path)));
+
     expect(uncovered).toEqual([]);
-    for (const path of Object.keys(NATIVE_DEFERRED)) expect(paths, path).toContain(path);
+
+    for (const path of Object.keys(NATIVE_DEFERRED)) {
+      expect(paths, path).toContain(path);
+    }
   });
 });

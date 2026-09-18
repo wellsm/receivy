@@ -5,9 +5,3 @@ export class TimelineOverflowError extends UnprocessableEntityError {
     super(message, 'TIMELINE_OVERFLOW');
   }
 }
-
-export class InvalidTimelineFilterError extends UnprocessableEntityError {
-  constructor(field: string, value: string) {
-    super(`Filtro inválido: ${value}.`, 'TIMELINE_FILTER_INVALID', { [field]: value });
-  }
-}

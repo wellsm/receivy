@@ -31,9 +31,11 @@ async function request(path: string, init: RequestInit = {}) {
 
   return response;
 }
+
 export const contactsClient = {
   async list(archived = false, cursor?: string, search?: string, sort?: "recent"): Promise<ContactsPage> {
     const params = new URLSearchParams({ archived: String(archived), ...(cursor ? { cursor } : {}), ...(search ? { search } : {}), ...(sort ? { sort } : {}) });
+
     return (await request(`contacts?${params}`)).json();
   },
   async get(id: string): Promise<Contact> {

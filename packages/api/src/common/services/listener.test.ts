@@ -5,6 +5,7 @@ import { requestListener } from './listener';
 
 it('keeps allowlisted correlation/status but no body, path, headers or error content', () => {
   const logger = vi.spyOn(console, 'info').mockImplementation(() => {});
+
   try {
     requestListener(
       {
@@ -25,9 +26,12 @@ it('logs the whole request and the error locally so the developer sees what the 
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   const error = vi.spyOn(console, 'error').mockImplementation(() => {});
   const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+
   process.env.APP_DEBUG = 'true';
+
   try {
     const request = { traceId: 'a3a49925-d9d4-4919-a670-8c59dd0d04bd', method: 'POST', path: '/billings', data: '{"totalCents":1}' };
+
     requestListener({ type: ServiceEventType.Ready, request } as never, {} as Service.Context<Http.Provider>);
     requestListener(
       { type: ServiceEventType.Error, request, error: new HttpBadRequestError('bad') } as never,

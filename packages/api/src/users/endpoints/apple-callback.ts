@@ -3,7 +3,7 @@ import type { Http } from '@ez4/gateway';
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { UserProvider } from '../provider';
-import { AuthRepository } from '../repositories/auth';
+import { authStore } from '../services/auth-store';
 import { OauthProvider } from '../services/oauth';
 import { commitOauthIdentity } from '../services/oauth-commit';
 import { completeOauth, OauthFlowError } from '../services/oauth-flow';
@@ -23,16 +23,20 @@ export async function appleCallbackHandler(
   { db, variables }: Service.Context<UserProvider>
 ): Promise<AppleCallbackResponse> {
   const dependencies = oauthDependencies(OauthProvider.Apple, { variables });
+
   if (!dependencies.client) {
     throw new HttpNotFoundError();
   }
+
   try {
     const form = new URLSearchParams(request.body);
     const code = form.get('code');
     const state = form.get('state');
+
     if (!state) {
       throw new HttpUnauthorizedError();
     }
+
     const result = await completeOauth(
       {
         code: code ?? undefined,
@@ -43,12 +47,13 @@ export async function appleCallbackHandler(
       },
       {
         providerClient: dependencies.client,
-        repo: AuthRepository.create(db),
+        repo: authStore(db),
         commitGrant: async (input) => {
           await commitOauthIdentity(db, input);
         }
       }
     );
+
     return {
       status: 302,
       headers: { location: appendOauthGrant(result.destination, result.grant) }
@@ -57,6 +62,7 @@ export async function appleCallbackHandler(
     if (error instanceof OauthFlowError) {
       throw new HttpUnauthorizedError();
     }
+
     throw error;
   }
 }

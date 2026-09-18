@@ -121,7 +121,6 @@ export type BillingPreview = {
   description: string;
   amount: Money;
   occurrenceDate: string;
-  materializationDate?: string;
 };
 
 // Explicit fields: EZ4 0.52 response reflection drops Omit/intersection members.
@@ -196,7 +195,6 @@ export type BillingDetail = {
   allocations: BillingAllocation[];
   charges: ChargeDetail[];
   previews: BillingPreview[];
-  nextMaterialization: string | null;
   category: BillingCategory;
   invite: BillingInvite | null;
   /** People who joined by invite and wait for the owner to say who they are; empty for everyone but the owner. */

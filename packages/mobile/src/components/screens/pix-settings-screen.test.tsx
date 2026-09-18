@@ -69,6 +69,7 @@ describe("PixSettingsScreen", () => {
     await fireEvent.press(await screen.findByLabelText("Copiar chave"));
 
     await waitFor(() => expect(Clipboard.setStringAsync).toHaveBeenCalledWith("ana@example.com"));
+
     expect(await screen.findByText("Copiado")).toBeOnTheScreen();
   });
 
@@ -91,6 +92,7 @@ describe("PixSettingsScreen", () => {
     await fireEvent.press(await screen.findByLabelText("Tornar padrão"));
 
     await waitFor(() => expect(api.defaultPaymentMethod).toHaveBeenCalledWith("pix-1"));
+
     expect(api.paymentMethods).toHaveBeenCalledTimes(2);
   });
 
@@ -105,6 +107,7 @@ describe("PixSettingsScreen", () => {
     expect(api.archivePaymentMethod).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByRole("button", { name: "Cancelar" }));
+
     expect(screen.queryByRole("header", { name: "Excluir chave Pix?" })).toBeNull();
 
     await fireEvent.press(screen.getByLabelText("Excluir"));

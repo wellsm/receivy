@@ -4,8 +4,6 @@ import type { String } from '@ez4/schema';
 import type { AuthUser } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { UserProvider } from '../provider';
-import { AccountRepository } from '../repositories/account';
-import { AvatarRepository } from '../repositories/avatar';
 
 declare class ProfileRequest implements Http.Request {
   identity: SessionIdentity;
@@ -17,11 +15,6 @@ declare class ProfileResponse implements Http.Response {
   body: { user: AuthUser };
 }
 
-export async function profileHandler(request: ProfileRequest, { db, avatarFiles }: Service.Context<UserProvider>): Promise<ProfileResponse> {
-  return {
-    status: 200,
-    body: await AvatarRepository.sign(avatarFiles, {
-      user: await AccountRepository.updateProfile(db, request.identity.userId, request.body)
-    })
-  };
+export async function profileHandler({ identity, body }: ProfileRequest, { accounts }: Service.Context<UserProvider>): Promise<ProfileResponse> {
+  return { status: 200, body: await accounts.updateProfile(identity.userId, body) };
 }

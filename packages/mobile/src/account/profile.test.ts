@@ -22,10 +22,13 @@ describe("profile store", () => {
 
     await expect(store.load()).resolves.toEqual(user);
     await expect(store.load()).resolves.toEqual(user);
+
     expect(fetchProfile).toHaveBeenCalledTimes(1);
 
     token = "token-b";
+
     await store.load();
+
     expect(fetchProfile).toHaveBeenCalledTimes(2);
   });
 
@@ -47,6 +50,7 @@ describe("profile store", () => {
     store.remember({ ...user, name: "Ana Souza" });
 
     await expect(store.load()).resolves.toMatchObject({ name: "Ana Souza" });
+
     expect(fetchProfile).not.toHaveBeenCalled();
   });
 });

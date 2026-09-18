@@ -11,20 +11,19 @@ import {
   PixKeyType,
   ProofState,
   SplitMode,
-  SplitPartKind
+  SplitPartKind,
+  chargeTotals
 } from '@receivy/common';
-import { BillingRepository } from '../../src/billings/repositories/billing';
-import { ChargeRepository } from '../../src/charges/repositories/charge';
+import { createBilling, patchBilling } from '../../src/billings/services/billing';
+import { getBilling, listBillings } from '../../src/billings/services/detail';
 import { ApiError } from '../../src/common/errors';
-import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { createInvite } from '../../src/invites/services/links';
-import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { ProofDeclarationForbiddenError } from '../../src/proofs/errors';
-import { ProofRepository } from '../../src/proofs/repositories/proof';
+import { declarePayment, reviewProof } from '../../src/proofs/services/proof';
 import type { ProofStorage } from '../../src/proofs/services/storage';
-import { PublicLinkRepository } from '../../src/public/repositories/public-link';
-import { TimelineRepository } from '../../src/timeline/repositories/timeline';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { publishChargeLink } from '../../src/public/services/public-link';
+import { contactLedger } from '../../src/timeline/services/ledger';
+import { charges, cleanupUsers, contacts, createUser, db, monthCharges, paymentMethods } from '../fixtures/financial';
 
 const OWNER = 'c1111111-1111-4111-8111-111111111111';
 const PAYEE = 'c2222222-2222-4222-8222-222222222222';
@@ -61,12 +60,13 @@ describe('contas a pagar on native PostgreSQL', () => {
   before(async () => {
     await createUser(db, { id: OWNER, email: 'payable-owner@example.com', name: 'Dona' });
     await createUser(db, { id: PAYEE, email: 'payable-payee@example.com', name: 'Credora' });
+
     payeeContactId = (
-      await ContactRepository.save(db, OWNER, { name: 'Credora', email: 'payable-payee@example.com', nickname: 'Imobiliária' })
+      await contacts.save(OWNER, { name: 'Credora', email: 'payable-payee@example.com', nickname: 'Imobiliária' })
     ).id;
-    soloContactId = (await ContactRepository.save(db, OWNER, { name: 'Netflix' })).id;
+    soloContactId = (await contacts.save(OWNER, { name: 'Netflix' })).id;
     payeeKeyId = (
-      await PaymentMethodRepository.save(db, OWNER, {
+      await paymentMethods.save(OWNER, {
         pixKeyType: PixKeyType.Email,
         pixKey: 'Imobiliaria@Example.com',
         label: 'Imobiliária',
@@ -74,20 +74,20 @@ describe('contas a pagar on native PostgreSQL', () => {
       })
     ).id;
     payeeOtherKeyId = (
-      await PaymentMethodRepository.save(db, OWNER, {
+      await paymentMethods.save(OWNER, {
         pixKeyType: PixKeyType.Cpf,
         pixKey: '529.982.247-25',
         label: 'Nova',
         contactId: payeeContactId
       })
     ).id;
-    ownKeyId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'dona@example.com' })).id;
+    ownKeyId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Email, pixKey: 'dona@example.com' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, PAYEE]));
 
   it('creates a bill the owner pays alone: one owner-paid charge named after the contact, no wallet key', async () => {
-    const created = await BillingRepository.create(db, OWNER, 'payable-alone', solo({ description: 'Netflix', totalCents: 3_990 }));
+    const created = await createBilling(db, OWNER, 'payable-alone', solo({ description: 'Netflix', totalCents: 3_990 }));
 
     equal(created.type, 'payable');
     equal(created.contact?.id, soloContactId);
@@ -107,18 +107,18 @@ describe('contas a pagar on native PostgreSQL', () => {
     equal(charge.sharingState, 'closed');
     equal(charge.amount.amountCents, 3_990);
 
-    const summary = (await BillingRepository.list(db, OWNER, { type: Direction.Payable })).billings.find(
+    const summary = (await listBillings(db, OWNER, { type: Direction.Payable })).billings.find(
       (row) => row.id === created.id
     );
 
     equal(summary?.type, 'payable');
     equal(summary?.contact?.name, 'Netflix');
     equal(summary?.participantCount, 0, 'the contact who receives is not a participant');
-    ok(!(await BillingRepository.list(db, OWNER, { type: Direction.Receivable })).billings.some((row) => row.id === created.id));
+    ok(!(await listBillings(db, OWNER, { type: Direction.Receivable })).billings.some((row) => row.id === created.id));
   });
 
   it('ignores a split and refuses any key outside the receiving contact scope', async () => {
-    const ignored = await BillingRepository.create(
+    const ignored = await createBilling(
       db,
       OWNER,
       'payable-split',
@@ -132,7 +132,7 @@ describe('contas a pagar on native PostgreSQL', () => {
 
     await rejects(
       () =>
-        BillingRepository.create(
+        createBilling(
           db,
           OWNER,
           'payable-wallet',
@@ -141,12 +141,12 @@ describe('contas a pagar on native PostgreSQL', () => {
       HttpNotFoundError
     );
     // The owner's own key is not the receiving contact's: a conta a pagar may only point inside their scope.
-    await rejects(() => BillingRepository.create(db, OWNER, 'payable-own-key', payable({ paymentMethodId: ownKeyId })), HttpNotFoundError);
+    await rejects(() => createBilling(db, OWNER, 'payable-own-key', payable({ paymentMethodId: ownKeyId })), HttpNotFoundError);
   });
 
   it('shows the payee the same charge as receivable, with settle powers only', async () => {
     // Due this month at the latest: the feed never lists charges past the end of the current month.
-    const created = await BillingRepository.create(db, OWNER, 'payable-payee', payable({ startDate: '2026-09-05' }));
+    const created = await createBilling(db, OWNER, 'payable-payee', payable({ startDate: '2026-09-05' }));
     const chargeId = created.charges[0]!.id;
 
     equal(created.contact?.id, payeeContactId);
@@ -155,7 +155,7 @@ describe('contas a pagar on native PostgreSQL', () => {
     equal(created.charges[0]!.counterpartName, 'Imobiliária');
     equal(created.charges[0]!.hasPix, true);
 
-    const seenByPayee = await ChargeRepository.get(db, PAYEE, chargeId);
+    const seenByPayee = await charges.get(PAYEE, chargeId);
 
     equal(seenByPayee.direction, 'receivable');
     equal(ownerPays(seenByPayee), true);
@@ -164,33 +164,29 @@ describe('contas a pagar on native PostgreSQL', () => {
     equal(seenByPayee.sharingState, 'closed');
 
     // The billing itself stays owner-scoped.
-    await rejects(() => BillingRepository.get(db, PAYEE, created.id), HttpNotFoundError);
-    await rejects(() => BillingRepository.patch(db, PAYEE, created.id, { state: BillingState.Ended }), HttpNotFoundError);
-    await rejects(() => ChargeRepository.cancel(db, PAYEE, chargeId), HttpForbiddenError);
-    await rejects(() => PublicLinkRepository.createOrRotate(db, PAYEE, chargeId, SECRET), HttpForbiddenError);
-    await rejects(() => PublicLinkRepository.createOrRotate(db, OWNER, chargeId, SECRET), HttpForbiddenError);
+    await rejects(() => getBilling(db, PAYEE, created.id), HttpNotFoundError);
+    await rejects(() => patchBilling(db, PAYEE, created.id, { state: BillingState.Ended }), HttpNotFoundError);
+    await rejects(() => charges.cancel(PAYEE, chargeId), HttpForbiddenError);
+    await rejects(() => publishChargeLink(db, PAYEE, chargeId, SECRET), HttpForbiddenError);
+    await rejects(() => publishChargeLink(db, OWNER, chargeId, SECRET), HttpForbiddenError);
     await rejects(() => createInvite(db, OWNER, created.id, SECRET, 'https://receivy.test'), ApiError);
     // The owner ends the conta as a whole; a single occurrence is never cancelled.
-    await rejects(() => ChargeRepository.cancel(db, OWNER, chargeId), HttpForbiddenError);
+    await rejects(() => charges.cancel(OWNER, chargeId), HttpForbiddenError);
 
-    const payeeTimeline = await TimelineRepository.get(db, PAYEE, { direction: [Direction.Receivable] });
-    const ownerTimeline = await TimelineRepository.get(db, OWNER, { direction: [Direction.Payable] });
+    const month = seenByPayee.dueDate.slice(0, 7);
+    const payeeFeed = await monthCharges(db, PAYEE, month);
+    const ownerFeed = await monthCharges(db, OWNER, month);
 
-    ok(payeeTimeline.items.some((item) => item.kind === 'charge' && item.charge.id === chargeId && item.direction === 'receivable'));
-    ok(ownerTimeline.items.some((item) => item.kind === 'charge' && item.charge.id === chargeId && item.direction === 'payable'));
-    equal(ownerTimeline.summary.payableCount >= 1, true);
-    ok(
-      !(await TimelineRepository.get(db, OWNER, { direction: [Direction.Receivable] })).items.some(
-        (item) => item.kind === 'charge' && item.charge.id === chargeId
-      )
-    );
+    equal(payeeFeed.find((item) => item.id === chargeId)?.type, Direction.Receivable);
+    equal(ownerFeed.find((item) => item.id === chargeId)?.type, Direction.Payable);
+    equal(ownerFeed.find((item) => item.id === chargeId)?.ownedByViewer, true);
+    equal(chargeTotals(ownerFeed).payable.count >= 1, true);
 
-    const ledger = await TimelineRepository.contactLedger(db, OWNER, payeeContactId);
+    const ledger = await contactLedger(db, OWNER, payeeContactId);
 
     equal(ledger.payable.amountCents, 150_000);
-    equal(ledger.balance.amountCents, -150_000);
 
-    const settled = await ChargeRepository.pay(db, PAYEE, chargeId);
+    const settled = await charges.pay(PAYEE, chargeId);
 
     equal(settled.state, 'paid');
     equal(settled.direction, 'receivable');
@@ -199,73 +195,76 @@ describe('contas a pagar on native PostgreSQL', () => {
   it('tells whether a declared payment needs someone to confirm it', async () => {
     // Due this month at the latest, so the feed (capped at the month end) lists them.
     const due = { startDate: '2026-09-05' };
-    const withPayee = await BillingRepository.create(db, OWNER, 'payable-confirm-active', payable({ ...due, description: 'Confirma' }));
-    const placeholder = await ContactRepository.save(db, OWNER, { name: 'Sem app', email: 'payable-placeholder@example.com' });
-    const withPlaceholder = await BillingRepository.create(
+    const withPayee = await createBilling(db, OWNER, 'payable-confirm-active', payable({ ...due, description: 'Confirma' }));
+    const placeholder = await contacts.save(OWNER, { name: 'Sem app', email: 'payable-placeholder@example.com' });
+    const withPlaceholder = await createBilling(
       db,
       OWNER,
       'payable-confirm-pending',
       payable({ ...due, contactId: placeholder.id, description: 'Sem app', paymentMethodId: undefined })
     );
-    const alone = await BillingRepository.create(db, OWNER, 'payable-confirm-alone', solo({ ...due, description: 'Só minha' }));
+    const alone = await createBilling(db, OWNER, 'payable-confirm-alone', solo({ ...due, description: 'Só minha' }));
 
-    equal((await ChargeRepository.get(db, OWNER, withPayee.charges[0]!.id)).confirmationRequired, true);
-    equal((await ChargeRepository.get(db, OWNER, withPlaceholder.charges[0]!.id)).confirmationRequired, false);
-    equal((await ChargeRepository.get(db, OWNER, alone.charges[0]!.id)).confirmationRequired, false);
-    equal((await ChargeRepository.get(db, OWNER, alone.charges[0]!.id)).proofKind, null);
+    equal((await charges.get(OWNER, withPayee.charges[0]!.id)).confirmationRequired, true);
+    equal((await charges.get(OWNER, withPlaceholder.charges[0]!.id)).confirmationRequired, false);
+    equal((await charges.get(OWNER, alone.charges[0]!.id)).confirmationRequired, false);
+    equal((await charges.get(OWNER, alone.charges[0]!.id)).proofKind, null);
 
-    const feed = await TimelineRepository.get(db, OWNER, { direction: [Direction.Payable] });
+    const feed = await monthCharges(db, OWNER, withPayee.charges[0]!.dueDate.slice(0, 7));
 
-    equal(feed.items.find((item) => item.charge.id === withPayee.charges[0]!.id)?.charge.confirmationRequired, true);
-    equal(feed.items.find((item) => item.charge.id === alone.charges[0]!.id)?.charge.confirmationRequired, false);
+    equal(feed.find((item) => item.id === withPayee.charges[0]!.id)?.confirmationRequired, true);
+    equal(feed.find((item) => item.id === alone.charges[0]!.id)?.confirmationRequired, false);
   });
 
   it('lets the owner declare a bill only to a payee who can confirm, and the payee answer it', async () => {
     const due = { startDate: '2026-09-05' };
-    const confirmable = await BillingRepository.create(db, OWNER, 'payable-declare-active', payable({ ...due, description: 'Declara' }));
-    const alone = await BillingRepository.create(db, OWNER, 'payable-declare-alone', solo({ ...due, description: 'Sozinha' }));
+    const confirmable = await createBilling(db, OWNER, 'payable-declare-active', payable({ ...due, description: 'Declara' }));
+    const alone = await createBilling(db, OWNER, 'payable-declare-alone', solo({ ...due, description: 'Sozinha' }));
     // A declaration never touches the bucket unless an upload slot was open.
     const storage = { delete: async () => undefined } as unknown as ProofStorage;
     const chargeId = confirmable.charges[0]!.id;
 
-    await rejects(() => ProofRepository.declare(db, storage, alone.charges[0]!.id, { userId: OWNER }), ProofDeclarationForbiddenError);
-    await rejects(() => ProofRepository.declare(db, storage, chargeId, { userId: PAYEE }), ProofDeclarationForbiddenError);
-    await rejects(() => ChargeRepository.pay(db, OWNER, chargeId), ProofDeclarationForbiddenError);
-    equal((await ChargeRepository.pay(db, OWNER, alone.charges[0]!.id)).state, 'paid', 'a bill nobody confirms settles at once');
-    await ProofRepository.declare(db, storage, chargeId, { userId: OWNER });
+    await rejects(() => declarePayment(db, storage, alone.charges[0]!.id, { userId: OWNER }), ProofDeclarationForbiddenError);
+    await rejects(() => declarePayment(db, storage, chargeId, { userId: PAYEE }), ProofDeclarationForbiddenError);
+    await rejects(() => charges.pay(OWNER, chargeId), ProofDeclarationForbiddenError);
 
-    equal((await ChargeRepository.get(db, PAYEE, chargeId)).proofKind, 'declaration');
-    equal((await ProofRepository.review(db, chargeId, PAYEE, { decision: ProofState.Accepted })).state, 'paid');
+    equal((await charges.pay(OWNER, alone.charges[0]!.id)).state, 'paid', 'a bill nobody confirms settles at once');
+
+    await declarePayment(db, storage, chargeId, { userId: OWNER });
+
+    equal((await charges.get(PAYEE, chargeId)).proofKind, 'declaration');
+    equal((await reviewProof(db, chargeId, PAYEE, { decision: ProofState.Accepted })).state, 'paid');
   });
 
   it('lets the owner settle their own bill and repoint it at another key of the contact', async () => {
-    const created = await BillingRepository.create(
+    const created = await createBilling(
       db,
       OWNER,
       'payable-self-settle',
       payable({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2099-01-05', description: 'Assinatura' })
     );
 
-    const patched = await BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: payeeOtherKeyId });
+    const patched = await patchBilling(db, OWNER, created.id, { paymentMethodId: payeeOtherKeyId });
 
     deepEqual(patched.pix, { keyType: PixKeyType.Cpf, key: '52998224725', label: 'Nova' });
 
     // A key is removed where it lives, under the contact: the billing follows whatever is left there.
-    await PaymentMethodRepository.archive(db, OWNER, patched.paymentMethodId!);
+    await paymentMethods.archive(OWNER, patched.paymentMethodId!);
 
-    equal((await BillingRepository.get(db, OWNER, created.id)).pix, null);
+    equal((await getBilling(db, OWNER, created.id)).pix, null);
 
-    const repointed = await BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: payeeKeyId });
+    const repointed = await patchBilling(db, OWNER, created.id, { paymentMethodId: payeeKeyId });
 
     deepEqual(repointed.pix, { keyType: PixKeyType.Email, key: 'imobiliaria@example.com', label: 'Imobiliária' });
+
     await rejects(
-      () => BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: 'a1111111-1111-4111-8111-111111111111' }),
+      () => patchBilling(db, OWNER, created.id, { paymentMethodId: 'a1111111-1111-4111-8111-111111111111' }),
       HttpNotFoundError
     );
-    await rejects(() => BillingRepository.patch(db, OWNER, created.id, { paymentMethodId: ownKeyId }), HttpNotFoundError);
+    await rejects(() => patchBilling(db, OWNER, created.id, { paymentMethodId: ownKeyId }), HttpNotFoundError);
 
-    const once = await BillingRepository.create(db, OWNER, 'payable-self-once', solo({ description: 'Luz', totalCents: 12_000 }));
-    const settled = await ChargeRepository.pay(db, OWNER, once.charges[0]!.id);
+    const once = await createBilling(db, OWNER, 'payable-self-once', solo({ description: 'Luz', totalCents: 12_000 }));
+    const settled = await charges.pay(OWNER, once.charges[0]!.id);
 
     equal(settled.state, 'paid');
     equal(settled.direction, 'payable');
@@ -280,14 +279,15 @@ describe('assinatura due date on native PostgreSQL', () => {
 
   before(async () => {
     await createUser(db, { id: OWNER2, email: 'due-owner@example.com', name: 'Dona' });
-    gymContactId = (await ContactRepository.save(db, OWNER2, { name: 'Academia' })).id;
+
+    gymContactId = (await contacts.save(OWNER2, { name: 'Academia' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER2]));
 
   it('materializes an assinatura due today at creation and moves the next due date on patch', async () => {
     const today = new Date().toISOString().slice(0, 10);
-    const created = await BillingRepository.create(db, OWNER2, 'due-today', {
+    const created = await createBilling(db, OWNER2, 'due-today', {
       recurrence: BillingRecurrence.Indefinite,
       frequency: BillingFrequency.Monthly,
       contactId: gymContactId,
@@ -301,11 +301,12 @@ describe('assinatura due date on native PostgreSQL', () => {
     equal(created.charges[0]!.dueDate, today);
 
     const next = new Date(Date.now() + 40 * 86_400_000).toISOString().slice(0, 10);
-    const patched = await BillingRepository.patch(db, OWNER2, created.id, { startDate: next });
+    const patched = await patchBilling(db, OWNER2, created.id, { startDate: next });
 
     equal(patched.startDate, next);
     equal(patched.charges.length, 1, 'generated occurrences keep their due date');
     equal(patched.previews[0]?.occurrenceDate, next);
-    await rejects(() => BillingRepository.patch(db, OWNER2, created.id, { startDate: '2020-01-01' }), /passado/);
+
+    await rejects(() => patchBilling(db, OWNER2, created.id, { startDate: '2020-01-01' }), /passado/);
   });
 });

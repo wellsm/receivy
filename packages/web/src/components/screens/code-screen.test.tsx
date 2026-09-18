@@ -31,6 +31,7 @@ describe("CodeScreen", () => {
 
     const input = screen.getByLabelText("Código de 6 dígitos");
     const confirm = screen.getByRole("button", { name: /Confirmar e Entrar/ });
+
     expect(confirm).toBeDisabled();
 
     fireEvent.change(input, { target: { value: "12a3b4" } });
@@ -48,6 +49,7 @@ describe("CodeScreen", () => {
     render(<CodeScreen />);
 
     const input = screen.getByLabelText("Código de 6 dígitos");
+
     fireEvent.change(input, { target: { value: "123456" } });
     expect(screen.getByRole("button", { name: /Confirmar e Entrar/ })).toBeEnabled();
 
@@ -63,6 +65,7 @@ describe("CodeScreen", () => {
     render(<CodeScreen />);
 
     const resend = screen.getByRole("button", { name: /Reenviar/ });
+
     expect(resend).toBeDisabled();
     expect(resend).toHaveTextContent(/Reenviar em/);
 
@@ -74,11 +77,14 @@ describe("CodeScreen", () => {
 
   it("keeps confirm busy after a successful code, so the spinner survives the navigation", async () => {
     writePendingLogin({ email: "ana@example.com", sentAt: Date.now(), nextPath: "/charges" });
+
     const assign = vi.fn();
+
     vi.stubGlobal("location", { ...window.location, assign });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
 
     render(<CodeScreen />);
+
     const confirm = screen.getByRole("button", { name: /Confirmar e Entrar/ });
 
     fireEvent.change(screen.getByLabelText("Código de 6 dígitos"), { target: { value: "123456" } });

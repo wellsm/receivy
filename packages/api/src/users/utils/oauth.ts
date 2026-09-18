@@ -9,6 +9,7 @@ export function oauthDependencies(
   native = false
 ) {
   const config = oauthProviderConfigFrom(variables);
+
   return {
     allowList: variables.OAUTH_REDIRECT_ALLOW_LIST.split(',')
       .map((value) => value.trim())
@@ -20,7 +21,13 @@ export function oauthDependencies(
 
 export function appendOauthGrant(destination: string, grant: string | null): string {
   const url = new URL(destination);
-  if (grant) url.searchParams.set('code', grant);
-  else url.searchParams.set('error', 'oauth');
+
+  if (grant) {
+    url.searchParams.set('code', grant);
+  }
+  else {
+    url.searchParams.set('error', 'oauth');
+  }
+
   return url.toString();
 }

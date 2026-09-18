@@ -1,9 +1,11 @@
 import { formatMoney } from '@receivy/common';
 import { ChargeRepository } from '../../charges/repositories/charge';
+import { creditorOf, debtorOf } from '../../charges/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
-import { currentProof } from '../../proofs/repositories/proof-row';
+import { ProofRepository } from '../../proofs/repositories/proof';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
+import { AccountRepository } from '../../users/repositories/account';
 import { pushToUser } from './direct';
 import { type NotificationTransport, notificationTransport } from './transport';
 
@@ -52,26 +54,17 @@ export async function pushPaymentNotice(
   performedBy?: string
 ): Promise<void> {
   try {
-    const charge = await db.charges.findOne({
-      select: {
-        owner_id: true,
-        creditor_id: true,
-        debtor_id: true,
-        description: true,
-        amount_cents: true
-      },
-      where: { id: chargeId }
-    });
+    const charge = await ChargeRepository.get(db, chargeId);
 
     if (!charge) {
       return;
     }
 
-    const proof = await currentProof(db, chargeId);
+    const proof = await ProofRepository.current(db, chargeId);
 
     // Whoever pays sends the proof; whoever receives reviews it.
-    const payerId = ChargeRepository.debtorOf(charge);
-    const reviewerId = ChargeRepository.creditorOf(charge);
+    const payerId = debtorOf(charge);
+    const reviewerId = creditorOf(charge);
     const toReviewer = notice === PaymentNotice.Declared || notice === PaymentNotice.ProofReceived;
     const recipientId = toReviewer ? reviewerId : payerId;
     const actorId = toReviewer ? payerId : reviewerId;
@@ -92,7 +85,7 @@ export async function pushPaymentNotice(
       return;
     }
 
-    const actor = actorId ? await db.users.findOne({ select: { name: true }, where: { id: actorId } }) : undefined;
+    const actor = actorId ? await AccountRepository.person(db, actorId) : undefined;
     const name = actor?.name?.trim().split(/\s+/)[0] || 'Alguém';
     const what = `${charge.description} · ${formatMoney({ amountCents: charge.amount_cents, currency: 'BRL' })}`;
 

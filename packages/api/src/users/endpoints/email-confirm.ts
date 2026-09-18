@@ -5,6 +5,7 @@ import type { String } from '@ez4/schema';
 import type { AuthSessionResponse } from '@receivy/common';
 import type { UserProvider } from '../provider';
 import { AuthFlowError } from '../services/email-login';
+import { accessTokenConfig } from '../utils/access-token';
 import { confirmEmailAtomically } from '../utils/atomic';
 
 declare class EmailConfirmRequest implements Http.Request {
@@ -26,14 +27,16 @@ export async function emailConfirmHandler(
 ): Promise<EmailConfirmResponse> {
   try {
     const body = await confirmEmailAtomically(db, request.body, {
-      accessTokenSecret: variables.AUTH_JWT_SECRET,
+      ...accessTokenConfig(variables),
       codeHashKey: variables.LOGIN_CODE_HASH_KEY
     });
+
     return { status: 200, body };
   } catch (error) {
     if (error instanceof AuthFlowError) {
       throw new HttpUnauthorizedError();
     }
+
     throw error;
   }
 }

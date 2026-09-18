@@ -7,12 +7,22 @@ import { pixSnapshot } from './materialize';
 function dbWith(rows: { id: string; contact_id?: string; is_default: boolean; pix_key: string }[]): DbClient {
   const match = (where: Record<string, unknown>) =>
     rows.filter((row) => {
-      if (where.id && where.id !== row.id) return false;
+      if (where.id && where.id !== row.id) {
+        return false;
+      }
+
       const scope = where.contact_id as string | { isNull: true } | undefined;
-      if (scope && typeof scope === 'object') return row.contact_id === undefined;
-      if (typeof scope === 'string') return row.contact_id === scope;
+
+      if (scope && typeof scope === 'object') {
+        return row.contact_id === undefined;
+      }
+      if (typeof scope === 'string') {
+        return row.contact_id === scope;
+      }
+
       return true;
     });
+
   return {
     payment_methods: {
       findOne: vi.fn(async ({ where }) => match(where)[0] && { pix_key_type: PixKeyType.Email, pix_key: match(where)[0]!.pix_key, label: 'Pix' }),

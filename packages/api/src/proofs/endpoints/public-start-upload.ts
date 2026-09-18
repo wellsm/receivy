@@ -3,8 +3,6 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { ProofUploadTicket } from '@receivy/common';
 import type { ProofProvider } from '../provider';
-import { ProofRepository } from '../repositories/proof';
-import { bucketProofStorage } from '../services/bucket-storage';
 import { resolveThrottledActor } from '../utils/actor';
 import type { UploadBody } from '../utils/body';
 
@@ -18,13 +16,8 @@ declare class TicketResponse implements Http.Response {
   body: ProofUploadTicket;
 }
 
-export async function publicStartProofUploadHandler(
-  request: PublicUploadRequest,
-  { db, variables, proofFiles, uploadExpiryScheduler }: Service.Context<ProofProvider>
-): Promise<TicketResponse> {
-  const { charge, actor } = await resolveThrottledActor({ db, variables }, request.parameters.token);
-  return {
-    status: 200,
-    body: await ProofRepository.startUpload(db, bucketProofStorage(proofFiles), uploadExpiryScheduler, charge.id, actor, request.body)
-  };
+export async function publicStartProofUploadHandler({ parameters, body }: PublicUploadRequest, { db, proofs, variables }: Service.Context<ProofProvider>): Promise<TicketResponse> {
+  const { charge, actor } = await resolveThrottledActor({ db, variables }, parameters.token);
+
+  return { status: 200, body: await proofs.startUpload(actor, charge.id, body) };
 }

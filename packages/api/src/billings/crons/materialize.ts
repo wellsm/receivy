@@ -5,7 +5,7 @@ import type { Db } from '../../database';
 import type { ChargeNotifyScheduler } from '../../notifications/schedulers/charge-notify';
 import { notificationConfigFrom } from '../../notifications/services/planner';
 import { notificationTransport } from '../../notifications/services/transport';
-import { BillingRepository } from '../repositories/billing';
+import { materializeDueBillings, settleRegistered } from '../services/materialize';
 
 /**
  * Daily at 05:00 UTC, past midnight in every Brazilian timezone: every active assinatura gets the
@@ -55,9 +55,9 @@ export async function handler(
     notify: chargeNotifyScheduler
   };
 
-  const materialized = await BillingRepository.materializeDueBillings(db, notice, now);
+  const materialized = await materializeDueBillings(db, notice, now);
   // After the sweep: the occurrence it just created is already paid, and this pays what came due since yesterday.
-  const settled = await BillingRepository.settleRegistered(db, now);
+  const settled = await settleRegistered(db, now);
 
   // Counts only; never owner or recipient data.
   console.info('Billing cron', { materialized, settled });

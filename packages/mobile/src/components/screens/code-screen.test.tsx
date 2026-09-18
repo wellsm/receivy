@@ -22,6 +22,7 @@ describe("CodeScreen", () => {
     const confirmEmailCode = jest.fn().mockResolvedValue({});
     const onAuthenticated = jest.fn();
     const time = clock();
+
     await render(
       <CodeScreen
         email="lucas@email.com"
@@ -37,13 +38,17 @@ describe("CodeScreen", () => {
     expect(screen.queryByText(/WhatsApp|suporte/i)).toBeNull();
 
     const confirm = screen.getByRole("button", { name: "Confirmar e Entrar" });
+
     expect(confirm).toBeDisabled();
 
     await fireEvent.changeText(screen.getByLabelText("Código de 6 dígitos"), "12a3456");
+
     expect(confirm).toBeEnabled();
+
     await fireEvent.press(confirm);
 
     await waitFor(() => expect(confirmEmailCode).toHaveBeenCalledWith({ email: "lucas@email.com", code: "123456" }));
+
     expect(onAuthenticated).toHaveBeenCalled();
     // Clearing it here would flash the button back to idle while this screen is still on top.
     expect(confirm).toBeDisabled();
@@ -51,6 +56,7 @@ describe("CodeScreen", () => {
 
   it("counts down to expiry and then refuses the code until a new one is sent", async () => {
     const time = clock();
+
     await render(
       <CodeScreen
         email="ana@example.com"
@@ -64,15 +70,19 @@ describe("CodeScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("Código de 6 dígitos"), "123456");
 
     time.advance(4 * 60_000 + 3_000);
+
     await act(async () => {
       jest.advanceTimersByTime(1000);
     });
+
     expect(screen.getByText("05:57")).toBeOnTheScreen();
 
     time.advance(6 * 60_000);
+
     await act(async () => {
       jest.advanceTimersByTime(1000);
     });
+
     expect(screen.getByText("Código expirado. Peça um novo código.")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Confirmar e Entrar" })).toBeDisabled();
 
@@ -80,6 +90,7 @@ describe("CodeScreen", () => {
     await act(async () => {
       jest.advanceTimersByTime(1000);
     });
+
     expect(screen.getByText("10:00")).toBeOnTheScreen();
     expect(screen.getByLabelText("Código de 6 dígitos")).toHaveDisplayValue("");
   });
@@ -87,6 +98,7 @@ describe("CodeScreen", () => {
   it("holds the resend button for the server cooldown after sending", async () => {
     const requestEmailCode = jest.fn().mockResolvedValue(undefined);
     const time = clock();
+
     await render(
       <CodeScreen
         email="ana@example.com"
@@ -98,13 +110,16 @@ describe("CodeScreen", () => {
     );
 
     const resend = screen.getByRole("button", { name: "Reenviar código" });
+
     expect(resend).toBeDisabled();
     expect(screen.getByText("Reenviar em 01:00")).toBeOnTheScreen();
 
     time.advance(61_000);
+
     await act(async () => {
       jest.advanceTimersByTime(1000);
     });
+
     expect(screen.getByRole("button", { name: "Reenviar código" })).toBeEnabled();
 
     await fireEvent.press(screen.getByRole("button", { name: "Reenviar código" }));
@@ -112,6 +127,7 @@ describe("CodeScreen", () => {
     await act(async () => {
       jest.advanceTimersByTime(1000);
     });
+
     expect(screen.getByRole("button", { name: "Reenviar código" })).toBeDisabled();
   });
 });

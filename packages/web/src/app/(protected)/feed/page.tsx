@@ -1,15 +1,14 @@
 import { calendarDate, currentMonth, feedFiltersFromQuery, filterCharges, isMonth, type ListCharge } from "@receivy/common";
 import { AppShell } from "@/components/app/app-shell";
 import { FeedScreen } from "@/components/screens/feed-screen";
-import { currentUser } from "@/lib/auth/current-user";
 import { sessionApiFetch } from "@/lib/auth/session-fetch";
 
 type FeedPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-async function listCharges(month: string): Promise<ListCharge | null> {
-  return await sessionApiFetch<ListCharge>(`charges?month=${encodeURIComponent(month)}`);
+function listCharges(month: string): Promise<ListCharge | null> {
+  return sessionApiFetch<ListCharge>(`charges?month=${encodeURIComponent(month)}`);
 }
 
 export default async function FeedPage({ searchParams }: FeedPageProps) {
@@ -18,17 +17,15 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   const month = isMonth(requested) ? requested : currentMonth();
   const today = calendarDate();
   const filters = feedFiltersFromQuery(params, today);
-  const [charges, user] = await Promise.all([listCharges(month), currentUser()]);
-  const viewerEmail = user?.email ?? "";
+  const charges = await listCharges(month);
 
   return (
     <AppShell activePath="/feed">
       <FeedScreen
-        charges={filterCharges(viewerEmail, charges ?? [], filters, today)}
+        charges={filterCharges(charges ?? [], filters, today)}
         filters={filters}
         month={month}
         today={today}
-        viewerEmail={viewerEmail}
       />
     </AppShell>
   );

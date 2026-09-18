@@ -5,7 +5,6 @@ import type { ChargeDetail } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ChargeProvider } from '../provider';
-import { ChargeRepository } from '../repositories/charge';
 
 declare class IdRequest implements Http.Request {
   identity: SessionIdentity;
@@ -17,9 +16,6 @@ declare class ItemResponse implements Http.Response {
   body: ChargeDetail;
 }
 
-export async function cancelChargeHandler(request: IdRequest, { db, avatarFiles }: Service.Context<ChargeProvider>): Promise<ItemResponse> {
-  return {
-    status: 200,
-    body: await AvatarRepository.sign(avatarFiles, await ChargeRepository.cancel(db, request.identity.userId, request.parameters.id))
-  };
+export async function cancelChargeHandler({ identity, parameters }: IdRequest, { avatarFiles, charges }: Service.Context<ChargeProvider>): Promise<ItemResponse> {
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, await charges.cancel(identity.userId, parameters.id)) };
 }

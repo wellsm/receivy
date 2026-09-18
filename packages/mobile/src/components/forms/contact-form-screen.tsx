@@ -205,11 +205,14 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
       setArchiving(null);
       setError(reason instanceof Error ? reason.message : KEYS_UPDATE_ERROR);
       setBusy(false);
+
       return;
     }
 
     setArchiving(null);
+
     await loadKeys();
+
     setBusy(false);
   }
 
@@ -222,6 +225,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
       input = normalizeContact({ name, nickname, email, ...paymentMethodInput() });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : INVALID_ERROR);
+
       return;
     }
 

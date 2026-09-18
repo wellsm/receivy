@@ -7,8 +7,6 @@ import type { SessionIdentity } from '../../common/authorizers/session';
 import { PaymentNotice, paymentNoticeContext, pushPaymentNotice } from '../../notifications/services/payment-notices';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ProofProvider } from '../provider';
-import { ProofRepository } from '../repositories/proof';
-import { bucketProofStorage } from '../services/bucket-storage';
 
 declare class DeclareRequest implements Http.Request {
   identity: SessionIdentity;
@@ -20,12 +18,9 @@ declare class ChargeResponse implements Http.Response {
   body: ChargeDetail;
 }
 
-export async function declarePaymentHandler(
-  request: DeclareRequest,
-  { db, avatarFiles, proofFiles, variables }: Service.Context<ProofProvider>
-): Promise<ChargeResponse> {
-  const { userId } = request.identity;
-  const row = await ProofRepository.declare(db, bucketProofStorage(proofFiles), request.parameters.id, { userId });
+export async function declarePaymentHandler({ identity, parameters }: DeclareRequest, { db, avatarFiles, proofs, variables }: Service.Context<ProofProvider>): Promise<ChargeResponse> {
+  const { userId } = identity;
+  const row = await proofs.declare({ userId }, parameters.id);
 
   await pushPaymentNotice(db, paymentNoticeContext(variables), row.id, PaymentNotice.Declared);
 

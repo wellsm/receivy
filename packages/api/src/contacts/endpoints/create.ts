@@ -5,7 +5,6 @@ import type { Contact } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ContactProvider } from '../provider';
-import { ContactRepository } from '../repositories/contact';
 import type { ContactPaymentMethodBody } from '../utils/body';
 import { parseContactInput } from '../utils/parse';
 
@@ -20,14 +19,8 @@ declare class CreateResponse implements Http.Response {
 }
 
 export async function createContactHandler(
-  request: CreateRequest,
-  { db, avatarFiles }: Service.Context<ContactProvider>
+  { identity, body }: CreateRequest,
+  { avatarFiles, contacts }: Service.Context<ContactProvider>
 ): Promise<CreateResponse> {
-  return {
-    status: 201,
-    body: await AvatarRepository.sign(
-      avatarFiles,
-      await ContactRepository.save(db, request.identity.userId, parseContactInput(request.body))
-    )
-  };
+  return { status: 201, body: await AvatarRepository.sign(avatarFiles, await contacts.save(identity.userId, parseContactInput(body))) };
 }

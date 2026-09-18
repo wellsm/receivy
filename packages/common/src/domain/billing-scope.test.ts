@@ -52,7 +52,6 @@ const recurring: BillingDetail = {
   allocations: [],
   charges: [charge({ id: 'c1' })],
   previews: [],
-  nextMaterialization: '2026-10-01',
   category: BillingCategory.Housing,
   invite: null,
   guests: [],

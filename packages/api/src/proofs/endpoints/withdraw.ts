@@ -3,8 +3,6 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { ProofProvider } from '../provider';
-import { ProofRepository } from '../repositories/proof';
-import { bucketProofStorage } from '../services/bucket-storage';
 
 declare class ChargeRequest implements Http.Request {
   identity: SessionIdentity;
@@ -15,10 +13,8 @@ declare class EmptyResponse implements Http.Response {
   status: 204;
 }
 
-export async function withdrawProofHandler(
-  request: ChargeRequest,
-  { db, proofFiles }: Service.Context<ProofProvider>
-): Promise<EmptyResponse> {
-  await ProofRepository.withdraw(db, bucketProofStorage(proofFiles), request.parameters.id, { userId: request.identity.userId });
+export async function withdrawProofHandler({ identity, parameters }: ChargeRequest, { proofs }: Service.Context<ProofProvider>): Promise<EmptyResponse> {
+  await proofs.withdraw({ userId: identity.userId }, parameters.id);
+
   return { status: 204 };
 }

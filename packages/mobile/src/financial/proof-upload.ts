@@ -14,15 +14,32 @@ function explained(failure: unknown): Error {
 /** Must be called directly from a user-triggered action, including Expo web. Resolves with the refreshed charge, or null when nothing was picked. */
 export async function pickAndUploadProof(id: string, client: Pick<FinancialClient, "startProofUpload" | "completeProofUpload">): Promise<ChargeDetail | null> {
   const result = await DocumentPicker.getDocumentAsync({ type: ["image/jpeg", "image/png", "application/pdf"], multiple: false, copyToCacheDirectory: true });
-  if (result.canceled) return null;
-  const asset = result.assets[0]; if (!asset) return null;
+
+  if (result.canceled) {
+    return null;
+  }
+
+  const asset = result.assets[0];
+
+ if (!asset) {
+    return null;
+  }
+
   const file = asset.file ?? new File(asset.uri); const size = asset.size ?? file.size; const mime = asset.mimeType;
-  if (!mime || !["image/jpeg", "image/png", "application/pdf"].includes(mime) || !size || size > 10 * 1024 * 1024) throw new Error("Selecione JPG, PNG ou PDF de até 10 MB.");
+
+  if (!mime || !["image/jpeg", "image/png", "application/pdf"].includes(mime) || !size || size > 10 * 1024 * 1024) {
+    throw new Error("Selecione JPG, PNG ou PDF de até 10 MB.");
+  }
+
   const ticket = await client.startProofUpload(id, { filename: asset.name, mime: mime as ProofUploadInput["mime"], size }).catch((failure: unknown) => {
     throw explained(failure);
   });
   const response = await expoFetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": mime }, body: file });
-  if (!response.ok) throw new Error("O arquivo não foi enviado. Aguarde cinco minutos para iniciar outro envio.");
+
+  if (!response.ok) {
+    throw new Error("O arquivo não foi enviado. Aguarde cinco minutos para iniciar outro envio.");
+  }
+
   // The client confirms the bytes landed; the bucket event does the same work where it exists.
   return client.completeProofUpload(id);
 }

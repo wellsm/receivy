@@ -120,6 +120,7 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
       if (returnTo) {
         patchDraft({ pix: saved.id });
         router.push(returnTo);
+
         return;
       }
 

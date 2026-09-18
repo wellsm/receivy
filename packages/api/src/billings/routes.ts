@@ -4,7 +4,6 @@ import type { createBillingHandler } from './endpoints/create';
 import type { getBillingHandler } from './endpoints/get';
 import type { listBillingsHandler } from './endpoints/list';
 import type { patchBillingHandler } from './endpoints/patch';
-import type { previewBillingHandler } from './endpoints/preview';
 import type { resolveGuestHandler } from './endpoints/resolve-guest';
 import type { setParticipantNotifyHandler } from './endpoints/notify-participant';
 
@@ -21,12 +20,6 @@ export type BillingRoutes = [
     path: 'GET /billings/{id}';
     authorizer: typeof sessionAuthorizer;
     handler: typeof getBillingHandler;
-  }>,
-  Http.UseRoute<{
-    name: 'previewBilling';
-    path: 'GET /billings/{id}/preview';
-    authorizer: typeof sessionAuthorizer;
-    handler: typeof previewBillingHandler;
   }>,
   Http.UseRoute<{
     name: 'patchBilling';

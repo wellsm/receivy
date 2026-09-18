@@ -59,7 +59,11 @@ function forgetUpload() { try { sessionStorage.removeItem(STARTED_KEY); } catch 
 async function readStatus(base: string): Promise<PublicProofState | null> {
   try {
     const response = await fetch(`${base}/proof`, { cache: "no-store" });
-    if (!response.ok) return null;
+
+    if (!response.ok) {
+      return null;
+    }
+
     return await response.json() as PublicProofState;
   } catch { return null; }
 }
@@ -67,7 +71,11 @@ async function readStatus(base: string): Promise<PublicProofState | null> {
 async function completeStatus(base: string): Promise<PublicProofState | null> {
   try {
     const response = await fetch(`${base}/proof/complete`, { method: "POST" });
-    if (!response.ok) return null;
+
+    if (!response.ok) {
+      return null;
+    }
+
     return await response.json() as PublicProofState;
   } catch { return null; }
 }
@@ -81,6 +89,7 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, cred
   const [status, setStatus] = useState<PublicProofState | null>(null);
   const [preview, setPreview] = useState<ProofPreview | null>(null);
   const [uploaded, setUploaded] = useState<ProofPreview | null>(null);
+
   useEffect(() => {
     return () => {
       revoke(preview);
@@ -91,42 +100,90 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, cred
       revoke(uploaded);
     };
   }, [uploaded]);
+
   function select(next: File | null) {
     setFile(next);
     setPreview(next ? { name: next.name, size: next.size, mime: next.type, url: objectUrl(next) } : null);
   }
   function showStatus(next: PublicProofState) {
     setStatus(next); setError("");
+
     // A reload lost the local bytes; the slot still names the file, so the card keeps reading.
-    if (next.file) setUploaded(previous => previous ?? { name: next.file!.name, size: next.file!.size, mime: next.file!.mime, url: null });
+    if (next.file) {
+      setUploaded(previous => previous ?? { name: next.file!.name, size: next.file!.size, mime: next.file!.mime, url: null });
+    }
   }
+
   useEffect(() => { let stopped = false;
     const check = async () => { const started = uploadStarted();
       // A started upload is completed again (falling back to a read); otherwise one read says where the payer's file stands.
       const next = started ? (await completeStatus(base)) ?? (await readStatus(base)) : await readStatus(base);
-      if (stopped) return;
-      if (!next) { if (started) setError(UNCONFIRMED); return; }
-      if (started) forgetUpload();
-      if (next.state === null) { if (started) setError(NOT_STORED); return; }
+
+      if (stopped) {
+        return;
+      }
+      if (!next) { if (started) {
+        setError(UNCONFIRMED);
+      }
+
+ return; }
+      if (started) {
+        forgetUpload();
+      }
+      if (next.state === null) { if (started) {
+        setError(NOT_STORED);
+      }
+
+ return; }
+
       showStatus(next);
-    }; void check(); return () => { stopped = true; };
+    };
+
+ void check();
+
+ return () => { stopped = true; };
   }, [base]);
+
   async function upload() {
-    if (!file) return;
+    if (!file) {
+      return;
+    }
+
     setBusy(true); setError("");
+
     try {
-      if (!["image/jpeg", "image/png", "application/pdf"].includes(file.type) || file.size <= 0 || file.size > 10 * 1024 * 1024) throw new Error("Selecione JPG, PNG ou PDF de até 10 MB.");
+      if (!["image/jpeg", "image/png", "application/pdf"].includes(file.type) || file.size <= 0 || file.size > 10 * 1024 * 1024) {
+        throw new Error("Selecione JPG, PNG ou PDF de até 10 MB.");
+      }
+
       const response = await fetch(`${base}/proof`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: file.name, mime: file.type, size: file.size }) });
-      if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível iniciar o envio."));
+
+      if (!response.ok) {
+        throw new Error(await responseMessage(response, "Não foi possível iniciar o envio."));
+      }
+
       const ticket = await response.json() as ProofUploadTicket;
       const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" });
-      if (!put.ok) throw new Error("O arquivo não foi enviado. Tente novamente.");
+
+      if (!put.ok) {
+        throw new Error("O arquivo não foi enviado. Tente novamente.");
+      }
+
       // The bytes are up: from here only the confirmation can be lost, so a reload completes again instead of offering the dropzone.
       rememberUpload();
+
       const next = await completeStatus(base);
-      if (!next) throw new Error(UNCONFIRMED);
+
+      if (!next) {
+        throw new Error(UNCONFIRMED);
+      }
+
       forgetUpload();
-      if (next.state === null) throw new Error(NOT_STORED);
+
+      if (next.state === null) {
+        throw new Error(NOT_STORED);
+      }
+
       // The selection becomes the sent file: its thumbnail stays on screen until the creditor answers.
       setUploaded(preview); setPreview(null); setFile(null);
       showStatus(next); onChanged?.();
@@ -137,9 +194,14 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, cred
   /** The payer takes the pending file back; the dropzone returns so another one can go up. */
   async function withdraw() {
     setBusy(true); setError("");
+
     try {
       const response = await fetch(`${base}/proof`, { method: "DELETE" });
-      if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível apagar o comprovante."));
+
+      if (!response.ok) {
+        throw new Error(await responseMessage(response, "Não foi possível apagar o comprovante."));
+      }
+
       forgetUpload();
       setStatus(null); setUploaded(null); setSelectionVersion(version => version + 1);
       onChanged?.();
@@ -150,15 +212,21 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, cred
   /** The payer already paid and has no file: the charge waits for the creditor, and a file may still follow. */
   async function declare() {
     setBusy(true); setError("");
+
     try {
       const response = await fetch(`${base}/proof/declaration`, { method: "POST" });
-      if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível informar o pagamento."));
+
+      if (!response.ok) {
+        throw new Error(await responseMessage(response, "Não foi possível informar o pagamento."));
+      }
+
       showStatus(await response.json() as PublicProofState);
       onChanged?.();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Não foi possível informar o pagamento.");
     } finally { setBusy(false); }
   }
+
   const effectiveState = status?.state === "accepted" ? "paid" : state;
   const declared = status?.state === "pending" && status.kind === ProofKind.Declaration;
   // A declaration keeps the dropzone: the payer may still attach the file.
@@ -166,6 +234,7 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, cred
   const rejectedAsDeclaration = status?.state === "rejected" && status.kind === ProofKind.Declaration;
   const rejectedTitle = rejectedAsDeclaration ? "Pagamento não identificado" : "Comprovante rejeitado";
   const rejectedHint = rejectedAsDeclaration ? "informar de novo ou enviar um comprovante." : "enviar outro arquivo.";
+
   return (
     <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-4">
       <div className="flex items-center gap-2">

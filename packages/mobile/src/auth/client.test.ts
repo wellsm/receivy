@@ -77,6 +77,7 @@ describe("mobile auth client", () => {
     });
 
     await expect(client.refresh()).rejects.toThrow("Sessão expirada");
+
     expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(REFRESH_TOKEN_KEY);
     expect(client.getAccessToken()).toBeNull();
   });

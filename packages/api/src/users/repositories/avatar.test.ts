@@ -1,6 +1,7 @@
 import type { Client } from '@ez4/storage';
 import { describe, expect, it, vi } from 'vitest';
 import { AvatarRepository } from './avatar';
+import { avatarRef } from '../utils/avatar';
 
 function bucket() {
   return {
@@ -8,11 +9,11 @@ function bucket() {
   } as unknown as Client;
 }
 
-describe('AvatarRepository.ref', () => {
+describe('avatarRef', () => {
   it('references the object only when a photo exists', () => {
-    expect(AvatarRepository.ref('u1', null)).toBeNull();
-    expect(AvatarRepository.ref('u1', '2026-09-13T10:00:00.000Z')).toEqual({ url: 'avatars/u1', version: '2026-09-13T10:00:00.000Z' });
-    expect(AvatarRepository.ref('u1', new Date('2026-09-13T10:00:00.000Z'))?.version).toBe('2026-09-13T10:00:00.000Z');
+    expect(avatarRef('u1', null)).toBeNull();
+    expect(avatarRef('u1', '2026-09-13T10:00:00.000Z')).toEqual({ url: 'avatars/u1', version: '2026-09-13T10:00:00.000Z' });
+    expect(avatarRef('u1', new Date('2026-09-13T10:00:00.000Z'))?.version).toBe('2026-09-13T10:00:00.000Z');
   });
 });
 
@@ -21,10 +22,10 @@ describe('AvatarRepository.sign', () => {
     const client = bucket();
     const body = {
       items: [
-        { charge: { counterpartAvatar: AvatarRepository.ref('u1', '2026-01-01T00:00:00.000Z') } },
-        { charge: { counterpartAvatar: AvatarRepository.ref('u1', '2026-01-01T00:00:00.000Z') } }
+        { charge: { counterpartAvatar: avatarRef('u1', '2026-01-01T00:00:00.000Z') } },
+        { charge: { counterpartAvatar: avatarRef('u1', '2026-01-01T00:00:00.000Z') } }
       ],
-      recipient: { name: 'Ana', avatar: AvatarRepository.ref('u2', '2026-01-02T00:00:00.000Z') },
+      recipient: { name: 'Ana', avatar: avatarRef('u2', '2026-01-02T00:00:00.000Z') },
       other: { url: 'https://example.test', version: 'x' },
       empty: null
     };

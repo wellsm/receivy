@@ -52,6 +52,7 @@ describe("ProfileScreen", () => {
     await waitFor(() =>
       expect(save).toHaveBeenCalledWith(expect.objectContaining({ name: "Lucas S.", locale: "pt-BR", country: "BR" })),
     );
+
     expect(remember).toHaveBeenCalled();
     expect(await screen.findByText("Lucas S.")).toBeOnTheScreen();
   });
@@ -76,9 +77,11 @@ describe("ProfileScreen", () => {
     expect(screen.getByText("Chaves cadastradas para receber pagamentos")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByLabelText("Gerenciar contatos"));
+
     expect(onOpenContacts).toHaveBeenCalled();
 
     await fireEvent.press(screen.getByLabelText("Gerenciar chaves Pix"));
+
     expect(onOpenPix).toHaveBeenCalled();
   });
 
@@ -89,15 +92,18 @@ describe("ProfileScreen", () => {
     await render(<ProfileScreen client={api} store={store} version="1.0.0" onLoggedOut={onLoggedOut} />);
 
     await fireEvent.press(await screen.findByLabelText("Sair da conta"));
+
     expect(screen.getByText("Deseja sair da sua conta?")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByLabelText("Cancelar"));
+
     expect(api.logout).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByLabelText("Sair da conta"));
     await fireEvent.press(screen.getByLabelText("Sair"));
 
     await waitFor(() => expect(api.logout).toHaveBeenCalled());
+
     expect(onLoggedOut).toHaveBeenCalled();
   });
 
@@ -108,6 +114,7 @@ describe("ProfileScreen", () => {
     await render(<ProfileScreen client={api} store={store} version="1.0.0" onLoggedOut={onLoggedOut} />);
 
     await fireEvent.press(await screen.findByLabelText("Excluir conta"));
+
     expect(screen.getByText("Excluir conta?")).toBeOnTheScreen();
     expect(screen.getByLabelText("Confirmar exclusão")).toBeDisabled();
 
@@ -115,6 +122,7 @@ describe("ProfileScreen", () => {
     await fireEvent.press(screen.getByLabelText("Confirmar exclusão"));
 
     await waitFor(() => expect(api.erase).toHaveBeenCalled());
+
     expect(await screen.findByText(ACCOUNT_DELETED)).toBeOnTheScreen();
     expect(onLoggedOut).toHaveBeenCalled();
   });

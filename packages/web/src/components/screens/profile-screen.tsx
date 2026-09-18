@@ -109,13 +109,17 @@ export function ProfileScreen() {
     void browserFetch("/api/auth/me")
       .then((response) => (response.ok ? (response.json() as Promise<{ user: AuthUser }>) : Promise.reject(new Error())))
       .then((payload) => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
 
         setUser(payload.user);
         setDraft(payload.user.name ?? "");
       })
       .catch(() => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
 
         setNotice("Não foi possível carregar sua conta.");
       });
@@ -126,7 +130,9 @@ export function ProfileScreen() {
   }, []);
 
   useEffect(() => {
-    if (!dialog) return;
+    if (!dialog) {
+      return;
+    }
 
     cancel.current?.focus();
   }, [dialog]);
@@ -134,7 +140,9 @@ export function ProfileScreen() {
   async function saveName() {
     const name = draft.trim();
 
-    if (!name || busy) return;
+    if (!name || busy) {
+      return;
+    }
 
     setBusy(true);
 
@@ -145,7 +153,9 @@ export function ProfileScreen() {
         body: JSON.stringify({ name, locale: "pt-BR", country: "BR", timezone: deviceTimezone() }),
       });
 
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        throw new Error();
+      }
 
       const payload = (await response.json()) as { user: AuthUser };
 
@@ -196,16 +206,19 @@ export function ProfileScreen() {
       if (deleted === null) {
         setNotice("");
         router.replace("/login");
+
         return;
       }
 
       setNotice(deleted ? ACCOUNT_DELETED : ACCOUNT_DELETION_UNCONFIRMED);
+
       return;
     }
 
     // A failed request cannot establish that the HttpOnly browser cookies were cleared.
     if (deleted === null) {
       setNotice("Não foi possível sair. Tente novamente.");
+
       return;
     }
 
@@ -218,7 +231,9 @@ export function ProfileScreen() {
   }
 
   async function logout() {
-    if (busy) return;
+    if (busy) {
+      return;
+    }
 
     setBusy(true);
     setDialog(null);
@@ -231,10 +246,13 @@ export function ProfileScreen() {
   }
 
   async function erase() {
-    if (confirmation !== "EXCLUIR" || busy) return;
+    if (confirmation !== "EXCLUIR" || busy) {
+      return;
+    }
 
     setBusy(true);
     setDialog(null);
+
     let deleted = false;
 
     try {
@@ -258,7 +276,9 @@ export function ProfileScreen() {
   }
 
   async function retryLogout() {
-    if (logoutRetry === null || busy) return;
+    if (logoutRetry === null || busy) {
+      return;
+    }
 
     setBusy(true);
 

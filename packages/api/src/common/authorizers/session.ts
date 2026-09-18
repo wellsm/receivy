@@ -41,7 +41,9 @@ export async function sessionAuthorizer(
       token,
       secret: variables.AUTH_JWT_SECRET
     });
+
     await SessionRepository.assertActive(db, identity);
+
     return { identity };
   } catch {
     throw new HttpUnauthorizedError();

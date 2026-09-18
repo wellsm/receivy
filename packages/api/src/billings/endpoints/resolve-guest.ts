@@ -3,11 +3,8 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { BillingDetail, BillingGuestAction } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
-import { noticeContext } from '../../notifications/services/context';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { BillingProvider } from '../provider';
-import { resolveGuest } from '../services/guests';
-import { inviteLink } from '../utils/context';
 
 declare class GuestRequest implements Http.Request {
   identity: SessionIdentity;
@@ -20,20 +17,8 @@ declare class DetailResponse implements Http.Response {
   body: BillingDetail;
 }
 
-export async function resolveGuestHandler(
-  request: GuestRequest,
-  { db, variables, email, chargeNotifyScheduler, avatarFiles }: Service.Context<BillingProvider>
-): Promise<DetailResponse> {
-  const body = await resolveGuest(
-    db,
-    request.identity.userId,
-    request.parameters.id,
-    request.parameters.guestId,
-    request.body as BillingGuestAction,
-    new Date(),
-    inviteLink({ variables }),
-    noticeContext({ chargeNotifyScheduler, email, variables })
-  );
+export async function resolveGuestHandler({ identity, parameters, body }: GuestRequest, { avatarFiles, billings }: Service.Context<BillingProvider>): Promise<DetailResponse> {
+  const detail = await billings.resolveGuest(identity.userId, parameters.id, parameters.guestId, body as BillingGuestAction);
 
-  return { status: 200, body: await AvatarRepository.sign(avatarFiles, body) };
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, detail) };
 }

@@ -69,6 +69,7 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
       if (!response.ok) {
         setError(await responseMessage(response, "Não foi possível enviar o código agora."));
         setBusy(false);
+
         return;
       }
 

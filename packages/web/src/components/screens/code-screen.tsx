@@ -31,6 +31,7 @@ export function CodeScreen() {
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
+
     return () => clearInterval(timer);
   }, []);
 
@@ -64,6 +65,7 @@ export function CodeScreen() {
       if (!response.ok) {
         setError(await responseMessage(response, "Código inválido ou expirado. Peça um novo código e tente novamente."));
         setBusy(false);
+
         return;
       }
 
@@ -94,10 +96,12 @@ export function CodeScreen() {
 
       if (!response.ok) {
         setError(await responseMessage(response, "Não foi possível enviar o código agora."));
+
         return;
       }
 
       const refreshed = { ...pending, sentAt: Date.now() };
+
       writePendingLogin(refreshed);
       setPending(refreshed);
       setCode("");

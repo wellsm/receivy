@@ -30,8 +30,10 @@ const pool = createPool(connection);
 
 try {
   const existing = await pool.query('SELECT datname FROM pg_database WHERE datname = $1', [TEST_DATABASE]);
+
   if (existing.rowCount === 0) {
     await pool.query(`CREATE DATABASE ${TEST_DATABASE}`);
+
     process.stdout.write(`Created dedicated PostgreSQL database ${TEST_DATABASE}.\n`);
   }
 } finally {

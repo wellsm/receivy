@@ -140,6 +140,7 @@ export function ContactLedgerScreen({
       return await action();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : fallback);
+
       return undefined;
     } finally {
       setBusy(false);
@@ -150,6 +151,7 @@ export function ContactLedgerScreen({
     const done = await run(async () => {
       await contacts.archive(id);
       await load();
+
       return true;
     }, ARCHIVE_ERROR);
 

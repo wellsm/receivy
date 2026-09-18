@@ -2,9 +2,7 @@ import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { BillingCategory, BillingRecurrence } from '@receivy/common';
-import { throttlePublicRead } from '../../common/utils/throttle';
 import type { InviteProvider } from '../provider';
-import { publicInviteView, resolveInvite } from '../services/links';
 
 declare class PublicTokenRequest implements Http.Request {
   parameters: { token: String.Max<200> };
@@ -29,11 +27,6 @@ declare class PublicInviteResponse implements Http.Response {
       };
 }
 
-export async function publicInviteHandler(
-  request: PublicTokenRequest,
-  { db, variables }: Service.Context<InviteProvider>
-): Promise<PublicInviteResponse> {
-  const invite = await resolveInvite(db, request.parameters.token, variables.PUBLIC_LINK_HMAC_SECRET);
-  await throttlePublicRead(db, invite.public_id);
-  return { status: 200, body: await publicInviteView(db, invite) };
+export async function publicInviteHandler({ parameters }: PublicTokenRequest, { invites }: Service.Context<InviteProvider>): Promise<PublicInviteResponse> {
+  return { status: 200, body: await invites.preview(parameters.token) };
 }

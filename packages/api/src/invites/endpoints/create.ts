@@ -4,7 +4,6 @@ import type { String } from '@ez4/schema';
 import type { BillingInvite } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { InviteProvider } from '../provider';
-import { createInvite } from '../services/links';
 
 declare class BillingRequest implements Http.Request {
   identity: SessionIdentity;
@@ -16,17 +15,6 @@ declare class InviteResponse implements Http.Response {
   body: BillingInvite;
 }
 
-export async function createInviteHandler(
-  request: BillingRequest,
-  { db, variables }: Service.Context<InviteProvider>
-): Promise<InviteResponse> {
-  const body = await createInvite(
-    db,
-    request.identity.userId,
-    request.parameters.id,
-    variables.PUBLIC_LINK_HMAC_SECRET,
-    variables.PUBLIC_WEB_ORIGIN
-  );
-
-  return { status: 200, body };
+export async function createInviteHandler({ identity, parameters }: BillingRequest, { invites }: Service.Context<InviteProvider>): Promise<InviteResponse> {
+  return { status: 200, body: await invites.create(identity.userId, parameters.id) };
 }

@@ -42,7 +42,9 @@ describe("LoginScreen", () => {
 
   it("stores the pending login and navigates to the code screen on success", async () => {
     vi.stubGlobal("fetch", fetchMock());
+
     const user = userEvent.setup();
+
     render(<LoginScreen nextPath="/charges" providers={ALL} />);
 
     await user.type(screen.getByLabelText("Seu e-mail"), "ana@example.com");
@@ -51,6 +53,7 @@ describe("LoginScreen", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/login/code"));
 
     const pending = JSON.parse(sessionStorage.getItem(PENDING_LOGIN_KEY) ?? "null");
+
     expect(pending.email).toBe("ana@example.com");
     expect(pending.nextPath).toBe("/charges");
     expect(typeof pending.sentAt).toBe("number");
@@ -58,7 +61,9 @@ describe("LoginScreen", () => {
 
   it("keeps the e-mail button busy after a successful send, so the spinner survives the route change", async () => {
     vi.stubGlobal("fetch", fetchMock());
+
     const user = userEvent.setup();
+
     render(<LoginScreen nextPath="/charges" providers={ALL} />);
 
     const button = screen.getByRole("button", { name: "Continuar com E-mail" });
@@ -74,6 +79,7 @@ describe("LoginScreen", () => {
 
   it("hides provider buttons and the e-mail divider when both providers are disabled, without fetching", async () => {
     const fetchSpy = fetchMock();
+
     vi.stubGlobal("fetch", fetchSpy);
     render(<LoginScreen nextPath="/" providers={NONE} />);
 

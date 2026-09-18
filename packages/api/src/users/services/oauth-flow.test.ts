@@ -30,8 +30,11 @@ function createRepo(): OauthFlowRepository {
 describe('OAuth flow', () => {
   it('rejects a consumed or unknown state before contacting the provider', async () => {
     const repo = createRepo();
+
     vi.mocked(repo.consumeAttempt).mockResolvedValue(null);
+
     const providerClient = { authorizationUrl: vi.fn(), verifyAuthorizationCode: vi.fn() };
+
     await expect(
       completeOauth(
         { code: 'provider-code', provider: OauthProvider.Google, state: 'replayed' },
@@ -41,19 +44,23 @@ describe('OAuth flow', () => {
         }
       )
     ).rejects.toEqual(new OauthFlowError(ErrorCode.InvalidState));
+
     expect(providerClient.verifyAuthorizationCode).not.toHaveBeenCalled();
     expect(repo.createGrant).not.toHaveBeenCalled();
   });
 
   it('returns cancellation only to the destination of a consumed valid state', async () => {
     const repo = createRepo();
+
     vi.mocked(repo.consumeAttempt).mockResolvedValue({
       codeVerifier: 'v',
       clientChallenge: 'c',
       nonce: 'n',
       destination: 'receivy://auth/callback'
     });
+
     const providerClient = { authorizationUrl: vi.fn(), verifyAuthorizationCode: vi.fn() };
+
     expect(
       await completeOauth(
         { error: 'access_denied', provider: OauthProvider.Apple, state: 'valid' },
@@ -82,6 +89,7 @@ describe('OAuth flow', () => {
         }
       )
     ).rejects.toEqual(new OauthFlowError(ErrorCode.ProviderDisabled));
+
     expect(repo.createAttempt).not.toHaveBeenCalled();
   });
 
@@ -114,6 +122,7 @@ describe('OAuth flow', () => {
         }
       )
     ).resolves.toEqual({ authorizationUrl: 'https://accounts.example/authorize' });
+
     expect(repo.createAttempt).toHaveBeenCalledWith(
       expect.objectContaining({
         codeVerifier: 'verifier',
@@ -125,6 +134,7 @@ describe('OAuth flow', () => {
 
   it('returns only a short one-time Receivy grant after provider verification', async () => {
     const repo = createRepo();
+
     vi.mocked(repo.consumeAttempt).mockResolvedValue({
       clientChallenge: 'a'.repeat(43),
       codeVerifier: 'verifier',
@@ -132,6 +142,7 @@ describe('OAuth flow', () => {
       nonce: 'nonce'
     });
     vi.mocked(repo.resolveUser).mockResolvedValue(user);
+
     const providerClient = {
       authorizationUrl: vi.fn(),
       verifyAuthorizationCode: vi.fn().mockResolvedValue({
@@ -161,6 +172,7 @@ describe('OAuth flow', () => {
 
   it('exchanges a grant once and issues the normal Receivy session', async () => {
     const repo = createRepo();
+
     vi.mocked(repo.consumeGrant).mockResolvedValue(user);
     vi.mocked(repo.issueSession).mockResolvedValue({
       familyId: '22222222-2222-4222-8222-222222222222',
@@ -179,6 +191,7 @@ describe('OAuth flow', () => {
     expect(repo.consumeGrant).toHaveBeenCalledWith(hashOauthValue('receivy-grant'), hashOauthValue('v'.repeat(43)));
     expect(session.refreshToken).toBe('refresh-token');
     expect(session.accessToken.split('.')).toHaveLength(3);
+
     await expect(
       exchangeOauthGrant(
         { code: 'bad', codeVerifier: 'v'.repeat(43) },

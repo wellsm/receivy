@@ -1,9 +1,8 @@
-import type { Service } from '@ez4/common';
 import { HttpBadRequestError } from '@ez4/gateway';
 import type { InviteLinkContext } from '../../invites/services/links';
-import type { BillingProvider } from '../provider';
 
-export function inviteLink({ variables }: Pick<Service.Context<BillingProvider>, 'variables'>): InviteLinkContext {
+/** What an invite link is signed with and where it lands, out of whichever service carries the variables. */
+export function inviteLink({ variables }: { variables: { PUBLIC_LINK_HMAC_SECRET: string; PUBLIC_WEB_ORIGIN: string } }): InviteLinkContext {
   return { secret: variables.PUBLIC_LINK_HMAC_SECRET, webOrigin: variables.PUBLIC_WEB_ORIGIN };
 }
 

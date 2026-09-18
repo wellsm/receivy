@@ -3,7 +3,7 @@ import type { Http } from '@ez4/gateway';
 import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { UserProvider } from '../provider';
-import { AuthRepository } from '../repositories/auth';
+import { authStore } from '../services/auth-store';
 import type { OauthProvider } from '../services/oauth';
 import { beginOauth, ErrorCode, OauthFlowError } from '../services/oauth-flow';
 import { oauthDependencies } from '../utils/oauth';
@@ -31,7 +31,7 @@ export async function oauthStartHandler(
     const body = await beginOauth(request.body, {
       allowList: dependencies.allowList,
       providerClient: dependencies.client,
-      repo: AuthRepository.create(db)
+      repo: authStore(db)
     });
 
     return { status: 200, body };

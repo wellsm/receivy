@@ -1,11 +1,9 @@
 import type { Environment } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
-import type { Db } from '../database';
-import type { AvatarFiles } from '../storage';
+import type { LedgerService } from './services/ledger';
 
 export declare class TimelineProvider implements Http.Provider {
   services: {
-    db: Environment.Service<Db>;
-    avatarFiles: Environment.Service<AvatarFiles>;
+    ledger: Environment.Service<LedgerService>;
   };
 }

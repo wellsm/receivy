@@ -73,7 +73,6 @@ function ledger(overrides: Partial<Contact> = {}, charges: ChargeDetail[] = []):
   return {
     contactId: "p1",
     contact: contact(overrides),
-    balance: { amountCents: 0, currency: "BRL" },
     receivable: { amountCents: charges.filter((item) => item.state === "pending").reduce((sum, item) => sum + item.amount.amountCents, 0), currency: "BRL" },
     payable: { amountCents: 0, currency: "BRL" },
     charges,
@@ -170,6 +169,7 @@ describe("ContactLedgerScreen", () => {
 
   it("shares the payment link and reminds from an active charge", async () => {
     jest.spyOn(Share, "share").mockResolvedValue({ action: Share.sharedAction });
+
     const notifications = { remind: jest.fn().mockResolvedValue({ queued: true }) };
     const client = makeClient(ledger({}, [charge({ id: "c1" })]));
 
@@ -177,10 +177,12 @@ describe("ContactLedgerScreen", () => {
 
     await fireEvent.press(await screen.findByRole("button", { name: "Link de Jantar" }));
     await waitFor(() => expect(client.publicLink).toHaveBeenCalledWith("c1"));
+
     expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({ message: "http://localhost:3000/pay/tk" }));
 
     await fireEvent.press(screen.getByRole("button", { name: "Lembrar Jantar" }));
     await waitFor(() => expect(notifications.remind).toHaveBeenCalledWith("c1"));
+
     expect(await screen.findByText("Lembrete enviado.")).toBeOnTheScreen();
 
     jest.restoreAllMocks();
@@ -201,6 +203,7 @@ describe("ContactLedgerScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Confirmar remoção" }));
 
     await waitFor(() => expect(contacts.archive).toHaveBeenCalledWith("p1"));
+
     expect(await screen.findByText("Contato removido")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Cobrar" })).toBeNull();

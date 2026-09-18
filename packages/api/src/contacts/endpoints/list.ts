@@ -22,6 +22,7 @@ export async function listContactsHandler(
   request: ListRequest,
   { db, avatarFiles }: Service.Context<ContactProvider>
 ): Promise<ListResponse> {
+  
   return {
     status: 200,
     body: await AvatarRepository.sign(

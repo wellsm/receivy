@@ -25,22 +25,26 @@ describe("CopyButton", () => {
     await act(async () => {
       jest.advanceTimersByTime(2_999);
     });
+
     expect(screen.getByText("Copiado")).toBeOnTheScreen();
 
     await act(async () => {
       jest.advanceTimersByTime(1);
     });
+
     expect(screen.getByText("Copiar")).toBeOnTheScreen();
   });
 
   it("stays idle and reports when the clipboard refuses", async () => {
     jest.mocked(Clipboard.setStringAsync).mockResolvedValue(false);
+
     const onRefused = jest.fn();
 
     await render(<CopyButton value="x" accessibilityLabel="Copiar chave" onRefused={onRefused} />);
     await fireEvent.press(screen.getByRole("button", { name: "Copiar chave" }));
 
     await act(async () => {});
+
     expect(onRefused).toHaveBeenCalled();
     expect(screen.queryByText("Copiado")).toBeNull();
   });

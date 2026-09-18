@@ -47,7 +47,6 @@ function detail(overrides: Overrides = {}) {
     allocations: [],
     charges: [],
     previews: [],
-    nextMaterialization: null,
     invite: null,
     guests: [],
     linkableContacts: [],
@@ -57,6 +56,7 @@ function detail(overrides: Overrides = {}) {
 
 function shiftDays(days: number): string {
   const date = new Date();
+
   date.setDate(date.getDate() + days);
 
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
@@ -136,6 +136,7 @@ describe("BillingsScreen", () => {
     expect(queries(client).filter((query) => query.includes("search="))).toEqual([]);
 
     await waitFor(() => expect(queries(client).some((query) => query.includes("search=churr"))).toBe(true));
+
     expect(queries(client).at(-1)).toBe("search=churr");
   });
 
@@ -148,6 +149,7 @@ describe("BillingsScreen", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Compartilhar" }));
 
     await waitFor(() => expect(client.publicLink).toHaveBeenCalledWith("c9"));
+
     expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({ message: "http://localhost:3000/pay/tk" }));
   });
 
@@ -258,6 +260,7 @@ describe("BillingsScreen", () => {
     });
 
     await render(<BillingsScreen client={client} />);
+
     expect(await screen.findByRole("button", { name: "Cobrança Churrasco" })).toBeOnTheScreen();
 
     await act(async () => {

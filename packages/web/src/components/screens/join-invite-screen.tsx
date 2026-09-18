@@ -68,6 +68,7 @@ export function JoinInviteScreen({ token, view, authenticated }: JoinInviteScree
 
       if (result.awaitingOwner) {
         router.replace("/");
+
         return;
       }
 

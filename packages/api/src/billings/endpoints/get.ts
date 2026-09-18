@@ -5,8 +5,6 @@ import type { BillingDetail } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { BillingProvider } from '../provider';
-import { BillingRepository } from '../repositories/billing';
-import { inviteLink } from '../utils/context';
 
 declare class ReadRequest implements Http.Request {
   identity: SessionIdentity;
@@ -18,15 +16,6 @@ declare class DetailResponse implements Http.Response {
   body: BillingDetail;
 }
 
-export async function getBillingHandler(
-  request: ReadRequest,
-  { db, variables, avatarFiles }: Service.Context<BillingProvider>
-): Promise<DetailResponse> {
-  return {
-    status: 200,
-    body: await AvatarRepository.sign(
-      avatarFiles,
-      await BillingRepository.get(db, request.identity.userId, request.parameters.id, new Date(), inviteLink({ variables }))
-    )
-  };
+export async function getBillingHandler({ identity, parameters }: ReadRequest, { avatarFiles, billings }: Service.Context<BillingProvider>): Promise<DetailResponse> {
+  return { status: 200, body: await AvatarRepository.sign(avatarFiles, await billings.get(identity.userId, parameters.id)) };
 }

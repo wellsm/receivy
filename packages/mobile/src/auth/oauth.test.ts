@@ -32,7 +32,9 @@ describe("mobile OAuth binding", () => {
     expect(authClient.exchangeNativeApple).toHaveBeenCalledWith({ state: "state", authorizationCode: "apple-code", codeVerifier: "07".repeat(32) });
     expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
     jest.mocked(AppleAuthentication.signInAsync).mockResolvedValue({ state: "wrong", authorizationCode: "apple-code" } as AppleAuthentication.AppleAuthenticationCredential);
+
     await expect(loginWithProvider("apple")).rejects.toThrow("Retorno Apple inválido");
+
     expect(authClient.exchangeNativeApple).toHaveBeenCalledTimes(1);
   });
 
@@ -47,7 +49,9 @@ describe("mobile OAuth binding", () => {
     jest.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: WebBrowser.WebBrowserResultType.CANCEL });
     expect(await loginWithProvider("apple")).toBe(false);
     jest.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValueOnce({ type: "success", url: "receivy://other/callback?code=grant" });
+
     await expect(loginWithProvider("apple")).rejects.toThrow("Retorno de login inválido");
+
     expect(authClient.exchangeOauth).not.toHaveBeenCalled();
   });
 });

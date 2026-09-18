@@ -2,11 +2,10 @@ import { randomBytes } from 'node:crypto';
 import type { AuthSessionResponse, AuthUser } from '@receivy/common';
 import { createOauthAttempt, hashOauthValue, isAllowedOauthRedirect, type OauthProvider } from './oauth';
 import type { OidcIdentity } from './oidc';
-import { issueAccessToken } from './session';
+import { DEFAULT_ACCESS_TOKEN_TTL_SECONDS, issueAccessToken } from './session';
 
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
 const GRANT_TTL_MS = 2 * 60 * 1000;
-const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 
 export type OauthAttemptValues = ReturnType<typeof createOauthAttempt>;
 export type OauthGrantCommit = {
@@ -87,6 +86,7 @@ export async function beginOauth(
 
   const values = (dependencies.createValues ?? createOauthAttempt)();
   const now = (dependencies.now ?? (() => new Date()))();
+
   await dependencies.repo.createAttempt({
     clientChallenge: input.clientChallenge,
     provider: input.provider,
@@ -116,13 +116,19 @@ export async function completeOauth(
     provider: input.provider,
     stateHash: hashOauthValue(input.state)
   });
+
   if (!attempt || attempt.destination.startsWith('native:')) {
     throw new OauthFlowError(ErrorCode.InvalidState);
   }
 
   const failure = { destination: attempt.destination, grant: null };
-  if (!input.code || input.error) return failure;
+
+  if (!input.code || input.error) {
+    return failure;
+  }
+
   let identity: OidcIdentity;
+
   try {
     identity = await dependencies.providerClient.verifyAuthorizationCode({
       code: input.code,
@@ -133,8 +139,10 @@ export async function completeOauth(
   } catch {
     return failure;
   }
+
   const grant = (dependencies.generateGrant ?? (() => randomBytes(32).toString('base64url')))();
   const now = (dependencies.now ?? (() => new Date()))();
+
   if (dependencies.commitGrant) {
     try {
       await dependencies.commitGrant({
@@ -145,18 +153,28 @@ export async function completeOauth(
         expiresAt: new Date(now.getTime() + GRANT_TTL_MS)
       });
     } catch (error) {
-      if (error instanceof OauthFlowError) return failure;
+      if (error instanceof OauthFlowError) {
+        return failure;
+      }
+
       throw error;
     }
+
     return { destination: attempt.destination, grant };
   }
+
   let user: AuthUser;
+
   try {
     user = await dependencies.repo.resolveUser({ provider: input.provider, identity });
   } catch (error) {
-    if (error instanceof OauthFlowError) return failure;
+    if (error instanceof OauthFlowError) {
+      return failure;
+    }
+
     throw error;
   }
+
   await dependencies.repo.createGrant({
     clientChallenge: attempt.clientChallenge,
     grantHash: hashOauthValue(grant),
@@ -171,26 +189,33 @@ export async function exchangeOauthGrant(
   input: { code: string; codeVerifier: string; deviceName?: string },
   dependencies: {
     accessTokenSecret: string;
+    accessTokenTtlSeconds?: number;
     repo: OauthFlowRepository;
   }
 ): Promise<AuthSessionResponse> {
+  const accessTokenTtlSeconds = dependencies.accessTokenTtlSeconds ?? DEFAULT_ACCESS_TOKEN_TTL_SECONDS;
+
   if (!/^[A-Za-z0-9._~-]{43,128}$/.test(input.codeVerifier)) {
     throw new OauthFlowError(ErrorCode.InvalidGrant);
   }
+
   const user = await dependencies.repo.consumeGrant(hashOauthValue(input.code), hashOauthValue(input.codeVerifier));
+
   if (!user) {
     throw new OauthFlowError(ErrorCode.InvalidGrant);
   }
 
   const session = await dependencies.repo.issueSession(user.id, input.deviceName);
+
   return {
     accessToken: issueAccessToken({
       familyId: session.familyId,
       secret: dependencies.accessTokenSecret,
+      ttlSeconds: accessTokenTtlSeconds,
       userId: user.id
     }),
     refreshToken: session.refreshToken,
-    expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+    expiresIn: accessTokenTtlSeconds,
     user
   };
 }

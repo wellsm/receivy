@@ -42,6 +42,7 @@ describe("THEME_SCRIPT", () => {
 
   it("keeps a pinned Light theme when the OS changes", () => {
     window.localStorage.setItem("receivy-theme", "light");
+
     const system = stubSystem(true);
 
     // Safe: see comment in the first test above.

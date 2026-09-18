@@ -877,9 +877,11 @@ try {
   await client.query(dryRun ? 'ROLLBACK' : 'COMMIT');
 } catch (error) {
   await client.query('ROLLBACK');
+
   throw error;
 } finally {
   client.release();
+
   await pool.end();
 }
 

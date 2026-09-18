@@ -34,6 +34,7 @@ describe("RejectReasonSheet", () => {
     const { rerender } = await render(<RejectReasonSheet visible={visible} busy={false} onCancel={onCancel} onConfirm={onConfirm} />);
 
     await fireEvent.changeText(screen.getByLabelText("Motivo opcional"), "Não caiu");
+
     expect(screen.getByLabelText("Motivo opcional").props.value).toBe("Não caiu");
 
     await fireEvent.press(screen.getByRole("button", { name: "Voltar" }));

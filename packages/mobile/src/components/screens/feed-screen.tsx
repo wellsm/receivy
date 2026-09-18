@@ -6,6 +6,7 @@ import {
   type BadgeTone,
   ChargeActionKind,
   ChargeState,
+  type ChargeTotals,
   currentMonth,
   DEFAULT_FEED_FILTERS,
   Direction,
@@ -14,15 +15,18 @@ import {
   chargeAction,
   chargeBadges,
   chargeStateLabel,
+  chargeSummaryOf,
+  chargeTotals,
   type ChargeSummary,
   feedDayLabel,
-  feedFilterQuery,
+  filterCharges,
   formatMoney,
   type FeedFilters,
+  groupChargesByDay,
+  type ListCharge,
+  type ListChargeItem,
   monthTabs,
-  type TimelineItem,
-  type TimelinePage,
-  type TimelineSummary,
+  openChargesTotal,
 } from "@receivy/common";
 import { FeedFiltersSheet } from "@/components/app/feed-filters-sheet";
 import { RemindSheet } from "@/components/app/remind-sheet";
@@ -33,7 +37,7 @@ import { notificationClient } from "@/notifications/client";
 import { useThemeColors } from "@/theme/colors";
 
 type FeedScreenProps = {
-  client?: Pick<FinancialClient, "timeline"> & Partial<Pick<FinancialClient, "pay" | "declarePayment">>;
+  client?: Pick<FinancialClient, "charges"> & Partial<Pick<FinancialClient, "pay" | "declarePayment">>;
   notifications?: Pick<typeof notificationClient, "remind">;
   onOpenCharge?: (id: string) => void;
 };
@@ -50,17 +54,6 @@ const TONE_CLASS: Record<BadgeTone, string> = {
   success: "text-success",
   neutral: "text-muted",
 };
-
-function groupByDay(items: TimelineItem[]): [string, TimelineItem[]][] {
-  const groups = new Map<string, TimelineItem[]>();
-
-  for (const item of items) {
-    const date = item.charge.dueDate;
-    groups.set(date, [...(groups.get(date) ?? []), item]);
-  }
-
-  return [...groups];
-}
 
 /** `2026-09-14` → `14 set`, appended to the relative day names on the day bar. */
 function shortDay(date: string): string {
@@ -107,11 +100,11 @@ function MonthTabsBar({ month, onSelect }: { month: string; onSelect: (value: st
  * Design 1b: both open totals with what was already settled this month, a bar split by their weight,
  * and the month's Previsto (everything due, open or settled) beside its Realizado (only what was settled).
  */
-function SummaryBox({ summary }: { summary?: TimelineSummary }) {
-  const receivable = summary?.receivable.amountCents ?? 0;
-  const payable = summary?.payable.amountCents ?? 0;
-  const received = summary?.receivedTotal.amountCents ?? 0;
-  const paid = summary?.paidTotal.amountCents ?? 0;
+function SummaryBox({ summary }: { summary?: ChargeTotals }) {
+  const receivable = summary?.receivable.pending.amountCents ?? 0;
+  const payable = summary?.payable.pending.amountCents ?? 0;
+  const received = summary?.receivable.paid.amountCents ?? 0;
+  const paid = summary?.payable.paid.amountCents ?? 0;
   const realized = received - paid;
 
   return (
@@ -122,7 +115,7 @@ function SummaryBox({ summary }: { summary?: TimelineSummary }) {
             <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A RECEBER</Text>
           </View>
           <Text className="mt-1 font-display text-[20px] font-bold text-primary" style={TABULAR}>
-            {summary ? formatMoney(summary.receivable) : "—"}
+            {summary ? formatMoney(summary.receivable.pending) : "—"}
           </Text>
         </View>
 
@@ -131,7 +124,7 @@ function SummaryBox({ summary }: { summary?: TimelineSummary }) {
             <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A PAGAR</Text>
           </View>
           <Text className="mt-1 font-display text-[20px] font-bold text-payable" style={TABULAR}>
-            {summary ? formatMoney(summary.payable) : "—"}
+            {summary ? formatMoney(summary.payable.pending) : "—"}
           </Text>
         </View>
       </View>
@@ -163,13 +156,12 @@ function SummaryBox({ summary }: { summary?: TimelineSummary }) {
   );
 }
 
-function DayBar({ date, today, items }: { date: string; today: string; items: TimelineItem[] }) {
+function DayBar({ date, today, charges }: { date: string; today: string; charges: ListCharge }) {
   const isToday = date === today;
   const label = feedDayLabel(date, today);
   const relative = !/\d/.test(label);
-  const open = items.filter((item) => item.charge.state === ChargeState.Pending);
-  const settled = items.every((item) => item.charge.state === ChargeState.Paid);
-  const total = open.reduce((sum, item) => sum + item.charge.amount.amountCents, 0);
+  const open = openChargesTotal(charges);
+  const settled = charges.every((charge) => charge.state === ChargeState.Paid);
   const textClass = isToday ? "text-on-primary" : "text-muted";
 
   return (
@@ -179,10 +171,8 @@ function DayBar({ date, today, items }: { date: string; today: string; items: Ti
         {relative && <Text className={`font-sans text-xs font-extrabold uppercase ${textClass}`}> · {shortDay(date)}</Text>}
       </View>
 
-      {open.length > 0 && (
-        <Text className={`font-display text-xs font-bold ${textClass}`}>{formatMoney({ amountCents: total, currency: open[0]!.charge.amount.currency })}</Text>
-      )}
-      {settled && <Text className={`font-sans text-xs font-bold ${isToday ? "text-on-primary" : "text-success"}`}>liquidado</Text>}
+      {open && <Text className={`font-display text-xs font-bold ${textClass}`}>{formatMoney(open)}</Text>}
+      {!open && settled && <Text className={`font-sans text-xs font-bold ${isToday ? "text-on-primary" : "text-success"}`}>liquidado</Text>}
     </View>
   );
 }
@@ -274,15 +264,14 @@ export function FeedScreen({
   onOpenCharge,
 }: FeedScreenProps) {
   const colors = useThemeColors();
-  const [data, setData] = useState<TimelinePage | null>(null);
+  // The whole month, as the API answered it; the filters narrow it down on screen.
+  const [charges, setCharges] = useState<ListCharge | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [remindTarget, setRemindTarget] = useState<ChargeSummary | null>(null);
-  // Read by `load` so the focus callback stays stable across filter changes and never double-fetches.
-  const filtersRef = useRef<FeedFilters>(DEFAULT_FEED_FILTERS);
   // The selected month persists across refocus/refresh; only picking another tab resets and reloads.
   const [month, setMonth] = useState(() => currentMonth(new Date()));
   const monthRef = useRef(month);
@@ -291,34 +280,25 @@ export function FeedScreen({
   const today = calendarDate();
 
   const load = useCallback(
-    async (nextFilters = filtersRef.current, nextMonth = monthRef.current, cursor?: string, quiet = false) => {
-      const requestGeneration = cursor ? generation.current : ++generation.current;
+    async (nextMonth = monthRef.current, quiet = false) => {
+      const requestGeneration = ++generation.current;
 
       setError("");
 
       // A quiet load keeps the current items on screen while fresh ones arrive (focus and pull to refresh).
       if (!quiet) {
         setLoading(true);
-      }
-
-      if (!cursor && !quiet) {
-        setData(null);
-      }
-
-      const params = feedFilterQuery(nextFilters, today, nextMonth);
-
-      if (cursor) {
-        params.set("cursor", cursor);
+        setCharges(null);
       }
 
       try {
-        const page = await client.timeline(params.toString());
+        const page = await client.charges(nextMonth);
 
         if (requestGeneration !== generation.current) {
           return;
         }
 
-        setData((previous) => (cursor && previous ? { ...page, items: [...previous.items, ...page.items] } : page));
+        setCharges(page);
       } catch (reason) {
         if (requestGeneration === generation.current) {
           setError(reason instanceof Error ? reason.message : "Não foi possível carregar seu feed.");
@@ -329,19 +309,21 @@ export function FeedScreen({
         }
       }
     },
-    [client, today],
+    [client],
   );
 
   // The charge routes sit on top of the tabs: paid or cancelled items must be current when the feed comes back.
   useFocusEffect(
     useCallback(() => {
-      void load(undefined, undefined, undefined, true);
+      void load(undefined, true);
     }, [load]),
   );
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    await load(undefined, undefined, undefined, true);
+
+    await load(undefined, true);
+
     setRefreshing(false);
   }, [load]);
 
@@ -352,12 +334,13 @@ export function FeedScreen({
 
     setMonth(value);
     monthRef.current = value;
-    void load(filtersRef.current, value);
+    void load(value);
   }
 
   async function remind(chargeId: string) {
     try {
       await notifications.remind(chargeId);
+
       setReminded((current) => ({ ...current, [chargeId]: "Lembrete enviado" }));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível enviar o lembrete.");
@@ -380,11 +363,12 @@ export function FeedScreen({
       await client.pay(chargeId);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível atualizar a cobrança.");
+
       return;
     }
 
     // Totals and the card state both change: a quiet reload keeps the list on screen meanwhile.
-    await load(undefined, undefined, undefined, true);
+    await load(undefined, true);
   }
 
   function confirmDeclare(charge: ChargeSummary) {
@@ -403,14 +387,16 @@ export function FeedScreen({
       await client.declarePayment(chargeId);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível informar o pagamento.");
+
       return;
     }
 
     // The row turns Em análise: a quiet reload keeps the list on screen meanwhile.
-    await load(undefined, undefined, undefined, true);
+    await load(undefined, true);
   }
 
-  const summary = data?.summary;
+  const visible = useMemo(() => (charges ? filterCharges(charges, filters, today) : null), [charges, filters, today]);
+  const summary = visible ? chargeTotals(visible) : undefined;
   const changedFilters = activeFeedFilterCount(filters);
 
   // Memoized so the shared native header is only updated when the badge changes.
@@ -432,6 +418,24 @@ export function FeedScreen({
   );
 
   useTabHeader({ title: "Feed", right: filtersButton });
+
+  function row(item: ListChargeItem) {
+    const charge = chargeSummaryOf(item);
+
+    return (
+      <ChargeRow
+        key={item.id}
+        charge={charge}
+        direction={item.type}
+        today={today}
+        reminded={reminded[item.id] ?? null}
+        onOpen={() => onOpenCharge?.(item.id)}
+        onRemind={() => setRemindTarget(charge)}
+        onMarkPaid={() => confirmMarkPaid(charge)}
+        onDeclare={() => confirmDeclare(charge)}
+      />
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
@@ -459,7 +463,7 @@ export function FeedScreen({
             </View>
           ) : null}
 
-          {!loading && !error && data?.items.length === 0 && (
+          {!loading && !error && visible?.length === 0 && (
             <View className="mx-[18px] gap-2 rounded-[18px] border border-outline bg-surface p-5">
               <Text className="font-display text-2xl font-bold text-ink">Sua timeline começa aqui</Text>
               <Text className="font-sans text-sm leading-6 text-muted">Crie uma conta na aba Contas ou entre com o e-mail em que recebeu uma.</Text>
@@ -467,37 +471,13 @@ export function FeedScreen({
           )}
 
           <View>
-            {groupByDay(data?.items ?? []).map(([date, items]) => (
+            {groupChargesByDay(visible ?? []).map(([date, items]) => (
               <View key={date}>
-                <DayBar date={date} today={today} items={items} />
-                {items.map((item) => (
-                  <ChargeRow
-                    key={item.charge.id}
-                    charge={item.charge}
-                    direction={item.direction}
-                    today={today}
-                    reminded={reminded[item.charge.id] ?? null}
-                    onOpen={() => onOpenCharge?.(item.charge.id)}
-                    onRemind={() => setRemindTarget(item.charge)}
-                    onMarkPaid={() => confirmMarkPaid(item.charge)}
-                    onDeclare={() => confirmDeclare(item.charge)}
-                  />
-                ))}
+                <DayBar date={date} today={today} charges={items} />
+                {items.map(row)}
               </View>
             ))}
           </View>
-
-          {data?.nextCursor && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Carregar mais"
-              disabled={loading}
-              onPress={() => void load(filters, undefined, data.nextCursor ?? undefined)}
-              className="mx-[18px] min-h-12 items-center justify-center rounded-xl border border-outline"
-            >
-              <Text className="font-sans font-bold text-primary">Carregar mais</Text>
-            </Pressable>
-          )}
         </View>
       </ScrollView>
 
@@ -508,8 +488,6 @@ export function FeedScreen({
           onApply={(next) => {
             setFiltersOpen(false);
             setFilters(next);
-            filtersRef.current = next;
-            void load(next);
           }}
         />
       )}

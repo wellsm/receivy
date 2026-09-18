@@ -95,6 +95,7 @@ describe("ContactsScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("Buscar contatos"), "Ana");
 
     await waitFor(() => expect(client.list).toHaveBeenLastCalledWith(false, undefined, "Ana"));
+
     expect(await screen.findByText("Ana Paula Souza")).toBeOnTheScreen();
   });
 

@@ -34,6 +34,7 @@ export function CopyButton({ value, label = "Copiar", ariaLabel, variant = "link
       await navigator.clipboard.writeText(value);
     } catch {
       onRefused?.();
+
       return;
     }
 

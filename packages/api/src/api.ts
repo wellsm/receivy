@@ -4,7 +4,6 @@ import type {
   BillingEndedError,
   BillingInactiveError,
   BillingNotPausableError,
-  BillingPreviewUnavailableError,
   BillingSnapshotLockedError,
   EditScopeNotRecurringError,
   GuestAlreadyResolvedError,
@@ -74,8 +73,7 @@ export declare class Api extends Http.Service {
       403: [ProofDeclarationForbiddenError];
       409: [
         IdempotencyMismatchError,
-        BillingPreviewUnavailableError,
-        BillingEndedError,
+              BillingEndedError,
         BillingNotPausableError,
         PayableHasNoSplitError,
         ReceivableHasNoPayeeError,

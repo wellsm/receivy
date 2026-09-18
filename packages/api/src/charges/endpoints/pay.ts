@@ -6,7 +6,6 @@ import type { SessionIdentity } from '../../common/authorizers/session';
 import { PaymentNotice, paymentNoticeContext, pushPaymentNotice } from '../../notifications/services/payment-notices';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ChargeProvider } from '../provider';
-import { ChargeRepository } from '../repositories/charge';
 
 declare class IdRequest implements Http.Request {
   identity: SessionIdentity;
@@ -19,11 +18,11 @@ declare class ItemResponse implements Http.Response {
 }
 
 export async function payChargeHandler(
-  request: IdRequest,
-  { db, avatarFiles, variables }: Service.Context<ChargeProvider>
+  { identity, parameters }: IdRequest,
+  { db, avatarFiles, charges, variables }: Service.Context<ChargeProvider>
 ): Promise<ItemResponse> {
-  const { userId } = request.identity;
-  const detail = await ChargeRepository.pay(db, userId, request.parameters.id);
+  const { userId } = identity;
+  const detail = await charges.pay(userId, parameters.id);
 
   // Settling by hand answered whatever waited in review: whoever paid hears it like a confirmation, unless they settled it.
   if (detail.proof?.state === ProofState.Accepted && detail.proof.reviewedAt === detail.paidAt) {

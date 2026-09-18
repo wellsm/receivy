@@ -38,14 +38,18 @@ describe('billing draft review', () => {
       paymentMethodId: undefined,
       reminders: [{ offsetDays: -3, enabled: true }],
       category: 'other',
-      split: { mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }, { kind: 'owner' }] },
-      type: 'receivable',
-      payeeUserId: undefined
+      split: { mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }, { kind: 'owner' }] }
     });
+  });
+
+  it('leaves the direction out of the wire body: the API reads it from contactId', () => {
+    expect(buildBillingInput(base)).not.toHaveProperty('type');
+    expect(buildBillingInput({ ...base, direction: Direction.Payable, payee: 'p9' })).not.toHaveProperty('type');
   });
 
   it('turns "N vezes" into the end date of the last occurrence', () => {
     const input = buildBillingInput({ ...base, type: BillingRecurrence.Until, occurrences: '3' });
+
     expect(input.endDate).toBe('2026-03-31');
     expect(buildBillingInput({ ...base, type: BillingRecurrence.Until, end: '2026-02-15' }).endDate).toBe('2026-02-15');
     expect(() => buildBillingInput({ ...base, type: BillingRecurrence.Until })).toThrow(/data final/i);
@@ -203,6 +207,7 @@ describe('EMPTY_BILLING_DRAFT', () => {
 
   it('returns a distinct object on every call', () => {
     const first = EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-10');
+
     first.selected.push('p1');
     first.values.fixed.p1 = '10,00';
 
@@ -216,6 +221,7 @@ describe('EMPTY_BILLING_DRAFT', () => {
 describe('EMPTY_SPLIT_VALUES', () => {
   it('returns a fresh object per mode on every call', () => {
     const first = EMPTY_SPLIT_VALUES();
+
     first.fixed.p1 = '10,00';
 
     const second = EMPTY_SPLIT_VALUES();
@@ -281,7 +287,6 @@ describe('registro draft', () => {
     const input = buildBillingInput({ ...base, direction: Direction.Payable, settled: true, payee: 'p9', pix: 'pix-1' });
 
     expect(input).toMatchObject({
-      type: 'payable',
       kind: 'record',
       contactId: 'p9',
       split: { mode: 'equal', parts: [{ kind: 'owner' }] }
@@ -293,7 +298,7 @@ describe('registro draft', () => {
   it('names the payers of a registro a receber from the selected contacts', () => {
     const input = buildBillingInput({ ...base, settled: true, selected: ['p1'] });
 
-    expect(input).toMatchObject({ type: 'receivable', kind: 'record', split: { mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }] } });
+    expect(input).toMatchObject({ kind: 'record', split: { mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }] } });
     expect(input.contactId).toBeUndefined();
   });
 

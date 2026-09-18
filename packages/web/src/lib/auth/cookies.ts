@@ -22,5 +22,6 @@ export function safeNextPath(value: string | null): string {
   ) {
     return "/feed";
   }
+
   return value;
 }

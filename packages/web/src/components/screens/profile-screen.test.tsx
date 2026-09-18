@@ -41,7 +41,9 @@ function expectedTimezone(): string {
 
 function loadAccount() {
   vi.mocked(browserFetch).mockImplementation(async (path) => {
-    if (path === "/api/auth/me") return Response.json({ user: account });
+    if (path === "/api/auth/me") {
+      return Response.json({ user: account });
+    }
 
     throw new Error(`unexpected ${String(path)}`);
   });
@@ -53,23 +55,31 @@ function stubDirectFetch(
   logout: () => Response = () => new Response(null, { status: 204 }),
 ) {
   const direct = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>(async (path) => {
-    if (path === "/api/financial/account") return erase();
-    if (path === "/api/auth/logout") return logout();
+    if (path === "/api/financial/account") {
+      return erase();
+    }
+    if (path === "/api/auth/logout") {
+      return logout();
+    }
 
     throw new Error(`unexpected ${path}`);
   });
 
   vi.stubGlobal("fetch", direct);
+
   return direct;
 }
 
 describe("ProfileScreen", () => {
   it("shows identity and edits the name inline", async () => {
     vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-      if (path === "/api/auth/me") return Response.json({ user: account });
+      if (path === "/api/auth/me") {
+        return Response.json({ user: account });
+      }
 
       if (path === "/api/financial/account/profile") {
         const body = JSON.parse(String((init as RequestInit).body)) as { name: string };
+
         return Response.json({ user: { ...account, name: body.name } });
       }
 
@@ -77,6 +87,7 @@ describe("ProfileScreen", () => {
     });
 
     render(<ProfileScreen />);
+
     const user = userEvent.setup();
 
     expect(await screen.findByText("Lucas Silveira")).toBeInTheDocument();
@@ -89,7 +100,9 @@ describe("ProfileScreen", () => {
     await user.click(screen.getByRole("button", { name: "Salvar nome" }));
 
     expect(await screen.findByText("Lucas S.")).toBeInTheDocument();
+
     const call = vi.mocked(browserFetch).mock.calls.find(([path]) => path === "/api/financial/account/profile");
+
     expect(call).toBeDefined();
     expect((call![1] as RequestInit).method).toBe("PATCH");
     expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({
@@ -131,16 +144,21 @@ describe("ProfileScreen", () => {
 
   it("logs out only after confirmation", async () => {
     loadAccount();
+
     const logout = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+
     vi.stubGlobal("fetch", logout);
 
     render(<ProfileScreen />);
+
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Sair da conta" }));
+
     expect(screen.getByRole("dialog")).toHaveTextContent("Deseja sair da sua conta?");
 
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
     expect(logout).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
@@ -153,19 +171,24 @@ describe("ProfileScreen", () => {
 
   it("deletes the account only with the literal confirmation", async () => {
     loadAccount();
+
     const direct = stubDirectFetch(async () => Response.json({ deleted: true }));
 
     render(<ProfileScreen />);
+
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Excluir conta" }));
+
     expect(screen.getByRole("dialog")).toHaveTextContent("Excluir conta?");
     expect(screen.getByRole("button", { name: "Confirmar exclusão" })).toBeDisabled();
 
     await user.type(screen.getByLabelText("Digite EXCLUIR para confirmar"), "EXCLUI");
+
     expect(screen.getByRole("button", { name: "Confirmar exclusão" })).toBeDisabled();
 
     await user.type(screen.getByLabelText("Digite EXCLUIR para confirmar"), "R");
+
     expect(screen.getByRole("button", { name: "Confirmar exclusão" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
@@ -174,7 +197,9 @@ describe("ProfileScreen", () => {
     // and a hard navigation before the outcome is shown.
     expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/account", expect.anything());
     expect(direct).toHaveBeenCalledWith("/api/financial/account", expect.objectContaining({ method: "DELETE" }));
+
     const call = direct.mock.calls.find(([path]) => path === "/api/financial/account");
+
     expect(JSON.parse(String(call![1]?.body))).toEqual({ confirmation: "EXCLUIR" });
     expect(direct).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
     expect(await screen.findByText(ACCOUNT_DELETED)).toBeInTheDocument();
@@ -184,9 +209,11 @@ describe("ProfileScreen", () => {
 
   it("reports an unconfirmed deletion when the account request is rejected", async () => {
     loadAccount();
+
     const direct = stubDirectFetch(async () => new Response(null, { status: 401 }));
 
     render(<ProfileScreen />);
+
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Excluir conta" }));
@@ -202,10 +229,12 @@ describe("ProfileScreen", () => {
 
   it("keeps a logout retry when the browser session cannot be cleared", async () => {
     loadAccount();
+
     let logoutStatus = 500;
     const direct = stubDirectFetch(async () => Response.json({ deleted: true }), () => new Response(null, { status: logoutStatus }));
 
     render(<ProfileScreen />);
+
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: "Excluir conta" }));
@@ -218,6 +247,7 @@ describe("ProfileScreen", () => {
     expect(screen.getByRole("button", { name: "Tentar encerrar a sessão novamente" })).toBeInTheDocument();
 
     logoutStatus = 204;
+
     await user.click(screen.getByRole("button", { name: "Tentar encerrar a sessão novamente" }));
 
     expect(await screen.findByText(ACCOUNT_DELETED)).toBeInTheDocument();
@@ -234,11 +264,13 @@ describe("ProfileScreen", () => {
     it("pins the dark theme from Aparência and remembers it in the browser", async () => {
       vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
       loadAccount();
+
       const user = userEvent.setup();
 
       render(<ProfileScreen />);
 
       const group = await screen.findByRole("radiogroup", { name: "APARÊNCIA" });
+
       expect(screen.getByRole("radio", { name: "Sistema" })).toHaveAttribute("aria-checked", "true");
 
       await user.click(screen.getByRole("radio", { name: "Escuro" }));

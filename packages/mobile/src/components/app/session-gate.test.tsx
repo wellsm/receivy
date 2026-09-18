@@ -39,6 +39,7 @@ describe("SessionGate", () => {
     );
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/onboarding"));
+
     expect(screen.queryByText("Home tabs")).toBeNull();
   });
 
@@ -63,6 +64,7 @@ describe("SessionGate", () => {
     );
 
     expect(await screen.findByText("Home tabs")).toBeOnTheScreen();
+
     await waitFor(() => expect(mockRegisterPushDevice).toHaveBeenCalledTimes(1));
   });
 
@@ -74,11 +76,13 @@ describe("SessionGate", () => {
     );
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/onboarding"));
+
     expect(mockRegisterPushDevice).not.toHaveBeenCalled();
   });
 
   it("refreshes a stored session first and falls back to login when that fails", async () => {
     const { client, store } = deps(active, null);
+
     client.refresh.mockRejectedValue(new Error("expired"));
 
     await render(
@@ -88,6 +92,7 @@ describe("SessionGate", () => {
     );
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/login"));
+
     expect(store.load).not.toHaveBeenCalled();
     expect(screen.queryByText("Home tabs")).toBeNull();
   });

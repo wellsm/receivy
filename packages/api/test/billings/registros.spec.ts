@@ -15,20 +15,20 @@ import {
   PixKeyType,
   SharingState,
   SplitMode,
-  SplitPartKind
+  SplitPartKind,
+  chargeTotals,
+  counterpartName
 } from '@receivy/common';
 import { ReceivableHasNoPayeeError, SettledLockedError } from '../../src/billings/errors';
 import { LinkableType } from '../../src/public/schemas/link';
-import { BillingRepository } from '../../src/billings/repositories/billing';
-import { ChargeRepository } from '../../src/charges/repositories/charge';
+import { createBilling, patchBilling } from '../../src/billings/services/billing';
+import { getBilling, listBillings } from '../../src/billings/services/detail';
+import { materializeDueBillings, settleRegistered } from '../../src/billings/services/materialize';
 import { EventRepository } from '../../src/common/repositories/events';
-import { ContactRepository } from '../../src/contacts/repositories/contact';
-import { InviteRepository } from '../../src/invites/repositories/invite';
+import { acceptInvite } from '../../src/invites/services/invite';
 import { createInvite } from '../../src/invites/services/links';
-import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { issuePublicChargeToken, PublicTokenPurpose } from '../../src/public/services/capability';
-import { TimelineRepository } from '../../src/timeline/repositories/timeline';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { charges, cleanupUsers, contacts, createUser, db, monthCharges, paymentMethods } from '../fixtures/financial';
 
 const OWNER = 'f7777777-7777-4777-8777-777777777777';
 const OTHER = 'f8888888-8888-4888-8888-888888888888';
@@ -96,12 +96,12 @@ describe('registros on native PostgreSQL', () => {
     await createUser(db, { id: OWNER, email: 'registros-owner@example.com', name: 'Dona' });
     await createUser(db, { id: OTHER, email: 'registros-other@example.com', name: 'Outra' });
 
-    anaId = (await ContactRepository.save(db, OWNER, { name: 'Ana', email: 'registros-ana@example.com' })).userId;
-    pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
-    empresaId = (await ContactRepository.save(db, OWNER, { name: 'Empresa X' })).userId;
-    imobiliariaId = (await ContactRepository.save(db, OWNER, { name: 'Imobiliária' })).id;
+    anaId = (await contacts.save(OWNER, { name: 'Ana', email: 'registros-ana@example.com' })).userId;
+    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    empresaId = (await contacts.save(OWNER, { name: 'Empresa X' })).userId;
+    imobiliariaId = (await contacts.save(OWNER, { name: 'Imobiliária' })).id;
     imobiliariaKeyId = (
-      await PaymentMethodRepository.save(db, OWNER, {
+      await paymentMethods.save(OWNER, {
         pixKeyType: PixKeyType.Email,
         pixKey: 'loja@example.com',
         label: 'Imobiliária',
@@ -109,8 +109,8 @@ describe('registros on native PostgreSQL', () => {
       })
     ).id;
     // A registro only ever names contacts of whoever owns it: the other owner keeps their own agenda.
-    otherEmpresaId = (await ContactRepository.save(db, OTHER, { name: 'Empresa X' })).userId;
-    otherImobiliariaId = (await ContactRepository.save(db, OTHER, { name: 'Imobiliária' })).id;
+    otherEmpresaId = (await contacts.save(OTHER, { name: 'Empresa X' })).userId;
+    otherImobiliariaId = (await contacts.save(OTHER, { name: 'Imobiliária' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, OTHER]));
@@ -118,7 +118,7 @@ describe('registros on native PostgreSQL', () => {
   it('refuses a registro without a counterpart, with a wallet key, a contact key or reminders, and a recorrente in the past', async () => {
     const now = date('2026-03-05');
     const refuse = (key: string, input: BillingInput, message: string) =>
-      rejects(() => BillingRepository.create(db, OWNER, key, input, now), { name: 'RangeError', message });
+      rejects(() => createBilling(db, OWNER, key, input, now), { name: 'RangeError', message });
     const crowded = 'Registro não tem avisos nem Pix.';
 
     await refuse('registro-no-name', registro('Sem nome', { split: undefined }), 'Selecione ao menos um contato.');
@@ -156,7 +156,7 @@ describe('registros on native PostgreSQL', () => {
   });
 
   it('pays a registro due by today at creation, on its due date, naming who was on the other side', async () => {
-    const once = await BillingRepository.create(db, OWNER, 'registro-past', registro('Venda do sofá'), date('2026-03-05'));
+    const once = await createBilling(db, OWNER, 'registro-past', registro('Venda do sofá'), date('2026-03-05'));
 
     equal(once.kind, BillingKind.Record);
     equal(once.contact, null, 'a registro a receber names its payer in the split, not a receiving contact');
@@ -174,7 +174,7 @@ describe('registros on native PostgreSQL', () => {
     equal(Date.parse(String(row.paid_at)), dayStart('2026-02-20'));
     deepEqual(await paidVia(row.id), ['registered']);
 
-    const detail = await ChargeRepository.get(db, OWNER, row.id);
+    const detail = await charges.get(OWNER, row.id);
 
     equal(detail.direction, Direction.Receivable);
     equal(detail.counterpartName, 'Empresa X');
@@ -183,20 +183,20 @@ describe('registros on native PostgreSQL', () => {
     equal(detail.sharingState, SharingState.Closed);
     equal(detail.pix, null);
 
-    const rent = await BillingRepository.create(
+    const rent = await createBilling(
       db,
       OWNER,
       'registro-past-payable',
       registroPago('Aluguel de fevereiro', { startDate: '2026-02-10', category: BillingCategory.Housing }),
       date('2026-03-05')
     );
-    const own = await ChargeRepository.get(db, OWNER, rent.charges[0]!.id);
+    const own = await charges.get(OWNER, rent.charges[0]!.id);
 
     equal(own.state, ChargeState.Paid);
     equal(own.direction, Direction.Payable);
     equal(own.counterpartName, 'Imobiliária');
 
-    const bonus = await BillingRepository.create(
+    const bonus = await createBilling(
       db,
       OWNER,
       'registro-future',
@@ -209,27 +209,27 @@ describe('registros on native PostgreSQL', () => {
   });
 
   it('keeps who is on the other side of a registro and refuses to turn a conta into a registro or back', async () => {
-    const once = await BillingRepository.create(db, OWNER, 'registro-rename', registro('Freela'), date('2026-03-05'));
+    const once = await createBilling(db, OWNER, 'registro-rename', registro('Freela'), date('2026-03-05'));
 
     equal(once.charges[0]!.counterpartName, 'Empresa X');
     equal(
-      (await BillingRepository.patch(db, OWNER, once.id, { kind: BillingKind.Record }, date('2026-03-06'))).kind,
+      (await patchBilling(db, OWNER, once.id, { kind: BillingKind.Record }, date('2026-03-06'))).kind,
       BillingKind.Record,
       'the stored value is accepted'
     );
 
-    await rejects(() => BillingRepository.patch(db, OWNER, once.id, { kind: BillingKind.Live }, date('2026-03-06')), SettledLockedError);
+    await rejects(() => patchBilling(db, OWNER, once.id, { kind: BillingKind.Live }, date('2026-03-06')), SettledLockedError);
     await rejects(
-      () => BillingRepository.patch(db, OWNER, once.id, { reminders: [{ offsetDays: 0, enabled: true }] }, date('2026-03-06')),
+      () => patchBilling(db, OWNER, once.id, { reminders: [{ offsetDays: 0, enabled: true }] }, date('2026-03-06')),
       SettledLockedError
     );
     await rejects(
-      () => BillingRepository.patch(db, OWNER, once.id, { contactId: imobiliariaId }, date('2026-03-06')),
+      () => patchBilling(db, OWNER, once.id, { contactId: imobiliariaId }, date('2026-03-06')),
       SettledLockedError,
       'a registro never changes who was on the other side'
     );
 
-    const dinner = await BillingRepository.create(
+    const dinner = await createBilling(
       db,
       OWNER,
       'registro-common',
@@ -247,18 +247,19 @@ describe('registros on native PostgreSQL', () => {
 
     equal(dinner.kind, BillingKind.Live);
     equal(dinner.contact, null);
+
     await rejects(
-      () => BillingRepository.patch(db, OWNER, dinner.id, { contactId: imobiliariaId }, date('2026-03-06')),
+      () => patchBilling(db, OWNER, dinner.id, { contactId: imobiliariaId }, date('2026-03-06')),
       ReceivableHasNoPayeeError,
       'a conta a receber never becomes the owner own bill'
     );
-    await rejects(() => BillingRepository.patch(db, OWNER, dinner.id, { kind: BillingKind.Record }, date('2026-03-06')), SettledLockedError);
+    await rejects(() => patchBilling(db, OWNER, dinner.id, { kind: BillingKind.Record }, date('2026-03-06')), SettledLockedError);
   });
 
   it('lists a registro by its counterpart and counts it in the month it is due', async () => {
     const now = new Date();
     const today = calendarDate(now, TZ);
-    const salary = await BillingRepository.create(
+    const salary = await createBilling(
       db,
       OTHER,
       'registro-timeline-salary',
@@ -269,7 +270,7 @@ describe('registros on native PostgreSQL', () => {
       now
     );
 
-    await BillingRepository.create(
+    await createBilling(
       db,
       OTHER,
       'registro-timeline-rent',
@@ -277,30 +278,31 @@ describe('registros on native PostgreSQL', () => {
       now
     );
 
-    const listed = (await BillingRepository.list(db, OTHER)).billings.find((billing) => billing.id === salary.id);
+    const listed = (await listBillings(db, OTHER)).billings.find((billing) => billing.id === salary.id);
 
     equal(listed?.kind, BillingKind.Record);
     equal(listed?.contact, null);
     equal(listed?.participantCount, 1, 'a registro a receber names who paid the owner');
 
-    const page = await TimelineRepository.get(db, OTHER, {});
+    const page = await monthCharges(db, OTHER, today.slice(0, 7));
+    const totals = chargeTotals(page);
 
-    equal(page.summary.receivedTotal.amountCents, 500_000);
-    equal(page.summary.paidTotal.amountCents, 120_000);
-    equal(page.summary.receivable.amountCents, 0, 'nothing is left open');
+    equal(totals.receivable.paid.amountCents, 500_000);
+    equal(totals.payable.paid.amountCents, 120_000);
+    equal(totals.receivable.pending.amountCents, 0, 'nothing is left open');
 
-    const item = page.items.find((entry) => entry.charge.billingId === salary.id);
+    const item = page.find((entry) => entry.billingId === salary.id);
 
-    equal(item?.direction, Direction.Receivable);
-    equal(item?.charge.counterpartName, 'Empresa X');
-    equal(item?.charge.kind, BillingKind.Record);
+    equal(item?.type, Direction.Receivable);
+    equal(counterpartName(item!), 'Empresa X');
+    equal(item?.billing.kind, BillingKind.Record);
   });
 
   it('names the other side of a billing as the owner knows them, on the summary and on the detail', async () => {
     const now = date('2026-03-05');
-    const salary = await BillingRepository.create(db, OWNER, 'registro-counterpart-salary', registro('Salário contraparte'), now);
-    const rent = await BillingRepository.create(db, OWNER, 'registro-counterpart-rent', registroPago('Aluguel contraparte'), now);
-    const split = await BillingRepository.create(
+    const salary = await createBilling(db, OWNER, 'registro-counterpart-salary', registro('Salário contraparte'), now);
+    const rent = await createBilling(db, OWNER, 'registro-counterpart-rent', registroPago('Aluguel contraparte'), now);
+    const split = await createBilling(
       db,
       OWNER,
       'registro-counterpart-split',
@@ -318,9 +320,9 @@ describe('registros on native PostgreSQL', () => {
     // A live conta a receber may have many payers: nobody stands for the other side.
     equal(split.counterpart, null);
 
-    equal((await BillingRepository.get(db, OWNER, salary.id, now)).counterpart?.name, 'Empresa X');
+    equal((await getBilling(db, OWNER, salary.id, now)).counterpart?.name, 'Empresa X');
 
-    const billings = (await BillingRepository.list(db, OWNER)).billings;
+    const billings = (await listBillings(db, OWNER)).billings;
 
     equal(billings.find((billing) => billing.id === salary.id)?.counterpart?.name, 'Empresa X');
     equal(billings.find((billing) => billing.id === rent.id)?.counterpart?.name, 'Imobiliária');
@@ -328,7 +330,7 @@ describe('registros on native PostgreSQL', () => {
   });
 
   it('settles each due charge of a registro once a day, never one somebody reopened', async () => {
-    const commission = await BillingRepository.create(
+    const commission = await createBilling(
       db,
       OWNER,
       'registro-cron-once',
@@ -340,10 +342,11 @@ describe('registros on native PostgreSQL', () => {
     ok(pending);
     equal(pending.state, ChargeState.Pending);
 
-    await BillingRepository.settleRegistered(db, cronAt('2026-04-19'));
+    await settleRegistered(db, cronAt('2026-04-19'));
+
     equal((await chargeRows(commission.id))[0]?.state, ChargeState.Pending, 'not due yet');
 
-    ok((await BillingRepository.settleRegistered(db, cronAt('2026-04-20'))) >= 1);
+    ok((await settleRegistered(db, cronAt('2026-04-20'))) >= 1);
 
     const [paid] = await chargeRows(commission.id);
 
@@ -351,18 +354,19 @@ describe('registros on native PostgreSQL', () => {
     equal(Date.parse(String(paid?.paid_at)), dayStart('2026-04-20'));
     deepEqual(await paidVia(pending.id), ['registered']);
 
-    await BillingRepository.settleRegistered(db, cronAt('2026-04-20'));
+    await settleRegistered(db, cronAt('2026-04-20'));
+
     deepEqual(await paidVia(pending.id), ['registered'], 'a second run changes nothing');
 
-    await ChargeRepository.reopen(db, OWNER, pending.id);
-    await BillingRepository.settleRegistered(db, cronAt('2026-04-21'));
+    await charges.reopen(OWNER, pending.id);
+    await settleRegistered(db, cronAt('2026-04-21'));
 
     equal((await chargeRows(commission.id))[0]?.state, ChargeState.Pending, 'whoever reopened decided the money did not come in');
     deepEqual(await paidVia(pending.id), ['registered']);
   });
 
   it('pays the occurrence the sweep creates in the same pass and projects the whole total', async () => {
-    const salary = await BillingRepository.create(
+    const salary = await createBilling(
       db,
       OWNER,
       'registro-cron-salary',
@@ -376,7 +380,7 @@ describe('registros on native PostgreSQL', () => {
     );
     equal(salary.previews[0]?.amount.amountCents, 500_000, 'a registro projects the whole total');
 
-    ok((await BillingRepository.materializeDueBillings(db, undefined, cronAt('2026-06-10'))) >= 1);
+    ok((await materializeDueBillings(db, undefined, cronAt('2026-06-10'))) >= 1);
     // June is born paid inside the sweep; May waits for the settlement step of the same run.
     deepEqual(
       (await chargeRows(salary.id)).map((row) => [row.due_date, row.state]),
@@ -386,7 +390,7 @@ describe('registros on native PostgreSQL', () => {
       ]
     );
 
-    await BillingRepository.settleRegistered(db, cronAt('2026-06-10'));
+    await settleRegistered(db, cronAt('2026-06-10'));
 
     const rows = await chargeRows(salary.id);
 
@@ -402,7 +406,7 @@ describe('registros on native PostgreSQL', () => {
   });
 
   it('refuses every field a registro never carries and keeps Pix off its charges', async () => {
-    const salary = await BillingRepository.create(
+    const salary = await createBilling(
       db,
       OWNER,
       'registro-locked',
@@ -414,7 +418,7 @@ describe('registros on native PostgreSQL', () => {
 
     const refuse = async (field: string, patch: BillingPatch) => {
       await rejects(
-        () => BillingRepository.patch(db, OWNER, salary.id, { ...patch, applyTo: EditScope.CurrentMonth }, date('2026-07-06')),
+        () => patchBilling(db, OWNER, salary.id, { ...patch, applyTo: EditScope.CurrentMonth }, date('2026-07-06')),
         SettledLockedError,
         field
       );
@@ -432,7 +436,7 @@ describe('registros on native PostgreSQL', () => {
   });
 
   it('refuses to create or accept an invite on a registro', async () => {
-    const freela = await BillingRepository.create(
+    const freela = await createBilling(
       db,
       OWNER,
       'registro-invite',
@@ -441,6 +445,7 @@ describe('registros on native PostgreSQL', () => {
     );
 
     await rejects(() => createInvite(db, OWNER, freela.id, SECRET, ORIGIN), SettledLockedError);
+
     equal(
       await db.links.count({ where: { linkable_type: LinkableType.BillingInvite, linkable_id: freela.id } }),
       0,
@@ -470,9 +475,9 @@ describe('registros on native PostgreSQL', () => {
       purpose: PublicTokenPurpose.Invite
     });
 
-    await rejects(() => InviteRepository.accept(db, OTHER, token, SECRET), SettledLockedError);
+    await rejects(() => acceptInvite(db, OTHER, token, SECRET), SettledLockedError);
 
-    const detail = await BillingRepository.get(db, OWNER, freela.id);
+    const detail = await getBilling(db, OWNER, freela.id);
 
     deepEqual(
       detail.allocations.map((allocation) => allocation.kind),
@@ -487,11 +492,12 @@ describe('registros on native PostgreSQL', () => {
       frequency: BillingFrequency.Monthly,
       startDate: '2026-08-10'
     });
-    const first = await BillingRepository.create(db, OWNER, 'registro-replay', input, cronAt('2026-08-10'));
-    const replay = await BillingRepository.create(db, OWNER, 'registro-replay', input, cronAt('2026-08-11'));
+    const first = await createBilling(db, OWNER, 'registro-replay', input, cronAt('2026-08-10'));
+    const replay = await createBilling(db, OWNER, 'registro-replay', input, cronAt('2026-08-11'));
 
     equal(replay.id, first.id);
-    await rejects(() => BillingRepository.create(db, OWNER, 'registro-replay-late', input, cronAt('2026-08-11')), {
+
+    await rejects(() => createBilling(db, OWNER, 'registro-replay-late', input, cronAt('2026-08-11')), {
       name: 'RangeError',
       message: 'Registro recorrente começa hoje ou depois.'
     });

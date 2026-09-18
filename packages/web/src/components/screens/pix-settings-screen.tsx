@@ -78,6 +78,7 @@ export function PixSettingsScreen({ returnTo, required = false }: PixSettingsScr
 
       setRemoving(null);
       setNotice(action === "default" ? "Chave principal atualizada." : "Chave excluída.");
+
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : UPDATE_ERROR);

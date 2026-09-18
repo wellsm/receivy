@@ -72,6 +72,7 @@ describe('billing split', () => {
   it('preserves total and each participant across many cent combinations', () => {
     for (let total = 1; total <= 301; total++) {
       const result = resolveBillingSplit(total, { mode: SplitMode.Equal, parts: [ana, bia, owner] });
+
       expect(result.reduce((sum, part) => sum + part.amountCents, 0)).toBe(total);
       expect(Math.max(...result.map((part) => part.amountCents)) - Math.min(...result.map((part) => part.amountCents))).toBeLessThanOrEqual(
         1

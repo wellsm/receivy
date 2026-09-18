@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BillingRecurrence } from './billing';
+import { BillingKind, BillingRecurrence } from './billing';
 import type { ListChargeItem } from './charge';
 import { ChargeState, Direction } from './contracts';
 import {
@@ -69,18 +69,23 @@ describe('feed filters', () => {
 });
 
 describe('feed filters over a month of charges', () => {
-  const viewer = 'ana@example.com';
   const today = '2026-09-11';
   const charge = (overrides: Partial<ListChargeItem> = {}): ListChargeItem => ({
     id: crypto.randomUUID(),
+    billingId: 'b1',
     description: 'Aluguel',
     state: ChargeState.Pending,
-    due_date: today,
-    amount_cents: 1000,
-    has_payment: false,
+    dueDate: today,
+    amountCents: 1000,
+    type: Direction.Receivable,
+    ownedByViewer: true,
+    hasPayment: false,
+    notify: true,
+    counterpartReachable: true,
+    confirmationRequired: true,
     proof: null,
-    billing: { recurrence: BillingRecurrence.Once, kind: 'live', contact: null },
-    debtor: { email: 'bruno@example.com' },
+    billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, contact: null },
+    debtor: { name: 'Bruno' },
     ...overrides
   });
 
@@ -101,16 +106,15 @@ describe('feed filters over a month of charges', () => {
   });
 
   it('keeps only the side, state, type and period the filters ask for', () => {
-    const mine = { email: viewer };
     const charges = [
       charge({ id: 'open-in' }),
       charge({ id: 'paid-in', state: ChargeState.Paid }),
-      charge({ id: 'open-out', debtor: mine }),
-      charge({ id: 'until-in', billing: { recurrence: BillingRecurrence.Until, kind: 'live', contact: null } }),
-      charge({ id: 'late-in', due_date: '2026-09-01' })
+      charge({ id: 'open-out', type: Direction.Payable }),
+      charge({ id: 'until-in', billing: { recurrence: BillingRecurrence.Until, kind: BillingKind.Live, contact: null } }),
+      charge({ id: 'late-in', dueDate: '2026-09-01' })
     ];
     const ids = (filters: Partial<FeedFilters>) =>
-      filterCharges(viewer, charges, { ...DEFAULT_FEED_FILTERS, ...filters }, today).map((item) => item.id);
+      filterCharges(charges, { ...DEFAULT_FEED_FILTERS, ...filters }, today).map((item) => item.id);
 
     expect(ids({ direction: [Direction.Payable] })).toEqual(['open-out']);
     expect(ids({ status: [FeedStatus.Paid] })).toEqual(['paid-in']);
@@ -122,6 +126,6 @@ describe('feed filters over a month of charges', () => {
   it('leaves the month untouched when every group is open', () => {
     const charges = [charge(), charge({ state: ChargeState.Cancelled })];
 
-    expect(filterCharges(viewer, charges, { ...DEFAULT_FEED_FILTERS, status: [] }, today)).toHaveLength(2);
+    expect(filterCharges(charges, { ...DEFAULT_FEED_FILTERS, status: [] }, today)).toHaveLength(2);
   });
 });

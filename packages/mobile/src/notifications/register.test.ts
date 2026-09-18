@@ -1,5 +1,6 @@
 import { registerPushDevice } from "./register";
 import * as Notifications from "expo-notifications";
+
 jest.mock("expo-notifications", () => ({
   getPermissionsAsync: jest.fn(),
   requestPermissionsAsync: jest.fn(),
@@ -25,6 +26,7 @@ it("does not register without permission and forwards the actual Expo token afte
       platform: "ios",
       createdAt: "2026-09-07",
     });
+
   jest
     .mocked(Notifications.getPermissionsAsync)
     .mockResolvedValue({
@@ -35,7 +37,9 @@ it("does not register without permission and forwards the actual Expo token afte
     .mockResolvedValue({
       status: "denied",
     } as Notifications.NotificationPermissionsStatus);
+
   await expect(registerPushDevice(register)).rejects.toThrow(/Permissão/);
+
   expect(register).not.toHaveBeenCalled();
   jest
     .mocked(Notifications.getPermissionsAsync)
@@ -48,7 +52,9 @@ it("does not register without permission and forwards the actual Expo token afte
       type: "expo",
       data: "ExpoPushToken[actual-test-token]",
     });
+
   await registerPushDevice(register);
+
   expect(register).toHaveBeenCalledWith(
     expect.objectContaining({
       token: "ExpoPushToken[actual-test-token]",

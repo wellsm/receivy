@@ -62,6 +62,7 @@ const notifications = { remind: jest.fn().mockResolvedValue({ queued: true }) };
 describe("ChargeDetailScreen", () => {
   it("creates and explicitly selects an owned Pix before sharing", async () => {
     jest.spyOn(Share, "share").mockResolvedValue({ action: Share.sharedAction });
+
     const client = {
       charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, pix: null, sharingState: SharingState.PixRequired })),
       cancel: jest.fn(),
@@ -79,6 +80,7 @@ describe("ChargeDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Publicar com este Pix" }));
 
     await waitFor(() => expect(client.publicLink).toHaveBeenCalledWith("charge", false, "method"));
+
     expect(client.savePaymentMethod).toHaveBeenCalledWith({ pixKeyType: "email", pixKey: "pix@example.com" });
   });
 
@@ -161,9 +163,11 @@ describe("ChargeDetailScreen", () => {
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} onOpenProof={onOpenProof} />);
 
     expect(await screen.findByText("JPG, PNG ou PDF de até 10 MB.")).toBeOnTheScreen();
+
     await fireEvent.press(screen.getAllByRole("button", { name: "Enviar comprovante" }).at(-1)!);
 
     await waitFor(() => expect(onOpenProof).toHaveBeenCalled(), { timeout: 3000 });
+
     expect(client.startProofUpload).toHaveBeenCalledWith("charge", { filename: "comprovante.pdf", mime: "application/pdf", size: 14 });
     expect(upload.fetch).toHaveBeenCalledWith(TICKET.uploadUrl, expect.objectContaining({ method: "PUT", headers: { "content-type": "application/pdf" } }));
     expect(await screen.findByText("comprovante.pdf")).toBeOnTheScreen();
@@ -208,6 +212,7 @@ describe("ChargeDetailScreen", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Apagar e enviar outro" }));
 
     await waitFor(() => expect(client.withdrawProof).toHaveBeenCalledWith("charge"));
+
     expect(await screen.findByText("Comprovante apagado. Envie outro quando quiser.")).toBeOnTheScreen();
     // The card and the quick action both offer a fresh upload once the file is gone.
     expect(screen.getAllByRole("button", { name: "Enviar comprovante" }).length).toBeGreaterThan(0);
@@ -216,6 +221,7 @@ describe("ChargeDetailScreen", () => {
 
   it("accepts the pending proof when the creditor marks the charge as paid", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
+
     const pending = proof({ sentByViewer: false });
     const client = {
       charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, proofState: ProofState.Pending, proof: pending })),
@@ -231,9 +237,11 @@ describe("ChargeDetailScreen", () => {
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
 
     expect(await screen.findByText("Valor a receber")).toBeOnTheScreen();
+
     await fireEvent.press(screen.getByRole("button", { name: "Marcar como pago" }));
 
     await waitFor(() => expect(client.reviewProof).toHaveBeenCalledWith("charge", "accepted"));
+
     expect(client.pay).not.toHaveBeenCalled();
     expect(await screen.findByText("Comprovante aceito e pagamento registrado.")).toBeOnTheScreen();
   });
@@ -242,6 +250,7 @@ describe("ChargeDetailScreen", () => {
     jest
       .spyOn(Alert, "alert")
       .mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga" || button.text === "Enviar lembrete")?.onPress?.());
+
     const client = {
       charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable })),
       cancel: jest.fn(),
@@ -256,13 +265,17 @@ describe("ChargeDetailScreen", () => {
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
 
     await fireEvent.press(await screen.findByRole("button", { name: "Lembrar" }));
+
     expect(Alert.alert).toHaveBeenCalledWith("Enviar lembrete?", expect.stringContaining("Avisa Ana por notificação no app ou por e-mail"), expect.any(Array));
+
     await waitFor(() => expect(notifications.remind).toHaveBeenCalledWith("charge"));
+
     expect(await screen.findByText("Lembrete enviado para Ana.")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByRole("button", { name: "Marcar como pago" }));
 
     await waitFor(() => expect(client.pay).toHaveBeenCalledWith("charge"));
+
     expect(client.reviewProof).not.toHaveBeenCalled();
     expect(await screen.findByText("Pagamento integral registrado.")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Marcar como pago" })).toBeNull();
@@ -270,6 +283,7 @@ describe("ChargeDetailScreen", () => {
 
   it("reopens a paid charge after confirmation", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Reabrir")?.onPress?.());
+
     const client = {
       charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z" })),
       startProofUpload: jest.fn(),
@@ -285,6 +299,7 @@ describe("ChargeDetailScreen", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Reabrir" }));
 
     await waitFor(() => expect(client.reopen).toHaveBeenCalledWith("charge"));
+
     expect(await screen.findByRole("button", { name: "Marcar como pago" })).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Reabrir" })).toBeNull();
   });
@@ -306,6 +321,7 @@ describe("ChargeDetailScreen", () => {
 
   it("lets the owner of a conta a pagar copy the key, send the proof and mark it paid", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
+
     const own = charge({ direction: Direction.Payable, ownedByViewer: true, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorId: null });
     const client = {
       charge: jest.fn().mockResolvedValue(own),
@@ -336,6 +352,7 @@ describe("ChargeDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Marcar como pago" }));
 
     await waitFor(() => expect(client.pay).toHaveBeenCalledWith("charge"));
+
     expect(client.reviewProof).not.toHaveBeenCalled();
     expect(await screen.findByText("Pagamento integral registrado.")).toBeOnTheScreen();
   });
@@ -382,6 +399,7 @@ describe("ChargeDetailScreen", () => {
       downloadProof: jest.fn(),
       withdrawProof: jest.fn(),
     };
+
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Já paguei")?.onPress?.());
 
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
@@ -428,6 +446,7 @@ describe("ChargeDetailScreen", () => {
 
   it("lets the creditor mark as paid by hand after refusing a declared payment", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
+
     const refused = charge({
       direction: Direction.Receivable,
       ownedByViewer: true,
@@ -452,9 +471,11 @@ describe("ChargeDetailScreen", () => {
 
     expect(await screen.findByText(/Ana informou que pagou/)).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Confirmar recebimento" })).toBeNull();
+
     await fireEvent.press(screen.getByRole("button", { name: "Marcar como pago" }));
 
     await waitFor(() => expect(client.pay).toHaveBeenCalled());
+
     expect(client.reviewProof).not.toHaveBeenCalled();
   });
 
@@ -472,6 +493,7 @@ describe("ChargeDetailScreen", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Não notificar esta cobrança" }));
 
     await waitFor(() => expect(client.setChargeNotify).toHaveBeenCalledWith("charge", false));
+
     expect(await screen.findByText("Avisos desta cobrança pausados.")).toBeOnTheScreen();
     expect(screen.getByText("Sem avisos")).toBeOnTheScreen();
     expect(screen.getByRole("button", { name: "Lembrar" })).toBeOnTheScreen();
@@ -479,6 +501,7 @@ describe("ChargeDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Voltar a notificar" }));
 
     await waitFor(() => expect(client.setChargeNotify).toHaveBeenLastCalledWith("charge", true));
+
     expect(await screen.findByText("Avisos reativados.")).toBeOnTheScreen();
     expect(screen.queryByText("Sem avisos")).toBeNull();
   });

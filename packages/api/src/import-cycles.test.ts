@@ -19,6 +19,7 @@ function sourceFiles(directory: string, found: string[] = []): string[] {
 
     if (statSync(path).isDirectory()) {
       sourceFiles(path, found);
+
       continue;
     }
 

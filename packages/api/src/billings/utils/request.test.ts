@@ -26,6 +26,7 @@ describe('billing request fingerprint', () => {
       type: Direction.Receivable as const,
       recurrence: BillingRecurrence.Once as const
     };
+
     expect(billingRequestFingerprint(reordered)).toBe(billingRequestFingerprint({ ...input, paymentMethodId: undefined }));
   });
 
@@ -44,6 +45,7 @@ describe('conta a pagar fingerprint', () => {
       type: Direction.Payable as const,
       split: { mode: SplitMode.Equal as const, parts: [{ kind: SplitPartKind.Owner as const }] }
     };
+
     expect(billingRequestFingerprint(payable)).not.toBe(billingRequestFingerprint(input));
     expect(billingRequestFingerprint({ ...payable, contactId: 'p9' })).not.toBe(billingRequestFingerprint(payable));
     expect(billingRequestFingerprint({ ...payable, paymentMethodId: 'method-1' })).not.toBe(billingRequestFingerprint(payable));

@@ -10,7 +10,10 @@ type IssueInput = { publicId: string; expiresAtSeconds: number; secret: string; 
 type VerifyInput = { nowSeconds?: number; secret: string; purpose: PublicTokenPurpose };
 
 export function assertPublicLinkSecretConfigured(secret: string): string {
-  if (!secret || secret === 'disabled') throw new Error('Public link secret is not configured');
+  if (!secret || secret === 'disabled') {
+    throw new Error('Public link secret is not configured');
+  }
+
   return secret;
 }
 
@@ -20,6 +23,7 @@ function signature(purpose: PublicTokenPurpose, publicId: string, expires: numbe
 
 export function issuePublicChargeToken(input: IssueInput): string {
   const mac = signature(input.purpose, input.publicId, input.expiresAtSeconds, input.secret).toString('base64url');
+
   return `${input.publicId}.${input.expiresAtSeconds}.${mac}`;
 }
 
@@ -31,10 +35,17 @@ export function verifyPublicChargeToken(token: string, input: VerifyInput): { pu
   const [publicId, rawExpires, rawSignature, extra] = token.split('.');
   const expiresAtSeconds = Number(rawExpires);
   const nowSeconds = input.nowSeconds ?? Math.floor(Date.now() / 1000);
-  if (!publicId || !rawExpires || !rawSignature || extra || !Number.isSafeInteger(expiresAtSeconds) || expiresAtSeconds <= nowSeconds)
+
+  if (!publicId || !rawExpires || !rawSignature || extra || !Number.isSafeInteger(expiresAtSeconds) || expiresAtSeconds <= nowSeconds) {
     invalid();
+  }
+
   const expected = signature(input.purpose, publicId, expiresAtSeconds, input.secret);
   const actual = Buffer.from(rawSignature, 'base64url');
-  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) invalid();
+
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    invalid();
+  }
+
   return { publicId, expiresAtSeconds };
 }

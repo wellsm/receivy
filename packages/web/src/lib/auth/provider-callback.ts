@@ -16,27 +16,41 @@ const MAX_FORM_BYTES = 32 * 1024;
  */
 export async function relayProviderCallback(request: Request, provider: "google" | "apple"): Promise<Response> {
   const failure = NextResponse.redirect(appUrl(request, "/login?error=oauth"), 303);
+
   failure.headers.set("Cache-Control", "no-store");
   failure.headers.set("Referrer-Policy", "no-referrer");
+
   try {
     const target = authApiUrl(`auth/${provider}/callback`);
     let upstream: Response;
+
     if (provider === "google") {
       target.search = new URL(request.url).search;
       upstream = await fetch(target, { method: "GET", redirect: "manual", cache: "no-store" });
     } else {
       const body = await request.text();
-      if (body.length > MAX_FORM_BYTES) return failure;
+
+      if (body.length > MAX_FORM_BYTES) {
+        return failure;
+      }
+
       upstream = await fetch(target, {
         method: "POST", redirect: "manual", cache: "no-store", body,
         headers: { "content-type": request.headers.get("content-type") ?? "application/x-www-form-urlencoded" },
       });
     }
+
     const location = upstream.headers.get("location");
-    if (upstream.status < 300 || upstream.status >= 400 || !location) return failure;
+
+    if (upstream.status < 300 || upstream.status >= 400 || !location) {
+      return failure;
+    }
+
     const relayed = new NextResponse(null, { status: 303, headers: { location } });
+
     relayed.headers.set("Cache-Control", "no-store");
     relayed.headers.set("Referrer-Policy", "no-referrer");
+
     return relayed;
   } catch {
     return failure;

@@ -13,6 +13,7 @@ export default function NewContactRoute() {
         // screen is two hops down, so the whole side trip is dismissed at once.
         if (returnTo === "new-billing") {
           router.dismissTo("/billings/new");
+
           return;
         }
 

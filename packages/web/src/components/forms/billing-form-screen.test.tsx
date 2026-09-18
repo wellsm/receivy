@@ -94,6 +94,7 @@ async function pickAna(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("button", { name: "Adicionar" }));
 
   const panel = screen.getByRole("dialog", { name: "Contatos" });
+
   await user.click(await within(panel).findByRole("checkbox", { name: "Ana" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
 }
@@ -103,6 +104,7 @@ async function seatAna(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("button", { name: /Escolher|Trocar/ }));
 
   const panel = screen.getByRole("dialog", { name: "Contatos" });
+
   await user.click(await within(panel).findByRole("checkbox", { name: "Ana" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
 }
@@ -118,6 +120,7 @@ it("starts with only me on the split and adds contacts through the agenda dialog
   await pickAna(user);
 
   const chip = screen.getByRole("button", { name: "Ana" });
+
   expect(chip).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText("2 pessoas")).toBeInTheDocument();
 
@@ -134,6 +137,7 @@ it("opens the contact panel and searches the whole agenda", async () => {
   await user.click(await screen.findByRole("button", { name: "Adicionar" }));
 
   const panel = screen.getByRole("dialog", { name: "Contatos" });
+
   await user.type(within(panel).getByLabelText("Buscar contatos"), "ma");
 
   expect(await within(panel).findByRole("checkbox", { name: "Bruno Lima" })).toBeInTheDocument();
@@ -148,6 +152,7 @@ it("opens the contact panel and searches the whole agenda", async () => {
 
 it("fills the title from the category select while it is empty", async () => {
   api();
+
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("combobox", { name: "Categoria" }));
@@ -181,29 +186,37 @@ it("types the amount like a bank keypad and posts the cents", async () => {
   expect(amount).toHaveValue("0,00");
 
   await user.type(amount, "1");
+
   expect(amount).toHaveValue("0,01");
 
   await user.type(amount, "00");
+
   expect(amount).toHaveValue("1,00");
 
   await user.type(amount, "{Backspace}");
+
   expect(amount).toHaveValue("0,10");
 
   await user.type(amount, "00");
+
   expect(amount).toHaveValue("10,00");
 
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   const post = sent.find(entry => entry.init.method === "POST");
+
   expect(JSON.parse(String(post?.init.body))).toMatchObject({ totalCents: 1_000 });
 });
 
 it("groups the thousands in the amount", async () => {
   api();
+
   const { user } = renderForm();
 
   const amount = await screen.findByLabelText("Valor total");
+
   await user.type(amount, "123456");
+
   expect(amount).toHaveValue("1.234,56");
 });
 
@@ -217,6 +230,7 @@ it("keeps Criar conta disabled while the amount is still zero", async () => {
 
 it("shows the installment field and keeps Valor total for a parcelado billing", async () => {
   api();
+
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("radio", { name: "Parcelado" }));
@@ -231,6 +245,7 @@ it("shows the installment field and keeps Valor total for a parcelado billing", 
 
 it("shows the per-installment helper below the typed total, with the rounded-up total once it does not divide evenly", async () => {
   api();
+
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("radio", { name: "Parcelado" }));
@@ -262,11 +277,13 @@ it("posts the rounded-up per-installment amount for a parcelado billing", async 
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   const post = sent.find(entry => entry.init.method === "POST");
+
   expect(JSON.parse(String(post?.init.body))).toMatchObject({ totalCents: 3334 });
 });
 
 it("computes the live amount for each share row", async () => {
   api();
+
   const { user } = renderForm();
 
   await pickAna(user);
@@ -284,6 +301,7 @@ it("computes the live amount for each share row", async () => {
 
 it("warns about the missing remainder on a fixed split when the owner does not participate", async () => {
   api();
+
   const { user } = renderForm();
 
   await pickAna(user);
@@ -297,6 +315,7 @@ it("warns about the missing remainder on a fixed split when the owner does not p
 
 it("shows the owner remainder as read-only text on a fixed split", async () => {
   api();
+
   const { user } = renderForm();
 
   await pickAna(user);
@@ -314,6 +333,7 @@ it("shows the owner remainder as read-only text on a fixed split", async () => {
 
 it("drops the owner remainder and warns when the fixed split exceeds the total", async () => {
   api();
+
   const { user } = renderForm();
 
   await pickAna(user);
@@ -336,15 +356,18 @@ it("keeps each mode's split values while the user switches modes", async () => {
   await user.type(screen.getByLabelText("Valor de Ana"), "60,00");
 
   await user.click(screen.getByRole("radio", { name: "Porcentagem" }));
+
   expect(screen.getByLabelText("Porcentagem de Ana")).toHaveValue("");
 
   await user.click(screen.getByRole("radio", { name: "Valor fixo" }));
+
   expect(screen.getByLabelText("Valor de Ana")).toHaveValue("60,00");
 
   await user.click(screen.getByRole("radio", { name: "Cotas" }));
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   const post = sent.find(entry => entry.init.method === "POST");
+
   expect(JSON.parse(String(post?.init.body)).split).toEqual({
     mode: "shares",
     parts: [{ kind: "user", userId: "u1", shares: 1 }, { kind: "owner", shares: 1 }],
@@ -353,9 +376,11 @@ it("keeps each mode's split values while the user switches modes", async () => {
 
 it("sets the due date from the date field and brings it back to today with the quick button", async () => {
   api();
+
   const { user } = renderForm();
 
   const due = await screen.findByLabelText("Vencimento");
+
   await user.clear(due);
   await user.type(due, addCalendarDays(today(), 7));
 
@@ -383,11 +408,13 @@ it("lands the due date on the last day of the picked month with Final do mês", 
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   const post = sent.find(entry => entry.init.method === "POST");
+
   expect(JSON.parse(String(post?.init.body))).toMatchObject({ recurrence: "once", startDate: next.value, dueRule: "end_of_month" });
 });
 
 it("offers Final do mês only while the billing is once or monthly", async () => {
   api();
+
   const { user } = renderForm();
 
   expect(await screen.findByRole("button", { name: "Final do mês" })).toBeInTheDocument();
@@ -400,6 +427,7 @@ it("offers Final do mês only while the billing is once or monthly", async () =>
 
 it("saves the draft and navigates when the user creates a new contact", async () => {
   api();
+
   const { user } = renderForm();
 
   await user.type(await screen.findByLabelText("Valor total"), "70,00");
@@ -415,6 +443,7 @@ it("saves the draft and navigates when the user creates a new contact", async ()
 
 it("saves the draft and navigates when the user registers a Pix key", async () => {
   api();
+
   const { user } = renderForm();
 
   await user.type(await screen.findByLabelText("Valor total"), "70,00");
@@ -426,10 +455,13 @@ it("saves the draft and navigates when the user registers a Pix key", async () =
 
 it("returns focus to Adicionar when the contact panel closes", async () => {
   api();
+
   const { user } = renderForm();
 
   const opener = await screen.findByRole("button", { name: "Adicionar" });
+
   await user.click(opener);
+
   expect(screen.getByLabelText("Buscar contatos")).toHaveFocus();
 
   await user.click(screen.getByRole("button", { name: "Concluir" }));
@@ -440,6 +472,7 @@ it("returns focus to Adicionar when the contact panel closes", async () => {
 
 it("returns focus to Adicionar even when StrictMode runs the panel effects twice", async () => {
   api();
+
   const user = userEvent.setup();
 
   render(
@@ -449,6 +482,7 @@ it("returns focus to Adicionar even when StrictMode runs the panel effects twice
   );
 
   const opener = await screen.findByRole("button", { name: "Adicionar" });
+
   await user.click(opener);
   await user.click(screen.getByRole("button", { name: "Concluir" }));
 
@@ -457,9 +491,11 @@ it("returns focus to Adicionar even when StrictMode runs the panel effects twice
 
 it("closes the contact panel with Escape and gives the focus back", async () => {
   api();
+
   const { user } = renderForm();
 
   const opener = await screen.findByRole("button", { name: "Adicionar" });
+
   await user.click(opener);
   await user.keyboard("{Escape}");
 
@@ -507,6 +543,7 @@ it("creates the billing in one step, with category, shares and an idempotency ke
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   const post = sent.find(entry => entry.init.method === "POST");
+
   expect(post?.path).toBe("/api/financial/billings");
   expect(JSON.parse(String(post?.init.body))).toMatchObject({
     recurrence: "once",
@@ -547,12 +584,14 @@ it("keeps the payload and the idempotency key across an uncertain retry", async 
   await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
 
   const posts = sent.filter(entry => entry.init.method === "POST");
+
   expect(posts[1]?.init.body).toBe(posts[0]?.init.body);
   expect(posts[1]?.init.headers).toEqual(posts[0]?.init.headers);
 });
 
 it("shows the validation error inline when no contact is selected", async () => {
   api();
+
   const { user } = renderForm();
 
   await user.type(await screen.findByLabelText("Valor total"), "100,00");
@@ -577,6 +616,7 @@ it("sends Não notificar on the participant it was switched for", async () => {
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   const post = sent.find(entry => entry.init.method === "POST");
+
   expect(JSON.parse(String(post?.init.body)).split).toEqual({
     mode: "equal",
     parts: [{ kind: "user", userId: "u1", notify: false }, { kind: "owner" }],
@@ -585,6 +625,7 @@ it("sends Não notificar on the participant it was switched for", async () => {
 
 it("offers Não notificar only on a conta a receber", async () => {
   api();
+
   const { user } = renderForm();
 
   await pickAna(user);
@@ -600,10 +641,13 @@ it("offers Não notificar only on a conta a receber", async () => {
 
 it("renders Não notificar only for a participant who can actually be reached", async () => {
   api((path) => (path.startsWith("/api/contacts") && !path.includes("search") ? Response.json({ contacts: [ana, carla], nextCursor: null }) : undefined));
+
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("button", { name: "Adicionar" }));
+
   const panel = screen.getByRole("dialog", { name: "Contatos" });
+
   await user.click(await within(panel).findByRole("checkbox", { name: "Ana" }));
   await user.click(within(panel).getByRole("checkbox", { name: "Carla" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
@@ -615,10 +659,13 @@ it("renders Não notificar only for a participant who can actually be reached", 
 
 it("hides the Não notificar helper entirely when no selected participant can be reached", async () => {
   api((path) => (path.startsWith("/api/contacts") && !path.includes("search") ? Response.json({ contacts: [carla], nextCursor: null }) : undefined));
+
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("button", { name: "Adicionar" }));
+
   const panel = screen.getByRole("dialog", { name: "Contatos" });
+
   await user.click(await within(panel).findByRole("checkbox", { name: "Carla" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
 
@@ -647,11 +694,13 @@ it("never sends a stale Não notificar for a participant the agenda no longer sh
   const { user } = renderForm(quietBilling);
 
   await screen.findByRole("button", { name: "Salvar conta" });
+
   expect(screen.queryByRole("switch", { name: /Não notificar/ })).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
   const patch = sent.find(entry => entry.init.method === "PATCH");
+
   expect(JSON.parse(String(patch?.init.body)).split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u3" }] });
 });
 
@@ -675,8 +724,8 @@ it("records a registro naming the single contact who paid it, with nobody to spl
   const post = sent.find(entry => entry.init.method === "POST");
   const body = JSON.parse(String(post?.init.body));
 
+  expect(body).not.toHaveProperty("type");
   expect(body).toMatchObject({
-    type: "receivable",
     kind: "record",
     totalCents: 500_000,
     split: { mode: "equal", parts: [{ kind: "user", userId: "u1" }] },
@@ -715,7 +764,6 @@ it("seats a registro a pagar under Para quem and keeps a recorrente from startin
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
 
   expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toMatchObject({
-    type: "payable",
     kind: "record",
     contactId: "c1",
   });
@@ -723,6 +771,7 @@ it("seats a registro a pagar under Para quem and keeps a recorrente from startin
 
 it("keeps a recorrente registro from starting before today", async () => {
   api();
+
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("switch", { name: "Já recebi" }));
@@ -737,6 +786,7 @@ function withoutPixKeys() {
 
 it("hides the form behind a single call to action when the account has no key", async () => {
   withoutPixKeys();
+
   const { user } = renderForm();
 
   expect(await screen.findByText("Cadastre uma chave Pix")).toBeInTheDocument();
@@ -752,6 +802,7 @@ it("hides the form behind a single call to action when the account has no key", 
 
 it("keeps the form open for a conta a pagar even without a key", async () => {
   withoutPixKeys();
+
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
@@ -762,6 +813,7 @@ it("keeps the form open for a conta a pagar even without a key", async () => {
 
 it("opens the form of a registro a receber even without a key", async () => {
   withoutPixKeys();
+
   const { user } = renderForm();
 
   expect(await screen.findByText("Cadastre uma chave Pix")).toBeInTheDocument();
@@ -802,6 +854,7 @@ it("creates a conta a pagar without participants, naming the contact who receive
   // The seated contact's default key comes preselected.
   expect(await screen.findByText("Pagar via Pix")).toBeInTheDocument();
   expect(sent.some(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toBe(true);
+
   await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Chave padrão"));
 
   await user.type(screen.getByLabelText("Valor total"), "100,00");
@@ -810,8 +863,8 @@ it("creates a conta a pagar without participants, naming the contact who receive
   const post = sent.find(entry => entry.init.method === "POST");
   const body = JSON.parse(String(post?.init.body));
 
+  expect(body).not.toHaveProperty("type");
   expect(body).toMatchObject({
-    type: "payable",
     totalCents: 10_000,
     contactId: "c1",
     paymentMethodId: "pix-ana",
@@ -869,6 +922,7 @@ it("re-picks the default key when the receiving seat moves to another contact", 
   await user.click(screen.getByRole("button", { name: /Trocar/ }));
 
   const panel = screen.getByRole("dialog", { name: "Contatos" });
+
   await user.type(within(panel).getByLabelText("Buscar contatos"), "ma");
   await user.click(await within(panel).findByRole("checkbox", { name: "Bruno Lima" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
@@ -917,13 +971,15 @@ it("sends a conta a pagar with no key at all when the contact has none", async (
 
   const body = JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body));
 
-  expect(body).toMatchObject({ type: "payable", contactId: "c1" });
+  expect(body).toMatchObject({ contactId: "c1" });
   expect(body.paymentMethodId).toBeUndefined();
 });
 
 it("refuses a conta a pagar whose receiving chip was removed", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+
   saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), direction: Direction.Payable, payee: "c1", amount: "50,00" }, "/billings/new");
+
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("button", { name: "Ana" }));
@@ -950,6 +1006,7 @@ it("never gates a conta a pagar on a wallet key", async () => {
 
 it("never offers a Pix selector on a conta a pagar with no seated contact", async () => {
   api();
+
   const { user } = renderForm();
 
   await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
@@ -979,7 +1036,6 @@ const onceBilling: BillingDetail = {
   allocations: [],
   charges: [],
   previews: [],
-  nextMaterialization: null,
   category: BillingCategory.Other,
   invite: null,
   guests: [],
@@ -1001,6 +1057,7 @@ it("freezes a finite billing and patches only category, Pix and reminders", asyn
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
   const patch = sent.find(entry => entry.init.method === "PATCH");
+
   expect(patch?.path).toBe("/api/financial/billings/b1");
   expect(JSON.parse(String(patch?.init.body))).toEqual({
     paymentMethodId: "pix-1",
@@ -1077,6 +1134,7 @@ it("clears the key of a conta a pagar whose contact has none left", async () => 
 
 it("asks for the scope when the key of a recorrente conta a pagar moves to another of the contact's", async () => {
   onSeptemberTenth();
+
   const recurringPayable: BillingDetail = {
     ...payableBilling,
     id: "b9",
@@ -1120,6 +1178,7 @@ it("patches the receiving contact of a conta a pagar once the seat moves", async
   await user.click(await screen.findByRole("button", { name: "Trocar" }));
 
   const panel = screen.getByRole("dialog", { name: "Contatos" });
+
   await user.type(within(panel).getByLabelText("Buscar contatos"), "ma");
   await user.click(await within(panel).findByRole("checkbox", { name: "Bruno Lima" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
@@ -1165,6 +1224,7 @@ it("switches an open-ended billing to the end of the month on edit", async () =>
 
   const start = indefiniteBilling.startDate >= today() ? indefiniteBilling.startDate : today();
   const patch = sent.find(entry => entry.init.method === "PATCH");
+
   expect(JSON.parse(String(patch?.init.body))).toMatchObject({ dueRule: "end_of_month", startDate: endOfMonth(start) });
 });
 
@@ -1200,6 +1260,7 @@ function onSeptemberTenth() {
 
 it("asks whether an amount change also reaches this month's charges", async () => {
   onSeptemberTenth();
+
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(recurringWithCharge) : undefined));
   const { user } = renderForm(recurringWithCharge);
 
@@ -1217,11 +1278,13 @@ it("asks whether an amount change also reaches this month's charges", async () =
   await user.click(within(dialog).getByRole("button", { name: "Aplicar também às deste mês" }));
 
   const patch = sent.find(entry => entry.init.method === "PATCH");
+
   expect(JSON.parse(String(patch?.init.body))).toMatchObject({ totalCents: 12_000, applyTo: "current_month" });
 });
 
 it("sends no scope when the owner keeps this month as it is", async () => {
   onSeptemberTenth();
+
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(recurringWithCharge) : undefined));
   const { user } = renderForm(recurringWithCharge);
 
@@ -1233,11 +1296,13 @@ it("sends no scope when the owner keeps this month as it is", async () => {
   await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Só a partir do mês seguinte" }));
 
   const patch = sent.find(entry => entry.init.method === "PATCH");
+
   expect(JSON.parse(String(patch?.init.body)).applyTo).toBeUndefined();
 });
 
 it("saves an untouched recurring billing without asking", async () => {
   onSeptemberTenth();
+
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(recurringWithCharge) : undefined));
   const { user } = renderForm(recurringWithCharge);
 
@@ -1265,6 +1330,7 @@ it("seeds Não notificar from the allocations and sends the new value on edit", 
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
   const patch = sent.find(entry => entry.init.method === "PATCH");
+
   expect(JSON.parse(String(patch?.init.body)).split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", notify: true }] });
 });
 
@@ -1293,6 +1359,7 @@ it("keeps the registro switch locked on edit and never moves its counterpart", a
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
   const patch = sent.find(entry => entry.init.method === "PATCH");
+
   expect(patch?.path).toBe("/api/financial/billings/b4");
   expect(JSON.parse(String(patch?.init.body))).toEqual({ category: "other" });
 });
@@ -1304,6 +1371,7 @@ function isBefore(a: Element, b: Element): boolean {
 
 it("orders the sections Direção, Valor, Título e categoria, Frequência, Divisão and Chave Pix", async () => {
   api();
+
   const { user } = renderForm();
 
   await pickAna(user);
@@ -1326,6 +1394,7 @@ it("orders the sections Direção, Valor, Título e categoria, Frequência, Divi
 
 it("places the restyled Adicionar action below the participant list, before Não notificar", async () => {
   api();
+
   const { user } = renderForm();
 
   await pickAna(user);
@@ -1343,6 +1412,7 @@ it("places the restyled Adicionar action below the participant list, before Não
 
 it("shows the footer summary and the rounded-up total for a parcelado draft", async () => {
   api();
+
   const { user } = renderForm();
 
   await pickAna(user);
@@ -1358,6 +1428,7 @@ it("shows the footer summary and the rounded-up total for a parcelado draft", as
 
 it("shows the footer summary with the per-month total for an indefinite draft", async () => {
   api();
+
   const { user } = renderForm();
 
   await pickAna(user);
@@ -1373,6 +1444,7 @@ it("hides the footer summary while the draft is not valid yet", async () => {
   renderForm();
 
   await screen.findByRole("button", { name: "Criar conta" });
+
   expect(screen.queryByText(/^Gera /)).not.toBeInTheDocument();
 });
 
@@ -1381,6 +1453,7 @@ it("never shows the footer summary while editing", async () => {
   renderForm(onceBilling);
 
   await screen.findByRole("button", { name: "Salvar conta" });
+
   expect(screen.queryByText(/^Gera /)).not.toBeInTheDocument();
 });
 

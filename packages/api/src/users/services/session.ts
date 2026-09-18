@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes as nodeRandomBytes, timingSafeEqual } from 'node:crypto';
 
-const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+/** Production lifetime of an access token; each stage overrides it through AUTH_ACCESS_TOKEN_TTL_SECONDS. */
+export const DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const TOKEN_ISSUER = 'receivy-api';
 const TOKEN_AUDIENCE = 'receivy-clients';
 
@@ -10,6 +11,7 @@ type AccessTokenInput = {
   familyId: string;
   nowSeconds?: number;
   secret: string;
+  ttlSeconds?: number;
   userId: string;
 };
 
@@ -40,11 +42,17 @@ function invalidToken(): never {
   throw new Error('Invalid session token');
 }
 
-export function issueAccessToken({ familyId, nowSeconds = Math.floor(Date.now() / 1000), secret, userId }: AccessTokenInput): string {
+export function issueAccessToken({
+  familyId,
+  nowSeconds = Math.floor(Date.now() / 1000),
+  secret,
+  ttlSeconds = DEFAULT_ACCESS_TOKEN_TTL_SECONDS,
+  userId
+}: AccessTokenInput): string {
   const header = encodeJson({ alg: 'HS256', typ: 'JWT' });
   const payload = encodeJson({
     aud: TOKEN_AUDIENCE,
-    exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
+    exp: nowSeconds + ttlSeconds,
     iat: nowSeconds,
     iss: TOKEN_ISSUER,
     sid: familyId,

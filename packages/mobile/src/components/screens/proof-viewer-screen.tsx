@@ -87,6 +87,7 @@ export function ProofViewerScreen({ chargeId, client = financialClient, onDone }
   async function review(decision: "accepted" | "rejected") {
     await run(async () => {
       await client.reviewProof(chargeId, decision, reason.trim() || undefined);
+
       onDone?.();
     }, "Não foi possível revisar o comprovante.");
   }

@@ -3,10 +3,8 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { PublicProofState } from '@receivy/common';
 import { throttlePublicRead } from '../../common/utils/throttle';
-import { PublicLinkRepository } from '../../public/repositories/public-link';
+import { resolvePublicCharge } from '../../public/services/public-link';
 import type { ProofProvider } from '../provider';
-import { ProofRepository } from '../repositories/proof';
-import { currentProof } from '../repositories/proof-row';
 
 declare class PublicRequest implements Http.Request {
   parameters: { token: String.Max<200> };
@@ -17,12 +15,10 @@ declare class PublicStateResponse implements Http.Response {
   body: PublicProofState;
 }
 
-export async function publicProofStateHandler(
-  request: PublicRequest,
-  { db, variables }: Service.Context<ProofProvider>
-): Promise<PublicStateResponse> {
-  const secret = variables.PUBLIC_LINK_HMAC_SECRET;
-  const charge = await PublicLinkRepository.resolveCharge(db, request.parameters.token, secret);
+export async function publicProofStateHandler({ parameters }: PublicRequest, { db, proofs, variables }: Service.Context<ProofProvider>): Promise<PublicStateResponse> {
+  const charge = await resolvePublicCharge(db, parameters.token, variables.PUBLIC_LINK_HMAC_SECRET);
+
   await throttlePublicRead(db, charge.id);
-  return { status: 200, body: ProofRepository.stateView(await currentProof(db, charge.id), request.parameters.token, secret) };
+
+  return { status: 200, body: await proofs.publicState(charge.id, parameters.token) };
 }

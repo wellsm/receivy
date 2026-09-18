@@ -39,9 +39,11 @@ function invalidToken(): never {
 function decodeJson(segment: string): Record<string, unknown> {
   try {
     const value: unknown = JSON.parse(Buffer.from(segment, 'base64url').toString('utf8'));
+
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return invalidToken();
     }
+
     return value as Record<string, unknown>;
   } catch {
     return invalidToken();
@@ -66,11 +68,13 @@ export function verifyOidcIdToken({
   token
 }: VerifyOidcIdTokenInput): OidcIdentity {
   const segments = token.split('.');
+
   if (segments.length !== 3) {
     return invalidToken();
   }
 
   const [encodedHeader, encodedPayload, encodedSignature] = segments;
+
   if (!encodedHeader || !encodedPayload || !encodedSignature) {
     return invalidToken();
   }
@@ -91,6 +95,7 @@ export function verifyOidcIdToken({
   const jwk = jwks.keys.find(
     (candidate) => candidate.kid === kid && (!candidate.alg || candidate.alg === algorithm) && (!candidate.use || candidate.use === 'sig')
   );
+
   if (!jwk) {
     return invalidToken();
   }
@@ -106,6 +111,7 @@ export function verifyOidcIdToken({
       algorithm === SupportedAlgorithm.Es256 ? { key: publicKey, dsaEncoding: 'ieee-p1363' } : publicKey,
       Buffer.from(encodedSignature, 'base64url')
     );
+
     if (!validSignature) {
       return invalidToken();
     }

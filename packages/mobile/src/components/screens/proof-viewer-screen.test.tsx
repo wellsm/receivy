@@ -13,6 +13,7 @@ jest.mock("expo-router", () => {
 jest.mock("expo-web-browser", () => ({ openBrowserAsync: jest.fn().mockResolvedValue({ type: "dismiss" }) }));
 jest.mock("react-native-pdf", () => {
   const { View } = jest.requireActual<typeof import("react-native")>("react-native");
+
   return { __esModule: true, default: (props: { source: { uri: string } }) => <View testID="pdf-view" accessibilityLabel={props.source.uri} /> };
 });
 jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
@@ -71,6 +72,7 @@ function clientWith(detail: ChargeDetail) {
 describe("ProofViewerScreen", () => {
   it("shows the proof and lets the creditor accept it", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar pago")?.onPress?.());
+
     const onDone = jest.fn();
     const client = clientWith(charge({ proof: proof() }));
 
@@ -83,6 +85,7 @@ describe("ProofViewerScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Marcar como pago" }));
 
     await waitFor(() => expect(client.reviewProof).toHaveBeenCalledWith("charge", "accepted", undefined));
+
     expect(onDone).toHaveBeenCalled();
   });
 
@@ -96,6 +99,7 @@ describe("ProofViewerScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Rejeitar comprovante" }));
 
     await waitFor(() => expect(client.reviewProof).toHaveBeenCalledWith("charge", "rejected", "Valor diferente"));
+
     expect(onDone).toHaveBeenCalled();
   });
 

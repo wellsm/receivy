@@ -11,12 +11,14 @@ export async function consumeQuota(db: DbClient, scope: string, limit: number, n
     expires_at = CASE WHEN proof_throttles.expires_at <= :now THEN :expiry ELSE proof_throttles.expires_at END RETURNING attempts`,
     { id, expiry: new Date(now + 600000).toISOString(), now: new Date(now).toISOString() }
   );
+
   return Number(rows[0]?.['attempts']) <= limit;
 }
 
 /** Five codes per normalized address per window; the 60 s cooldown in `replaceLoginCode` handles resends. */
 export async function allowEmailCode(db: DbClient, email: string, secret: string): Promise<boolean> {
   const hash = createHmac('sha256', secret).update(normalizeEmail(email)).digest('hex');
+
   return consumeQuota(db, `otp-request-email:${hash}`, 5);
 }
 

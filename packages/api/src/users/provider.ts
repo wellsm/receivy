@@ -2,20 +2,22 @@ import type { Environment } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { EmailService } from '../common/services/email/service';
 import type { Db } from '../database';
-import type { AvatarFiles, ProofFiles } from '../storage';
+import type { AvatarFiles } from '../storage';
+import type { AccountService } from './services/account';
 
 export declare class UserProvider implements Http.Provider {
   services: {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
     avatarFiles: Environment.Service<AvatarFiles>;
-    // Erasing an account still deletes the proof files the person sent.
-    proofFiles: Environment.Service<ProofFiles>;
+    accounts: Environment.Service<AccountService>;
     variables: Environment.ServiceVariables;
   };
 
   variables: {
     AUTH_JWT_SECRET: Environment.Variable<'AUTH_JWT_SECRET'>;
+    // Lifetime of an access token in seconds; local and dev stretch it, production keeps 15 minutes.
+    AUTH_ACCESS_TOKEN_TTL_SECONDS: Environment.VariableOrValue<'AUTH_ACCESS_TOKEN_TTL_SECONDS', '900'>;
     LOGIN_CODE_HASH_KEY: Environment.Variable<'LOGIN_CODE_HASH_KEY'>;
     EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
     RESEND_FROM_EMAIL: Environment.Variable<'RESEND_FROM_EMAIL'>;

@@ -82,6 +82,7 @@ export function patchDraft(patch: { contact?: { id: string; userId: string }; pi
     const payee = patch.contact ? { payee: patch.contact.id } : {};
 
     write({ returnTo: stored.returnTo, draft: { ...stored.draft, ...payee, ...pix } });
+
     return;
   }
 

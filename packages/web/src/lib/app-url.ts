@@ -12,10 +12,13 @@ export function appOrigin(request: Request): string {
 
   if (configured) {
     let url: URL;
+
     try { url = new URL(configured); } catch { throw new Error("WEB_APP_URL must be an absolute URL"); }
+
     if (!/^https?:$/.test(url.protocol) || url.pathname !== "/" || url.search || url.hash) {
       throw new Error("WEB_APP_URL must be an http(s) origin without path, query or fragment");
     }
+
     return url.origin;
   }
   

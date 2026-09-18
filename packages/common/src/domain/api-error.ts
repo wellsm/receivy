@@ -31,5 +31,6 @@ export function apiErrorMessage(status: number, body: unknown, fallback: string)
 /** Stable machine code of a domain error (`context.code`), for callers that branch on it. */
 export function apiErrorCode(body: unknown): string | undefined {
   const code = (body as ErrorBody | null)?.context?.code;
+
   return typeof code === 'string' ? code : undefined;
 }

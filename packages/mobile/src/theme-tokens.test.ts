@@ -31,6 +31,7 @@ function sources(directory: string, found: string[] = []): string[] {
 
     if (statSync(path).isDirectory()) {
       sources(path, found);
+
       continue;
     }
 

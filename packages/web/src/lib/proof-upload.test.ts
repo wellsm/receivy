@@ -11,8 +11,13 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 it("reserves a ticket, PUTs the bytes and completes the upload", async () => {
   const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
-    if (init?.method === "PUT") return new Response(null, { status: 204 });
-    if (url === `${base}/proof/complete`) return Response.json({ id: "c1", proof: { state: "pending" } });
+    if (init?.method === "PUT") {
+      return new Response(null, { status: 204 });
+    }
+    if (url === `${base}/proof/complete`) {
+      return Response.json({ id: "c1", proof: { state: "pending" } });
+    }
+
     return ticket();
   });
 
@@ -23,8 +28,13 @@ it("reserves a ticket, PUTs the bytes and completes the upload", async () => {
 
 it("explains an upload the API could not complete", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
-    if (init?.method === "PUT") return new Response(null, { status: 204 });
-    if (url === `${base}/proof/complete`) return new Response(null, { status: 500 });
+    if (init?.method === "PUT") {
+      return new Response(null, { status: 204 });
+    }
+    if (url === `${base}/proof/complete`) {
+      return new Response(null, { status: 500 });
+    }
+
     return ticket();
   });
 
@@ -41,5 +51,6 @@ it("rejects a file the API would refuse before reserving anything", async () => 
   const fetcher = vi.spyOn(globalThis, "fetch");
 
   await expect(uploadProofFile(base, new File(["x"], "notas.txt", { type: "text/plain" }))).rejects.toThrow("Selecione JPG, PNG ou PDF de até 10 MB.");
+
   expect(fetcher).not.toHaveBeenCalled();
 });

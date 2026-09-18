@@ -46,7 +46,8 @@
       "style": {
         "useImportType": "error",
         "noParameterAssign": "error",
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "useBlockStatements": "error"
       },
       "suspicious": {
         "noExplicitAny": "warn",

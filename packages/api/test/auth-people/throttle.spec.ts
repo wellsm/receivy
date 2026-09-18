@@ -18,6 +18,7 @@ describe('link quotas on PostgreSQL', () => {
         parameters: { token: `invalid-${crypto.randomUUID()}` },
         body: { filename: 'fixture.pdf', mime: ProofMime.Pdf, size: 12 }
       };
+
       await rejects(
         () => publicStartProofUploadHandler(request, context),
         (error) => (error as { status: number }).status === 404
@@ -30,15 +31,20 @@ describe('link quotas on PostgreSQL', () => {
   it('caps one capability at twelve actions per window and hashes the bucket id', async () => {
     const now = Date.now() + 86400000;
 
-    for (let index = 0; index < 12; index++) await throttleProof(db, 'one-capability', now);
+    for (let index = 0; index < 12; index++) {
+      await throttleProof(db, 'one-capability', now);
+    }
+
     await rejects(() => throttleProof(db, 'one-capability', now), TooManyRequestsError);
     await throttleProof(db, 'another-capability', now);
 
     const rows = await db.proof_throttles.findMany({ select: { id: true } });
+
     equal(
       rows.records.every((row) => /^[a-f0-9]{64}$/.test(row.id)),
       true
     );
+
     await db.proof_throttles.deleteMany({ where: { expires_at: new Date(now + 600000).toISOString() } });
   });
 });

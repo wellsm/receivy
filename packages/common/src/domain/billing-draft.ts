@@ -4,6 +4,7 @@ import {
   BillingKind,
   type BillingInput,
   type BillingReminder,
+  type NormalizedBillingInput,
   BillingRecurrence,
   MAX_FINITE_OCCURRENCES,
   SplitPartKind
@@ -272,6 +273,11 @@ function payeeOf(draft: BillingDraft): string {
   return draft.payee;
 }
 
+/** The request body: `normalizeBillingInput` also names the direction, which the API reads from `contactId`. */
+function requestBody({ type: _type, ...input }: NormalizedBillingInput): BillingInput {
+  return input;
+}
+
 /** Shared pure review boundary; raw text stays in each platform's local UI. `now` is passed only on creation. */
 export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput {
   const endDate = endDateFor(draft);
@@ -294,7 +300,7 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
 
   // A registro names who is on the other side and has nobody to pay through or remind.
   if (draft.settled) {
-    return normalizeBillingInput({ ...schedule, kind: BillingKind.Record, ...counterpartOf(draft) }, now);
+    return requestBody(normalizeBillingInput({ ...schedule, kind: BillingKind.Record, ...counterpartOf(draft) }, now));
   }
 
   const base = {
@@ -307,7 +313,7 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
 
   if (draft.direction === Direction.Payable) {
     // Whoever receives owns the key: the draft points at one of their payment methods, or at none.
-    return normalizeBillingInput({ ...base, contactId: payeeOf(draft), paymentMethodId: draft.pix || undefined }, now);
+    return requestBody(normalizeBillingInput({ ...base, contactId: payeeOf(draft), paymentMethodId: draft.pix || undefined }, now));
   }
 
   if (!draft.selected.length) {
@@ -319,12 +325,14 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
     ...(draft.owner ? [{ kind: SplitPartKind.Owner } satisfies SplitParty] : [])
   ];
 
-  return normalizeBillingInput(
-    {
-      ...base,
-      paymentMethodId: draft.pix || undefined,
-      split: buildSplit(draft, parties)
-    },
-    now
+  return requestBody(
+    normalizeBillingInput(
+      {
+        ...base,
+        paymentMethodId: draft.pix || undefined,
+        split: buildSplit(draft, parties)
+      },
+      now
+    )
   );
 }

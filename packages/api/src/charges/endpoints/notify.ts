@@ -5,7 +5,6 @@ import type { ChargeDetail } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ChargeProvider } from '../provider';
-import { ChargeRepository } from '../repositories/charge';
 
 declare class NotifyRequest implements Http.Request {
   identity: SessionIdentity;
@@ -19,10 +18,10 @@ declare class ItemResponse implements Http.Response {
 }
 
 export async function setChargeNotifyHandler(
-  request: NotifyRequest,
-  { db, avatarFiles }: Service.Context<ChargeProvider>
+  { identity, parameters, body }: NotifyRequest,
+  { avatarFiles, charges }: Service.Context<ChargeProvider>
 ): Promise<ItemResponse> {
-  const detail = await ChargeRepository.setNotify(db, request.identity.userId, request.parameters.id, request.body.notify);
+  const detail = await charges.setNotify(identity.userId, parameters.id, body.notify);
 
   return { status: 200, body: await AvatarRepository.sign(avatarFiles, detail) };
 }

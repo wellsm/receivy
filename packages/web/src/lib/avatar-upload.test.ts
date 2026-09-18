@@ -6,9 +6,16 @@ afterEach(() => vi.restoreAllMocks());
 it("reserves, puts the bytes and completes the upload", async () => {
   const blob = new Blob(["jpeg"], { type: "image/jpeg" });
   const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
-    if (url === "/api/financial/account/avatar") return Response.json({ uploadUrl: "https://bucket.test/put", expiresAt: "2026-09-13T12:05:00.000Z" });
-    if (url === "https://bucket.test/put") return new Response(null, { status: 200 });
-    if (url === "/api/financial/account/avatar/complete") return Response.json({ avatar: { url: "https://bucket.test/get", version: "v2" } });
+    if (url === "/api/financial/account/avatar") {
+      return Response.json({ uploadUrl: "https://bucket.test/put", expiresAt: "2026-09-13T12:05:00.000Z" });
+    }
+    if (url === "https://bucket.test/put") {
+      return new Response(null, { status: 200 });
+    }
+    if (url === "/api/financial/account/avatar/complete") {
+      return Response.json({ avatar: { url: "https://bucket.test/get", version: "v2" } });
+    }
+
     throw new Error(`unexpected ${String(url)} ${init?.method}`);
   });
 
@@ -24,8 +31,13 @@ it("reserves, puts the bytes and completes the upload", async () => {
 
 it("explains a rejected file", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-    if (url === "/api/financial/account/avatar") return Response.json({ uploadUrl: "https://bucket.test/put", expiresAt: "x" });
-    if (url === "https://bucket.test/put") return new Response(null, { status: 200 });
+    if (url === "/api/financial/account/avatar") {
+      return Response.json({ uploadUrl: "https://bucket.test/put", expiresAt: "x" });
+    }
+    if (url === "https://bucket.test/put") {
+      return new Response(null, { status: 200 });
+    }
+
     return Response.json({ message: "Envie uma imagem JPG ou PNG de até 2 MB." }, { status: 422 });
   });
 

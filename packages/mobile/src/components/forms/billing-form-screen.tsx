@@ -198,11 +198,13 @@ function valuesFromBilling(billing: BillingDetail): SplitValues {
 
     if ("amountCents" in part) {
       values.fixed[key] = moneyText(part.amountCents);
+
       continue;
     }
 
     if ("basisPoints" in part) {
       values.percentage[key] = String(part.basisPoints / 100).replace(".", ",");
+
       continue;
     }
 
@@ -565,6 +567,7 @@ export function BillingFormScreen({
     // An edit is not restorable from a parked draft: only a creation leaves one behind.
     if (editing) {
       onEditContact(draft.payee);
+
       return;
     }
 
@@ -675,11 +678,13 @@ export function BillingFormScreen({
 
     if (attempt) {
       void save(attempt);
+
       return;
     }
 
     if (!isCalendarDate(draft.start)) {
       setError("Informe a data como AAAA-MM-DD.");
+
       return;
     }
 
@@ -697,6 +702,7 @@ export function BillingFormScreen({
       // Only a recorrente edit that changes what its charges carry, with charges of this month still ahead, needs the answer.
       if (billing && shouldAskEditScope(billing, patchBody(next.input), todayIn(billing.timezone))) {
         setScopeAttempt(next);
+
         return;
       }
 
@@ -716,6 +722,7 @@ export function BillingFormScreen({
   function toggleMonthEnd() {
     if (monthEnd) {
       update({ dueRule: BillingDueRule.Fixed });
+
       return;
     }
 
@@ -725,9 +732,11 @@ export function BillingFormScreen({
     setCalendarOpen(false);
     update({ dueRule: BillingDueRule.EndOfMonth, start: endOfMonth(base) });
   }
+
   const totalCents = draftTotalCents(draft);
   const installmentPreview = untilInstallmentPreview(draft);
   const { amounts, error: hint } = previewBillingSplit(draft);
+
   /** The draft seats user ids; the agenda entries loaded so far give them a name. */
   function contactOf(userId: string): Contact {
     return recent.find((contact) => contact.userId === userId) ?? directory.find((contact) => contact.userId === userId) ?? unknownContact(userId);

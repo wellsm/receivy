@@ -1,15 +1,19 @@
-import { ChargeState, chargeDirection, feedDayLabel, formatMoney, openChargesTotal, type ListCharge } from "@receivy/common";
+import { ChargeState, feedDayLabel, formatMoney, openChargesTotal, type ListCharge, type ListChargeItem } from "@receivy/common";
 import { FeedChargeCard } from "./feed-charge-card";
 
 type FeedDayGroupProps = {
   date: string;
   charges: ListCharge;
   today: string;
-  viewerEmail: string;
+  /** "Lembrete enviado" per charge id once a reminder went out; the button stays disabled with that label. */
+  reminded: Record<string, string>;
+  onRemind: (charge: ListChargeItem) => void;
+  onMarkPaid: (charge: ListChargeItem) => void;
+  onDeclare: (charge: ListChargeItem) => void;
 };
 
 /** One due date of the feed: the day heading with what it still owes, then its charges. */
-export function FeedDayGroup({ date, charges, today, viewerEmail }: FeedDayGroupProps) {
+export function FeedDayGroup({ date, charges, today, reminded, onRemind, onMarkPaid, onDeclare }: FeedDayGroupProps) {
   const isToday = date === today;
   const open = openChargesTotal(charges);
   const settled = charges.every((charge) => charge.state === ChargeState.Paid);
@@ -37,7 +41,16 @@ export function FeedDayGroup({ date, charges, today, viewerEmail }: FeedDayGroup
       </h2>
 
       {charges.map((charge) => (
-        <FeedChargeCard key={charge.id} charge={charge} direction={chargeDirection(charge, viewerEmail)} today={today} viewerEmail={viewerEmail} />
+        <FeedChargeCard
+          key={charge.id}
+          charge={charge}
+          direction={charge.type}
+          today={today}
+          reminded={reminded[charge.id] ?? null}
+          onRemind={() => onRemind(charge)}
+          onMarkPaid={() => onMarkPaid(charge)}
+          onDeclare={() => onDeclare(charge)}
+        />
       ))}
     </section>
   );

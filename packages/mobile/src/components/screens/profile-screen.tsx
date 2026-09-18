@@ -197,6 +197,7 @@ export function ProfileScreen({
 
     try {
       await client.logout();
+
       setEnded(true);
       setNotice("");
       onLoggedOut?.();
@@ -214,6 +215,7 @@ export function ProfileScreen({
 
     setBusy(true);
     setDialog(null);
+
     let confirmed = false;
 
     try {

@@ -11,8 +11,10 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function stubProfilePatch() {
   const requests: unknown[] = [];
+
   vi.stubGlobal("fetch", vi.fn(async (_path: string, init?: RequestInit) => {
     requests.push(JSON.parse(init?.body as string));
+
     return Response.json({ user: { name: "Ana" } });
   }));
 
@@ -24,6 +26,7 @@ it("only enables Continuar for a non-blank name", () => {
   render(<OnboardingScreen />);
 
   const button = screen.getByRole("button", { name: "Continuar" });
+
   expect(button).toBeDisabled();
 
   fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "   " } });
@@ -43,12 +46,14 @@ it("pre-fills the name the API already knows, so a contact added by someone else
 
 it("saves the trimmed name with the device timezone and continues to the app", async () => {
   const requests = stubProfilePatch();
+
   render(<OnboardingScreen />);
 
   fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "  Ana  " } });
   fireEvent.submit(screen.getByRole("button", { name: "Continuar" }).closest("form") as HTMLFormElement);
 
   await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+
   expect(requests).toEqual([
     { name: "Ana", locale: "pt-BR", country: "BR", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
   ]);
@@ -56,6 +61,7 @@ it("saves the trimmed name with the device timezone and continues to the app", a
 
 it("masks the optional phone and sends it as typed", async () => {
   const requests = stubProfilePatch();
+
   render(<OnboardingScreen />);
 
   fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Ana" } });
@@ -66,6 +72,7 @@ it("masks the optional phone and sends it as typed", async () => {
   fireEvent.submit(screen.getByRole("button", { name: "Continuar" }).closest("form") as HTMLFormElement);
 
   await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+
   expect(requests).toEqual([
     { name: "Ana", phone: "(11) 98765-4321", locale: "pt-BR", country: "BR", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
   ]);

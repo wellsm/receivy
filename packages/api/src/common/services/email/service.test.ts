@@ -171,15 +171,19 @@ describe('email factory service', () => {
     const html = '<!doctype html><html><body><p>Olá</p></body></html>';
 
     const mailpit = vi.fn().mockResolvedValue(Response.json({ ID: 'mailpit-3' }));
+
     await createEmailClient({ APP_STAGE: 'local' }, mailpit).send(EmailTransport.Mailpit, { ...message, html });
 
     const [, mailpitInit] = mailpit.mock.calls[0] as [string, RequestInit];
+
     expect(JSON.parse(String(mailpitInit.body))).toMatchObject({ text: message.text, html });
 
     const resend = vi.fn().mockResolvedValue(Response.json({ id: 'resend-3' }));
+
     await createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, resend).send(EmailTransport.Resend, { ...message, html });
 
     const [, resendInit] = resend.mock.calls[0] as [string, RequestInit];
+
     expect(JSON.parse(String(resendInit.body))).toMatchObject({ text: message.text, html });
   });
 
@@ -189,6 +193,7 @@ describe('email factory service', () => {
     await createEmailClient({ APP_STAGE: 'dev', RESEND_API_KEY: 'key' }, resend).send(EmailTransport.Resend, message);
 
     const [, init] = resend.mock.calls[0] as [string, RequestInit];
+
     expect(JSON.parse(String(init.body))).not.toHaveProperty('html');
   });
 

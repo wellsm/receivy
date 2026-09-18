@@ -3,7 +3,7 @@ import type { Http } from '@ez4/gateway';
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { UserProvider } from '../provider';
-import { AuthRepository } from '../repositories/auth';
+import { authStore } from '../services/auth-store';
 import { OauthProvider } from '../services/oauth';
 import { commitOauthIdentity } from '../services/oauth-commit';
 import { completeOauth, OauthFlowError } from '../services/oauth-flow';
@@ -28,9 +28,11 @@ export async function googleCallbackHandler(
   { db, variables, avatarFiles }: Service.Context<UserProvider>
 ): Promise<GoogleCallbackResponse> {
   const dependencies = oauthDependencies(OauthProvider.Google, { variables });
+
   if (!dependencies.client) {
     throw new HttpNotFoundError();
   }
+
   try {
     const result = await completeOauth(
       {
@@ -41,9 +43,10 @@ export async function googleCallbackHandler(
       },
       {
         providerClient: dependencies.client,
-        repo: AuthRepository.create(db),
+        repo: authStore(db),
         commitGrant: async (input) => {
           const userId = await commitOauthIdentity(db, input);
+
           await adoptProviderPicture({
             db,
             bucket: avatarFiles,
@@ -53,6 +56,7 @@ export async function googleCallbackHandler(
         }
       }
     );
+
     return {
       status: 302,
       headers: { location: appendOauthGrant(result.destination, result.grant) }
@@ -61,6 +65,7 @@ export async function googleCallbackHandler(
     if (error instanceof OauthFlowError) {
       throw new HttpUnauthorizedError();
     }
+
     throw error;
   }
 }

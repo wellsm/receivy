@@ -171,11 +171,14 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       setArchiving(null);
       setError(reason instanceof Error ? reason.message : KEYS_UPDATE_ERROR);
       setBusy(false);
+
       return;
     }
 
     setArchiving(null);
+
     await loadKeys();
+
     setBusy(false);
   }
 
@@ -189,6 +192,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       input = normalizeContact({ name, nickname, email, ...paymentMethodInput() });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Confira os dados do contato.");
+
       return;
     }
 
@@ -209,6 +213,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
 
       if (contactId) {
         router.push(returnTo ?? `/contacts/${contactId}`);
+
         return;
       }
 
@@ -217,6 +222,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       if (returnTo) {
         patchDraft({ contact: { id: saved.id, userId: saved.userId } });
         router.push(returnTo);
+
         return;
       }
 

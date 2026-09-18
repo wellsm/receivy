@@ -4,7 +4,6 @@ import type { String } from '@ez4/schema';
 import type { PaymentMethod } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { PaymentMethodProvider } from '../provider';
-import { PaymentMethodRepository } from '../repositories/payment-method';
 import { type PaymentMethodBody, paymentMethodInput, safe } from '../utils/input';
 
 declare class EditRequest implements Http.Request {
@@ -19,13 +18,8 @@ declare class EditResponse implements Http.Response {
 }
 
 export async function editPaymentMethodHandler(
-  request: EditRequest,
-  { db }: Service.Context<PaymentMethodProvider>
+  { identity, parameters, body }: EditRequest,
+  { paymentMethods }: Service.Context<PaymentMethodProvider>
 ): Promise<EditResponse> {
-  return {
-    status: 200,
-    body: await safe(() =>
-      PaymentMethodRepository.save(db, request.identity.userId, paymentMethodInput(request.body), request.parameters.id)
-    )
-  };
+  return { status: 200, body: await safe(() => paymentMethods.save(identity.userId, paymentMethodInput(body), parameters.id)) };
 }

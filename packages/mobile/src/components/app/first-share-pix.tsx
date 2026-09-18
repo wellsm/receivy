@@ -6,8 +6,15 @@ import type { FinancialClient } from "@/financial/client";
 export function FirstSharePix({ client, busy, publish }: { client: Pick<FinancialClient, "paymentMethods" | "savePaymentMethod">; busy: boolean; publish: (id: string) => Promise<void> }) {
   const [items, setItems] = useState<PaymentMethod[]>([]), [selected, setSelected] = useState("");
   const [key, setKey] = useState(""), [type, setType] = useState<PixKeyType>(PixKeyType.Email), [error, setError] = useState(""), [saving, setSaving] = useState(false);
+
   useEffect(() => { void client.paymentMethods().then(page => setItems(page.paymentMethods)).catch(() => setError("Não foi possível carregar as chaves. Reabra a cobrança para tentar novamente.")); }, [client]);
-  async function save() { setSaving(true); setError(""); try { const method = await client.savePaymentMethod({ pixKeyType: type, pixKey: key }); setItems(previous => [...previous, method]); setSelected(method.id); setKey(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível salvar a chave."); } finally { setSaving(false); } }
+
+  async function save() { setSaving(true); setError("");
+
+ try { const method = await client.savePaymentMethod({ pixKeyType: type, pixKey: key });
+
+ setItems(previous => [...previous, method]); setSelected(method.id); setKey(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível salvar a chave."); } finally { setSaving(false); } }
+
   return <View className="gap-3 rounded-3xl border border-outline bg-surface p-5"><Text className="text-xl font-bold text-primary-strong">Pix antes de compartilhar</Text><Text>Você pode manter este registro sem Pix. Para publicar, escolha a chave que ficará fixa nesta cobrança. O aviso inicial aguardará essa escolha.</Text>
     {items.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ checked: selected === item.id }} onPress={() => setSelected(item.id)} className="min-h-12 justify-center rounded-xl border border-outline p-3"><Text>{selected === item.id ? "✓ " : ""}{item.pixKeyType.toUpperCase()} · {item.pixKey}</Text></Pressable>)}
     <Pressable accessibilityRole="button" disabled={busy || saving || !selected} onPress={() => void publish(selected)} className="min-h-12 items-center justify-center rounded-xl bg-primary"><Text className="font-bold text-on-primary">Publicar com este Pix</Text></Pressable>

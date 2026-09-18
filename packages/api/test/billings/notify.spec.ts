@@ -12,16 +12,14 @@ import {
   SplitMode,
   SplitPartKind
 } from '@receivy/common';
-import { BillingRepository } from '../../src/billings/repositories/billing';
+import { createBilling, patchBilling, setParticipantNotify } from '../../src/billings/services/billing';
+import { materializeNextOccurrence } from '../../src/billings/services/materialize';
 import { ChargeClosedError, SilenceUnavailableError } from '../../src/charges/errors';
-import { ChargeRepository } from '../../src/charges/repositories/charge';
 import { EventRepository } from '../../src/common/repositories/events';
-import { ContactRepository } from '../../src/contacts/repositories/contact';
-import { InviteRepository } from '../../src/invites/repositories/invite';
+import { acceptInvite } from '../../src/invites/services/invite';
 import { createInvite } from '../../src/invites/services/links';
-import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
-import { TimelineRepository } from '../../src/timeline/repositories/timeline';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { contactLedger } from '../../src/timeline/services/ledger';
+import { charges, cleanupUsers, contacts, createUser, db, paymentMethods } from '../fixtures/financial';
 
 const OWNER = 'd1111111-1111-4111-8111-111111111111';
 const OTHER = 'd2222222-2222-4222-8222-222222222222';
@@ -101,19 +99,19 @@ describe('sem avisos on native PostgreSQL', () => {
     await createUser(db, { id: OTHER, email: 'silenced-other@example.com', name: 'Outra' });
     await createUser(db, { id: GUEST, email: 'silenced-guest@example.com', name: 'Gabi' });
 
-    const ana = await ContactRepository.save(db, OWNER, { name: 'Ana', email: 'silenced-ana@example.com' });
+    const ana = await contacts.save(OWNER, { name: 'Ana', email: 'silenced-ana@example.com' });
 
     anaId = ana.userId;
     anaContactId = ana.id;
-    brunoId = (await ContactRepository.save(db, OWNER, { name: 'Bruno', email: 'silenced-bruno@example.com' })).userId;
-    carlaId = (await ContactRepository.save(db, OWNER, { name: 'Carla', email: 'silenced-carla@example.com' })).userId;
-    pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    brunoId = (await contacts.save(OWNER, { name: 'Bruno', email: 'silenced-bruno@example.com' })).userId;
+    carlaId = (await contacts.save(OWNER, { name: 'Carla', email: 'silenced-carla@example.com' })).userId;
+    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, OTHER, GUEST]));
 
   it('copies a quiet participant to the allocation and to every charge created for them', async () => {
-    const created = await BillingRepository.create(
+    const created = await createBilling(
       db,
       OWNER,
       'silenced-create',
@@ -160,16 +158,16 @@ describe('sem avisos on native PostgreSQL', () => {
 
     equal(anaCharge.notify, false);
     equal(created.charges.find((charge) => charge.debtorId === brunoId)!.notify, true);
-    equal((await ChargeRepository.get(db, anaId, anaCharge.id)).notify, true, 'whoever owes sees no difference');
+    equal((await charges.get(anaId, anaCharge.id)).notify, true, 'whoever owes sees no difference');
 
-    const ledger = await TimelineRepository.contactLedger(db, OWNER, anaContactId);
+    const ledger = await contactLedger(db, OWNER, anaContactId);
 
     equal(ledger.charges.find((charge) => charge.id === anaCharge.id)?.notify, false);
   });
 
   it('copies the participant value to the charges of each new month', async () => {
-    const billing = await BillingRepository.create(db, OWNER, 'silenced-monthly', recurring('Aluguel'), date('2026-01-01'));
-    const done = await BillingRepository.materializeNextOccurrence(db, billing.id, date('2026-02-01'));
+    const billing = await createBilling(db, OWNER, 'silenced-monthly', recurring('Aluguel'), date('2026-01-01'));
+    const done = await materializeNextOccurrence(db, billing.id, date('2026-02-01'));
 
     equal(done.materialized, true);
 
@@ -181,11 +179,11 @@ describe('sem avisos on native PostgreSQL', () => {
   });
 
   it('keeps the value of whoever stays, applies the one sent and moves their pending charges', async () => {
-    const billing = await BillingRepository.create(db, OWNER, 'silenced-edit', recurring('Internet'), date('2026-01-01'));
+    const billing = await createBilling(db, OWNER, 'silenced-edit', recurring('Internet'), date('2026-01-01'));
 
-    await BillingRepository.materializeNextOccurrence(db, billing.id, date('2026-02-01'));
+    await materializeNextOccurrence(db, billing.id, date('2026-02-01'));
 
-    const edited = await BillingRepository.patch(
+    const edited = await patchBilling(
       db,
       OWNER,
       billing.id,
@@ -223,7 +221,7 @@ describe('sem avisos on native PostgreSQL', () => {
       'whoever enters takes the value without an event, like at creation'
     );
 
-    await BillingRepository.patch(
+    await patchBilling(
       db,
       OWNER,
       billing.id,
@@ -248,7 +246,7 @@ describe('sem avisos on native PostgreSQL', () => {
   });
 
   it('switches a participant on the allocation and on their pending charges only', async () => {
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'silenced-participant',
@@ -275,7 +273,7 @@ describe('sem avisos on native PostgreSQL', () => {
       data: { state: ChargeState.Cancelled, cancelled_at: stamp, updated_at: stamp }
     });
 
-    const quieted = await BillingRepository.setParticipantNotify(db, OWNER, billing.id, anaId, false, date('2026-03-02'));
+    const quieted = await setParticipantNotify(db, OWNER, billing.id, anaId, false, date('2026-03-02'));
 
     deepEqual(
       quieted.allocations.map((allocation) => allocation.notify),
@@ -295,7 +293,7 @@ describe('sem avisos on native PostgreSQL', () => {
       'paid and cancelled charges keep the value they were created with'
     );
 
-    await BillingRepository.setParticipantNotify(db, OWNER, billing.id, anaId, false, date('2026-03-03'));
+    await setParticipantNotify(db, OWNER, billing.id, anaId, false, date('2026-03-03'));
 
     deepEqual(
       (await EventRepository.list(db, billing.id, 'billing.participant_silenced')).map((event) => event.payload),
@@ -303,7 +301,7 @@ describe('sem avisos on native PostgreSQL', () => {
       'the same value records nothing'
     );
 
-    const resumed = await BillingRepository.setParticipantNotify(db, OWNER, billing.id, anaId, true, date('2026-03-04'));
+    const resumed = await setParticipantNotify(db, OWNER, billing.id, anaId, true, date('2026-03-04'));
 
     deepEqual(
       resumed.charges.map((charge) => charge.notify),
@@ -313,7 +311,7 @@ describe('sem avisos on native PostgreSQL', () => {
   });
 
   it('refuses another owner, a non-participant and a conta a pagar on the participant route', async () => {
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'silenced-refusals',
@@ -328,16 +326,17 @@ describe('sem avisos on native PostgreSQL', () => {
       },
       date('2026-03-01')
     );
-    const payable = await BillingRepository.create(db, OWNER, 'silenced-refusals-payable', payableOnce('Luz'), date('2026-03-01'));
+    const payable = await createBilling(db, OWNER, 'silenced-refusals-payable', payableOnce('Luz'), date('2026-03-01'));
 
-    await rejects(() => BillingRepository.setParticipantNotify(db, OTHER, billing.id, anaId, false), HttpNotFoundError);
-    await rejects(() => BillingRepository.setParticipantNotify(db, OWNER, billing.id, carlaId, false), HttpNotFoundError);
-    await rejects(() => BillingRepository.setParticipantNotify(db, OWNER, payable.id, anaId, false), SilenceUnavailableError);
+    await rejects(() => setParticipantNotify(db, OTHER, billing.id, anaId, false), HttpNotFoundError);
+    await rejects(() => setParticipantNotify(db, OWNER, billing.id, carlaId, false), HttpNotFoundError);
+    await rejects(() => setParticipantNotify(db, OWNER, payable.id, anaId, false), SilenceUnavailableError);
+
     equal(await db.events.count({ where: { eventable_id: billing.id, type: 'billing.participant_silenced' } }), 0);
   });
 
   it('switches one charge for its creditor and nobody else', async () => {
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'silenced-charge',
@@ -359,7 +358,7 @@ describe('sem avisos on native PostgreSQL', () => {
       date('2026-03-01')
     );
     const target = billing.charges.find((charge) => charge.debtorId === anaId)!;
-    const detail = await ChargeRepository.setNotify(db, OWNER, target.id, false);
+    const detail = await charges.setNotify(OWNER, target.id, false);
 
     equal(detail.notify, false);
     deepEqual(
@@ -371,29 +370,30 @@ describe('sem avisos on native PostgreSQL', () => {
       [brunoId, true]
     ]);
 
-    await ChargeRepository.setNotify(db, OWNER, target.id, false);
+    await charges.setNotify(OWNER, target.id, false);
 
     equal((await EventRepository.list(db, target.id, 'charge.silenced')).length, 1, 'the same value records nothing');
 
-    await ChargeRepository.setNotify(db, OWNER, target.id, true);
+    await charges.setNotify(OWNER, target.id, true);
 
     equal((await EventRepository.list(db, target.id, 'charge.unsilenced')).length, 1);
-    await rejects(() => ChargeRepository.setNotify(db, OTHER, target.id, false), HttpNotFoundError);
-    await rejects(() => ChargeRepository.setNotify(db, anaId, target.id, false), HttpNotFoundError);
 
-    await ChargeRepository.pay(db, OWNER, target.id);
-    await rejects(() => ChargeRepository.setNotify(db, OWNER, target.id, false), ChargeClosedError);
+    await rejects(() => charges.setNotify(OTHER, target.id, false), HttpNotFoundError);
+    await rejects(() => charges.setNotify(anaId, target.id, false), HttpNotFoundError);
 
-    const payable = await BillingRepository.create(db, OWNER, 'silenced-charge-payable', payableOnce('Água'), date('2026-03-01'));
+    await charges.pay(OWNER, target.id);
+    await rejects(() => charges.setNotify(OWNER, target.id, false), ChargeClosedError);
 
-    await rejects(() => ChargeRepository.setNotify(db, OWNER, payable.charges[0]!.id, false), SilenceUnavailableError);
+    const payable = await createBilling(db, OWNER, 'silenced-charge-payable', payableOnce('Água'), date('2026-03-01'));
+
+    await rejects(() => charges.setNotify(OWNER, payable.charges[0]!.id, false), SilenceUnavailableError);
   });
 
   it('moves the leftover pending charges of someone removed and added back with a value', async () => {
-    const billing = await BillingRepository.create(db, OWNER, 'silenced-readd', recurring('Academia'), date('2026-01-01'));
+    const billing = await createBilling(db, OWNER, 'silenced-readd', recurring('Academia'), date('2026-01-01'));
 
-    await BillingRepository.materializeNextOccurrence(db, billing.id, date('2026-02-01'));
-    await BillingRepository.patch(
+    await materializeNextOccurrence(db, billing.id, date('2026-02-01'));
+    await patchBilling(
       db,
       OWNER,
       billing.id,
@@ -406,7 +406,7 @@ describe('sem avisos on native PostgreSQL', () => {
     equal(leftover?.state, ChargeState.Pending, 'a next-month edit keeps the charge of whoever left');
     equal(leftover?.notify === false, false);
 
-    await BillingRepository.patch(
+    await patchBilling(
       db,
       OWNER,
       billing.id,
@@ -439,9 +439,9 @@ describe('sem avisos on native PostgreSQL', () => {
 
   it('keeps every participant value when a guest joins by the invite and copies it to the new charges', async () => {
     const now = date('2026-01-02');
-    const billing = await BillingRepository.create(db, OWNER, 'silenced-invite', recurring('Streaming'), date('2026-01-01'));
+    const billing = await createBilling(db, OWNER, 'silenced-invite', recurring('Streaming'), date('2026-01-01'));
     const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
-    const joined = await InviteRepository.accept(db, GUEST, tokenOf(invite.url), SECRET, now);
+    const joined = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
     equal(joined.joinedSplit, true);
     deepEqual(await allocationFlags(billing.id), [
@@ -450,7 +450,7 @@ describe('sem avisos on native PostgreSQL', () => {
       [GUEST, true]
     ]);
 
-    await BillingRepository.materializeNextOccurrence(db, billing.id, date('2026-02-01'));
+    await materializeNextOccurrence(db, billing.id, date('2026-02-01'));
 
     const rows = await chargeRows(billing.id);
 
@@ -461,10 +461,10 @@ describe('sem avisos on native PostgreSQL', () => {
   });
 
   it('copies the participant value to the charges an edit of the current month creates', async () => {
-    const billing = await BillingRepository.create(db, OWNER, 'silenced-current-month', recurring('Condomínio'), date('2026-01-01'));
+    const billing = await createBilling(db, OWNER, 'silenced-current-month', recurring('Condomínio'), date('2026-01-01'));
 
-    await BillingRepository.materializeNextOccurrence(db, billing.id, date('2026-02-01'));
-    await BillingRepository.patch(
+    await materializeNextOccurrence(db, billing.id, date('2026-02-01'));
+    await patchBilling(
       db,
       OWNER,
       billing.id,

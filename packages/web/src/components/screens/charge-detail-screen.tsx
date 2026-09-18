@@ -139,6 +139,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
       return await action();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : fallback);
+
       return undefined;
     } finally {
       setBusy(false);
@@ -151,6 +152,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
         setCharge(await request<ChargeDetail>(`${base}/proof/review`, jsonInit("POST", { decision: "accepted" }), "Não foi possível revisar o comprovante."));
         setConfirmPaid(null);
         setNotice("Comprovante aceito e pagamento registrado.");
+
         return;
       }
 
@@ -171,6 +173,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   async function withdraw() {
     await run(async () => {
       await request<void>(`${base}/proof`, { method: "DELETE" }, "Não foi possível desfazer.");
+
       setCharge(await request<ChargeDetail>(base));
       setNotice("Pagamento informado desfeito.");
     }, "Não foi possível desfazer.");
@@ -232,10 +235,12 @@ export function ChargeDetailScreen({ id }: { id: string }) {
             throw new Error("Não foi possível abrir o compartilhamento. Copie o link manualmente.");
           }
         });
+
         return;
       }
 
       await navigator.clipboard.writeText(text);
+
       setNotice("Link copiado.");
     }, "Não foi possível compartilhar o link.");
   }
@@ -265,6 +270,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   async function copyPix(key: string) {
     try {
       await navigator.clipboard.writeText(key);
+
       setError("");
       setNotice("Chave Pix copiada.");
     } catch {

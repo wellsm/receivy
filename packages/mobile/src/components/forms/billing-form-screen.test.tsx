@@ -210,7 +210,6 @@ const onceBilling: BillingDetail = {
   allocations: [],
   charges: [],
   previews: [],
-  nextMaterialization: null,
   category: BillingCategory.Food,
   invite: null,
   guests: [],
@@ -260,6 +259,7 @@ describe("BillingFormScreen", () => {
     await fillQuickBilling();
     await fireEvent.press(screen.getByRole("button", { name: "Categoria" }));
     await fireEvent.press(screen.getByRole("button", { name: "Mercado" }));
+
     expect(screen.queryByRole("button", { name: "Revisar cobrança" })).toBeNull();
 
     const create = screen.getByRole("button", { name: "Criar conta" });
@@ -287,6 +287,7 @@ describe("BillingFormScreen", () => {
     await fillQuickBilling();
     await fireEvent.press(screen.getByRole("button", { name: "Cotas" }));
     await fireEvent.changeText(screen.getByLabelText("Cotas de Ana"), "3");
+
     // The single-occurrence footer summary shares the same total as Ana's row on this draft:
     // exactly the split row's amount and the footer total, no more, no less.
     expect(screen.getAllByText("R$ 75,00")).toHaveLength(2);
@@ -444,8 +445,8 @@ describe("BillingFormScreen", () => {
 
     const input = client.createBilling.mock.calls[0][0];
 
+    expect(input).not.toHaveProperty("type");
     expect(input).toMatchObject({
-      type: "receivable",
       kind: "record",
       totalCents: 500_000,
       split: { mode: "equal", parts: [{ kind: "user", userId: "u1" }] },
@@ -482,7 +483,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
     await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
 
-    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ type: "payable", kind: "record", contactId: "p1" });
+    expect(client.createBilling.mock.calls[0][0]).toMatchObject({ kind: "record", contactId: "p1" });
   });
 
   it("keeps a recorrente registro from starting before today", async () => {
@@ -624,15 +625,19 @@ describe("BillingFormScreen", () => {
     expect(amount).toHaveDisplayValue("0,00");
 
     await fireEvent.changeText(amount, "1");
+
     expect(amount).toHaveDisplayValue("0,01");
 
     await fireEvent.changeText(amount, "0,010");
+
     expect(amount).toHaveDisplayValue("0,10");
 
     await fireEvent.changeText(amount, "0,1");
+
     expect(amount).toHaveDisplayValue("0,01");
 
     await fireEvent.changeText(amount, "123456");
+
     expect(amount).toHaveDisplayValue("1.234,56");
 
     await pickAna();
@@ -668,9 +673,11 @@ describe("BillingFormScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("Valor de Ana"), "60,00");
 
     await fireEvent.press(screen.getByRole("button", { name: "Porcentagem" }));
+
     expect(screen.getByLabelText("Porcentagem de Ana")).toHaveDisplayValue("");
 
     await fireEvent.press(screen.getByRole("button", { name: "Valor fixo" }));
+
     expect(screen.getByLabelText("Valor de Ana")).toHaveDisplayValue("60,00");
 
     await fireEvent.press(screen.getByRole("button", { name: "Cotas" }));
@@ -733,9 +740,11 @@ describe("BillingFormScreen", () => {
     await waitFor(() => expect(contacts.list).toHaveBeenCalledWith(false, undefined, "Bru"));
 
     await fireEvent.press(await screen.findByRole("checkbox", { name: "Bruno" }));
+
     expect(screen.getByRole("checkbox", { name: "Bruno" })).toBeChecked();
 
     await fireEvent.press(screen.getByRole("button", { name: "Carregar mais" }));
+
     expect(await screen.findByRole("checkbox", { name: "Carla" })).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByRole("button", { name: "Concluir" }));
@@ -783,6 +792,7 @@ describe("BillingFormScreen", () => {
 
     // The contact screen saved the new contact and popped back to the still-mounted form.
     patchDraft({ contact: { id: "p-new", userId: "u-new" } });
+
     await refocus();
 
     expect(await screen.findByRole("button", { name: "Carla" })).toBeSelected();
@@ -971,6 +981,7 @@ describe("BillingFormScreen", () => {
 
     await render(<BillingFormScreen client={client as never} contacts={contactsApi()} billing={onceBilling} onSaved={onSaved} onBack={jest.fn()} />);
     await screen.findByText("Editar conta");
+
     expect(screen.getByText("Contas já geradas só permitem categoria, Pix e lembretes.")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Cadastrar chave" })).toBeNull();
     expect(screen.getByRole("button", { name: "Trocar chave Pix" })).toBeDisabled();
@@ -1026,6 +1037,7 @@ describe("BillingFormScreen", () => {
 
   it("asks whether an amount change also reaches this month's charges", async () => {
     onSeptemberTenth();
+
     const patchBilling = jest.fn().mockResolvedValue(recurringWithCharge);
     const client = financialApi({ patchBilling });
 
@@ -1042,11 +1054,13 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Aplicar também às deste mês" }));
 
     await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
     expect(patchBilling.mock.calls[0][1]).toMatchObject({ totalCents: 12_000, applyTo: "current_month" });
   });
 
   it("asks for the scope when the key of a recorrente conta a pagar moves to another of the contact's", async () => {
     onSeptemberTenth();
+
     const recurringPayable: BillingDetail = {
       ...payableBilling,
       id: "b9",
@@ -1074,11 +1088,13 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Aplicar também às deste mês" }));
 
     await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
     expect(patchBilling.mock.calls[0][1]).toMatchObject({ paymentMethodId: "pix-ana", applyTo: "current_month" });
   });
 
   it("sends no scope when the owner keeps this month as it is", async () => {
     onSeptemberTenth();
+
     const patchBilling = jest.fn().mockResolvedValue(recurringWithCharge);
     const client = financialApi({ patchBilling });
 
@@ -1090,11 +1106,13 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(await screen.findByRole("button", { name: "Só a partir do mês seguinte" }));
 
     await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
     expect(patchBilling.mock.calls[0][1].applyTo).toBeUndefined();
   });
 
   it("saves an untouched recurring billing without asking", async () => {
     onSeptemberTenth();
+
     const patchBilling = jest.fn().mockResolvedValue(recurringWithCharge);
     const client = financialApi({ patchBilling });
 
@@ -1104,6 +1122,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
 
     await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
     expect(screen.queryByRole("header", { name: "Aplicar às cobranças deste mês?" })).toBeNull();
   });
 
@@ -1130,7 +1149,9 @@ describe("BillingFormScreen", () => {
     // The seated contact's default key comes preselected.
     expect(await screen.findByText("Pagar via Pix")).toBeOnTheScreen();
     expect(client.paymentMethods).toHaveBeenCalledWith("p1");
+
     await waitFor(() => expect(screen.getByText("E-mail: ana@example.com")).toBeOnTheScreen());
+
     expect(screen.getByText("Chave padrão")).toBeOnTheScreen();
 
     await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
@@ -1140,8 +1161,8 @@ describe("BillingFormScreen", () => {
 
     const input = client.createBilling.mock.calls[0][0];
 
+    expect(input).not.toHaveProperty("type");
     expect(input).toMatchObject({
-      type: "payable",
       contactId: "p1",
       totalCents: 10_000,
       description: "Aluguel",
@@ -1231,6 +1252,7 @@ describe("BillingFormScreen", () => {
     expect(onEditContact).toHaveBeenCalledWith("p1");
 
     registered.p1 = [anaKey];
+
     await refocus();
 
     expect(await screen.findByText("E-mail: ana@example.com")).toBeOnTheScreen();
@@ -1280,7 +1302,7 @@ describe("BillingFormScreen", () => {
 
     const input = client.createBilling.mock.calls[0][0];
 
-    expect(input).toMatchObject({ type: "payable", contactId: "p1" });
+    expect(input).toMatchObject({ contactId: "p1" });
     expect(input.paymentMethodId).toBeUndefined();
   });
 

@@ -1,27 +1,24 @@
-import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
-import {
-  type BillingPlan,
-  type BillingRecurrence,
-  ChargePayer,
-  ChargeState,
-  calendarDate,
-  type PaymentMethod,
-  UserStatus
-} from '@receivy/common';
+import { HttpNotFoundError } from '@ez4/gateway';
+import { type BillingKind, type BillingPlan, type BillingRecurrence, ChargePayer, calendarDate, type PixKeyType, UserStatus } from '@receivy/common';
+import { AllocationRepository } from '../../billings/repositories/allocation';
 import { billingRegistered } from '../../billings/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
+import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
-import { lockAccountReferences } from '../../users/services/locking';
+import { PaymentMethodRepository } from '../../payment-methods/repositories/payment-method';
+import { AccountRepository } from '../../users/repositories/account';
 import { ChargeRepository } from '../repositories/charge';
 import { PaymentMethodKind } from '../schemas/charge';
+import { counterpartId } from '../utils/columns';
+import { markRegistered } from './charge';
 
 /** A participant validated against the owner's agenda: the person's account id, and whether they already use the app. */
 export type ChargeRecipientMaterialization = { userId: string; active: boolean };
 
 export type ChargeMaterializationContext = {
   recipients: Map<string, ChargeRecipientMaterialization>;
-  pix: { keyType: PaymentMethod['pixKeyType']; key: string; label: string } | null;
+  pix: { keyType: PixKeyType; key: string; label: string } | null;
   /** 'owner' materializes a conta a pagar: the owner pays, the (optional) payee is the counterpart. */
   payer: ChargePayer;
 };
@@ -33,35 +30,16 @@ export type PayableMaterialization = {
   contactId?: string;
 };
 
-export type ChargeBillingRef = { id: string; type: BillingRecurrence };
-
-/**
- * All billing mutations start here and keep the same lock order: owner → billing (when it already
- * exists) → people → Pix. A creation has no billing row to lock yet: it files the contact's key and
- * takes the people before inserting one.
- */
-export async function lockOwner(db: DbClient, ownerId: string): Promise<void> {
-  await lockAccountReferences(db, 'write');
-
-  const owner = await db.users.findOne({ select: { id: true }, where: { id: ownerId, deleted_at: { isNull: true } }, lock: true });
-
-  if (!owner) {
-    throw new HttpUnauthorizedError();
-  }
-}
+/** What the persistence seam knows about the billing behind the plan: enough to settle a registro without reading it. */
+export type ChargeBillingRef = { id: string; type: BillingRecurrence; kind: BillingKind; timezone: string };
 
 /** The owner may only bill people in their agenda: every participant needs an unarchived contact and a live account. */
 async function recipientSnapshots(db: DbClient, ownerId: string, userIds: string[]): Promise<Map<string, ChargeRecipientMaterialization>> {
   const result = new Map<string, ChargeRecipientMaterialization>();
 
   for (const userId of new Set(userIds)) {
-    const contact = await db.contacts.findOne({
-      select: { id: true, archived_at: true },
-      where: { owner_id: ownerId, user_id: userId },
-      lock: true
-    });
-    const user =
-      contact && !contact.archived_at ? await db.users.findOne({ select: { id: true, status: true }, where: { id: userId } }) : undefined;
+    const contact = await ContactRepository.byUser(db, ownerId, userId, true);
+    const user = contact && !contact.archivedAt ? await AccountRepository.person(db, userId) : null;
 
     if (!user || user.status === UserStatus.Removed) {
       throw new HttpNotFoundError('Contato indisponível.');
@@ -80,32 +58,20 @@ export async function pixSnapshot(
   paymentMethodId?: string,
   contactId?: string
 ): Promise<ChargeMaterializationContext['pix']> {
-  if (paymentMethodId) {
-    const row = await db.payment_methods.findOne({
-      select: { pix_key_type: true, pix_key: true, label: true, archived_at: true },
-      // A conta a receber publishes the owner's own key, never one they keep about a contact. A conta a
-      // pagar takes any key of the owner: new pointers are checked when they are filed, and the legacy
-      // ones the backfill leaves out of scope on purpose must keep paying.
-      where: { id: paymentMethodId, owner_id: ownerId, ...(contactId ? null : { contact_id: { isNull: true } }) },
-      lock: true
-    });
-
-    if (!row || row.archived_at) {
-      throw new HttpNotFoundError('Chave Pix indisponível.');
-    }
-
-    return { keyType: row.pix_key_type, key: row.pix_key, label: row.label };
+  if (!paymentMethodId) {
+    return PaymentMethodRepository.defaultOf(db, ownerId, contactId);
   }
 
-  const { records } = await db.payment_methods.findMany({
-    select: { pix_key_type: true, pix_key: true, label: true },
-    where: { owner_id: ownerId, contact_id: contactId ? contactId : { isNull: true }, is_default: true, archived_at: { isNull: true } },
-    take: 1
-  });
+  // A conta a receber publishes the owner's own key, never one they keep about a contact. A conta a
+  // pagar takes any key of the owner: new pointers are checked when they are filed, and the legacy
+  // ones the backfill leaves out of scope on purpose must keep paying.
+  const key = await PaymentMethodRepository.pointer(db, ownerId, paymentMethodId, !contactId, true);
 
-  const row = records[0];
+  if (!key || key.archivedAt) {
+    throw new HttpNotFoundError('Chave Pix indisponível.');
+  }
 
-  return row ? { keyType: row.pix_key_type, key: row.pix_key, label: row.label } : null;
+  return { keyType: key.keyType, key: key.key, label: key.label };
 }
 
 /** Validates owner-scoped people/payment method and captures values before materialization. */
@@ -128,50 +94,9 @@ export async function prepareChargeMaterialization(
   return { recipients, pix: await pixSnapshot(db, ownerId, paymentMethodId), payer: ChargePayer.Person };
 }
 
-/** Participants whose allocation says "Não notificar": every charge created for them starts with the notices off. */
-async function quietDebtors(db: DbClient, billingId: string, ownerId: string): Promise<Set<string>> {
-  const { records } = await db.allocations.findMany({
-    select: { user_id: true },
-    where: { billing_id: billingId, user_id: { not: ownerId }, notify: false }
-  });
-  const quiet = new Set<string>();
-
-  for (const row of records) {
-    if (row.user_id) {
-      quiet.add(row.user_id);
-    }
-  }
-
-  return quiet;
-}
-
 /** How the billing behind new charges settles: a registro pays each charge due by today, in its own timezone. */
-async function settlementOf(db: DbClient, billingId: string, now: string): Promise<{ settled: boolean; timezone: string; today: string }> {
-  const row = await db.billings.findOne({ select: { kind: true, owner_id: true }, where: { id: billingId } });
-
-  if (!row) {
-    throw new HttpNotFoundError();
-  }
-
-  const owner = await db.users.findOne({ select: { timezone: true }, where: { id: row.owner_id } });
-
-  if (!owner) {
-    throw new HttpNotFoundError();
-  }
-
-  return { settled: billingRegistered(row), timezone: owner.timezone, today: calendarDate(new Date(now), owner.timezone) };
-}
-
-async function recordCreation(db: DbClient, ownerId: string, row: ChargeRepository.Row, now: string): Promise<void> {
-  await EventRepository.record(db, {
-    type: 'charge.created',
-    eventableType: EventableType.Charge,
-    eventableId: row.id,
-    actorId: ownerId,
-    // The payload keeps its key: it is history already written. The value is the person on the other side.
-    payload: { billingId: row.billing_id, ...(ChargeRepository.counterpartId(row) ? { debtorUserId: ChargeRepository.counterpartId(row) } : {}) },
-    at: now
-  });
+function settlementOf(billing: ChargeBillingRef, now: string): { settled: boolean; timezone: string; today: string } {
+  return { settled: billingRegistered(billing), timezone: billing.timezone, today: calendarDate(new Date(now), billing.timezone) };
 }
 
 /**
@@ -190,8 +115,8 @@ export async function persistChargePlan(
   const noticeChargeIds: string[] = [];
 
   // Creation, the monthly sweep, edits and invites all land here, after the allocations are saved.
-  const quiet = await quietDebtors(db, billing.id, ownerId);
-  const settlement = await settlementOf(db, billing.id, now);
+  const quiet = await AllocationRepository.quietParticipants(db, billing.id, ownerId);
+  const settlement = settlementOf(billing, now);
 
   for (const item of plan.charges) {
     // A conta a pagar without a payee and a registro have no one on the other side.
@@ -207,45 +132,37 @@ export async function persistChargePlan(
 
     const ownerPays = context.payer === ChargePayer.Owner;
     // The money's own axis: whoever receives sits in creditor_id, whoever pays in debtor_id, the owner in owner_id.
-    const creditorId = ownerPays ? recipient?.userId : ownerId;
-    const debtorId = ownerPays ? ownerId : recipient?.userId;
-    const inserted = await db.charges.insertOne({
-      select: ChargeRepository.SELECT,
-      data: {
-        id: crypto.randomUUID(),
-        owner: { id: ownerId },
-        ...(creditorId ? { creditor: { id: creditorId } } : {}),
-        ...(debtorId ? { debtor: { id: debtorId } } : {}),
-        billing: { id: billing.id },
-        description: item.description,
-        amount_cents: item.amountCents,
-        due_date: item.dueDate,
-        ...(item.installment !== null && item.installmentCount !== null
-          ? { installment: item.installment, installment_count: item.installmentCount }
-          : {}),
-        // A registro is never paid through a link, so the wallet key stays out of it.
-        ...(context.pix && !settlement.settled
-          ? {
-              payment_snapshot: {
-                method: PaymentMethodKind.Pix,
-                type: context.pix.keyType,
-                value: context.pix.key,
-                label: context.pix.label
-              }
-            }
-          : {}),
-        state: ChargeState.Pending,
-        notify: !recipient || !quiet.has(recipient.userId),
-        created_at: now,
-        updated_at: now
-      }
+    const inserted = await ChargeRepository.insert(db, {
+      ownerId,
+      creditorId: ownerPays ? recipient?.userId : ownerId,
+      debtorId: ownerPays ? ownerId : recipient?.userId,
+      billingId: billing.id,
+      description: item.description,
+      amountCents: item.amountCents,
+      dueDate: item.dueDate,
+      ...(item.installment !== null && item.installmentCount !== null ? { installment: item.installment, installmentCount: item.installmentCount } : {}),
+      // A registro is never paid through a link, so the wallet key stays out of it.
+      payment:
+        context.pix && !settlement.settled
+          ? { method: PaymentMethodKind.Pix, type: context.pix.keyType, value: context.pix.key, label: context.pix.label }
+          : null,
+      notify: !recipient || !quiet.has(recipient.userId),
+      now
     });
 
-    await recordCreation(db, ownerId, inserted, now);
+    await EventRepository.record(db, {
+      type: 'charge.created',
+      eventableType: EventableType.Charge,
+      eventableId: inserted.id,
+      actorId: ownerId,
+      // The payload keeps its key: it is history already written. The value is the person on the other side.
+      payload: { billingId: inserted.billing_id, ...(counterpartId(inserted) ? { debtorUserId: counterpartId(inserted) } : {}) },
+      at: now
+    });
 
     // A registro is paid on its due date: whatever is already due settles in the same transaction.
     const due = settlement.settled && item.dueDate <= settlement.today;
-    const row = due ? await ChargeRepository.markRegistered(db, inserted, settlement.timezone, now) : inserted;
+    const row = due ? await markRegistered(db, inserted, settlement.timezone, now) : inserted;
 
     rows.push(row);
     noticeChargeIds.push(row.id);

@@ -255,6 +255,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
       return await action();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : fallback);
+
       return undefined;
     } finally {
       setBusy(false);
@@ -265,10 +266,12 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   async function shareUrl(url: string, title: string, text?: string) {
     if (typeof navigator.share === "function") {
       await navigator.share({ title, url, ...(text ? { text } : {}) });
+
       return;
     }
 
     await navigator.clipboard.writeText(text ? `${text}` : url);
+
     setNotice("Link copiado");
   }
 
@@ -279,6 +282,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   async function inviteSomeone(detail: BillingDetail) {
     if (invite) {
       await run(() => shareInvite(invite, detail.description), "Não foi possível compartilhar o convite.");
+
       return;
     }
 
@@ -286,6 +290,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
       const created = await request<BillingInvite>(`/api/financial/billings/${detail.id}/invite`, { method: "POST" }, "Não foi possível criar o convite.");
 
       setInvite(created);
+
       await shareInvite(created, detail.description);
     }, "Não foi possível criar o convite.");
   }
@@ -293,6 +298,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   async function revokeInvite(detail: BillingDetail) {
     await run(async () => {
       await request<void>(`/api/financial/billings/${detail.id}/invite`, { method: "DELETE" }, "Não foi possível revogar o convite.");
+
       setInvite(null);
     }, "Não foi possível revogar o convite.");
   }
@@ -311,6 +317,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
         await request<void>(`/api/financial/billings/${detail.id}/invite`, {
           method: "DELETE",
         }).catch(() => undefined);
+
         setInvite(null);
       }
     }, "Não foi possível atualizar a cobrança.");
@@ -356,6 +363,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   async function reopen(charge: ChargeDetail) {
     await run(async () => {
       await request<ChargeDetail>(`/api/financial/charges/${charge.id}/reopen`, { method: "POST" }, "Não foi possível reabrir a cobrança.");
+
       setConfirmReopen(null);
       load();
     }, "Não foi possível reabrir a cobrança.");
@@ -380,6 +388,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   function pause(detail: BillingDetail) {
     if (!pendingChargesOf(detail).length) {
       void transition(detail, "paused");
+
       return;
     }
 
@@ -389,6 +398,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   function end(detail: BillingDetail) {
     if (!pendingChargesOf(detail).length) {
       setConfirmEnd(true);
+
       return;
     }
 
@@ -482,6 +492,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
 
     if (!participant.notify) {
       void notifyParticipant(detail, userId, name, true);
+
       return;
     }
 

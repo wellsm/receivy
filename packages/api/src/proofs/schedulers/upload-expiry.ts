@@ -3,7 +3,7 @@ import type { Client, Cron } from '@ez4/scheduler';
 import type { String } from '@ez4/schema';
 import type { Db } from '../../database';
 import type { ProofFiles } from '../../storage';
-import { ProofRepository } from '../repositories/proof';
+import { expireProofUpload } from '../services/proof';
 import { bucketProofStorage } from '../services/bucket-storage';
 
 export type UploadExpirySchedule = { chargeId: String.UUID; key: String.Max<300> };
@@ -37,7 +37,7 @@ export async function handler(
   { db, proofFiles }: Service.Context<UploadExpiryScheduler>
 ): Promise<void> {
   const { chargeId, key } = request.event;
-  const released = await ProofRepository.expireUpload(db, bucketProofStorage(proofFiles), chargeId, key);
+  const released = await expireProofUpload(db, bucketProofStorage(proofFiles), chargeId, key);
 
   console.info('Upload expiry', { chargeId, released });
 }

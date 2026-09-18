@@ -13,6 +13,7 @@ export function sessionResponse(session: AuthSessionResponse): NextResponse {
     expiresIn: session.expiresIn,
     user: session.user,
   });
+
   response.cookies.set(
     ACCESS_COOKIE,
     session.accessToken,
@@ -23,11 +24,13 @@ export function sessionResponse(session: AuthSessionResponse): NextResponse {
     session.refreshToken,
     authCookieOptions(REFRESH_MAX_AGE),
   );
+
   return response;
 }
 
 export function clearSessionCookies(response: NextResponse): NextResponse {
   response.cookies.set(ACCESS_COOKIE, "", authCookieOptions(0));
   response.cookies.set(REFRESH_COOKIE, "", authCookieOptions(0));
+
   return response;
 }

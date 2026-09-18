@@ -73,6 +73,7 @@ describe('passwordless email login', () => {
     await expect(
       requestEmailCode({ email: 'ana@example.com' }, { codeHashKey: 'hash-key', repo, transport, generateCode: () => '123456' })
     ).resolves.toBeUndefined();
+
     expect(transport.sendLoginCode).not.toHaveBeenCalled();
   });
 
@@ -105,6 +106,7 @@ describe('passwordless email login', () => {
       await expect(
         confirmEmailCode({ email: 'ana@example.com', code: '000000' }, { accessTokenSecret: 'jwt-secret', codeHashKey: 'hash-key', repo })
       ).rejects.toEqual(new AuthFlowError('INVALID_CODE'));
+
       expect(repo.findOrCreateUserByEmail).not.toHaveBeenCalled();
     }
   });

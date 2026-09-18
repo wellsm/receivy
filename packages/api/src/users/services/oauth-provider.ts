@@ -30,9 +30,13 @@ function isRecord(value: unknown): value is JsonObject {
 }
 
 export function appleConfigurationAvailable(config: AppleConfig | undefined): boolean {
-  if (!config) return false;
+  if (!config) {
+    return false;
+  }
+
   try {
     const key = createPrivateKey(Buffer.from(config.privateKeyBase64, 'base64').toString('utf8'));
+
     return key.asymmetricKeyType === 'ec' && key.asymmetricKeyDetails?.namedCurve === 'prime256v1';
   } catch {
     return false;
@@ -56,6 +60,7 @@ export function createAppleClientSecret(config: AppleConfig, nowSeconds: number)
     key: createPrivateKey(Buffer.from(config.privateKeyBase64, 'base64').toString('utf8')),
     dsaEncoding: 'ieee-p1363'
   });
+
   return `${header}.${payload}.${signature.toString('base64url')}`;
 }
 
@@ -63,10 +68,13 @@ async function readJson(response: Response): Promise<JsonObject> {
   if (!response.ok) {
     throw new Error('OAuth provider request failed');
   }
+
   const value: unknown = await response.json();
+
   if (!isRecord(value)) {
     throw new Error('OAuth provider response is invalid');
   }
+
   return value;
 }
 
@@ -74,13 +82,17 @@ function appleName(profile: string | undefined): string | undefined {
   if (!profile) {
     return undefined;
   }
+
   try {
     const parsed: unknown = JSON.parse(profile);
+
     if (!isRecord(parsed) || !isRecord(parsed.name)) {
       return undefined;
     }
+
     const first = typeof parsed.name.firstName === 'string' ? parsed.name.firstName.trim() : '';
     const last = typeof parsed.name.lastName === 'string' ? parsed.name.lastName.trim() : '';
+
     return [first, last].filter(Boolean).join(' ').slice(0, 120) || undefined;
   } catch {
     return undefined;
@@ -97,6 +109,7 @@ export function createOauthProviderClient(
     native && provider === OauthProvider.Apple && config.apple?.nativeClientId
       ? { ...config.apple, clientId: config.apple.nativeClientId }
       : config[provider];
+
   if (!selected) {
     return null;
   }
@@ -133,6 +146,7 @@ export function createOauthProviderClient(
           })
         })
       );
+
       // Only the id_token is consumed; the provider refresh token is deliberately never stored.
       if (typeof tokenResponse.id_token !== 'string') {
         throw new Error('OAuth identity token is missing');
@@ -146,9 +160,11 @@ export function createOauthProviderClient(
           redirect: 'error'
         })
       );
+
       if (!Array.isArray(jwks.keys)) {
         throw new Error('OAuth provider keys are invalid');
       }
+
       const identity = verifyOidcIdToken({
         algorithms: provider === OauthProvider.Google ? [SupportedAlgorithm.Rs256] : [SupportedAlgorithm.Rs256, SupportedAlgorithm.Es256],
         audience: selected.clientId,
@@ -159,6 +175,7 @@ export function createOauthProviderClient(
         token: tokenResponse.id_token
       });
       const profileName = provider === OauthProvider.Apple ? appleName(input.profile) : undefined;
+
       return {
         ...identity,
         ...(profileName && !identity.name ? { name: profileName } : {})

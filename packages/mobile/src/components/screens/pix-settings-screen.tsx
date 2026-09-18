@@ -84,12 +84,15 @@ export function PixSettingsScreen({ client = financialClient, required = false, 
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : UPDATE_ERROR);
       setBusy(false);
+
       return;
     }
 
     setRemoving(null);
     setNotice(done);
+
     await load();
+
     setBusy(false);
   }
 

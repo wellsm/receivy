@@ -16,12 +16,10 @@ import {
   ProofKind
 } from '@receivy/common';
 import { EditScopeNotRecurringError, PendingChargesWithoutStateError } from '../../src/billings/errors';
-import { BillingRepository } from '../../src/billings/repositories/billing';
+import { createBilling, patchBilling } from '../../src/billings/services/billing';
 import { StoredProofState } from '../../src/charges/schemas/charge';
 import { EventRepository } from '../../src/common/repositories/events';
-import { ContactRepository } from '../../src/contacts/repositories/contact';
-import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { cleanupUsers, contacts, createUser, db, paymentMethods } from '../fixtures/financial';
 import { fakeNotice } from '../fixtures/scheduling';
 
 const OWNER = 'b6666666-6666-4666-8666-666666666666';
@@ -79,23 +77,23 @@ describe('month materialized: pending charges and current month edits', () => {
 
     await createUser(db, { id: OWNER, email: 'month-owner@example.com', name: 'Dona' });
 
-    const ana = await ContactRepository.save(db, OWNER, { name: 'Ana', email: 'month-ana@example.com' });
+    const ana = await contacts.save(OWNER, { name: 'Ana', email: 'month-ana@example.com' });
 
     anaId = ana.userId;
     anaContactId = ana.id;
 
-    const bruno = await ContactRepository.save(db, OWNER, { name: 'Bruno', email: 'month-bruno@example.com' });
+    const bruno = await contacts.save(OWNER, { name: 'Bruno', email: 'month-bruno@example.com' });
 
     brunoId = bruno.userId;
     brunoContactId = bruno.id;
 
-    const carla = await ContactRepository.save(db, OWNER, { name: 'Carla', email: 'month-carla@example.com' });
+    const carla = await contacts.save(OWNER, { name: 'Carla', email: 'month-carla@example.com' });
 
     carlaId = carla.userId;
     carlaContactId = carla.id;
-    pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
     anaKeyId = (
-      await PaymentMethodRepository.save(db, OWNER, {
+      await paymentMethods.save(OWNER, {
         pixKeyType: PixKeyType.Email,
         pixKey: 'month-landlord@example.com',
         label: 'Imobiliária',
@@ -109,7 +107,7 @@ describe('month materialized: pending charges and current month edits', () => {
   it('creates the whole month of a recorrente at creation and leaves it to the reminder', async () => {
     sent.reset();
 
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'month-create',
@@ -124,13 +122,12 @@ describe('month materialized: pending charges and current month edits', () => {
       ['2026-03-20']
     );
     equal(sent.emails.length, 0, 'the charge meets Ana through its reminder');
-    equal(billing.nextMaterialization, '2026-04-01');
   });
 
   it('announces only the installment due today', async () => {
     sent.reset();
 
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'month-installments',
@@ -145,7 +142,7 @@ describe('month materialized: pending charges and current month edits', () => {
   });
 
   it('keeps this month on Keep and cancels every pending charge on Cancel', async () => {
-    const kept = await BillingRepository.create(
+    const kept = await createBilling(
       db,
       OWNER,
       'month-pause-keep',
@@ -153,19 +150,20 @@ describe('month materialized: pending charges and current month edits', () => {
       date('2026-03-05')
     );
 
-    await BillingRepository.patch(
+    await patchBilling(
       db,
       OWNER,
       kept.id,
       { state: BillingState.Paused, pendingCharges: PendingChargesAction.Keep },
       date('2026-03-06')
     );
+
     deepEqual(
       (await chargeRows(kept.id)).map((row) => row.state),
       ['pending']
     );
 
-    const dropped = await BillingRepository.create(
+    const dropped = await createBilling(
       db,
       OWNER,
       'month-pause-cancel',
@@ -173,7 +171,7 @@ describe('month materialized: pending charges and current month edits', () => {
       date('2026-03-05')
     );
 
-    await BillingRepository.patch(
+    await patchBilling(
       db,
       OWNER,
       dropped.id,
@@ -187,7 +185,7 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(row.state, 'cancelled');
     deepEqual((await EventRepository.list(db, row.id, 'charge.cancelled'))[0]?.payload, { reason: 'billing_paused' });
 
-    const course = await BillingRepository.create(
+    const course = await createBilling(
       db,
       OWNER,
       'month-end-keep',
@@ -195,13 +193,14 @@ describe('month materialized: pending charges and current month edits', () => {
       date('2026-03-05')
     );
 
-    await BillingRepository.patch(
+    await patchBilling(
       db,
       OWNER,
       course.id,
       { state: BillingState.Ended, pendingCharges: PendingChargesAction.Keep },
       date('2026-03-06')
     );
+
     deepEqual(
       (await chargeRows(course.id)).map((charge) => [charge.due_date, charge.state]),
       [
@@ -212,7 +211,7 @@ describe('month materialized: pending charges and current month edits', () => {
     );
 
     await rejects(
-      () => BillingRepository.patch(db, OWNER, kept.id, { pendingCharges: PendingChargesAction.Cancel }, date('2026-03-06')),
+      () => patchBilling(db, OWNER, kept.id, { pendingCharges: PendingChargesAction.Cancel }, date('2026-03-06')),
       PendingChargesWithoutStateError
     );
   });
@@ -220,7 +219,7 @@ describe('month materialized: pending charges and current month edits', () => {
   it('rewrites the not yet due charges of this month on CurrentMonth', async () => {
     sent.reset();
 
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'month-edit',
@@ -231,7 +230,7 @@ describe('month materialized: pending charges and current month edits', () => {
 
     ok(anaCharge);
 
-    await BillingRepository.patch(
+    await patchBilling(
       db,
       OWNER,
       billing.id,
@@ -261,12 +260,13 @@ describe('month materialized: pending charges and current month edits', () => {
   });
 
   it('leaves charges due today or with a proof under review, and NextMonth touches nothing', async () => {
-    const today = await BillingRepository.create(db, OWNER, 'month-today', recurring('Hoje', '2026-03-05', [anaId]), date('2026-03-05'));
+    const today = await createBilling(db, OWNER, 'month-today', recurring('Hoje', '2026-03-05', [anaId]), date('2026-03-05'));
 
-    await BillingRepository.patch(db, OWNER, today.id, { totalCents: 5_000, applyTo: EditScope.CurrentMonth }, date('2026-03-05'));
+    await patchBilling(db, OWNER, today.id, { totalCents: 5_000, applyTo: EditScope.CurrentMonth }, date('2026-03-05'));
+
     equal((await chargeRows(today.id))[0]?.amount_cents, 10_000);
 
-    const reviewed = await BillingRepository.create(
+    const reviewed = await createBilling(
       db,
       OWNER,
       'month-review',
@@ -286,15 +286,17 @@ describe('month materialized: pending charges and current month edits', () => {
         updated_at: new Date().toISOString()
       }
     });
-    await BillingRepository.patch(db, OWNER, reviewed.id, { totalCents: 5_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+    await patchBilling(db, OWNER, reviewed.id, { totalCents: 5_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+
     equal((await chargeRows(reviewed.id))[0]?.amount_cents, 10_000);
 
-    const later = await BillingRepository.create(db, OWNER, 'month-next', recurring('Depois', '2026-03-20', [anaId]), date('2026-03-05'));
+    const later = await createBilling(db, OWNER, 'month-next', recurring('Depois', '2026-03-20', [anaId]), date('2026-03-05'));
 
-    await BillingRepository.patch(db, OWNER, later.id, { totalCents: 5_000, applyTo: EditScope.NextMonth }, date('2026-03-06'));
+    await patchBilling(db, OWNER, later.id, { totalCents: 5_000, applyTo: EditScope.NextMonth }, date('2026-03-06'));
+
     equal((await chargeRows(later.id))[0]?.amount_cents, 10_000);
 
-    const reminded = await BillingRepository.create(
+    const reminded = await createBilling(
       db,
       OWNER,
       'month-reminders',
@@ -303,22 +305,23 @@ describe('month materialized: pending charges and current month edits', () => {
     );
     const [remindedCharge] = await chargeRows(reminded.id);
 
-    await BillingRepository.patch(
+    await patchBilling(
       db,
       OWNER,
       reminded.id,
       { reminders: [{ offsetDays: -1, enabled: true }], applyTo: EditScope.CurrentMonth },
       date('2026-03-06')
     );
+
     equal((await chargeRows(reminded.id))[0]?.amount_cents, 10_000);
     equal((await EventRepository.list(db, remindedCharge!.id, 'charge.edited')).length, 0);
   });
 
   it('moves the due day inside the month and skips a person whose cancelled charge holds the date', async () => {
-    const moved = await BillingRepository.create(db, OWNER, 'month-move', recurring('Mudou', '2026-03-20', [anaId]), date('2026-03-05'));
+    const moved = await createBilling(db, OWNER, 'month-move', recurring('Mudou', '2026-03-20', [anaId]), date('2026-03-05'));
     const [before] = await chargeRows(moved.id);
 
-    await BillingRepository.patch(db, OWNER, moved.id, { startDate: '2026-03-25', applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+    await patchBilling(db, OWNER, moved.id, { startDate: '2026-03-25', applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
 
     const after = await chargeRows(moved.id);
 
@@ -326,7 +329,7 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(after[0]?.id, before!.id);
     equal(after[0]?.due_date, '2026-03-25');
 
-    const back = await BillingRepository.create(
+    const back = await createBilling(
       db,
       OWNER,
       'month-back',
@@ -339,8 +342,8 @@ describe('month materialized: pending charges and current month edits', () => {
       parts: [anaId, brunoId].map((userId): SplitParty => ({ kind: SplitPartKind.User, userId }))
     } satisfies BillingInput['split'];
 
-    await BillingRepository.patch(db, OWNER, back.id, { split: onlyAna, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
-    await BillingRepository.patch(db, OWNER, back.id, { split: both, applyTo: EditScope.CurrentMonth }, date('2026-03-07'));
+    await patchBilling(db, OWNER, back.id, { split: onlyAna, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+    await patchBilling(db, OWNER, back.id, { split: both, applyTo: EditScope.CurrentMonth }, date('2026-03-07'));
 
     const brunoRows = (await chargeRows(back.id)).filter((row) => row.debtor_id === brunoId);
 
@@ -351,7 +354,7 @@ describe('month materialized: pending charges and current month edits', () => {
   });
 
   it('refuses applyTo on a finite billing', async () => {
-    const course = await BillingRepository.create(
+    const course = await createBilling(
       db,
       OWNER,
       'month-finite-scope',
@@ -360,7 +363,7 @@ describe('month materialized: pending charges and current month edits', () => {
     );
 
     await rejects(
-      () => BillingRepository.patch(db, OWNER, course.id, { applyTo: EditScope.CurrentMonth }, date('2026-03-06')),
+      () => patchBilling(db, OWNER, course.id, { applyTo: EditScope.CurrentMonth }, date('2026-03-06')),
       EditScopeNotRecurringError
     );
   });
@@ -371,7 +374,7 @@ describe('month materialized: pending charges and current month edits', () => {
     // materializationHorizon('2026-03-29', [-5]) = max(endOfMonth = '2026-03-31', '2026-03-29' + 5 = '2026-04-03')
     // = '2026-04-03': the April 3 occurrence already exists at creation, one day before the reminder
     // itself (due date - 5 = '2026-03-29') would have forced the daily cron to create it anyway.
-    const absent = await BillingRepository.create(
+    const absent = await createBilling(
       db,
       OWNER,
       'month-pause-early-absent',
@@ -384,13 +387,14 @@ describe('month materialized: pending charges and current month edits', () => {
       ['2026-04-03']
     );
 
-    await BillingRepository.patch(db, OWNER, absent.id, { state: BillingState.Paused }, date('2026-03-29'));
+    await patchBilling(db, OWNER, absent.id, { state: BillingState.Paused }, date('2026-03-29'));
+
     deepEqual(
       (await chargeRows(absent.id)).map((row) => row.state),
       ['pending']
     );
 
-    const keptExplicitly = await BillingRepository.create(
+    const keptExplicitly = await createBilling(
       db,
       OWNER,
       'month-pause-early-keep',
@@ -398,13 +402,14 @@ describe('month materialized: pending charges and current month edits', () => {
       date('2026-03-29')
     );
 
-    await BillingRepository.patch(
+    await patchBilling(
       db,
       OWNER,
       keptExplicitly.id,
       { state: BillingState.Paused, pendingCharges: PendingChargesAction.Keep },
       date('2026-03-29')
     );
+
     deepEqual(
       (await chargeRows(keptExplicitly.id)).map((row) => row.state),
       ['pending']
@@ -412,7 +417,7 @@ describe('month materialized: pending charges and current month edits', () => {
   });
 
   it('CurrentMonth leaves due_date and the Pix snapshot alone when the patch does not reschedule or touch Pix', async () => {
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'month-current-untouched',
@@ -424,15 +429,15 @@ describe('month materialized: pending charges and current month edits', () => {
     ok(before);
     equal(before.payment_snapshot?.value, '52998224725', 'picked up the only default payment method at creation');
 
-    const alternate = await PaymentMethodRepository.save(db, OWNER, {
+    const alternate = await paymentMethods.save(OWNER, {
       pixKeyType: PixKeyType.Email,
       pixKey: 'alt@example.com',
       label: 'Alternativo'
     });
 
-    await PaymentMethodRepository.makeDefault(db, OWNER, alternate.id);
+    await paymentMethods.makeDefault(OWNER, alternate.id);
 
-    await BillingRepository.patch(db, OWNER, billing.id, { totalCents: 12_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+    await patchBilling(db, OWNER, billing.id, { totalCents: 12_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
 
     const [after] = await chargeRows(billing.id);
 
@@ -445,11 +450,11 @@ describe('month materialized: pending charges and current month edits', () => {
       'an unrelated default-payment-method change must not rotate an already shared key'
     );
 
-    await PaymentMethodRepository.makeDefault(db, OWNER, pixId);
+    await paymentMethods.makeDefault(OWNER, pixId);
   });
 
   it('applyTo on a paused billing creates no charge for a newly added person', async () => {
-    const paused = await BillingRepository.create(
+    const paused = await createBilling(
       db,
       OWNER,
       'month-paused-split',
@@ -457,14 +462,14 @@ describe('month materialized: pending charges and current month edits', () => {
       date('2026-03-05')
     );
 
-    await BillingRepository.patch(db, OWNER, paused.id, { state: BillingState.Paused }, date('2026-03-06'));
+    await patchBilling(db, OWNER, paused.id, { state: BillingState.Paused }, date('2026-03-06'));
 
     const withCarla = {
       mode: SplitMode.Equal,
       parts: [anaId, carlaId].map((userId): SplitParty => ({ kind: SplitPartKind.User, userId }))
     } satisfies BillingInput['split'];
 
-    await BillingRepository.patch(db, OWNER, paused.id, { split: withCarla, applyTo: EditScope.CurrentMonth }, date('2026-03-07'));
+    await patchBilling(db, OWNER, paused.id, { split: withCarla, applyTo: EditScope.CurrentMonth }, date('2026-03-07'));
 
     const rows = await chargeRows(paused.id);
 
@@ -472,7 +477,7 @@ describe('month materialized: pending charges and current month edits', () => {
   });
 
   it('CurrentMonth updating an existing charge does not fail because another participant was archived later', async () => {
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'month-current-archived',
@@ -480,10 +485,10 @@ describe('month materialized: pending charges and current month edits', () => {
       date('2026-03-05')
     );
 
-    await ContactRepository.archive(db, OWNER, brunoContactId);
+    await contacts.archive(OWNER, brunoContactId);
 
     // totalCents-only: neither Ana nor Bruno enters this month, so neither needs revalidation.
-    await BillingRepository.patch(db, OWNER, billing.id, { totalCents: 12_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
+    await patchBilling(db, OWNER, billing.id, { totalCents: 12_000, applyTo: EditScope.CurrentMonth }, date('2026-03-06'));
 
     const ana = (await chargeRows(billing.id)).find((row) => row.debtor_id === anaId);
 
@@ -491,7 +496,7 @@ describe('month materialized: pending charges and current month edits', () => {
   });
 
   it('moves a conta a pagar to another contact for CurrentMonth, cancelling the charge of the old one', async () => {
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'month-payable-move-contact',
@@ -513,7 +518,7 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(anaCharge.creditor_id, anaId, 'the contact receives: she sits on the creditor side');
     equal(anaCharge.payment_snapshot?.value, 'month-landlord@example.com', 'the key of the contact travels to the charge');
 
-    const moved = await BillingRepository.patch(
+    const moved = await patchBilling(
       db,
       OWNER,
       billing.id,

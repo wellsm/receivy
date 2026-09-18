@@ -1,37 +1,46 @@
-import { counterpartName, formatMoney, type Direction, type ListChargeItem } from "@receivy/common";
+"use client";
+
+import {
+  ChargeActionKind,
+  ChargeState,
+  chargeAction,
+  chargeBadges,
+  chargeStateLabel,
+  chargeSummaryOf,
+  counterpartName,
+  Direction,
+  feedDayLabel,
+  formatMoney,
+  type ListChargeItem,
+} from "@receivy/common";
+import { Bell, Check } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
+import { ConfirmDialog } from "../ui/confirm-dialog";
 import { InitialsAvatar } from "../ui/initials-avatar";
+import { StatusTag } from "../ui/status-tag";
 
 type ChargeCardProps = {
   charge: ListChargeItem;
   direction: Direction;
   today: string;
-  /** Who is reading the feed: names the counterpart on the other side of the card. */
-  viewerEmail: string;
-  /** Card actions stay optional while the list endpoint does not answer with what they need. */
-  reminded?: string | null;
-  onRemind?: () => void;
-  onMarkPaid?: () => void;
-  onDeclare?: () => void;
+  /** "Lembrete enviado" once a reminder went out; the button stays disabled with that label. */
+  reminded: string | null;
+  onRemind: () => void;
+  onMarkPaid: () => void;
+  onDeclare: () => void;
 };
 
-export function FeedChargeCard({
-  charge,
-  direction,
-  viewerEmail,
-  // reminded,
-  // onRemind,
-  // onMarkPaid,
-  // onDeclare,
-}: ChargeCardProps) {
-  // const [confirmRemind, setConfirmRemind] = useState(false);
-  // const [confirmPaid, setConfirmPaid] = useState(false);
-  // const [confirmDeclare, setConfirmDeclare] = useState(false);
-  // const badges = chargeBadges(charge, today);
-  // const action = chargeAction(charge, direction);
-  const settled = charge.state !== "pending";
-  const amountClass = settled ? "text-muted" : direction === "receivable" ? "text-ink" : "text-payable";
-  const counterpart = counterpartName(charge, viewerEmail);
+export function FeedChargeCard({ charge, direction, today, reminded, onRemind, onMarkPaid, onDeclare }: ChargeCardProps) {
+  const [confirmRemind, setConfirmRemind] = useState(false);
+  const [confirmPaid, setConfirmPaid] = useState(false);
+  const [confirmDeclare, setConfirmDeclare] = useState(false);
+  const summary = chargeSummaryOf(charge);
+  const badges = chargeBadges(summary, today, direction);
+  const action = chargeAction(summary, direction);
+  const settled = charge.state !== ChargeState.Pending;
+  const amountClass = settled ? "text-muted" : direction === Direction.Receivable ? "text-ink" : "text-payable";
+  const counterpart = counterpartName(charge);
 
   // The whole row opens the charge through one stretched link. Nesting the action inside it would
   // not be accessible, so the link is a sibling overlay and the action is raised above it.
@@ -53,21 +62,21 @@ export function FeedChargeCard({
         <p className="m-0 truncate text-[13.5px] font-bold text-ink md:text-[15.5px] md:font-semibold">
           {charge.description} · <span className="font-semibold text-muted md:font-normal">{counterpart}</span>
         </p>
-        {/* {badges.length > 0 && (
+        {badges.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {badges.map(badge => (
+            {badges.map((badge) => (
               <StatusTag key={badge.label} label={badge.label} tone={badge.tone} />
             ))}
           </div>
-        )} */}
+        )}
       </div>
 
       <div className="flex shrink-0 flex-col items-end md:w-[120px]">
-        <strong className={`font-display text-sm font-bold tabular-nums md:text-[19px] ${amountClass}`}>{formatMoney({ amountCents: charge.amount_cents, currency: 'BRL' })}</strong>
-        {/* <span className="text-[11px] text-muted md:text-[11.5px]">{chargeStateLabel(charge, direction)}</span> */}
+        <strong className={`font-display text-sm font-bold tabular-nums md:text-[19px] ${amountClass}`}>{formatMoney(summary.amount)}</strong>
+        <span className="text-[11px] text-muted md:text-[11.5px]">{chargeStateLabel(summary, direction)}</span>
       </div>
 
-      {/* {action?.kind === ChargeActionKind.Remind && (
+      {action?.kind === ChargeActionKind.Remind && (
         <button
           type="button"
           disabled={reminded !== null}
@@ -109,11 +118,11 @@ export function FeedChargeCard({
               <span className="text-[10.5px] font-semibold tracking-[0.08em] text-muted">PRÉVIA</span>
               <strong className="text-[13.5px] font-semibold text-ink">{charge.description}</strong>
               <span className="text-xs text-muted">
-                {formatMoney(charge.amount)} · vence {feedDayLabel(charge.dueDate, today).toLowerCase()}
+                {formatMoney(summary.amount)} · vence {feedDayLabel(charge.dueDate, today).toLowerCase()}
               </span>
             </>
           }
-          explanation={`Avisa ${charge.counterpartName} por notificação no app ou por e-mail, com o link de pagamento e a chave Pix. Só um lembrete a cada 24 horas.`}
+          explanation={`Avisa ${counterpart} por notificação no app ou por e-mail, com o link de pagamento e a chave Pix. Só um lembrete a cada 24 horas.`}
           confirmLabel="Enviar lembrete"
           onConfirm={() => {
             setConfirmRemind(false);
@@ -141,7 +150,7 @@ export function FeedChargeCard({
           title="Marcar como pago?"
           icon={Check}
           tone="primary"
-          explanation={`${charge.counterpartName} vai receber um aviso para confirmar o recebimento.`}
+          explanation={`${counterpart} vai receber um aviso para confirmar o recebimento.`}
           confirmLabel="Marcar pago"
           onConfirm={() => {
             setConfirmDeclare(false);
@@ -149,7 +158,7 @@ export function FeedChargeCard({
           }}
           onCancel={() => setConfirmDeclare(false)}
         />
-      )} */}
+      )}
     </article>
   );
 }

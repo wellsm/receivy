@@ -3,7 +3,6 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { InviteProvider } from '../provider';
-import { revokeInvite } from '../services/links';
 
 declare class BillingRequest implements Http.Request {
   identity: SessionIdentity;
@@ -14,8 +13,8 @@ declare class EmptyResponse implements Http.Response {
   status: 204;
 }
 
-export async function revokeInviteHandler(request: BillingRequest, { db }: Service.Context<InviteProvider>): Promise<EmptyResponse> {
-  await revokeInvite(db, request.identity.userId, request.parameters.id);
+export async function revokeInviteHandler({ identity, parameters }: BillingRequest, { invites }: Service.Context<InviteProvider>): Promise<EmptyResponse> {
+  await invites.revoke(identity.userId, parameters.id);
 
   return { status: 204 };
 }

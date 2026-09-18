@@ -4,10 +4,9 @@ import type { String } from '@ez4/schema';
 import { EventRepository } from '../../common/repositories/events';
 import type { EmailService } from '../../common/services/email/service';
 import type { Db } from '../../database';
-import { notificationConfigFrom } from '../services/planner';
+import { noticeContext } from '../services/context';
 import type { NoticeTemplate } from '../services/render';
 import { followUpCharge, notifyCharge } from '../services/send';
-import { notificationTransport } from '../services/transport';
 
 export type ChargeNotifySchedule = {
   chargeId: String.UUID;
@@ -58,16 +57,13 @@ export async function handler(
 ): Promise<void> {
   const event = request.event;
   const now = Date.now();
-  const notice = {
-    config: notificationConfigFrom(variables),
-    transport: notificationTransport(variables, globalThis.fetch, email),
-    notify: chargeNotifyScheduler
-  };
+  const notice = noticeContext({ variables, email, chargeNotifyScheduler });
 
   if (event.stage === 'followup') {
     const { channels } = await followUpCharge(db, notice, event, now);
 
     console.info('Charge notify follow-up', { chargeId: event.chargeId, template: event.template, channels });
+
     return;
   }
 
@@ -78,6 +74,7 @@ export async function handler(
 
   if (already) {
     console.info('Charge notify skipped', { chargeId: event.chargeId, reason: 'already_sent' });
+
     return;
   }
 

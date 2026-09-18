@@ -26,6 +26,19 @@ describe('session token security', () => {
     expect(() => verifyAccessToken({ nowSeconds: 1_788_546_500, secret, token })).toThrow('Invalid session token');
   });
 
+  it('honours the access token lifetime it is given', () => {
+    const token = issueAccessToken({
+      familyId: '22222222-2222-4222-8222-222222222222',
+      nowSeconds: 1_788_545_600,
+      secret,
+      ttlSeconds: 604_800,
+      userId: '11111111-1111-4111-8111-111111111111'
+    });
+
+    expect(verifyAccessToken({ nowSeconds: 1_788_545_600 + 604_799, secret, token }).userId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(() => verifyAccessToken({ nowSeconds: 1_788_545_600 + 604_800, secret, token })).toThrow('Invalid session token');
+  });
+
   it('rejects a token whose signed payload was changed', () => {
     const token = issueAccessToken({
       familyId: '22222222-2222-4222-8222-222222222222',

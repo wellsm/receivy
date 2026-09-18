@@ -1,7 +1,5 @@
 import type { LogoutBody, RefreshSessionBody, SessionTokens } from '@receivy/common';
-import { issueAccessToken } from './session';
-
-const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+import { DEFAULT_ACCESS_TOKEN_TTL_SECONDS, issueAccessToken } from './session';
 
 export type RotateRefreshTokenOutcome =
   | {
@@ -26,8 +24,9 @@ export class SessionFlowError extends Error {
 
 export async function refreshSession(
   input: RefreshSessionBody,
-  dependencies: { accessTokenSecret: string; repo: SessionRepository }
+  dependencies: { accessTokenSecret: string; accessTokenTtlSeconds?: number; repo: SessionRepository }
 ): Promise<SessionTokens> {
+  const accessTokenTtlSeconds = dependencies.accessTokenTtlSeconds ?? DEFAULT_ACCESS_TOKEN_TTL_SECONDS;
   const outcome = await dependencies.repo.rotateRefreshToken(input.refreshToken);
 
   if (outcome.kind === 'stale') {
@@ -42,10 +41,11 @@ export async function refreshSession(
     accessToken: issueAccessToken({
       familyId: outcome.familyId,
       secret: dependencies.accessTokenSecret,
+      ttlSeconds: accessTokenTtlSeconds,
       userId: outcome.userId
     }),
     refreshToken: outcome.refreshToken,
-    expiresIn: ACCESS_TOKEN_TTL_SECONDS
+    expiresIn: accessTokenTtlSeconds
   };
 }
 

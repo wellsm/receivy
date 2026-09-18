@@ -1,28 +1,49 @@
-import { ChargeState, Direction, type Money } from './contracts';
+import type { BillingKind, BillingRecurrence } from './billing';
+import { type ChargeSummary, ChargeState, Direction, type Money, type ProofKind, type ProofState } from './contracts';
 
+/** One charge of the month as `GET /charges` answers it: the row plus what its joins say, nothing read per row. */
 export type ListChargeItem = {
   id: string;
+  billingId: string;
   description: string;
   installment?: number;
-  installment_count?: number;
-  state: string;
-  due_date: string;
-  amount_cents: number;
-  has_payment: boolean;
-  proof: { state: string; kind: string } | null;
+  installmentCount?: number;
+  state: ChargeState;
+  dueDate: string;
+  amountCents: number;
+  /** The viewer's side, like `BillingSummary.type`: whoever sits on the creditor side collects, anyone else pays. */
+  type: Direction;
+  /** The viewer owns the billing behind the charge; owner powers key on this, never on direction. */
+  ownedByViewer: boolean;
+  /** A Pix key was frozen on the charge when it was published. */
+  hasPayment: boolean;
+  /** The automatic notices of this charge are on; only the creditor ever reads false. */
+  notify: boolean;
+  /** The other side has an e-mail or phone on file, so a reminder can reach them. */
+  counterpartReachable: boolean;
+  /** A payment declared by the paying side waits for the other side to confirm it; false settles at once. */
+  confirmationRequired: boolean;
+  proof: {
+    state: ProofState;
+    kind: ProofKind;
+  } | null;
   billing: {
-    recurrence: string;
-    kind: string;
-    contact: { id: string; nickname?: string; user: { name?: string } } | null;
+    recurrence: BillingRecurrence;
+    kind: BillingKind;
+    /** The owner's agenda entry for the person who receives; null unless the viewer owns a conta a pagar. */
+    contact: {
+      id: string;
+      nickname?: string | null;
+      user: {
+        name?: string | null;
+      };
+    } | null;
   };
   creditor?: {
-    name?: string;
-    email?: string;
+    name?: string | null;
   };
   debtor?: {
-    name?: string;
-    email?: string;
-    phone?: string;
+    name?: string | null;
   };
 };
 
@@ -42,19 +63,9 @@ export type ChargeTotals = {
   payable: DirectionTotals;
 };
 
-/**
- * Which side of a charge the viewer is on: `debtor` is whoever pays it, so the viewer pays when that
- * is them and receives otherwise. The list only ever holds charges the viewer is on one side of.
- */
-export function chargeDirection(charge: ListChargeItem, viewerEmail: string): Direction {
-  const pays = !!viewerEmail && charge.debtor?.email === viewerEmail;
-
-  return pays ? Direction.Payable : Direction.Receivable;
-}
-
 /** Who is on the other side, as the viewer knows them: the contact's nickname first, then the person's name. */
-export function counterpartName(charge: ListChargeItem, viewerEmail: string): string {
-  if (chargeDirection(charge, viewerEmail) === Direction.Payable) {
+export function counterpartName(charge: ListChargeItem): string {
+  if (charge.type === Direction.Payable) {
     const contact = charge.billing.contact;
 
     return contact?.nickname || contact?.user.name || charge.creditor?.name || 'Você';
@@ -67,11 +78,35 @@ function money(amountCents: number): Money {
   return { amountCents, currency: 'BRL' };
 }
 
-function totalsOf(viewerEmail: string, charges: ListCharge, direction: Direction): DirectionTotals {
-  const side = charges.filter((charge) => chargeDirection(charge, viewerEmail) === direction);
+/** The list item in the shape the card helpers (`chargeBadges`, `chargeAction`, `chargeStateLabel`) read. */
+export function chargeSummaryOf(charge: ListChargeItem): ChargeSummary {
+  return {
+    id: charge.id,
+    description: charge.description,
+    amount: money(charge.amountCents),
+    dueDate: charge.dueDate,
+    state: charge.state,
+    billingId: charge.billingId,
+    recurrence: charge.billing.recurrence,
+    installment: charge.installment ?? null,
+    installmentCount: charge.installmentCount ?? null,
+    counterpartName: counterpartName(charge),
+    proofState: charge.proof?.state ?? null,
+    proofKind: charge.proof?.kind ?? null,
+    ownedByViewer: charge.ownedByViewer,
+    hasPix: charge.hasPayment,
+    counterpartReachable: charge.counterpartReachable,
+    confirmationRequired: charge.confirmationRequired,
+    notify: charge.notify,
+    kind: charge.billing.kind
+  };
+}
+
+function totalsOf(charges: ListCharge, direction: Direction): DirectionTotals {
+  const side = charges.filter((charge) => charge.type === direction);
   const pending = side.filter((charge) => charge.state === ChargeState.Pending);
   const paid = side.filter((charge) => charge.state === ChargeState.Paid);
-  const sum = (rows: ListCharge) => rows.reduce((total, charge) => total + charge.amount_cents, 0);
+  const sum = (rows: ListCharge) => rows.reduce((total, charge) => total + charge.amountCents, 0);
 
   return {
     pending: money(sum(pending)),
@@ -84,10 +119,10 @@ function totalsOf(viewerEmail: string, charges: ListCharge, direction: Direction
  * What the feed's summary box reads: open and settled money on each side of the month. Cancelled
  * charges count for nothing, and `count` follows `pending`, which is what the card labels.
  */
-export function chargeTotals(viewerEmail: string, charges: ListCharge): ChargeTotals {
+export function chargeTotals(charges: ListCharge): ChargeTotals {
   return {
-    receivable: totalsOf(viewerEmail, charges, Direction.Receivable),
-    payable: totalsOf(viewerEmail, charges, Direction.Payable)
+    receivable: totalsOf(charges, Direction.Receivable),
+    payable: totalsOf(charges, Direction.Payable)
   };
 }
 
@@ -96,7 +131,7 @@ export function groupChargesByDay(charges: ListCharge): [string, ListCharge][] {
   const groups = new Map<string, ListCharge>();
 
   for (const charge of charges) {
-    groups.set(charge.due_date, [...(groups.get(charge.due_date) ?? []), charge]);
+    groups.set(charge.dueDate, [...(groups.get(charge.dueDate) ?? []), charge]);
   }
 
   return [...groups];
@@ -110,5 +145,5 @@ export function openChargesTotal(charges: ListCharge): Money | null {
     return null;
   }
 
-  return money(pending.reduce((total, charge) => total + charge.amount_cents, 0));
+  return money(pending.reduce((total, charge) => total + charge.amountCents, 0));
 }

@@ -34,6 +34,7 @@ describe("POST /api/auth/email/confirm", () => {
         headers: { "content-type": "application/json" },
       }),
     ));
+
     const request = new Request("https://receivy.example/api/auth/email/confirm", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "https://receivy.example" },
@@ -58,6 +59,7 @@ describe("POST /api/auth/email/confirm", () => {
 
   it("returns one generic message for rejected confirmations", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
+
     const request = new Request("https://receivy.example/api/auth/email/confirm", {
       method: "POST",
       headers: { "content-type": "application/json", origin: "https://receivy.example" },
@@ -65,6 +67,7 @@ describe("POST /api/auth/email/confirm", () => {
     });
 
     const response = await POST(request);
+
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({
       message: "Código inválido ou expirado. Peça um novo código e tente novamente.",

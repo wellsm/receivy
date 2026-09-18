@@ -14,19 +14,24 @@ describe("LoginScreen", () => {
   it("requests a code with the normalized e-mail and never asks for a password", async () => {
     const requestEmailCode = jest.fn().mockResolvedValue(undefined);
     const onCodeRequested = jest.fn();
+
     await render(<LoginScreen client={{ requestEmailCode }} onCodeRequested={onCodeRequested} />);
 
     expect(screen.queryByLabelText(/senha/i)).toBeNull();
     expect(screen.getByText("Controle o que tem a receber e a pagar")).toBeOnTheScreen();
 
     const button = screen.getByRole("button", { name: "Continuar com E-mail" });
+
     expect(button).toBeDisabled();
 
     await fireEvent.changeText(screen.getByLabelText("Seu e-mail"), "  Ana@Example.com ");
+
     expect(button).toBeEnabled();
+
     await fireEvent.press(button);
 
     await waitFor(() => expect(requestEmailCode).toHaveBeenCalledWith({ email: "ana@example.com" }));
+
     expect(onCodeRequested).toHaveBeenCalledWith("ana@example.com");
     // Clearing it here would flash the button back to idle while this screen is still on top.
     expect(button).toBeDisabled();

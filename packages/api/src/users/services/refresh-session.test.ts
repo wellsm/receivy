@@ -25,6 +25,18 @@ describe('refresh session', () => {
     expect(result.expiresIn).toBe(900);
   });
 
+  it('issues the access token with the configured lifetime and reports it as expiresIn', async () => {
+    const result = await refreshSession(
+      { refreshToken: 'current-refresh-token' },
+      { accessTokenSecret: 'jwt-secret', accessTokenTtlSeconds: 86_400, repo: repository() }
+    );
+
+    const payload = JSON.parse(Buffer.from(result.accessToken.split('.')[1]!, 'base64url').toString());
+
+    expect(result.expiresIn).toBe(86_400);
+    expect(payload.exp - payload.iat).toBe(86_400);
+  });
+
   it('returns the same generic unauthorized result for missing, expired and replayed tokens', async () => {
     for (const kind of ['invalid', 'expired', 'replayed'] as const) {
       const repo = repository({
@@ -51,6 +63,7 @@ describe('refresh session', () => {
     const repo = repository();
 
     await expect(revokeSession({ refreshToken: 'refresh-token' }, { repo })).resolves.toBeUndefined();
+
     expect(repo.revokeFamilyByRefreshToken).toHaveBeenCalledWith('refresh-token');
   });
 });

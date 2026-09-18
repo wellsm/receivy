@@ -1,16 +1,16 @@
 import { HttpNotFoundError } from '@ez4/gateway';
 import { type BillingDetail, type BillingGuestAction, BillingState } from '@receivy/common';
-import { lockOwner } from '../../charges/services/materialize';
-import { ContactRepository } from '../../contacts/repositories/contact';
+import { ensure, linkGuest } from '../../contacts/services/contact';
 import type { DbClient } from '../../database';
-import { InviteRepository } from '../../invites/repositories/invite';
+import { joinSplit } from '../../invites/services/invite';
 import type { InviteLinkContext } from '../../invites/services/links';
 import { announceCharges, type NoticeContext } from '../../notifications/services/send';
+import { AccountRepository } from '../../users/repositories/account';
 import { BillingInactiveError, GuestAlreadyResolvedError } from '../errors';
-import { BillingRepository } from '../repositories/billing';
+import { BillingGuestRepository } from '../repositories/guest';
 import { BillingGuestState } from '../schemas/billing-guest';
-
-const GUEST_SELECT = { id: true, billing_id: true, owner_id: true, user_id: true, state: true, created_at: true } as const;
+import { getBilling, loadBilling } from './detail';
+import { auditBilling } from './split';
 
 /**
  * The owner answers a waiting guest: they are one of the e-mail-less contacts (`link`), a new participant
@@ -30,13 +30,9 @@ export async function resolveGuest(
   const noticeChargeIds: string[] = [];
 
   await db.transaction(async (tx) => {
-    await lockOwner(tx, ownerId);
+    await AccountRepository.lock(tx, ownerId);
 
-    const guest = await tx.billing_guests.findOne({
-      select: GUEST_SELECT,
-      where: { id: guestId, billing_id: billingId, owner_id: ownerId },
-      lock: true
-    });
+    const guest = await BillingGuestRepository.get(tx, ownerId, billingId, guestId, true);
 
     if (!guest) {
       throw new HttpNotFoundError();
@@ -46,15 +42,7 @@ export async function resolveGuest(
       throw new GuestAlreadyResolvedError();
     }
 
-    const billing = await tx.billings.findOne({
-      select: BillingRepository.SELECT,
-      where: { id: billingId, owner_id: ownerId },
-      lock: true
-    });
-
-    if (!billing) {
-      throw new HttpNotFoundError();
-    }
+    const billing = await loadBilling(tx, ownerId, billingId, true);
 
     if (billing.state !== BillingState.Active) {
       throw new BillingInactiveError();
@@ -63,23 +51,16 @@ export async function resolveGuest(
     const instant = now.toISOString();
 
     if (action.action === 'link') {
-      await ContactRepository.linkGuest(tx, ownerId, action.contactId, guest.user_id, instant);
+      await linkGuest(tx, ownerId, action.contactId, guest.user_id, instant);
     } else if (action.action === 'add') {
-      await ContactRepository.ensure(tx, ownerId, guest.user_id, instant);
-      await InviteRepository.joinSplit(
-        tx,
-        { ...billing, timezone: await BillingRepository.ownerTimezone(tx, ownerId) },
-        guest.user_id,
-        instant,
-        noticeChargeIds
-      );
+      await ensure(tx, ownerId, guest.user_id, instant);
+      await joinSplit(tx, billing, guest.user_id, instant, noticeChargeIds);
     }
 
-    const state =
-      action.action === 'link' ? BillingGuestState.Linked : action.action === 'add' ? BillingGuestState.Added : BillingGuestState.Dismissed;
+    const state = action.action === 'link' ? BillingGuestState.Linked : action.action === 'add' ? BillingGuestState.Added : BillingGuestState.Dismissed;
 
-    await tx.billing_guests.updateOne({ where: { id: guest.id }, data: { state, resolved_at: instant } });
-    await BillingRepository.audit(tx, ownerId, billingId, `billings.guest_${state}`, instant, {
+    await BillingGuestRepository.resolve(tx, guest.id, state, instant);
+    await auditBilling(tx, ownerId, billingId, `billings.guest_${state}`, instant, {
       userId: guest.user_id,
       ...(action.action === 'link' ? { contactId: action.contactId } : {})
     });
@@ -89,5 +70,5 @@ export async function resolveGuest(
     await announceCharges(db, notice, noticeChargeIds, now.getTime());
   }
 
-  return BillingRepository.get(db, ownerId, billingId, now, link);
+  return getBilling(db, ownerId, billingId, now, link);
 }

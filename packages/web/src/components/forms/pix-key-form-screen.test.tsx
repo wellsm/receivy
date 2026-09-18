@@ -81,6 +81,7 @@ it("switches the field label, placeholder and mask with the key type", async () 
   render(<PixKeyFormScreen />);
 
   const user = await ready();
+
   await user.click(screen.getByRole("radio", { name: "CPF" }));
 
   const field = screen.getByLabelText("CPF do titular");
@@ -114,9 +115,11 @@ it("pastes into the field and then offers to clear it", async () => {
 
 it("saves the unmasked key without a nickname and promotes it to the main key", async () => {
   const sent = api();
+
   render(<PixKeyFormScreen />);
 
   const user = await ready();
+
   await user.click(screen.getByRole("radio", { name: "CPF" }));
   await user.type(screen.getByLabelText("CPF do titular"), "52998224725");
 
@@ -135,6 +138,7 @@ it("saves the unmasked key without a nickname and promotes it to the main key", 
 
 it("leaves the main key toggle off when the account already has keys", async () => {
   const sent = api([{ ...saved, id: "pix-0", isDefault: true }]);
+
   render(<PixKeyFormScreen />);
 
   const user = await ready();
@@ -145,6 +149,7 @@ it("leaves the main key toggle off when the account already has keys", async () 
   await user.click(screen.getByRole("button", { name: "Salvar chave Pix" }));
 
   await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/settings/pix"));
+
   expect(sent.some(entry => entry.path.endsWith("/default"))).toBe(false);
 });
 
@@ -162,5 +167,6 @@ it("hands the new key back to the billing draft and returns to the form", async 
   await user.click(screen.getByRole("button", { name: "Salvar chave Pix" }));
 
   await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/billings/new"));
+
   expect(takeDraft()?.draft.pix).toBe("pix-1");
 });

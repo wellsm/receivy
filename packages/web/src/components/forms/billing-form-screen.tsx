@@ -119,6 +119,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = new Error(await responseMessage(response, "Não foi possível salvar. Tente novamente."));
+
     throw Object.assign(error, { status: response.status });
   }
 
@@ -150,11 +151,13 @@ function valuesFromBilling(billing: BillingDetail): SplitValues {
 
     if ("amountCents" in part) {
       values.fixed[key] = moneyText(part.amountCents);
+
       continue;
     }
 
     if ("basisPoints" in part) {
       values.percentage[key] = String(part.basisPoints / 100).replace(".", ",");
+
       continue;
     }
 
@@ -375,6 +378,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   function seat(contact: Contact) {
     if (payable) {
       update({ payee: draft.payee === contact.id ? "" : contact.id });
+
       return;
     }
 
@@ -412,6 +416,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     // An edit is not restorable from a stored draft: only a creation leaves one behind.
     if (editing) {
       router.push(path);
+
       return;
     }
 
@@ -518,6 +523,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
     if (locked && attempt) {
       void save(attempt);
+
       return;
     }
 
@@ -531,6 +537,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       // Only a recorrente edit that changes what its charges carry, with charges of this month still ahead, needs the answer.
       if (billing && shouldAskEditScope(billing, patchBody(next.input), todayIn(billing.timezone))) {
         setScopeAttempt(next);
+
         return;
       }
 
@@ -550,14 +557,17 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   function toggleMonthEnd() {
     if (monthEnd) {
       update({ dueRule: BillingDueRule.Fixed });
+
       return;
     }
 
     update({ dueRule: BillingDueRule.EndOfMonth, start: endOfMonth(draft.start && draft.start >= today ? draft.start : today) });
   }
+
   const totalCents = draftTotalCents(draft);
   const installmentPreview = untilInstallmentPreview(draft);
   const { amounts, error: hint } = previewBillingSplit(draft);
+
   /** The draft seats people by account; the chips and split rows look their agenda entry up by that id. */
   function contactFor(userId: string): Contact {
     return recent.find(contact => contact.userId === userId) ?? directory.find(contact => contact.userId === userId) ?? unknownContact(userId);

@@ -7,6 +7,7 @@ import { googleCallbackHandler } from './google-callback';
 
 vi.mock('../services/oauth-flow', async () => {
   const actual = await vi.importActual<typeof import('../services/oauth-flow')>('../services/oauth-flow');
+
   return {
     ...actual,
     completeOauth: vi.fn(async (input, dependencies) => {
@@ -17,6 +18,7 @@ vi.mock('../services/oauth-flow', async () => {
         grantHash: 'hash',
         expiresAt: new Date()
       });
+
       return { destination: 'https://app.test/', grant: 'g' };
     })
   };

@@ -6,7 +6,9 @@ vi.mock("next/headers", () => ({ cookies: vi.fn() }));
 
 function fetchMock(response = Response.json([{ id: "charge-1" }])) {
   const mock = vi.fn().mockResolvedValue(response);
+
   vi.stubGlobal("fetch", mock);
+
   return mock;
 }
 
@@ -27,6 +29,7 @@ afterEach(() => {
 describe("sessionApiFetch", () => {
   it("carries the access cookie as a bearer token and parses the payload", async () => {
     vi.mocked(cookies).mockResolvedValue({ get: () => ({ value: "access-token" }) } as never);
+
     const mock = fetchMock();
 
     const charges = await sessionApiFetch<{ id: string }[]>("charges?month=2026-09");
@@ -38,6 +41,7 @@ describe("sessionApiFetch", () => {
 
   it("sends no authorization when the access cookie is gone, so the API answers instead of the page guessing", async () => {
     vi.mocked(cookies).mockResolvedValue({ get: () => undefined } as never);
+
     const mock = fetchMock();
 
     await sessionApiFetch("charges?month=2026-09");
@@ -54,6 +58,7 @@ describe("sessionApiFetch", () => {
 
   it("keeps the headers the caller passed", async () => {
     vi.mocked(cookies).mockResolvedValue({ get: () => ({ value: "access-token" }) } as never);
+
     const mock = fetchMock();
 
     await sessionApiFetch("charges", { headers: { "idempotency-key": "key-1" } });

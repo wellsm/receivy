@@ -22,6 +22,7 @@ export function applyThemePreference(preference: ThemePreference): void {
   if (preference === ThemePreference.System) {
     // RN 0.85's ColorSchemeName is 'light' | 'dark' | 'unspecified'; it has no null member.
     Appearance.setColorScheme("unspecified");
+
     return;
   }
 

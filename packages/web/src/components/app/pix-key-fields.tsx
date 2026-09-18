@@ -38,6 +38,7 @@ export function PixKeyFields({ type, value, inputId = "pix-key", required = fals
 
       if (!text) {
         field.current?.focus();
+
         return;
       }
 

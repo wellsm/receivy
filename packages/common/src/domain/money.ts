@@ -47,5 +47,6 @@ export function formatMoney(money: Money, locale = 'pt-BR'): string {
   // yields a "00" fraction, then substitute the exact cents. The sign is applied
   // manually because the engine's handling of -0 is not guaranteed.
   const formatted = formatter.format(Number(units)).replace(/00(?=\D*$)/, fraction);
+
   return cents < 0n ? `-${formatted}` : formatted;
 }

@@ -31,6 +31,7 @@ describe('contacts', () => {
   });
   it('keeps the payment method untouched: the repository normalizes the key, not this function', () => {
     const paymentMethod = { pixKeyType: PixKeyType.Email, pixKey: 'ana@example.com', label: 'Ana' };
+
     expect(normalizeContact({ name: 'Ana', paymentMethod })).toEqual({ name: 'Ana', paymentMethod });
   });
   it.each([

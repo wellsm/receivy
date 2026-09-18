@@ -11,6 +11,7 @@ export async function POST(request: Request) {
   }
 
   const refreshToken = (await cookies()).get(REFRESH_COOKIE)?.value;
+
   if (refreshToken) {
     try {
       await authApiFetch("auth/logout", {

@@ -77,6 +77,7 @@ it("reports a failure instead of announcing a copy the browser cannot make", asy
   const user = userEvent.setup();
   // A plain-http origin exposes no clipboard at all.
   const stub = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+
   Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
 
   try {
@@ -110,6 +111,7 @@ it("closes the delete dialog on Escape and returns focus to the trash button", a
 
 it("promotes another key to the main one", async () => {
   const sent = api();
+
   render(<PixSettingsScreen />);
 
   await userEvent.setup().click(await screen.findByRole("button", { name: "Tornar padrão" }));
@@ -119,9 +121,11 @@ it("promotes another key to the main one", async () => {
 
 it("asks for confirmation before deleting a key", async () => {
   const sent = api();
+
   render(<PixSettingsScreen />);
 
   const user = userEvent.setup();
+
   await user.click((await screen.findAllByRole("button", { name: "Excluir" }))[1]!);
 
   const dialog = screen.getByRole("dialog", { name: "Excluir chave Pix?" });

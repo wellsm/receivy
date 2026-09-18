@@ -4,7 +4,6 @@ import type { String } from '@ez4/schema';
 import type { PublicChargeView } from '@receivy/common';
 import { throttlePublicRead } from '../../common/utils/throttle';
 import type { PublicProvider } from '../provider';
-import { PublicLinkRepository } from '../repositories/public-link';
 
 declare class TokenRequest implements Http.Request {
   parameters: { token: String.Max<200> };
@@ -15,11 +14,10 @@ declare class PublicResponse implements Http.Response {
   body: PublicChargeView;
 }
 
-export async function publicChargeHandler(
-  request: TokenRequest,
-  { db, variables }: Service.Context<PublicProvider>
-): Promise<PublicResponse> {
-  const charge = await PublicLinkRepository.resolveCharge(db, request.parameters.token, variables.PUBLIC_LINK_HMAC_SECRET);
+export async function publicChargeHandler({ parameters }: TokenRequest, { db, publicLinks }: Service.Context<PublicProvider>): Promise<PublicResponse> {
+  const { charge, view } = await publicLinks.view(parameters.token);
+
   await throttlePublicRead(db, charge.id);
-  return { status: 200, body: await PublicLinkRepository.chargeView(db, charge) };
+
+  return { status: 200, body: view };
 }

@@ -123,6 +123,7 @@ export function PixKeyFormScreen({ client = financialClient, profile = profileSt
     // failure that never names the real problem.
     if (!pixKey) {
       setError(EMPTY_ERROR);
+
       return;
     }
 

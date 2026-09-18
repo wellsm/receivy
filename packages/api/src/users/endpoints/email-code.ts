@@ -3,7 +3,7 @@ import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import { allowEmailCode } from '../../common/utils/throttle';
 import type { UserProvider } from '../provider';
-import { AuthRepository } from '../repositories/auth';
+import { authStore } from '../services/auth-store';
 import { requestEmailCode } from '../services/email-login';
 import { createLoginCodeMailer } from '../services/login-code-email';
 
@@ -27,7 +27,7 @@ export async function emailCodeHandler(
 
   await requestEmailCode(request.body, {
     codeHashKey: variables.LOGIN_CODE_HASH_KEY,
-    repo: AuthRepository.create(db),
+    repo: authStore(db),
     transport: createLoginCodeMailer(email, variables.EMAIL_TRANSPORT, variables.RESEND_FROM_EMAIL)
   });
 

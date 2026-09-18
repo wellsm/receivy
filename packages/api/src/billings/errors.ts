@@ -6,12 +6,6 @@ export class IdempotencyMismatchError extends ConflictError {
   }
 }
 
-export class BillingPreviewUnavailableError extends ConflictError {
-  constructor(message = 'Só cobranças sem fim têm projeção.') {
-    super(message, 'BILLING_PREVIEW_UNAVAILABLE');
-  }
-}
-
 export class BillingEndedError extends ConflictError {
   constructor(message = 'Conta encerrada não aceita edição.') {
     super(message, 'BILLING_ENDED');

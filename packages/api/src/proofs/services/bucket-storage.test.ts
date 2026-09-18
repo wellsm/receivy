@@ -12,8 +12,10 @@ describe('bucketProofStorage', () => {
       })
     } as unknown as Client;
     const storage = bucketProofStorage(bucket);
+
     await storage.delete('proofs/a');
     await storage.delete('proofs/a');
+
     expect(bucket.delete).toHaveBeenCalledTimes(1);
   });
 });

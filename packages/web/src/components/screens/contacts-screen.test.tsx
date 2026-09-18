@@ -124,6 +124,7 @@ describe("ContactsScreen", () => {
     render(<ContactsScreen />);
 
     const user = userEvent.setup();
+
     await user.click(await screen.findByRole("button", { name: "Carregar mais" }));
     await user.type(screen.getByLabelText("Buscar contatos"), "Bruno");
 
@@ -131,6 +132,7 @@ describe("ContactsScreen", () => {
 
     await act(async () => {
       release(Response.json({ contacts: [carla], nextCursor: "cursor-3" }));
+
       await new Promise(resolve => setTimeout(resolve, 0));
     });
 

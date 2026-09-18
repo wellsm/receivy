@@ -78,7 +78,6 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
     allocations: [],
     charges: [...firstCycle, ...secondCycle],
     previews: [],
-    nextMaterialization: null,
     category: BillingCategory.Food,
     invite: null,
     guests: [],
@@ -156,9 +155,11 @@ describe("BillingDetailScreen", () => {
   });
 
   it("tags an overdue pending charge Atrasado", async () => {
-    pinClock("2026-11-20T12:00:00Z"); // noon UTC = 09:00 in America/Sao_Paulo, same calendar day
+    pinClock("2026-11-20T12:00:00Z");
+ // noon UTC = 09:00 in America/Sao_Paulo, same calendar day
 
     const overdue = billing({ nextDueDate: "2026-11-15", charges: [charge({ id: "c1", name: "Carlos", dueDate: "2026-11-15" })] });
+
     await open(makeClient(overdue));
 
     expect(screen.getByText("Atrasado")).toBeOnTheScreen();
@@ -168,6 +169,7 @@ describe("BillingDetailScreen", () => {
     pinClock("2026-11-20T12:00:00Z");
 
     const dueToday = billing({ nextDueDate: "2026-11-20", charges: [charge({ id: "c2", name: "Carlos", dueDate: "2026-11-20" })] });
+
     await open(makeClient(dueToday));
 
     // The corner tag and the secondary line both read "Vence hoje" for a charge due today.
@@ -178,6 +180,7 @@ describe("BillingDetailScreen", () => {
     pinClock("2026-11-20T12:00:00Z");
 
     const future = billing({ nextDueDate: "2027-01-31", charges: [charge({ id: "c3", name: "Carlos", dueDate: "2027-01-31" })] });
+
     await open(makeClient(future));
 
     expect(screen.getByText("Pendente")).toBeOnTheScreen();
@@ -190,6 +193,7 @@ describe("BillingDetailScreen", () => {
       nextDueDate: "2026-11-15",
       charges: [charge({ id: "c1", name: "Carlos", dueDate: "2026-11-15", state: ChargeState.Paid, paidAt: "2026-11-14T22:42:00Z" })],
     });
+
     await open(makeClient(paid));
 
     expect(screen.getByText("Pago")).toBeOnTheScreen();
@@ -213,6 +217,7 @@ describe("BillingDetailScreen", () => {
 
   it("accepts the proof under review when the owner marks the participant as paid", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
+
     const pending = { state: ProofState.Pending, kind: ProofKind.File, file: { name: "pix.png", mime: ProofMime.Png, size: 10 }, sentAt: "2026-11-12T10:00:00Z", reviewedAt: null, reason: null, sentByViewer: false };
     const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: ChargeState.Paid }), charge({ id: "c6", name: "Carlos", proofState: ProofState.Pending, proof: pending })] });
     const { client } = await open(makeClient(detail));
@@ -220,6 +225,7 @@ describe("BillingDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Marcar Carlos como pago" }));
 
     await waitFor(() => expect(client.reviewProof).toHaveBeenCalledWith("c6", "accepted"));
+
     expect(client.pay).not.toHaveBeenCalled();
     expect(await screen.findByText("Pagamento de Carlos registrado.")).toBeOnTheScreen();
     expect(client.billing).toHaveBeenCalledTimes(2);
@@ -241,27 +247,32 @@ describe("BillingDetailScreen", () => {
     const { client } = await open();
 
     await fireEvent.press(screen.getByRole("button", { name: "Copiar chave Pix" }));
+
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith("11987654321");
     expect(await screen.findByText("Copiado")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByRole("button", { name: "Compartilhar link de Carlos" }));
     await waitFor(() => expect(client.publicLink).toHaveBeenCalledWith("c6"));
+
     expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({ message: chargeShareText(charge({ id: "c6", name: "Carlos" }), "http://localhost:3000/pay/tk") }));
   });
 
   it("marks a pending participant as paid after confirmation and reloads the billing", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
+
     const { client } = await open();
 
     await fireEvent.press(screen.getByRole("button", { name: "Marcar Carlos como pago" }));
 
     await waitFor(() => expect(client.pay).toHaveBeenCalledWith("c6"));
+
     expect(await screen.findByText("Pagamento de Carlos registrado.")).toBeOnTheScreen();
     expect(client.billing).toHaveBeenCalledTimes(2);
   });
 
   it("reopens a paid participant after confirmation and reloads the billing", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Reabrir")?.onPress?.());
+
     const { client } = await open();
 
     await fireEvent.press(screen.getByRole("button", { name: "Reabrir cobrança de Lucas F." }));
@@ -276,6 +287,7 @@ describe("BillingDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Compartilhar link de pagamento" }));
 
     await waitFor(() => expect(client.publicLink).toHaveBeenCalledWith("c6"));
+
     expect(Share.share).toHaveBeenCalledWith(expect.objectContaining({ message: chargeShareText(charge({ id: "c6", name: "Carlos" }), "http://localhost:3000/pay/tk") }));
   });
 
@@ -307,6 +319,7 @@ describe("BillingDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Convidar" }));
 
     await waitFor(() => expect(client.invite).toHaveBeenCalledWith("b1"));
+
     expect(Share.share).toHaveBeenCalledWith(
       expect.objectContaining({ message: "Entre na conta Jantar de despedida no Receivy: http://localhost:3000/join/abc" }),
     );
@@ -315,6 +328,7 @@ describe("BillingDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Revogar convite" }));
 
     await waitFor(() => expect(client.revokeInvite).toHaveBeenCalledWith("b1"));
+
     expect(screen.queryByText("Convite ativo até 08/10")).toBeNull();
   });
 
@@ -347,6 +361,7 @@ describe("BillingDetailScreen", () => {
 
     await waitFor(() => expect(client.resolveGuest).toHaveBeenCalledWith("b1", "g1", { action: "link", contactId: "c1" }));
     await waitFor(() => expect(screen.queryByText("Aguardando você")).toBeNull());
+
     expect(screen.queryByText("José Silva")).toBeNull();
   });
 
@@ -366,6 +381,7 @@ describe("BillingDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Manter as deste mês" }));
 
     await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: BillingState.Paused, pendingCharges: PendingChargesAction.Keep }));
+
     expect(await screen.findByRole("button", { name: "Retomar" })).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Convidar" })).toBeNull();
   });
@@ -378,6 +394,7 @@ describe("BillingDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Pausar" }));
 
     await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: BillingState.Paused }));
+
     expect(screen.queryByRole("header", { name: "Pausar conta?" })).toBeNull();
   });
 
@@ -410,6 +427,7 @@ describe("BillingDetailScreen", () => {
 
     await waitFor(() => expect(client.patchBilling).toHaveBeenCalledWith("b1", { state: BillingState.Ended, pendingCharges: PendingChargesAction.Cancel }));
     await waitFor(() => expect(client.revokeInvite).toHaveBeenCalledWith("b1"));
+
     expect(await screen.findByText("Encerrada")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Compartilhar link de pagamento" })).toBeNull();
@@ -501,12 +519,15 @@ describe("BillingDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Não notificar Carlos" }));
 
     expect(Alert.alert).toHaveBeenCalledWith("Não notificar Carlos?", "Os lembretes automáticos das cobranças pendentes e futuras de Carlos nesta conta param.", expect.any(Array));
+
     await waitFor(() => expect(setParticipantNotify).toHaveBeenCalledWith("b1", "u1", false));
+
     expect(await screen.findByText("Sem avisos")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByRole("button", { name: "Voltar a notificar Carlos" }));
 
     await waitFor(() => expect(setParticipantNotify).toHaveBeenLastCalledWith("b1", "u1", true));
+
     expect(Alert.alert).toHaveBeenCalledTimes(1);
     expect(await screen.findByText("Avisos reativados para Carlos.")).toBeOnTheScreen();
     expect(screen.queryByText("Sem avisos")).toBeNull();

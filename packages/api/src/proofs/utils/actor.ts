@@ -1,6 +1,6 @@
 import type { Service } from '@ez4/common';
 import type { ChargeRepository } from '../../charges/repositories/charge';
-import { PublicLinkRepository } from '../../public/repositories/public-link';
+import { resolvePublicCharge } from '../../public/services/public-link';
 import type { ProofProvider } from '../provider';
 import { throttleProof } from '../services/throttle';
 
@@ -12,7 +12,9 @@ export async function resolveThrottledActor(
   token: string
 ): Promise<{ charge: ChargeRepository.Row; actor: PublicProofActor }> {
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
-  const charge = await PublicLinkRepository.resolveCharge(db, token, secret);
+  const charge = await resolvePublicCharge(db, token, secret);
+
   await throttleProof(db, charge.id);
+
   return { charge, actor: { token, secret } };
 }

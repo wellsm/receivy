@@ -6,7 +6,6 @@ import type { SessionIdentity } from '../../common/authorizers/session';
 import { PaymentNotice, paymentNoticeContext, pushPaymentNotice } from '../../notifications/services/payment-notices';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ProofProvider } from '../provider';
-import { ProofRepository } from '../repositories/proof';
 
 declare class ReviewRequest implements Http.Request {
   identity: SessionIdentity;
@@ -19,11 +18,8 @@ declare class ChargeResponse implements Http.Response {
   body: ChargeDetail;
 }
 
-export async function reviewProofHandler(
-  request: ReviewRequest,
-  { db, avatarFiles, variables }: Service.Context<ProofProvider>
-): Promise<ChargeResponse> {
-  const detail = await ProofRepository.review(db, request.parameters.id, request.identity.userId, request.body);
+export async function reviewProofHandler({ identity, parameters, body }: ReviewRequest, { db, avatarFiles, proofs, variables }: Service.Context<ProofProvider>): Promise<ChargeResponse> {
+  const detail = await proofs.review(identity.userId, parameters.id, body);
   const notice = detail.state === ChargeState.Paid ? PaymentNotice.Confirmed : PaymentNotice.NotIdentified;
 
   await pushPaymentNotice(db, paymentNoticeContext(variables), detail.id, notice);

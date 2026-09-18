@@ -68,6 +68,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Paula Souza", email: "ana@example.com" }, undefined));
+
     expect(client.get).not.toHaveBeenCalled();
   });
 
@@ -84,6 +85,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana" }, undefined));
+
     expect(client.save.mock.calls[0]?.[0]).not.toHaveProperty("email");
   });
 
@@ -119,6 +121,7 @@ describe("ContactFormScreen", () => {
     await render(<ContactFormScreen contactId="p1" client={client} financial={financialApi()} />);
 
     await waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveDisplayValue("Ana Paula Souza"));
+
     expect(screen.getByLabelText("Apelido")).toHaveDisplayValue("Aninha");
     expect(screen.getByLabelText("E-mail (opcional)")).toHaveDisplayValue("ana@example.com");
     expect(screen.getByLabelText("Nome completo")).toBeEnabled();
@@ -155,6 +158,7 @@ describe("ContactFormScreen", () => {
 
     // Once as the standing note, once as the failure reason.
     await waitFor(() => expect(screen.getAllByText(LINKED_NOTE)).toHaveLength(2));
+
     expect(screen.queryByText("Já existe um contato com esse e-mail.")).toBeNull();
   });
 
@@ -174,6 +178,7 @@ describe("ContactFormScreen", () => {
 
   it("keeps the typed data when the save fails", async () => {
     const client = contactsApi();
+
     client.save.mockRejectedValue(new Error("Já existe um contato com esse e-mail."));
 
     await render(<ContactFormScreen client={client} />);
@@ -206,6 +211,7 @@ describe("ContactFormScreen", () => {
     await waitFor(() =>
       expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", paymentMethod: { pixKeyType: "phone", pixKey: "+5511987654321", label: "Nubank" } }, undefined),
     );
+
     expect(financial.paymentMethods).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Definir padrão")).toBeNull();
   });
@@ -254,6 +260,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Definir padrão"));
 
     await waitFor(() => expect(financial.defaultPaymentMethod).toHaveBeenCalledWith("pm-2"));
+
     expect(financial.paymentMethods).toHaveBeenCalledTimes(2);
   });
 
@@ -274,6 +281,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Arquivar chave Pix"));
 
     await waitFor(() => expect(financial.archivePaymentMethod).toHaveBeenCalledWith("pm-2"));
+
     expect(financial.paymentMethods).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("header", { name: "Arquivar chave Pix?" })).toBeNull();
   });
@@ -329,6 +337,7 @@ describe("ContactFormScreen", () => {
     const onSaved = jest.fn();
 
     saveDraft(EMPTY_BILLING_DRAFT(TIMEZONE, TODAY));
+
     await render(<ContactFormScreen client={client} returnTo="new-billing" onSaved={onSaved} />);
 
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
@@ -336,6 +345,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(contact({ id: "saved", userId: "u-saved" })));
+
     expect(takeDraft()?.selected).toEqual(["u-saved"]);
   });
 
@@ -344,6 +354,7 @@ describe("ContactFormScreen", () => {
     const onSaved = jest.fn();
 
     saveDraft(EMPTY_BILLING_DRAFT(TIMEZONE, TODAY));
+
     await render(<ContactFormScreen client={client} onSaved={onSaved} />);
 
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
@@ -351,6 +362,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
     expect(takeDraft()?.selected).toEqual([]);
   });
 });

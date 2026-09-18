@@ -5,6 +5,7 @@ import type { String } from '@ez4/schema';
 import type { AuthSessionResponse } from '@receivy/common';
 import type { UserProvider } from '../provider';
 import { OauthFlowError } from '../services/oauth-flow';
+import { accessTokenConfig } from '../utils/access-token';
 import { exchangeOauthAtomically } from '../utils/atomic';
 
 declare class OauthExchangeRequest implements Http.Request {
@@ -25,14 +26,14 @@ export async function oauthExchangeHandler(
   { db, variables }: Service.Context<UserProvider>
 ): Promise<OauthExchangeResponse> {
   try {
-    const body = await exchangeOauthAtomically(db, request.body, {
-      accessTokenSecret: variables.AUTH_JWT_SECRET
-    });
+    const body = await exchangeOauthAtomically(db, request.body, accessTokenConfig(variables));
+
     return { status: 200, body };
   } catch (error) {
     if (error instanceof OauthFlowError) {
       throw new HttpUnauthorizedError();
     }
+
     throw error;
   }
 }

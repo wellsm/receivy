@@ -109,6 +109,7 @@ export function BillingsScreen() {
 
     try {
       await navigator.clipboard?.writeText(value);
+
       setNotice("Link copiado");
     } catch {
       setError("Não foi possível copiar o link.");
@@ -124,6 +125,7 @@ export function BillingsScreen() {
     // A conta a pagar has no public link: its action only opens the billing.
     if (billing.type === "payable" || billingShareAction(billing) !== "share" || !chargeId) {
       router.push(`/billings/${billing.id}`);
+
       return;
     }
 
@@ -131,10 +133,12 @@ export function BillingsScreen() {
 
     if (!response.ok) {
       router.push(`/charges/${chargeId}`);
+
       return;
     }
 
     const link = (await response.json()) as { token: string };
+
     await copy(`${window.location.origin}/pay/${link.token}`);
   }
 

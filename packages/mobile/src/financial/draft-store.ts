@@ -50,6 +50,7 @@ export function patchDraft(patch: { contact?: { id: string; userId: string }; pi
 
   if (parked.direction === "payable") {
     parked = { ...parked, ...(patch.contact ? { payee: patch.contact.id } : {}), ...pix };
+
     return;
   }
 

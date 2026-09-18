@@ -1,16 +1,10 @@
 import { HttpNotFoundError } from '@ez4/gateway';
-import {
-  type BillingCategory,
-  type BillingInvite,
-  type BillingKind,
-  BillingState,
-  type BillingRecurrence,
-  Direction,
-  type PublicInviteView
-} from '@receivy/common';
+import { type BillingInvite, BillingState, Direction, type PublicInviteView } from '@receivy/common';
 import { SettledLockedError } from '../../billings/errors';
+import { AllocationRepository } from '../../billings/repositories/allocation';
+import { BillingRepository } from '../../billings/repositories/billing';
+import { AccountRepository } from '../../users/repositories/account';
 import { billingDirection, billingRecurrence, billingRegistered } from '../../billings/utils/columns';
-import { lockOwner } from '../../charges/services/materialize';
 import type { DbClient } from '../../database';
 import { type LinkRow, LinkRepository } from '../../public/repositories/link';
 import { LinkableType } from '../../public/schemas/link';
@@ -30,30 +24,6 @@ export type InviteLinkContext = { secret: string; webOrigin: string };
  * the same deadline and the same revocation, so the two public links share one place and one token service.
  */
 export type InviteRow = LinkRow & { billing_id: string };
-
-/** The narrowest billing shape createInvite/revokeInvite need, so this module never depends on billings/repository. */
-const OWNED_BILLING_SELECT = { id: true, state: true, contact_id: true, kind: true } as const;
-
-type OwnedBillingRow = { id: string; state: BillingState; contact_id?: string; kind: BillingKind };
-
-/** The narrowest billing shape a public invite preview needs. */
-const PUBLIC_BILLING_SELECT = {
-  id: true,
-  description: true,
-  total_cents: true,
-  recurrence: true,
-  category: true,
-  state: true
-} as const;
-
-type PublicBillingRow = {
-  id: string;
-  description: string;
-  total_cents: number;
-  recurrence: BillingRecurrence;
-  category: BillingCategory;
-  state: BillingState;
-};
 
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -82,8 +52,8 @@ function inviteResponse(row: Pick<InviteRow, 'public_id' | 'expires_at'>, secret
   return { url: `${webOrigin.replace(/\/+$/, '')}/join/${inviteToken(row, secret)}`, expiresAt: row.expires_at };
 }
 
-async function ownedBilling(db: DbClient, ownerId: string, billingId: string, lock = false): Promise<OwnedBillingRow> {
-  const row = await db.billings.findOne({ select: OWNED_BILLING_SELECT, where: { id: billingId, owner_id: ownerId }, lock });
+async function ownedBilling(db: DbClient, ownerId: string, billingId: string, lock = false): Promise<BillingRepository.Row> {
+  const row = await BillingRepository.get(db, ownerId, billingId, lock);
 
   if (!row) {
     throw new HttpNotFoundError();
@@ -103,7 +73,7 @@ export async function createInvite(
   assertPublicLinkSecretConfigured(secret);
 
   return db.transaction(async (tx) => {
-    await lockOwner(tx, ownerId);
+    await AccountRepository.lock(tx, ownerId);
 
     const billing = await ownedBilling(tx, ownerId, billingId, true);
 
@@ -139,7 +109,7 @@ export async function createInvite(
 
 export async function revokeInvite(db: DbClient, ownerId: string, billingId: string, now = new Date()): Promise<void> {
   await db.transaction(async (tx) => {
-    await lockOwner(tx, ownerId);
+    await AccountRepository.lock(tx, ownerId);
 
     const billing = await ownedBilling(tx, ownerId, billingId, true);
 
@@ -204,10 +174,7 @@ export async function getPublicInvite(db: DbClient, token: string, secret: strin
 }
 
 export async function publicInviteView(db: DbClient, invite: InviteRow, now = new Date()): Promise<PublicInviteView> {
-  const billing: PublicBillingRow | undefined = await db.billings.findOne({
-    select: PUBLIC_BILLING_SELECT,
-    where: { id: invite.billing_id }
-  });
+  const billing = await BillingRepository.publicView(db, invite.billing_id);
 
   if (!billing) {
     throw new HttpNotFoundError();
@@ -219,18 +186,13 @@ export async function publicInviteView(db: DbClient, invite: InviteRow, now = ne
     return { expired: true };
   }
 
-  const owner = await db.billings.findOne({ select: { owner_id: true }, where: { id: billing.id } });
-  const user = owner ? await db.users.findOne({ select: { name: true }, where: { id: owner.owner_id } }) : undefined;
-
   return {
     expired: false,
-    creditorFirstName: user?.name?.trim().split(/\s+/)[0] || 'Pessoa',
+    creditorFirstName: billing.owner.name?.trim().split(/\s+/)[0] || 'Pessoa',
     description: billing.description,
     amount: { amountCents: billing.total_cents, currency: 'BRL' },
     recurrence: billingRecurrence(billing),
-    participantCount: owner
-      ? await db.allocations.count({ where: { billing_id: billing.id, user_id: { not: owner.owner_id } } })
-      : 0,
+    participantCount: await AllocationRepository.countOthers(db, billing.id, billing.owner_id),
     category: billing.category
   };
 }

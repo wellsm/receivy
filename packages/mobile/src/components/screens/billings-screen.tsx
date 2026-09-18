@@ -132,7 +132,9 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
+
     await load();
+
     setRefreshing(false);
   }, [load]);
 
@@ -144,6 +146,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
     // A conta a pagar has no public link: its card opens the detail instead.
     if (billing.type === "payable" || billingShareAction(billing) !== "share" || !chargeId) {
       onOpenBilling?.(billing.id);
+
       return;
     }
 

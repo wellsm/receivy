@@ -1,11 +1,8 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
-import { HttpUnauthorizedError } from '@ez4/gateway';
 import type { AuthUser } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { UserProvider } from '../provider';
-import { AuthRepository } from '../repositories/auth';
-import { AvatarRepository } from '../repositories/avatar';
 
 declare class MeRequest implements Http.Request {
   identity: SessionIdentity;
@@ -16,10 +13,6 @@ declare class MeResponse implements Http.Response {
   body: { user: AuthUser };
 }
 
-export async function meHandler(request: MeRequest, { db, avatarFiles }: Service.Context<UserProvider>): Promise<MeResponse> {
-  const user = await AuthRepository.findUserById(db, request.identity.userId);
-  if (!user) {
-    throw new HttpUnauthorizedError();
-  }
-  return { status: 200, body: await AvatarRepository.sign(avatarFiles, { user }) };
+export async function meHandler({ identity }: MeRequest, { accounts }: Service.Context<UserProvider>): Promise<MeResponse> {
+  return { status: 200, body: await accounts.me(identity.userId) };
 }

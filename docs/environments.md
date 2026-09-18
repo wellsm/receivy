@@ -24,6 +24,9 @@ de autenticação exigem. Em produção o domínio é o real do produto.
 API (`packages/api/dev.env.example` → `dev.env`, git-ignored; `prd.env` análogo):
 
 - `PUBLIC_WEB_ORIGIN`: origem do web do stage. Alimenta links públicos e deep links.
+- `AUTH_ACCESS_TOKEN_TTL_SECONDS`: vida do access token em segundos. Uma semana no local
+  (`604800`), um dia no dev (`86400`) e 15 minutos em produção (`900`, o padrão quando ausente).
+  O refresh token continua igual; só muda com que frequência o cliente renova.
 - `OAUTH_REDIRECT_ALLOW_LIST`: `<web>/auth/oauth/callback,receivy://auth/callback`.
 - `GOOGLE_SIGNIN_ENABLED` / `APPLE_SIGNIN_ENABLED`: `true` liga o login social correspondente;
   qualquer outro valor (padrão `false`) o mantém desligado mesmo com credenciais configuradas.

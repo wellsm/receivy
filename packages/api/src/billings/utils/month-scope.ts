@@ -17,6 +17,7 @@ export function monthChanges(existing: MonthCharge[], planned: PlannedCharge[]):
 
     if (!match) {
       changes.cancel.push(charge);
+
       continue;
     }
 

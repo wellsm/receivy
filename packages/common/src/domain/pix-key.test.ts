@@ -1,6 +1,6 @@
-import { PixKeyType } from '@receivy/common';
 import { describe, expect, it } from 'vitest';
-import { normalizePixKey } from './validation';
+import { PixKeyType } from './contracts';
+import { normalizePixKey } from './pix-key';
 
 describe('Pix key validation', () => {
   it.each([

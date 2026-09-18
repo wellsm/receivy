@@ -116,6 +116,7 @@ export function billingDates(rule: BillingCalendarRule, from: string, to: string
 
     if (rule.frequency === BillingFrequency.Yearly) {
       year++;
+
       continue;
     }
 

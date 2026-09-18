@@ -19,6 +19,7 @@ export async function POST(request: Request) {
 
   const store = await cookies();
   const current = store.get(REFRESH_COOKIE)?.value;
+
   if (!current) {
     return clearSessionCookies(new NextResponse(null, { status: 401 }));
   }
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
       method: "POST",
       body: JSON.stringify({ refreshToken: current }),
     });
+
     // A sibling window rotated first: the cookie jar already holds the new pair, so clearing it here
     // would end a session that is alive. The caller retries with what it now has.
     if (upstream.status === 409) {
@@ -40,8 +42,10 @@ export async function POST(request: Request) {
 
     const session = (await upstream.json()) as SessionTokens;
     const response = new NextResponse(null, { status: 204 });
+
     response.cookies.set(ACCESS_COOKIE, session.accessToken, authCookieOptions(ACCESS_MAX_AGE));
     response.cookies.set(REFRESH_COOKIE, session.refreshToken, authCookieOptions(REFRESH_MAX_AGE));
+
     return response;
   } catch {
     return NextResponse.json({ message: "Serviço indisponível." }, { status: 503 });

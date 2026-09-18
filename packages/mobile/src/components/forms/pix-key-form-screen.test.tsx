@@ -115,6 +115,7 @@ describe("PixKeyFormScreen", () => {
     const field = screen.getByLabelText("CPF do titular");
 
     await fireEvent.changeText(field, "12345678901");
+
     expect(screen.getByLabelText("Colar")).toBeOnTheScreen();
 
     await fireEvent(field, "focus");
@@ -152,6 +153,7 @@ describe("PixKeyFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Salvar chave Pix"));
 
     await waitFor(() => expect(api.savePaymentMethod).toHaveBeenCalled());
+
     expect(api.defaultPaymentMethod).not.toHaveBeenCalled();
   });
 
@@ -160,6 +162,7 @@ describe("PixKeyFormScreen", () => {
     const onSaved = jest.fn();
 
     saveDraft(EMPTY_BILLING_DRAFT(TIMEZONE, TODAY));
+
     await render(<PixKeyFormScreen client={api} profile={profile("")} returnTo="new-billing" required onSaved={onSaved} />);
 
     expect(screen.getByText("Você precisa de uma chave Pix para criar cobranças.")).toBeOnTheScreen();
@@ -168,6 +171,7 @@ describe("PixKeyFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Salvar chave Pix"));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
     expect(takeDraft()?.pix).toBe("saved");
   });
 

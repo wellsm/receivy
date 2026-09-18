@@ -4,9 +4,6 @@ import type { String } from '@ez4/schema';
 import type { PublicProofState } from '@receivy/common';
 import { PaymentNotice, paymentNoticeContext, pushPaymentNotice } from '../../notifications/services/payment-notices';
 import type { ProofProvider } from '../provider';
-import { ProofRepository } from '../repositories/proof';
-import { currentProof } from '../repositories/proof-row';
-import { bucketProofStorage } from '../services/bucket-storage';
 import { resolveThrottledActor } from '../utils/actor';
 
 declare class PublicDeclareRequest implements Http.Request {
@@ -18,14 +15,11 @@ declare class PublicStateResponse implements Http.Response {
   body: PublicProofState;
 }
 
-export async function publicDeclarePaymentHandler(
-  request: PublicDeclareRequest,
-  { db, variables, proofFiles }: Service.Context<ProofProvider>
-): Promise<PublicStateResponse> {
-  const { charge, actor } = await resolveThrottledActor({ db, variables }, request.parameters.token);
-  const row = await ProofRepository.declare(db, bucketProofStorage(proofFiles), charge.id, actor);
+export async function publicDeclarePaymentHandler({ parameters }: PublicDeclareRequest, { db, proofs, variables }: Service.Context<ProofProvider>): Promise<PublicStateResponse> {
+  const { charge, actor } = await resolveThrottledActor({ db, variables }, parameters.token);
+  const row = await proofs.declare(actor, charge.id);
 
   await pushPaymentNotice(db, paymentNoticeContext(variables), row.id, PaymentNotice.Declared);
 
-  return { status: 200, body: ProofRepository.stateView(await currentProof(db, row.id), actor.token, actor.secret) };
+  return { status: 200, body: await proofs.publicState(row.id, actor.token) };
 }

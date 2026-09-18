@@ -1,6 +1,6 @@
 import { BillingRecurrence } from './billing';
 import { addCalendarDays } from './billing-calendar';
-import { chargeDirection, type ListCharge, type ListChargeItem } from './charge';
+import type { ListCharge, ListChargeItem } from './charge';
 import { ChargeState, Direction } from './contracts';
 import { calendarDate } from './financial-form';
 
@@ -214,10 +214,11 @@ function readPeriod(params: Record<string, string | string[] | undefined>, today
 function matchesStatus(charge: ListChargeItem, statuses: FeedStatus[], today: string): boolean {
   return statuses.some((status) => {
     if (status === FeedStatus.Overdue) {
-      return charge.state === ChargeState.Pending && charge.due_date < today;
+      return charge.state === ChargeState.Pending && charge.dueDate < today;
     }
 
-    return charge.state === status;
+    // The other statuses spell the stored state; the enums only differ in name.
+    return (charge.state as string) === status;
   });
 }
 
@@ -225,11 +226,11 @@ function matchesStatus(charge: ListChargeItem, statuses: FeedStatus[], today: st
  * The month narrowed down to what the filters ask for. The list endpoint answers with the whole
  * month, so every group is applied here; an empty group means no restriction on it.
  */
-export function filterCharges(viewerEmail: string, charges: ListCharge, filters: FeedFilters, today = calendarDate()): ListCharge {
+export function filterCharges(charges: ListCharge, filters: FeedFilters, today = calendarDate()): ListCharge {
   const range = periodRange(filters.period, today);
 
   return charges.filter((charge) => {
-    if (filters.direction.length && !filters.direction.includes(chargeDirection(charge, viewerEmail))) {
+    if (filters.direction.length && !filters.direction.includes(charge.type)) {
       return false;
     }
 
@@ -237,10 +238,10 @@ export function filterCharges(viewerEmail: string, charges: ListCharge, filters:
       return false;
     }
 
-    if (filters.recurrence.length && !filters.recurrence.includes(charge.billing.recurrence as BillingRecurrence)) {
+    if (filters.recurrence.length && !filters.recurrence.includes(charge.billing.recurrence)) {
       return false;
     }
 
-    return !range || (charge.due_date >= range.from && charge.due_date <= range.to);
+    return !range || (charge.dueDate >= range.from && charge.dueDate <= range.to);
   });
 }

@@ -46,6 +46,7 @@ export function CopyButton({ value, accessibilityLabel, label = "Copiar", varian
 
     if (!done) {
       onRefused?.();
+
       return;
     }
 

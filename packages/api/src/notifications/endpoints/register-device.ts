@@ -4,7 +4,6 @@ import type { String } from '@ez4/schema';
 import type { DevicePlatform, NotificationDevice } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { NotificationProvider } from '../provider';
-import { NotificationRepository } from '../repositories/notification';
 
 declare class DeviceRequest implements Http.Request {
   identity: SessionIdentity;
@@ -20,12 +19,6 @@ declare class DeviceResponse implements Http.Response {
   body: NotificationDevice;
 }
 
-export async function registerDeviceHandler(
-  request: DeviceRequest,
-  { db }: Service.Context<NotificationProvider>
-): Promise<DeviceResponse> {
-  return {
-    status: 200,
-    body: await NotificationRepository.registerDevice(db, request.identity.userId, request.body, request.identity.familyId)
-  };
+export async function registerDeviceHandler({ identity, body }: DeviceRequest, { notifications }: Service.Context<NotificationProvider>): Promise<DeviceResponse> {
+  return { status: 200, body: await notifications.registerDevice(identity.userId, body, identity.familyId) };
 }

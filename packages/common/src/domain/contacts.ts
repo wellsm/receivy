@@ -62,16 +62,30 @@ export function normalizeContact(input: ContactInput): ContactInput {
     typeof input?.name !== 'string' ||
     (input.nickname !== undefined && typeof input.nickname !== 'string') ||
     (input.email !== undefined && typeof input.email !== 'string')
-  )
+  ) {
     throw new Error('Dados de contato inválidos.');
+  }
+
   const name = input.name.normalize('NFC').trim().replace(/\s+/g, ' ');
-  if (!name || name.length > 120) throw new Error('Informe um nome com até 120 caracteres.');
+
+  if (!name || name.length > 120) {
+    throw new Error('Informe um nome com até 120 caracteres.');
+  }
+
   // An empty nickname is how the clients clear it, so it normalizes to `undefined` instead of failing.
   const nickname = (input.nickname ?? '').normalize('NFC').trim().replace(/\s+/g, ' ');
-  if (nickname.length > 60) throw new RangeError('Informe um apelido com até 60 caracteres.');
+
+  if (nickname.length > 60) {
+    throw new RangeError('Informe um apelido com até 60 caracteres.');
+  }
+
   // An empty e-mail is how the clients leave it out; only a filled one has to look like an address.
   const email = normalizeEmail(input.email ?? '');
-  if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw new Error('Informe um e-mail válido.');
+
+  if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+    throw new Error('Informe um e-mail válido.');
+  }
+
   return {
     name,
     ...(nickname ? { nickname } : {}),

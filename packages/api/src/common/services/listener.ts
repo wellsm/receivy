@@ -18,8 +18,12 @@ export function requestListener(event: Service.AnyEvent<Http.Incoming<Http.Reque
     logVerbose(event);
   }
 
-  if (event.type !== ServiceEventType.Done && event.type !== ServiceEventType.Error && event.type !== ServiceEventType.Timeout) return;
+  if (event.type !== ServiceEventType.Done && event.type !== ServiceEventType.Error && event.type !== ServiceEventType.Timeout) {
+    return;
+  }
+
   const correlationId = /^[a-f0-9-]{36}$/.test(event.request.traceId ?? '') ? event.request.traceId : undefined;
+
   console.info({
     event:
       event.type === ServiceEventType.Done
@@ -42,10 +46,12 @@ function logVerbose(event: Service.AnyEvent<Http.Incoming<Http.Request>>): void 
 
     if (typeof data === 'string' && data.length > MAX_INPUT_LENGTH) {
       Logger.warning('[EVENT OMITTED]', { traceId: request.traceId, maxLength: MAX_INPUT_LENGTH, length: data.length });
+
       return;
     }
 
     Logger.log('[EVENT]', { ...request });
+
     return;
   }
 

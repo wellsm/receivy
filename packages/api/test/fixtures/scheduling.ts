@@ -46,10 +46,12 @@ export function fakeTransport() {
   const transport: NotificationTransport = {
     push: async (input) => {
       pushes.push(input);
+
       return state.pushStatus === 'accepted' ? { status: 'accepted', id: `ticket-${pushes.length}` } : { status: state.pushStatus };
     },
     email: async (input) => {
       emails.push(input);
+
       return state.emailStatus === 'accepted' ? { status: 'accepted', id: `email-${emails.length}` } : { status: state.emailStatus };
     },
     receipt: async () => ({ status: 'delivered' })

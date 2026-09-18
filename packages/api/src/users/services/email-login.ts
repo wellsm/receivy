@@ -1,9 +1,7 @@
 import type { AuthSessionResponse, AuthUser, ConfirmEmailCodeBody, RequestEmailCodeBody } from '@receivy/common';
 import { normalizeEmail } from '@receivy/common';
 import { generateEmailCode } from './code';
-import { issueAccessToken } from './session';
-
-const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+import { DEFAULT_ACCESS_TOKEN_TTL_SECONDS, issueAccessToken } from './session';
 
 export type LoginCodeOutcome = { kind: 'valid' } | { kind: 'invalid' | 'expired' | 'exhausted' };
 
@@ -57,13 +55,14 @@ export async function requestEmailCode(
 
 type ConfirmEmailCodeDependencies = {
   accessTokenSecret: string;
+  accessTokenTtlSeconds?: number;
   codeHashKey: string;
   repo: AuthRepository;
 };
 
 export async function confirmEmailCode(
   input: ConfirmEmailCodeBody,
-  { accessTokenSecret, codeHashKey, repo }: ConfirmEmailCodeDependencies
+  { accessTokenSecret, accessTokenTtlSeconds = DEFAULT_ACCESS_TOKEN_TTL_SECONDS, codeHashKey, repo }: ConfirmEmailCodeDependencies
 ): Promise<AuthSessionResponse> {
   const email = normalizeEmail(input.email);
   const outcome = await repo.consumeLoginCode({
@@ -81,13 +80,14 @@ export async function confirmEmailCode(
   const accessToken = issueAccessToken({
     familyId: session.familyId,
     secret: accessTokenSecret,
+    ttlSeconds: accessTokenTtlSeconds,
     userId: user.id
   });
 
   return {
     accessToken,
     refreshToken: session.refreshToken,
-    expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+    expiresIn: accessTokenTtlSeconds,
     user
   };
 }

@@ -58,16 +58,21 @@ describe("ProfileGuard", () => {
     await render(<ProfileGuard store={profiles} />);
 
     await waitFor(() => expect(profiles.load).toHaveBeenCalled());
+
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it("skips public screens and sessions that are not established yet", async () => {
     mockPathname = "/login";
+
     const publicScreen = store(pending);
+
     await render(<ProfileGuard store={publicScreen} />);
 
     mockPathname = "/";
+
     const noSession = store(pending, false);
+
     await render(<ProfileGuard store={noSession} />);
 
     expect(publicScreen.load).not.toHaveBeenCalled();

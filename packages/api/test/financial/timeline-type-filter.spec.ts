@@ -7,15 +7,13 @@ import {
   SplitMode,
   SplitPartKind
 } from '@receivy/common';
-import { BillingRepository } from '../../src/billings/repositories/billing';
-import { ContactRepository } from '../../src/contacts/repositories/contact';
-import { TimelineRepository } from '../../src/timeline/repositories/timeline';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { createBilling } from '../../src/billings/services/billing';
+import { cleanupUsers, contacts, createUser, db, monthCharges } from '../fixtures/financial';
 
 /**
- * `charges.billing_type` is gone: the feed filters by type through the billing relation, which EZ4
- * compiles into a correlated EXISTS. A dropped clause would return every type instead of failing,
- * so each filtered call is asserted against the unfiltered one.
+ * `charges.billing_type` is gone: the month list carries the type through the billing relation, and
+ * the feed filters on it locally. A dropped join would leave every item typeless instead of failing,
+ * so each filtered read is asserted against the unfiltered one.
  */
 const OWNER = 'b7777777-7777-4777-8777-777777777777';
 const MONTH = '2026-01';
@@ -23,7 +21,7 @@ const TZ = 'America/Sao_Paulo';
 
 const date = (value: string) => new Date(`${value}T12:00:00Z`);
 
-describe('timeline type filter', () => {
+describe('month list recurrence', () => {
   before(async () => {
     const [database] = await db.rawQuery('SELECT current_database() AS name');
 
@@ -36,7 +34,7 @@ describe('timeline type filter', () => {
     });
 
     const debtorId = (
-      await ContactRepository.save(db, OWNER, {
+      await contacts.save(OWNER, {
         name: 'Bruno',
         email: 'timeline-type-debtor@example.com'
       })
@@ -49,7 +47,7 @@ describe('timeline type filter', () => {
       ]
     };
 
-    await BillingRepository.create(
+    await createBilling(
       db,
       OWNER,
       'timeline-type-once',
@@ -64,7 +62,7 @@ describe('timeline type filter', () => {
       date('2026-01-01')
     );
 
-    await BillingRepository.create(
+    await createBilling(
       db,
       OWNER,
       'timeline-type-monthly',
@@ -84,35 +82,27 @@ describe('timeline type filter', () => {
   after(async () => cleanupUsers(db, [OWNER]));
 
   /** Descriptions of the month's items, deduplicated so an extra occurrence cannot change the assertion. */
-  async function descriptions(type?: BillingRecurrence[]): Promise<string[]> {
-    const page = await TimelineRepository.get(db, OWNER, {
-      month: MONTH,
-      ...(type ? { recurrence: type } : {})
-    });
+  async function descriptions(recurrence?: BillingRecurrence): Promise<string[]> {
+    const items = (await monthCharges(db, OWNER, MONTH)).filter((item) => !recurrence || item.billing.recurrence === recurrence);
 
-    return [
-      ...new Set(page.items.map((item) => item.charge.description))
-    ].sort();
+    return [...new Set(items.map((item) => item.description))].sort();
   }
 
-  it('lists every type when no type filter is given', async () => {
+  it('lists every type when nothing narrows the month', async () => {
     deepEqual(await descriptions(), ['Mensal', 'Única']);
   });
 
   it('keeps only the once billing', async () => {
-    deepEqual(await descriptions([BillingRecurrence.Once]), ['Única']);
+    deepEqual(await descriptions(BillingRecurrence.Once), ['Única']);
   });
 
   it('keeps only the indefinite billing', async () => {
-    deepEqual(await descriptions([BillingRecurrence.Indefinite]), ['Mensal']);
+    deepEqual(await descriptions(BillingRecurrence.Indefinite), ['Mensal']);
   });
 
   it('serves the type on the item even though the charge no longer stores it', async () => {
-    const page = await TimelineRepository.get(db, OWNER, {
-      month: MONTH,
-      recurrence: [BillingRecurrence.Indefinite]
-    });
+    const items = await monthCharges(db, OWNER, MONTH);
 
-    equal(page.items[0]?.charge.recurrence, BillingRecurrence.Indefinite);
+    equal(items.find((item) => item.description === 'Mensal')?.billing.recurrence, BillingRecurrence.Indefinite);
   });
 });

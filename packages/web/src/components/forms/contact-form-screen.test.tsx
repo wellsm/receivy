@@ -74,9 +74,11 @@ function keyList() {
 
 it("creates a contact with a nickname and an e-mail", async () => {
   const sent = api();
+
   render(<ContactFormScreen />);
 
   const user = userEvent.setup();
+
   await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
   await user.type(screen.getByLabelText("Apelido"), "Aninha");
   await user.type(screen.getByLabelText("E-mail (opcional)"), "Ana@Example.com");
@@ -105,9 +107,11 @@ it("shows the placeholders and the field hints from the design, without a phone 
 
 it("saves a contact without an e-mail and leaves the key out of the body", async () => {
   const sent = api();
+
   render(<ContactFormScreen />);
 
   const user = userEvent.setup();
+
   await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
 
@@ -120,14 +124,17 @@ it("saves a contact without an e-mail and leaves the key out of the body", async
 
 it("loads a contact for editing and returns to its ledger", async () => {
   const sent = api();
+
   render(<ContactFormScreen contactId="c1" />);
 
   await vi.waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveValue("Ana Souza"));
+
   expect(screen.getByLabelText("E-mail (opcional)")).toHaveValue("ana@example.com");
 
   await userEvent.setup().click(screen.getByRole("button", { name: "Salvar contato" }));
 
   await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts/c1"));
+
   expect(sent.find(entry => entry.init.method === "PATCH")?.path).toBe("/api/contacts/c1");
 });
 
@@ -148,19 +155,23 @@ it("hands the new contact's account back to the billing draft when it came from 
   render(<ContactFormScreen returnTo="/billings/new" />);
 
   const user = userEvent.setup();
+
   await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
   await user.type(screen.getByLabelText("E-mail (opcional)"), "ana@example.com");
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
 
   await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/billings/new"));
+
   expect(takeDraft()?.draft.selected).toEqual(["user-0", "user-saved"]);
 });
 
 it("files the typed Pix key under the new contact", async () => {
   const sent = api();
+
   render(<ContactFormScreen />);
 
   const user = userEvent.setup();
+
   await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
 
   expect(screen.getByText("Chave Pix (opcional)")).toBeInTheDocument();
@@ -184,9 +195,11 @@ it("files the typed Pix key under the new contact", async () => {
 
 it("leaves the label out when only the key was typed", async () => {
   const sent = api();
+
   render(<ContactFormScreen />);
 
   const user = userEvent.setup();
+
   await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
   await user.type(screen.getByLabelText("E-mail Pix"), "ana@example.com");
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
@@ -201,6 +214,7 @@ it("leaves the label out when only the key was typed", async () => {
 
 it("lists the contact's Pix keys on edit and promotes the one the owner picks", async () => {
   const sent = api(ana, [nubank, itau]);
+
   render(<ContactFormScreen contactId="c1" />);
 
   await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
@@ -212,16 +226,19 @@ it("lists the contact's Pix keys on edit and promotes the one the owner picks", 
   await userEvent.setup().click(keyList().getByRole("button", { name: "Definir padrão" }));
 
   await vi.waitFor(() => expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(2));
+
   expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pm-2/default" && entry.init.method === "POST")).toBe(true);
 });
 
 it("archives one of the contact's keys only after the owner confirms, then reloads the list", async () => {
   const sent = api(ana, [nubank, itau]);
+
   render(<ContactFormScreen contactId="c1" />);
 
   await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
 
   const user = userEvent.setup();
+
   await user.click(keyList().getAllByRole("button", { name: "Arquivar" })[1]!);
 
   const dialog = screen.getByRole("dialog", { name: "Arquivar chave Pix?" });
@@ -232,6 +249,7 @@ it("archives one of the contact's keys only after the owner confirms, then reloa
   await user.click(within(dialog).getByRole("button", { name: "Arquivar" }));
 
   await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pm-2/archive" && entry.init.method === "POST")).toBe(true));
+
   expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(2);
 });
 
@@ -257,6 +275,7 @@ it("closes the dialog and says why an archive failed", async () => {
   await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
 
   const user = userEvent.setup();
+
   await user.click(keyList().getAllByRole("button", { name: "Arquivar" })[1]!);
   await user.click(within(screen.getByRole("dialog", { name: "Arquivar chave Pix?" })).getByRole("button", { name: "Arquivar" }));
 
@@ -269,12 +288,14 @@ it("closes the dialog and says why an archive failed", async () => {
 
 it("keeps the key when the archive confirmation is cancelled", async () => {
   const sent = api(ana, [nubank, itau]);
+
   render(<ContactFormScreen contactId="c1" />);
 
   await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
 
   const user = userEvent.setup();
   const trigger = keyList().getAllByRole("button", { name: "Arquivar" })[1]!;
+
   await user.click(trigger);
   await user.click(within(screen.getByRole("dialog", { name: "Arquivar chave Pix?" })).getByRole("button", { name: "Cancelar" }));
 
@@ -285,6 +306,7 @@ it("keeps the key when the archive confirmation is cancelled", async () => {
 
 it("never asks the API for keys while the contact does not exist yet", async () => {
   const sent = api();
+
   render(<ContactFormScreen />);
 
   await screen.findByRole("button", { name: "Salvar contato" });
@@ -298,6 +320,7 @@ it("keeps the typed data when the server rejects the contact", async () => {
   render(<ContactFormScreen />);
 
   const user = userEvent.setup();
+
   await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
   await user.type(screen.getByLabelText("E-mail (opcional)"), "ana@example.com");
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));

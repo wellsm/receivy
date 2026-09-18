@@ -285,6 +285,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
       return await action();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : fallback);
+
       return undefined;
     } finally {
       setBusy(false);
@@ -298,6 +299,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   async function inviteSomeone(detail: BillingDetail) {
     if (invite) {
       await run(() => shareInvite(invite, detail.description), "Não foi possível compartilhar o convite.");
+
       return;
     }
 
@@ -305,6 +307,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
       const created = await client.invite(detail.id);
 
       setInvite(created);
+
       await shareInvite(created, detail.description);
     }, "Não foi possível criar o convite.");
   }
@@ -312,6 +315,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   async function revokeInvite(detail: BillingDetail) {
     await run(async () => {
       await client.revokeInvite(detail.id);
+
       setInvite(null);
     }, "Não foi possível revogar o convite.");
   }
@@ -341,6 +345,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
       // The server keeps the invite alive after the billing ends, so drop it here; a failure must not block the transition.
       if (state === BillingState.Ended && invite) {
         await client.revokeInvite(detail.id).catch(() => undefined);
+
         setInvite(null);
       }
     }, "Não foi possível atualizar a conta.");
@@ -349,6 +354,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   function pause(detail: BillingDetail) {
     if (!pendingChargesOf(detail).length) {
       void transition(detail, BillingState.Paused);
+
       return;
     }
 
@@ -358,6 +364,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   function end(detail: BillingDetail) {
     if (!pendingChargesOf(detail).length) {
       setConfirmEnd(true);
+
       return;
     }
 
@@ -386,6 +393,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   async function settle(charge: ChargeDetail) {
     if (charge.proofState !== "pending") {
       await client.pay(charge.id);
+
       return;
     }
 
@@ -401,6 +409,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
           void run(async () => {
             await settle(charge);
             await reloadBilling();
+
             setNotice(`Pagamento de ${name} registrado.`);
           }, "Não foi possível atualizar a cobrança."),
       },
@@ -445,6 +454,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
 
     if (!participant.notify) {
       void setParticipantNotify(detail, userId, name, true);
+
       return;
     }
 

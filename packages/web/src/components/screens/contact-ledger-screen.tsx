@@ -108,6 +108,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
       return await action();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : fallback);
+
       return undefined;
     } finally {
       setBusy(false);
@@ -149,6 +150,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
       const url = `${window.location.origin}/pay/${encodeURIComponent(link.token)}`;
 
       await navigator.clipboard?.writeText(url);
+
       setNotice("Link de pagamento copiado.");
     }, LINK_ERROR);
   }

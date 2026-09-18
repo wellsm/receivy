@@ -6,6 +6,7 @@ import type { AuthSessionResponse } from '@receivy/common';
 import type { UserProvider } from '../provider';
 import { beginNativeApple, exchangeNativeApple } from '../services/apple-native';
 import { OauthProvider } from '../services/oauth';
+import { accessTokenConfig } from '../utils/access-token';
 import { oauthDependencies } from '../utils/oauth';
 
 declare class StartRequest implements Http.Request {
@@ -28,11 +29,15 @@ declare class ExchangeResponse implements Http.Response {
   status: 200;
   body: AuthSessionResponse;
 }
+
 export async function nativeAppleStartHandler(
   request: StartRequest,
   { db, variables }: Service.Context<UserProvider>
 ): Promise<StartResponse> {
-  if (!oauthDependencies(OauthProvider.Apple, { variables }, true).client) throw new HttpNotFoundError();
+  if (!oauthDependencies(OauthProvider.Apple, { variables }, true).client) {
+    throw new HttpNotFoundError();
+  }
+
   return { status: 200, body: await beginNativeApple(db, request.body.clientChallenge) };
 }
 export async function nativeAppleExchangeHandler(
@@ -40,6 +45,12 @@ export async function nativeAppleExchangeHandler(
   { db, variables }: Service.Context<UserProvider>
 ): Promise<ExchangeResponse> {
   const client = oauthDependencies(OauthProvider.Apple, { variables }, true).client;
-  if (!client) throw new HttpNotFoundError();
-  return { status: 200, body: await exchangeNativeApple(db, request.body, client, variables.AUTH_JWT_SECRET) };
+
+  if (!client) {
+    throw new HttpNotFoundError();
+  }
+
+  const { accessTokenSecret, accessTokenTtlSeconds } = accessTokenConfig(variables);
+
+  return { status: 200, body: await exchangeNativeApple(db, request.body, client, accessTokenSecret, accessTokenTtlSeconds) };
 }

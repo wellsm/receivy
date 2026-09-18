@@ -5,17 +5,6 @@ import { LinkableType } from '../schemas/link';
 
 const sqlNull = null as unknown as undefined;
 
-export const LINK_SELECT = {
-  id: true,
-  linkable_type: true,
-  linkable_id: true,
-  public_id: true,
-  expires_at: true,
-  revoked_at: true,
-  accepted_count: true,
-  created_at: true
-} as const;
-
 export type LinkRow = {
   id: string;
   linkable_type: LinkableType;
@@ -40,7 +29,7 @@ export namespace LinkRepository {
     lock = false
   ): Promise<LinkRow | null> {
     const { records } = await db.links.findMany({
-      select: LINK_SELECT,
+      select: { id: true, linkable_type: true, linkable_id: true, public_id: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true },
       where: { linkable_type: linkableType, linkable_id: linkableId, revoked_at: { isNull: true } },
       order: { created_at: Order.Desc },
       take: 1,
@@ -77,7 +66,7 @@ export namespace LinkRepository {
     await revokeLive(db, input.linkableType, input.linkableId, now);
 
     return db.links.insertOne({
-      select: LINK_SELECT,
+      select: { id: true, linkable_type: true, linkable_id: true, public_id: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true },
       data: {
         id: crypto.randomUUID(),
         linkable_type: input.linkableType,
@@ -99,16 +88,40 @@ export namespace LinkRepository {
     return !!(await db.links.count({ where: { linkable_type: linkableType, linkable_id: linkableId } }));
   }
 
+  /** Which of `linkableIds` ever had a link, revoked ones included: one read for a whole page. */
+  export async function issuedFor(db: DbClient, linkableType: LinkableType, linkableIds: string[]): Promise<Set<string>> {
+    if (!linkableIds.length) {
+      return new Set();
+    }
+
+    const { records } = await db.links.findMany({
+      select: { linkable_id: true },
+      where: { linkable_type: linkableType, linkable_id: { isIn: linkableIds } }
+    });
+
+    return new Set(records.map((record) => record.linkable_id));
+  }
+
+  /** The tally of acceptances an invite link carries. */
+  export async function setAcceptedCount(db: DbClient, id: string, acceptedCount: number): Promise<void> {
+    await db.links.updateOne({ where: { id }, data: { accepted_count: acceptedCount } });
+  }
+
+  /** Every link ever issued for the target, live or not. */
+  export async function removeFor(db: DbClient, linkableType: LinkableType, linkableId: string): Promise<void> {
+    await db.links.deleteMany({ where: { linkable_type: linkableType, linkable_id: linkableId } });
+  }
+
   /** One row by id, for a caller that already resolved it and now needs it under lock. */
   export async function byId(db: DbClient, id: string, lock = false): Promise<LinkRow | null> {
-    const row = await db.links.findOne({ select: LINK_SELECT, where: { id }, ...(lock ? { lock: true } : {}) });
+    const row = await db.links.findOne({ select: { id: true, linkable_type: true, linkable_id: true, public_id: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true }, where: { id }, ...(lock ? { lock: true } : {}) });
 
     return row ?? null;
   }
 
   /** The row behind a handle, whatever its state: the caller decides what revoked or expired means. */
   export async function byPublicId(db: DbClient, publicId: string): Promise<LinkRow | null> {
-    const row = await db.links.findOne({ select: LINK_SELECT, where: { public_id: publicId } });
+    const row = await db.links.findOne({ select: { id: true, linkable_type: true, linkable_id: true, public_id: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true }, where: { public_id: publicId } });
 
     return row ?? null;
   }

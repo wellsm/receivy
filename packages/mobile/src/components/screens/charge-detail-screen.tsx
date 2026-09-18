@@ -138,6 +138,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
       return await action();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : fallback);
+
       return undefined;
     } finally {
       setBusy(false);
@@ -149,6 +150,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
       if (acceptProof && client.reviewProof) {
         setCharge(await client.reviewProof(id, "accepted"));
         setNotice("Comprovante aceito e pagamento registrado.");
+
         return;
       }
 
@@ -283,6 +285,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
 
     if (!done) {
       setError("Não foi possível copiar a chave.");
+
       return;
     }
 
@@ -314,6 +317,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
 
     const done = await run(async () => {
       await client.withdrawProof!(id);
+
       return true;
     }, "Não foi possível apagar o comprovante.");
 

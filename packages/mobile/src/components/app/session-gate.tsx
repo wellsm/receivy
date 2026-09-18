@@ -59,6 +59,7 @@ export function SessionGate({ client = authClient, store = profileStore, childre
 
         if (needsOnboarding(user)) {
           router.replace("/onboarding");
+
           return;
         }
 

@@ -30,14 +30,19 @@ describe("OnboardingScreen", () => {
     const { save } = await setup();
 
     const button = screen.getByRole("button", { name: "Continuar" });
+
     expect(button).toBeDisabled();
 
     await fireEvent.changeText(screen.getByLabelText("Nome"), "   ");
+
     expect(button).toBeDisabled();
+
     await fireEvent.press(button);
+
     expect(save).not.toHaveBeenCalled();
 
     await fireEvent.changeText(screen.getByLabelText("Nome"), "Ana");
+
     expect(button).toBeEnabled();
   });
 
@@ -48,6 +53,7 @@ describe("OnboardingScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Continuar" }));
 
     await waitFor(() => expect(onComplete).toHaveBeenCalled());
+
     expect(save).toHaveBeenCalledWith({
       name: "Ana",
       locale: "pt-BR",
@@ -74,6 +80,7 @@ describe("OnboardingScreen", () => {
     await setup(undefined, { ...user, name: "Ana Paula" });
 
     await waitFor(() => expect(screen.getByLabelText("Nome")).toHaveDisplayValue("Ana Paula"));
+
     expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
   });
 
@@ -92,10 +99,13 @@ describe("OnboardingScreen", () => {
     await setup();
 
     expect(screen.getAllByText("Termos de uso")).toHaveLength(1);
+
     await fireEvent.press(screen.getByRole("link", { name: "Termos de uso" }));
+
     expect(screen.getAllByText("Termos de uso")).toHaveLength(2);
 
     await fireEvent.press(screen.getByRole("link", { name: "Termos de uso" }));
+
     expect(screen.getAllByText("Termos de uso")).toHaveLength(1);
   });
 });

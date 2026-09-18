@@ -10,10 +10,25 @@ const LABEL = "text-xs font-semibold text-muted";
 export function FirstSharePix({ busy, publish }: { busy: boolean; publish: (id: string) => Promise<void> }) {
   const [items, setItems] = useState<PaymentMethod[]>([]), [selected, setSelected] = useState("");
   const [key, setKey] = useState(""), [type, setType] = useState<PixKeyType>(PixKeyType.Email), [error, setError] = useState(""), [saving, setSaving] = useState(false);
-  useEffect(() => { void browserFetch("/api/financial/payment-methods").then(async response => { if (!response.ok) throw new Error("Não foi possível carregar as chaves."); setItems((await response.json()).paymentMethods); }).catch(() => setError("Não foi possível carregar as chaves. Reabra a cobrança para tentar novamente.")); }, []);
+
+  useEffect(() => { void browserFetch("/api/financial/payment-methods").then(async response => { if (!response.ok) {
+    throw new Error("Não foi possível carregar as chaves.");
+  }
+
+ setItems((await response.json()).paymentMethods); }).catch(() => setError("Não foi possível carregar as chaves. Reabra a cobrança para tentar novamente.")); }, []);
+
   async function save() {
     setSaving(true); setError("");
-    try { const response = await browserFetch("/api/financial/payment-methods", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pixKeyType: type, pixKey: key }) }); if (!response.ok) throw new Error(await responseMessage(response, "Não foi possível salvar a chave.")); const method: PaymentMethod = await response.json(); setItems(previous => [...previous, method]); setSelected(method.id); setKey(""); }
+
+    try { const response = await browserFetch("/api/financial/payment-methods", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pixKeyType: type, pixKey: key }) });
+
+ if (!response.ok) {
+      throw new Error(await responseMessage(response, "Não foi possível salvar a chave."));
+    }
+
+ const method: PaymentMethod = await response.json();
+
+ setItems(previous => [...previous, method]); setSelected(method.id); setKey(""); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível salvar a chave."); } finally { setSaving(false); }
   }
 

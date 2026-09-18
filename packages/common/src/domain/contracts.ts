@@ -131,9 +131,6 @@ export type PublicProofState = {
   file: ProofFile | null;
 };
 
-/** The feed lists charges only: no billing previews, no proof or payment history rows. */
-export type TimelineItem = { kind: 'charge'; direction: Direction; charge: ChargeSummary };
-
 export type HealthResponse = {
   status: 'ok';
   service: 'receivy-api';
@@ -209,31 +206,9 @@ export type PublicChargeView = {
   uploadsEnabled: boolean;
 };
 
-export type TimelineSummary = {
-  receivable: Money;
-  payable: Money;
-  overdue: Money;
-  pending: Money;
-  proofsToReview: number;
-  receivableCount: number;
-  payableCount: number;
-  /** Paid charges due this month on each side: the "realizado" shown beside the open totals. */
-  receivedTotal: Money;
-  paidTotal: Money;
-};
-
-export type TimelinePage = {
-  items: TimelineItem[];
-  summary: TimelineSummary;
-  /** The resolved `YYYY-MM` the page was served for. Always sent by the API; absent on older fixtures. */
-  month?: string;
-  nextCursor: string | null;
-};
-
 export type ContactLedger = {
   contactId: string;
   contact: Contact;
-  balance: Money;
   receivable: Money;
   payable: Money;
   charges: ChargeDetail[];

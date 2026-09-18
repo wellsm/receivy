@@ -65,6 +65,7 @@ export function CodeScreen({ client = authClient, email, sentAt, onAuthenticated
 
     try {
       await client.confirmEmailCode({ email, code });
+
       // Left busy on purpose: the caller leaves this screen.
       onAuthenticated();
     } catch (reason) {

@@ -99,6 +99,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
         },
         "Não foi possível revisar o comprovante.",
       );
+
       router.push(`/charges/${chargeId}`);
     }, "Não foi possível revisar o comprovante.");
   }
@@ -116,6 +117,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
   async function withdraw() {
     await run(async () => {
       await request<void>(`${base}/proof`, { method: "DELETE" }, "Não foi possível apagar o comprovante.");
+
       router.push(`/charges/${chargeId}`);
     }, "Não foi possível apagar o comprovante.");
   }

@@ -25,6 +25,7 @@ export interface NotificationTransport {
   push(input: { token: string; title: string; body: string; url: string }): Promise<SendResult>;
   receipt(ticket: string): Promise<ReceiptResult>;
 }
+
 export function notificationTransport(
   env: Record<string, string | undefined>,
   request: typeof fetch = globalThis.fetch,

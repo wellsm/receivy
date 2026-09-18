@@ -4,6 +4,7 @@ import { LoginScreen } from "@/components/screens/login-screen";
 
 export default function LoginRoute() {
   const router = useRouter();
+
   return (
     <LoginScreen
       onCodeRequested={(email) => {

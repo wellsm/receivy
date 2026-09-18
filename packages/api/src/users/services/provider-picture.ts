@@ -1,7 +1,8 @@
 import type { Client } from '@ez4/storage';
 import { isAvatarUpload } from '@receivy/common';
 import type { DbClient } from '../../database';
-import { AvatarRepository } from '../repositories/avatar';
+import { AccountRepository } from '../repositories/account';
+import { avatarKey } from '../utils/avatar';
 
 const TIMEOUT_MS = 3000;
 
@@ -31,12 +32,9 @@ export async function adoptProviderPicture({
   }
 
   try {
-    const user = await db.users.findOne({
-      select: { id: true, avatar_updated_at: true },
-      where: { id: userId, deleted_at: { isNull: true } }
-    });
+    const user = await AccountRepository.avatarUpdatedAt(db, userId);
 
-    if (!user || user.avatar_updated_at) {
+    if (!user || user.avatarUpdatedAt) {
       return false;
     }
 
@@ -44,9 +42,11 @@ export async function adoptProviderPicture({
       signal: AbortSignal.timeout(TIMEOUT_MS),
       redirect: 'follow'
     });
+
     if (!response.ok || (response.url && !response.url.startsWith('https://'))) {
       return false;
     }
+
     const type = response.headers.get('content-type')?.split(';', 1)[0]?.trim() ?? '';
     const bytes = Buffer.from(await response.arrayBuffer());
 
@@ -56,16 +56,14 @@ export async function adoptProviderPicture({
 
     const instant = now.toISOString();
 
-    await bucket.write(AvatarRepository.key(userId), bytes, { contentType: type });
-    await db.users.updateOne({
-      where: { id: userId },
-      data: { avatar_updated_at: instant, updated_at: instant }
-    });
+    await bucket.write(avatarKey(userId), bytes, { contentType: type });
+    await AccountRepository.touchAvatar(db, userId, instant);
 
     return true;
   } catch {
     // Counts only: no URL, no user data.
     console.warn('Provider picture skipped');
+
     return false;
   }
 }

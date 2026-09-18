@@ -88,6 +88,7 @@ describe("ProofViewerScreen", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Marcar pago" }));
 
     await waitFor(() => expect(review).toHaveBeenCalled());
+
     expect(routerMock.push).toHaveBeenCalledWith("/charges/charge");
   });
 
@@ -102,6 +103,7 @@ describe("ProofViewerScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rejeitar comprovante" }));
 
     await waitFor(() => expect(review).toHaveBeenCalled());
+
     expect(review.mock.calls[0]?.[0]?.body).toBe(JSON.stringify({ decision: "rejected", reason: "Valor diferente" }));
   });
 
@@ -113,6 +115,7 @@ describe("ProofViewerScreen", () => {
       "POST /api/financial/charges/charge/proof": () => {
         // The bucket event lands right after the PUT: the next read of the charge already carries the new file.
         swap(replaced);
+
         return Response.json({ uploadUrl: "https://upload.test/put", expiresAt: "2030-01-01" });
       },
     });
@@ -144,6 +147,7 @@ describe("ProofViewerScreen", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Apagar e enviar outro" }));
 
     await waitFor(() => expect(withdraw).toHaveBeenCalled());
+
     expect(routerMock.push).toHaveBeenCalledWith("/charges/charge");
   });
 

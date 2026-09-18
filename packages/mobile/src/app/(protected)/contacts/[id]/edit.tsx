@@ -14,6 +14,7 @@ export default function EditContactRoute() {
         // receives; the whole side trip is dismissed at once, draft and all.
         if (returnTo === "new-billing") {
           router.dismissTo("/billings/new");
+
           return;
         }
 

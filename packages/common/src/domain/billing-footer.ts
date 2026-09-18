@@ -1,4 +1,4 @@
-import { BillingKind, BillingRecurrence, type NormalizedBillingInput, SplitPartKind } from './billing';
+import { type BillingInput, BillingKind, BillingRecurrence, type NormalizedBillingInput, SplitPartKind } from './billing';
 import { billingDueDates } from './billing-calendar';
 import { type BillingDraft, buildBillingInput } from './billing-draft';
 import { type PlannedCharge, planBillingCharges } from './billing-plan';
@@ -16,13 +16,14 @@ export type BillingDraftSummary = {
 };
 
 /** Participants who actually get a charge: the owner part never counts, nor does an amount rounded to zero. */
-function summaryPeople(input: NormalizedBillingInput, allocations: ResolvedAllocation[]): number {
+function summaryPeople(input: BillingInput, allocations: ResolvedAllocation[]): number {
   if (input.kind === BillingKind.Record) {
     return 0;
   }
 
-  if (input.type === Direction.Payable) {
-    return input.contactId ? 1 : 0;
+  // A conta a pagar: the receiving contact is the one person charged.
+  if (input.contactId) {
+    return 1;
   }
 
   return allocations.filter((allocation) => allocation.kind === SplitPartKind.User && allocation.amountCents > 0).length;
@@ -47,10 +48,10 @@ export function billingDraftSummary(draft: BillingDraft, today: Date): BillingDr
   const seatless = draft.direction === Direction.Payable && !draft.payee;
 
   try {
-    // `buildBillingInput` always returns `normalizeBillingInput`'s result; its declared type is
-    // widened to `BillingInput` because it also doubles as the request body sent over the wire.
-    const input = buildBillingInput(seatless ? { ...draft, payee: SEAT_PREVIEW } : draft, today) as NormalizedBillingInput;
-    const payer = input.type === Direction.Payable ? ChargePayer.Owner : ChargePayer.Person;
+    // `buildBillingInput` returns `normalizeBillingInput`'s result minus the direction, which the API
+    // (and this footer) reads from `contactId`; its declared type is widened to the request body.
+    const input = buildBillingInput(seatless ? { ...draft, payee: SEAT_PREVIEW } : draft, today) as Omit<NormalizedBillingInput, 'type'>;
+    const payer = input.contactId ? ChargePayer.Owner : ChargePayer.Person;
     const people = (allocations: ResolvedAllocation[]) => (seatless ? 0 : summaryPeople(input, allocations));
     const settled = input.kind === BillingKind.Record;
 

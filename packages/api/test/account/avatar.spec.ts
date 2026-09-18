@@ -4,7 +4,7 @@ import { HttpNotFoundError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
 import { AvatarMime } from '@receivy/common';
 import { AvatarInvalidError } from '../../src/users/errors';
-import { AuthRepository } from '../../src/users/repositories/auth';
+import { AccountRepository } from '../../src/users/repositories/account';
 import { AvatarRepository } from '../../src/users/repositories/avatar';
 import { cleanupUsers, createUser, db } from '../fixtures/financial';
 
@@ -38,11 +38,12 @@ describe('avatar upload', () => {
     await rejects(AvatarRepository.complete(db, bucket, user), AvatarInvalidError);
 
     equal(bucket.delete.mock.calls.at(-1)?.arguments[0], `avatar-uploads/${user}`);
-    equal((await AuthRepository.findUserById(db, user))?.avatar, null);
+    equal((await AccountRepository.authUser(db, user))?.avatar, null);
   });
 
   it('accepts a PNG, promotes it from staging and exposes the signed avatar', async () => {
     const now = new Date('2026-09-13T12:00:00.000Z');
+
     bucket.stat.mock.mockImplementation(async () => ({ type: 'image/png', size: 1024 }));
     bucket.copy.mock.mockImplementation(async () => undefined);
     bucket.delete.mock.mockImplementation(async () => undefined);
@@ -51,7 +52,7 @@ describe('avatar upload', () => {
     const result = await AvatarRepository.complete(db, bucket, user, now);
 
     deepEqual(result, { avatar: { url: `https://bucket.test/avatars/${user}?get`, version: now.toISOString() } });
-    deepEqual((await AuthRepository.findUserById(db, user))?.avatar, { url: `avatars/${user}`, version: now.toISOString() });
+    deepEqual((await AccountRepository.authUser(db, user))?.avatar, { url: `avatars/${user}`, version: now.toISOString() });
     deepEqual(bucket.copy.mock.calls.at(-1)?.arguments, [`avatar-uploads/${user}`, `avatars/${user}`]);
     equal(bucket.delete.mock.calls.at(-1)?.arguments[0], `avatar-uploads/${user}`);
   });

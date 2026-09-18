@@ -9,6 +9,7 @@ function refreshSession(): Promise<Response> {
       refreshInFlight = null;
     });
   }
+
   return refreshInFlight;
 }
 
@@ -25,6 +26,7 @@ export async function browserFetch(path: string, init: RequestInit = {}): Promis
     if (!refreshed.ok && refreshed.status !== 409) {
       // This transport runs outside React; reload after clearing expired cookies.
       window.location.replace(new URL("/login", window.location.origin).href);
+
       throw new Error("Sua sessão expirou. Entre novamente.");
     }
 

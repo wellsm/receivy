@@ -4,7 +4,6 @@ import type { String } from '@ez4/schema';
 import type { PublicLink } from '@receivy/common';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { PublicProvider } from '../provider';
-import { PublicLinkRepository } from '../repositories/public-link';
 
 declare class ChargeRequest implements Http.Request {
   identity: SessionIdentity;
@@ -16,18 +15,6 @@ declare class LinkResponse implements Http.Response {
   body: PublicLink;
 }
 
-export async function rotatePublicLinkHandler(
-  request: ChargeRequest,
-  { db, variables }: Service.Context<PublicProvider>
-): Promise<LinkResponse> {
-  return {
-    status: 200,
-    body: await PublicLinkRepository.createOrRotate(
-      db,
-      request.identity.userId,
-      request.parameters.id,
-      variables.PUBLIC_LINK_HMAC_SECRET,
-      true
-    )
-  };
+export async function rotatePublicLinkHandler({ identity, parameters }: ChargeRequest, { publicLinks }: Service.Context<PublicProvider>): Promise<LinkResponse> {
+  return { status: 200, body: await publicLinks.rotate(identity.userId, parameters.id) };
 }

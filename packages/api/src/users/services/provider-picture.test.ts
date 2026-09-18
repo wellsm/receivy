@@ -21,7 +21,9 @@ function image(type = 'image/jpeg', bytes = 10, url = 'https://lh3.test/p.jpg') 
       status: 200,
       headers: { 'content-type': type }
     });
+
     Object.defineProperty(response, 'url', { value: url, writable: false });
+
     return response;
   }) as unknown as typeof fetch;
 }

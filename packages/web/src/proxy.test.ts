@@ -6,7 +6,11 @@ import { proxy } from "./proxy";
 function request(path: string, cookies: Record<string, string> = {}) {
   const headers = new Headers();
   const cookie = Object.entries(cookies).map(([key, value]) => `${key}=${value}`).join("; ");
-  if (cookie) headers.set("cookie", cookie);
+
+  if (cookie) {
+    headers.set("cookie", cookie);
+  }
+
   return new NextRequest(`https://receivy.example${path}`, { headers });
 }
 
@@ -15,8 +19,11 @@ afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 describe("public charge proxy headers", () => {
   it("allows signed-link pages without a session and supplies a strict nonce CSP", async () => {
     const response = await proxy(request("/pay/capability"));
+
     expect(response.status).toBe(200);
+
     const csp = response.headers.get("content-security-policy") ?? "";
+
     expect(csp).toContain("script-src 'nonce-");
     expect(csp).not.toContain("unsafe-inline");
     expect(csp).not.toContain("unsafe-eval");
@@ -25,6 +32,7 @@ describe("public charge proxy headers", () => {
 
   it("lets an anonymous visitor reach an invite page without indexing it", async () => {
     const response = await proxy(request("/join/token"));
+
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
@@ -37,35 +45,44 @@ describe("public charge proxy headers", () => {
 describe("session gate", () => {
   it("lets an anonymous visitor reach the code confirmation screen", async () => {
     const response = await proxy(request("/login/code"));
+
     expect(response.status).toBe(200);
   });
 
   it("sends a signed-in visitor away from the code confirmation screen", async () => {
     const response = await proxy(request("/login/code", { [ACCESS_COOKIE]: "access" }));
+
     expect(response.status).toBe(307);
     expect(new URL(response.headers.get("location") ?? "").pathname).toBe("/feed");
   });
 
   it("sends anonymous visitors of the onboarding screen to login with a return path", async () => {
     const response = await proxy(request("/onboarding"));
+
     expect(response.status).toBe(307);
     expect(new URL(response.headers.get("location") ?? "").searchParams.get("next")).toBe("/onboarding");
   });
 
   it("lets a valid access cookie through without touching the API", async () => {
     const fetchMock = vi.fn();
+
     vi.stubGlobal("fetch", fetchMock);
+
     const response = await proxy(request("/", { [ACCESS_COOKIE]: "access" }));
+
     expect(response.status).toBe(200);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("refreshes an expired access cookie before the server render and rotates both cookies", async () => {
     vi.stubEnv("EZ4_API_URL", "https://api.receivy.example/");
+
     const fetchMock = vi.fn(async (_url: URL, init?: RequestInit) => {
       expect(JSON.parse(init?.body as string)).toEqual({ refreshToken: "old-refresh" });
+
       return Response.json({ accessToken: "new-access", refreshToken: "new-refresh", expiresIn: 900 });
     });
+
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await proxy(request("/contacts", { [REFRESH_COOKIE]: "old-refresh" }));

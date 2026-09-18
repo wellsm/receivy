@@ -8,9 +8,11 @@ const email = {
   subject: 'Test',
   text: 'Body'
 };
+
 describe('notification provider boundaries', () => {
   it.each([401, 403])('does not treat receipt-query HTTP %s as failed delivery', async (status) => {
     const sender = notificationTransport({ NOTIFICATION_PUSH_TRANSPORT: 'expo' }, async () => new Response(null, { status }));
+
     expect(await sender.receipt('accepted-ticket')).toEqual({
       status: 'observation_failed'
     });
@@ -19,6 +21,7 @@ describe('notification provider boundaries', () => {
     const sender = notificationTransport({ NOTIFICATION_PUSH_TRANSPORT: 'expo' }, async () =>
       Response.json({ data: { ticket: { status: 'unknown' } } })
     );
+
     expect(await sender.receipt('ticket')).toEqual({
       status: 'observation_failed'
     });
@@ -26,9 +29,12 @@ describe('notification provider boundaries', () => {
   it('keeps disabled explicit and sends stable Resend key/body, classifying failures', async () => {
     const request = vi.fn<typeof fetch>();
     const disabled = notificationTransport({}, request);
+
     expect(await disabled.email(email)).toEqual({ status: 'disabled' });
     expect(request).not.toHaveBeenCalled();
+
     const sender = notificationTransport({ EMAIL_TRANSPORT: 'resend', RESEND_API_KEY: 'fake-key' }, request);
+
     request.mockResolvedValueOnce(Response.json({ id: 'email-id' }));
     expect(await sender.email(email)).toEqual({
       status: 'accepted',
@@ -62,6 +68,7 @@ describe('notification provider boundaries', () => {
       body: 'Generic',
       url: 'https://receivy.example/pay/fixture'
     };
+
     request.mockResolvedValueOnce(Response.json({ data: { status: 'ok', id: 'ticket' } }));
     expect(await sender.push(push)).toEqual({
       status: 'accepted',

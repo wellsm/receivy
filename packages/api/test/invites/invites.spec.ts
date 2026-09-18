@@ -1,5 +1,6 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
+import type { Service } from '@ez4/common';
 import { Order } from '@ez4/database';
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
 import {
@@ -15,17 +16,16 @@ import {
   SplitPartKind,
   UserStatus
 } from '@receivy/common';
-import { BillingRepository } from '../../src/billings/repositories/billing';
+import { createBilling } from '../../src/billings/services/billing';
+import { getBilling } from '../../src/billings/services/detail';
 import { resolveGuest } from '../../src/billings/services/guests';
 import { StoredProofState } from '../../src/charges/schemas/charge';
 import { ApiError, TooManyRequestsError } from '../../src/common/errors';
 import { createEmailClient } from '../../src/common/services/email/compose';
-import { ContactRepository } from '../../src/contacts/repositories/contact';
 import { acceptInviteHandler } from '../../src/invites/endpoints/accept';
-import { InviteRepository } from '../../src/invites/repositories/invite';
+import { acceptInvite, createService as createInviteService, type InviteService } from '../../src/invites/services/invite';
 import { activeInvite, createInvite, getPublicInvite, revokeInvite } from '../../src/invites/services/links';
-import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
-import { cleanupUsers, createUser, db } from '../fixtures/financial';
+import { cleanupUsers, contacts, createUser, db, paymentMethods } from '../fixtures/financial';
 import { fakeScheduler } from '../fixtures/scheduling';
 
 const OWNER = 'c1111111-1111-4111-8111-111111111111';
@@ -104,22 +104,22 @@ describe('billing invites on native PostgreSQL', () => {
       }
     });
 
-    debtorId = (await ContactRepository.save(db, OWNER, { name: 'Caio', email: 'invite-debtor@example.com' })).userId;
-    otherDebtorId = (await ContactRepository.save(db, OTHER_OWNER, { name: 'Caio', email: 'invite-other-debtor@example.com' })).userId;
-    pixId = (await PaymentMethodRepository.save(db, OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
+    debtorId = (await contacts.save(OWNER, { name: 'Caio', email: 'invite-debtor@example.com' })).userId;
+    otherDebtorId = (await contacts.save(OTHER_OWNER, { name: 'Caio', email: 'invite-other-debtor@example.com' })).userId;
+    pixId = (await paymentMethods.save(OWNER, { pixKeyType: PixKeyType.Cpf, pixKey: '52998224725', label: 'Principal' })).id;
   });
 
   after(async () => cleanupUsers(db, [OWNER, OTHER_OWNER, LINKED_OWNER, GUEST, STRANGER, OUTSIDER, PARKED]));
 
   it('issues a join link, exposes it on the detail and revokes the previous invite', async () => {
     const now = new Date('2026-10-01T12:00:00Z');
-    const billing = await BillingRepository.create(db, OWNER, 'invite-issue', once(), now);
+    const billing = await createBilling(db, OWNER, 'invite-issue', once(), now);
     const first = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
 
     ok(first.url.startsWith(`${ORIGIN}/join/`));
     equal(first.expiresAt, new Date(now.getTime() + 30 * DAY).toISOString());
 
-    const detail = await BillingRepository.get(db, OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
+    const detail = await getBilling(db, OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
 
     deepEqual(detail.invite, first);
 
@@ -135,12 +135,13 @@ describe('billing invites on native PostgreSQL', () => {
 
     equal(await activeInvite(db, billing.id, SECRET, ORIGIN, now), null);
     deepEqual(await getPublicInvite(db, tokenOf(second.url), SECRET, now), { expired: true });
+
     await rejects(() => createInvite(db, OTHER_OWNER, billing.id, SECRET, ORIGIN, now), HttpNotFoundError);
   });
 
   it('answers the public view with the billing headline and hides forged tokens', async () => {
     const now = new Date('2026-10-02T12:00:00Z');
-    const billing = await BillingRepository.create(db, OWNER, 'invite-public', once({ description: 'Churrasco de sábado' }), now);
+    const billing = await createBilling(db, OWNER, 'invite-public', once({ description: 'Churrasco de sábado' }), now);
     const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
     const view = await getPublicInvite(db, tokenOf(invite.url), SECRET, now);
 
@@ -164,14 +165,14 @@ describe('billing invites on native PostgreSQL', () => {
 
   it('adds the guest as contact and participant, recalculating the pending charges', async () => {
     const now = new Date('2026-10-03T12:00:00Z');
-    const billing = await BillingRepository.create(db, OWNER, 'invite-accept', once(), now);
+    const billing = await createBilling(db, OWNER, 'invite-accept', once(), now);
     const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
     const before = await chargesOf(billing.id);
 
     equal(before.length, 1);
     equal(before[0]!.amount_cents, 8_000);
 
-    const result = await InviteRepository.accept(db, GUEST, tokenOf(invite.url), SECRET, now);
+    const result = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
     equal(result.billingId, billing.id);
     equal(result.joinedSplit, true);
@@ -182,7 +183,7 @@ describe('billing invites on native PostgreSQL', () => {
     ok(guestContact, 'the guest joins the owner agenda through their own account');
     ok(!guestContact.archived_at);
 
-    const detail = await BillingRepository.get(db, OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
+    const detail = await getBilling(db, OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
 
     deepEqual(
       detail.allocations.map((allocation) => [allocation.userId, allocation.amount.amountCents, allocation.order]),
@@ -214,7 +215,7 @@ describe('billing invites on native PostgreSQL', () => {
 
     equal(row?.accepted_count, 1);
 
-    const repeated = await InviteRepository.accept(db, GUEST, tokenOf(invite.url), SECRET, now);
+    const repeated = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
     deepEqual(repeated, { billingId: billing.id, chargeId: result.chargeId, joinedSplit: false, awaitingOwner: false });
     equal((await chargesOf(billing.id)).length, 2);
@@ -224,7 +225,7 @@ describe('billing invites on native PostgreSQL', () => {
 
   it('reprices every installment and numbers the guest charges like the originals', async () => {
     const now = new Date('2026-10-03T18:00:00Z');
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'invite-until',
@@ -250,7 +251,7 @@ describe('billing invites on native PostgreSQL', () => {
       ]
     );
 
-    const result = await InviteRepository.accept(db, GUEST, tokenOf(invite.url), SECRET, now);
+    const result = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
     equal(result.joinedSplit, true);
 
@@ -303,18 +304,19 @@ describe('billing invites on native PostgreSQL', () => {
 
   it('refuses to reshape a split that already moved', async () => {
     const now = new Date('2026-10-04T12:00:00Z');
-    const paid = await BillingRepository.create(db, OWNER, 'invite-paid', once(), now);
+    const paid = await createBilling(db, OWNER, 'invite-paid', once(), now);
     const paidInvite = await createInvite(db, OWNER, paid.id, SECRET, ORIGIN, now);
 
     await db.charges.updateOne({ where: { id: paid.charges[0]!.id }, data: { state: ChargeState.Paid, paid_at: now.toISOString() } });
     await rejects(
-      () => InviteRepository.accept(db, GUEST, tokenOf(paidInvite.url), SECRET, now),
+      () => acceptInvite(db, GUEST, tokenOf(paidInvite.url), SECRET, now),
       (error: Error) => error instanceof ApiError && error.message === 'Divisão já em andamento.'
     );
+
     equal(await db.allocations.count({ where: { billing_id: paid.id } }), 1);
     equal((await chargesOf(paid.id)).length, 1);
 
-    const proofed = await BillingRepository.create(db, OWNER, 'invite-proofed', once(), now);
+    const proofed = await createBilling(db, OWNER, 'invite-proofed', once(), now);
     const proofedInvite = await createInvite(db, OWNER, proofed.id, SECRET, ORIGIN, now);
 
     await db.proofs.insertOne({
@@ -331,15 +333,16 @@ describe('billing invites on native PostgreSQL', () => {
       }
     });
     await rejects(
-      () => InviteRepository.accept(db, GUEST, tokenOf(proofedInvite.url), SECRET, now),
+      () => acceptInvite(db, GUEST, tokenOf(proofedInvite.url), SECRET, now),
       (error: Error) => error instanceof ApiError && error.message === 'Divisão já em andamento.'
     );
+
     equal(await db.allocations.count({ where: { billing_id: proofed.id } }), 1);
   });
 
   it('keeps indefinite billings on allocations only and fixed splits on contact only', async () => {
     const now = new Date('2026-10-05T12:00:00Z');
-    const endless = await BillingRepository.create(
+    const endless = await createBilling(
       db,
       OWNER,
       'invite-indefinite',
@@ -350,13 +353,13 @@ describe('billing invites on native PostgreSQL', () => {
     ok(endless.charges.length > 0, 'the month of creation exists right away');
 
     const endlessInvite = await createInvite(db, OWNER, endless.id, SECRET, ORIGIN, now);
-    const joined = await InviteRepository.accept(db, GUEST, tokenOf(endlessInvite.url), SECRET, now);
+    const joined = await acceptInvite(db, GUEST, tokenOf(endlessInvite.url), SECRET, now);
 
     deepEqual(joined, { billingId: endless.id, chargeId: null, joinedSplit: true, awaitingOwner: false });
     equal(await db.allocations.count({ where: { billing_id: endless.id } }), 2);
     equal((await chargesOf(endless.id)).length, endless.charges.length, 'the guest joins the split from next month');
 
-    const fixed = await BillingRepository.create(
+    const fixed = await createBilling(
       db,
       OWNER,
       'invite-fixed',
@@ -364,7 +367,7 @@ describe('billing invites on native PostgreSQL', () => {
       now
     );
     const fixedInvite = await createInvite(db, OWNER, fixed.id, SECRET, ORIGIN, now);
-    const contactOnly = await InviteRepository.accept(db, GUEST, tokenOf(fixedInvite.url), SECRET, now);
+    const contactOnly = await acceptInvite(db, GUEST, tokenOf(fixedInvite.url), SECRET, now);
 
     deepEqual(contactOnly, { billingId: fixed.id, chargeId: null, joinedSplit: false, awaitingOwner: false });
     equal(await db.allocations.count({ where: { billing_id: fixed.id, user_id: { not: OWNER } } }), 1);
@@ -373,31 +376,32 @@ describe('billing invites on native PostgreSQL', () => {
 
   it('rejects the owner, an unconfirmed address and an expired link', async () => {
     const now = new Date('2026-10-06T12:00:00Z');
-    const billing = await BillingRepository.create(db, OWNER, 'invite-guards', once(), now);
+    const billing = await createBilling(db, OWNER, 'invite-guards', once(), now);
     const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
 
     await rejects(
-      () => InviteRepository.accept(db, OWNER, tokenOf(invite.url), SECRET, now),
+      () => acceptInvite(db, OWNER, tokenOf(invite.url), SECRET, now),
       (error: Error) => error instanceof ApiError && error.message === 'Você é o dono desta cobrança.'
     );
     await rejects(
-      () => InviteRepository.accept(db, STRANGER, tokenOf(invite.url), SECRET, now),
+      () => acceptInvite(db, STRANGER, tokenOf(invite.url), SECRET, now),
       (error: Error) => error instanceof HttpForbiddenError && error.message === 'Confirme seu e-mail antes de participar.'
     );
 
     const stale = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, new Date(now.getTime() - 31 * DAY));
 
     deepEqual(await getPublicInvite(db, tokenOf(stale.url), SECRET, now), { expired: true });
-    await rejects(() => InviteRepository.accept(db, GUEST, tokenOf(stale.url), SECRET, now), HttpNotFoundError);
+
+    await rejects(() => acceptInvite(db, GUEST, tokenOf(stale.url), SECRET, now), HttpNotFoundError);
   });
 
   it('reuses the existing contact for the guest instead of duplicating it', async () => {
     const now = new Date('2026-10-07T12:00:00Z');
-    const existing = await ContactRepository.save(db, OTHER_OWNER, { name: 'Bruna Lima', email: GUEST_EMAIL, nickname: 'Bruna' });
+    const existing = await contacts.save(OTHER_OWNER, { name: 'Bruna Lima', email: GUEST_EMAIL, nickname: 'Bruna' });
 
     equal(existing.userId, GUEST);
 
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OTHER_OWNER,
       'invite-existing-contact',
@@ -412,13 +416,13 @@ describe('billing invites on native PostgreSQL', () => {
       now
     );
     const invite = await createInvite(db, OTHER_OWNER, billing.id, SECRET, ORIGIN, now);
-    const result = await InviteRepository.accept(db, GUEST, tokenOf(invite.url), SECRET, now);
+    const result = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
     equal(result.joinedSplit, true);
     equal(await db.contacts.count({ where: { owner_id: OTHER_OWNER, user_id: GUEST } }), 1);
     equal((await contactFor(OTHER_OWNER, GUEST))?.id, existing.id);
 
-    const detail = await BillingRepository.get(db, OTHER_OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
+    const detail = await getBilling(db, OTHER_OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
 
     deepEqual(
       detail.allocations.map((allocation) => [allocation.userId, allocation.shares, allocation.amount.amountCents]),
@@ -431,13 +435,13 @@ describe('billing invites on native PostgreSQL', () => {
 
   it('revives an archived contact for the guest instead of creating a second one', async () => {
     const now = new Date('2026-10-08T12:00:00Z');
-    const linkedDebtorId = (await ContactRepository.save(db, LINKED_OWNER, { name: 'Caio', email: 'invite-linked-debtor@example.com' }))
+    const linkedDebtorId = (await contacts.save(LINKED_OWNER, { name: 'Caio', email: 'invite-linked-debtor@example.com' }))
       .userId;
-    const archived = await ContactRepository.save(db, LINKED_OWNER, { name: 'Bruna Lima', email: GUEST_EMAIL });
+    const archived = await contacts.save(LINKED_OWNER, { name: 'Bruna Lima', email: GUEST_EMAIL });
 
-    await ContactRepository.archive(db, LINKED_OWNER, archived.id);
+    await contacts.archive(LINKED_OWNER, archived.id);
 
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       LINKED_OWNER,
       'invite-linked-contact',
@@ -453,7 +457,7 @@ describe('billing invites on native PostgreSQL', () => {
     );
     const invite = await createInvite(db, LINKED_OWNER, billing.id, SECRET, ORIGIN, now);
 
-    const result = await InviteRepository.accept(db, GUEST, tokenOf(invite.url), SECRET, now);
+    const result = await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
     equal(result.joinedSplit, true);
 
@@ -465,12 +469,12 @@ describe('billing invites on native PostgreSQL', () => {
   });
   it('parks the guest when the split names a contact without e-mail, and linking moves that contact to the guest', async () => {
     const now = new Date('2026-10-03T12:00:00Z');
-    const placeholder = await ContactRepository.save(db, OWNER, { name: 'Zé', nickname: 'Zezinho' });
+    const placeholder = await contacts.save(OWNER, { name: 'Zé', nickname: 'Zezinho' });
 
     equal(placeholder.email, '');
     equal(placeholder.status, 'pending');
 
-    const billing = await BillingRepository.create(
+    const billing = await createBilling(
       db,
       OWNER,
       'invite-park',
@@ -481,7 +485,7 @@ describe('billing invites on native PostgreSQL', () => {
 
     await createUser(db, { id: PARKED, email: PARKED_EMAIL, name: 'Paula Reis' });
 
-    const result = await InviteRepository.accept(db, PARKED, tokenOf(invite.url), SECRET, now);
+    const result = await acceptInvite(db, PARKED, tokenOf(invite.url), SECRET, now);
 
     deepEqual(
       { ...result, waiting: undefined },
@@ -492,12 +496,12 @@ describe('billing invites on native PostgreSQL', () => {
     equal((await chargesOf(billing.id)).length, 1);
 
     // Accepting again keeps the single waiting row instead of counting twice.
-    const again = await InviteRepository.accept(db, PARKED, tokenOf(invite.url), SECRET, now);
+    const again = await acceptInvite(db, PARKED, tokenOf(invite.url), SECRET, now);
 
     equal(again.awaitingOwner, true);
     equal(await db.billing_guests.count({ where: { billing_id: billing.id } }), 1);
 
-    const detail = await BillingRepository.get(db, OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
+    const detail = await getBilling(db, OWNER, billing.id, now, { secret: SECRET, webOrigin: ORIGIN });
 
     deepEqual(
       detail.guests.map((guest) => [guest.userId, guest.name, guest.email]),
@@ -534,8 +538,8 @@ describe('billing invites on native PostgreSQL', () => {
 
   it('adds a waiting guest as a new participant, or dismisses them without touching the agenda', async () => {
     const now = new Date('2026-10-03T12:00:00Z');
-    const placeholder = await ContactRepository.save(db, OWNER, { name: 'Sem E-mail' });
-    const billing = await BillingRepository.create(
+    const placeholder = await contacts.save(OWNER, { name: 'Sem E-mail' });
+    const billing = await createBilling(
       db,
       OWNER,
       'invite-add',
@@ -544,9 +548,9 @@ describe('billing invites on native PostgreSQL', () => {
     );
     const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
 
-    equal((await InviteRepository.accept(db, GUEST, tokenOf(invite.url), SECRET, now)).awaitingOwner, true);
+    equal((await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now)).awaitingOwner, true);
 
-    const waiting = (await BillingRepository.get(db, OWNER, billing.id, now)).guests[0]!;
+    const waiting = (await getBilling(db, OWNER, billing.id, now)).guests[0]!;
     const added = await resolveGuest(db, OWNER, billing.id, waiting.id, { action: 'add' }, now);
 
     deepEqual(added.guests, []);
@@ -563,21 +567,22 @@ describe('billing invites on native PostgreSQL', () => {
     // Someone else joining the same billing can still be dismissed without leaving a trace in the agenda.
     await createUser(db, { id: OUTSIDER, email: 'invite-outsider@example.com', name: 'Otto' });
 
-    equal((await InviteRepository.accept(db, OUTSIDER, tokenOf(invite.url), SECRET, now)).awaitingOwner, true);
+    equal((await acceptInvite(db, OUTSIDER, tokenOf(invite.url), SECRET, now)).awaitingOwner, true);
 
-    const second = (await BillingRepository.get(db, OWNER, billing.id, now)).guests[0]!;
+    const second = (await getBilling(db, OWNER, billing.id, now)).guests[0]!;
     const dismissed = await resolveGuest(db, OWNER, billing.id, second.id, { action: 'dismiss' }, now);
 
     deepEqual(dismissed.guests, []);
     equal(await contactFor(OWNER, OUTSIDER), undefined);
     equal((await chargesOf(billing.id)).length, 2);
+
     await rejects(resolveGuest(db, OTHER_OWNER, billing.id, second.id, { action: 'add' }, now), HttpNotFoundError);
   });
 
   it('refuses to link a guest to a contact that has an e-mail', async () => {
     const now = new Date('2026-10-03T12:00:00Z');
-    const placeholder = await ContactRepository.save(db, OWNER, { name: 'Vago' });
-    const billing = await BillingRepository.create(
+    const placeholder = await contacts.save(OWNER, { name: 'Vago' });
+    const billing = await createBilling(
       db,
       OWNER,
       'invite-refuse',
@@ -586,21 +591,22 @@ describe('billing invites on native PostgreSQL', () => {
     );
     const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
 
-    await InviteRepository.accept(db, GUEST, tokenOf(invite.url), SECRET, now);
+    await acceptInvite(db, GUEST, tokenOf(invite.url), SECRET, now);
 
-    const waiting = (await BillingRepository.get(db, OWNER, billing.id, now)).guests[0]!;
+    const waiting = (await getBilling(db, OWNER, billing.id, now)).guests[0]!;
     const withEmail = await db.contacts.findOne({ select: { id: true }, where: { owner_id: OWNER, user_id: debtorId } });
 
     await rejects(resolveGuest(db, OWNER, billing.id, waiting.id, { action: 'link', contactId: withEmail!.id }, now), ApiError);
-    equal((await BillingRepository.get(db, OWNER, billing.id, now)).guests.length, 1, 'a refused answer leaves the guest waiting');
+
+    equal((await getBilling(db, OWNER, billing.id, now)).guests.length, 1, 'a refused answer leaves the guest waiting');
   });
 
   it('rate-limits repeated acceptances of the same invite link', async () => {
     const now = new Date('2026-10-09T12:00:00Z');
-    const billing = await BillingRepository.create(db, OWNER, 'invite-throttle', once(), now);
+    const billing = await createBilling(db, OWNER, 'invite-throttle', once(), now);
     const invite = await createInvite(db, OWNER, billing.id, SECRET, ORIGIN, now);
     // The handler announces the guest's charge through the notice context, so the schedulers must exist.
-    const context = {
+    const invites = createInviteService({
       db,
       email: createEmailClient({ APP_STAGE: 'test', RESEND_API_KEY: 'disabled' }),
       chargeNotifyScheduler: fakeScheduler(),
@@ -611,7 +617,8 @@ describe('billing invites on native PostgreSQL', () => {
         NOTIFICATION_PUSH_TRANSPORT: 'disabled',
         RESEND_FROM_EMAIL: 'disabled'
       }
-    } as unknown as Parameters<typeof acceptInviteHandler>[1];
+    } as unknown as Service.Context<InviteService>);
+    const context = { invites } as Parameters<typeof acceptInviteHandler>[1];
     const request = {
       identity: { familyId: 'f1111111-1111-4111-8111-111111111111', userId: GUEST },
       parameters: { token: tokenOf(invite.url) }

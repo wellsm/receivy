@@ -13,10 +13,11 @@ vi.mock('../repositories/auth', () => ({
 
 vi.mock('../services/refresh-session', async () => {
   const actual = await vi.importActual<typeof import('../services/refresh-session')>('../services/refresh-session');
+
   return { ...actual, refreshSession: vi.fn() };
 });
 
-const context = { db: {} as DbClient, variables: { AUTH_JWT_SECRET: 'jwt-secret' } } as Service.Context<UserProvider>;
+const context = { db: {} as DbClient, variables: { AUTH_JWT_SECRET: 'jwt-secret', AUTH_ACCESS_TOKEN_TTL_SECONDS: '900' } } as Service.Context<UserProvider>;
 const request = { body: { refreshToken: 'current-refresh-token' } };
 
 describe('refreshHandler', () => {

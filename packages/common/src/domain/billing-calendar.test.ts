@@ -135,9 +135,11 @@ describe('billing calendar', () => {
       timezone: 'America/Sao_Paulo',
       split
     });
+
     expect(once.description).toBe('Conta');
     expect(once.frequency).toBeUndefined();
     expect(once.reminders).toBeUndefined();
+
     const until = normalizeBillingInput({
       recurrence: BillingRecurrence.Until,
       frequency: BillingFrequency.Monthly,
@@ -151,6 +153,7 @@ describe('billing calendar', () => {
         { offsetDays: -3, enabled: false }
       ]
     });
+
     expect(until.reminders).toEqual([
       { offsetDays: -3, enabled: false },
       { offsetDays: 2, enabled: true }

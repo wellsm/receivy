@@ -28,8 +28,10 @@ describe('OAuth provider configuration', () => {
     const request: typeof fetch = async (_url, init) => {
       if (init?.method === 'POST') {
         tokenBody = init.body as URLSearchParams;
+
         return Response.json({ id_token: `${header}.${payload}.${signature}`, refresh_token: 'refresh-fixture' });
       }
+
       return Response.json({ keys: [{ ...keys.publicKey.export({ format: 'jwk' }), kid: 'fixture', alg: 'RS256', use: 'sig' }] });
     };
     const client = createOauthProviderClient(
@@ -54,9 +56,11 @@ describe('OAuth provider configuration', () => {
       nonce: 'nonce',
       profile: JSON.stringify({ name: { firstName: 'Ana', lastName: 'Silva' } })
     });
+
     expect(identity).toMatchObject({ subject: 'person', email: 'person@gmail.com', emailAuthoritative: true });
     expect(tokenBody?.get('code')).toBe('authorization-code');
     expect(tokenBody?.get('code_verifier')).toBe(provider === 'google' ? 'verifier' : null);
+
     if (provider === 'apple') {
       // The provider refresh token is never retained anywhere in the identity.
       expect(JSON.stringify(identity)).not.toContain('refresh-fixture');
@@ -75,6 +79,7 @@ describe('OAuth provider configuration', () => {
       privateKeyBase64: Buffer.from(key.privateKey.export({ type: 'pkcs8', format: 'pem' })).toString('base64')
     };
     const request = vi.fn<typeof fetch>();
+
     expect(createOauthProviderClient(OauthProvider.Apple, { apple }, request)).not.toBeNull();
     expect(createOauthProviderClient(OauthProvider.Apple, { apple }, request, true)).toBeNull();
     expect(createOauthProviderClient(OauthProvider.Apple, { apple: { ...apple, nativeClientId: 'native' } }, request, true)).not.toBeNull();

@@ -49,7 +49,12 @@ export type BillingDraft = {
   /** "N vezes" shortcut for `until`: computes `end` when `end` is empty. */
   occurrences: string;
   timezone: string;
-  /** The key that pays this conta: the owner's own on a receivable, one of the seated contact's on a payable. */
+  /**
+   * The key that pays this conta: the owner's own on a receivable, one of the seated contact's on a
+   * payable. The web form persists the resolved payment method id into this field as soon as it is
+   * picked; the mobile form leaves it derived at render (`payingKey()`) instead of writing it here.
+   * Do not "unify" the two into one write pattern — they resolve the same value at different times.
+   */
   pix: string;
   mode: SplitMode;
   /** Raw text split values, one bucket per mode; `equal` reads none of them. */

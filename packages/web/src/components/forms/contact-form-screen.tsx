@@ -152,6 +152,11 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     trigger.current?.focus();
   }
 
+  /**
+   * A refused "Definir padrão"/"Arquivar" has to be readable: the dialog covers the form's
+   * alert, so a failure closes it and leaves the reason on the form. Only a change worth
+   * showing reloads the list.
+   */
   async function act(id: string, action: "default" | "archive") {
     setBusy(true);
     setError("");
@@ -162,14 +167,16 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       if (!response.ok) {
         throw new Error(await responseMessage(response, KEYS_UPDATE_ERROR));
       }
-
-      setArchiving(null);
-      await loadKeys();
     } catch (reason) {
+      setArchiving(null);
       setError(reason instanceof Error ? reason.message : KEYS_UPDATE_ERROR);
-    } finally {
       setBusy(false);
+      return;
     }
+
+    setArchiving(null);
+    await loadKeys();
+    setBusy(false);
   }
 
   async function submit(event: FormEvent) {
@@ -353,7 +360,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
             </>
           }
           explanation="A chave sai das próximas contas a pagar deste contato. As contas já criadas não mudam."
-          confirmLabel="Arquivar"
+          confirmLabel={busy ? "Arquivando…" : "Arquivar"}
           busy={busy}
           onConfirm={() => void act(archiving.id, "archive")}
           onCancel={closeDialog}

@@ -66,7 +66,7 @@ export function ConfirmDialog({ title, subtitle, icon: Icon, detail, explanation
         {detail && <div className="flex flex-col gap-1 rounded-xl border border-outline/30 bg-surface-muted/70 p-3">{detail}</div>}
         {explanation && <p className="m-0 text-xs leading-5 text-muted">{explanation}</p>}
         <div className="flex gap-2.5 pt-1">
-          <button ref={cancel} type="button" onClick={onCancel} className="h-11 flex-1 rounded-xl border border-outline/50 bg-surface text-sm font-semibold text-ink">
+          <button ref={cancel} type="button" disabled={busy} onClick={onCancel} className="h-11 flex-1 rounded-xl border border-outline/50 bg-surface text-sm font-semibold text-ink disabled:opacity-50">
             Cancelar
           </button>
           <button type="button" disabled={busy} onClick={onConfirm} className={`h-11 flex-1 rounded-xl text-sm font-semibold transition disabled:opacity-50 ${styles.confirm} ${styles.confirmText}`}>

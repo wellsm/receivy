@@ -235,6 +235,38 @@ it("archives one of the contact's keys only after the owner confirms, then reloa
   expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(2);
 });
 
+it("closes the dialog and says why an archive failed", async () => {
+  const sent: Sent[] = [];
+
+  vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
+    sent.push({ path, init });
+
+    if (path.endsWith("/archive")) {
+      return Response.json({ message: "Não foi possível arquivar a chave." }, { status: 409 });
+    }
+
+    if (path.includes("payment-methods")) {
+      return Response.json({ paymentMethods: [nubank, itau] });
+    }
+
+    return Response.json(ana);
+  });
+
+  render(<ContactFormScreen contactId="c1" />);
+
+  await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
+
+  const user = userEvent.setup();
+  await user.click(keyList().getAllByRole("button", { name: "Arquivar" })[1]!);
+  await user.click(within(screen.getByRole("dialog", { name: "Arquivar chave Pix?" })).getByRole("button", { name: "Arquivar" }));
+
+  expect(await screen.findByText("Não foi possível arquivar a chave.")).toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(sent.filter(entry => entry.path.endsWith("/archive"))).toHaveLength(1);
+  // The list is only worth reloading when something actually changed.
+  expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(1);
+});
+
 it("keeps the key when the archive confirmation is cancelled", async () => {
   const sent = api(ana, [nubank, itau]);
   render(<ContactFormScreen contactId="c1" />);

@@ -60,10 +60,10 @@ appId: dev.receivy.local
 - tapOn: "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento."
 - scrollUntilVisible:
     element:
-      text: "Se este e-mail já tiver conta no Receivy, o contato será associado a ela."
+      text: "Sem e-mail, a pessoa só recebe pelo link compartilhado. Quando ela entrar por um convite, você confirma quem é."
     direction: DOWN
 - tapOn:
-    text: "E-mail"
+    text: "E-mail (opcional)"
     index: 1
 - inputText: "ana-qa@example.invalid"
 - tapOn: "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento."

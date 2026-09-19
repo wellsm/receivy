@@ -152,6 +152,16 @@ describe("PaymentMethodsScreen", () => {
     expect(screen.queryByLabelText("Salvar meio de pagamento")).toBeNull();
   });
 
+  it("hides the copy button on a PagBank row", async () => {
+    const api = client([method({ id: "pb-1", provider: PaymentProvider.PagSeguro, kind: null, value: "Conta da loja", label: "PagBank" })]);
+
+    await render(<PaymentMethodsScreen client={api} />);
+
+    expect(await screen.findByText("PagBank")).toBeOnTheScreen();
+    expect(screen.getByText("Conta da loja")).toBeOnTheScreen();
+    expect(screen.queryByLabelText("Copiar valor")).toBeNull();
+  });
+
   it("reports a list failure", async () => {
     const api = client();
 

@@ -24,6 +24,7 @@ const checkMark = require("../../../assets/images/auth/check.svg");
 const trashMark = require("../../../assets/images/auth/trash.svg");
 const lockMark = require("../../../assets/images/auth/lock.svg");
 const infinityMark = require("../../../assets/images/auth/infinity.svg");
+const bankMark = require("../../../assets/images/auth/bank.svg");
 
 const ICONS: Record<PixKeyType, number> = {
   cpf: require("../../../assets/images/auth/id-card.svg"),
@@ -34,6 +35,10 @@ const ICONS: Record<PixKeyType, number> = {
 };
 
 function iconOf(method: PaymentMethod): number {
+  if (method.provider === PaymentProvider.PagSeguro) {
+    return bankMark;
+  }
+
   if (method.provider === PaymentProvider.InfinitePay || !method.kind) {
     return infinityMark;
   }
@@ -127,6 +132,7 @@ export function PaymentMethodsScreen({ client = financialClient, required = fals
 
         {items.map((method) => {
           const text = paymentMethodText(method);
+          const copyValue = paymentMethodCopyValue(method);
 
           return (
             <View key={method.id} className="gap-3 rounded-2xl border border-outline/30 bg-surface p-4">
@@ -167,12 +173,9 @@ export function PaymentMethodsScreen({ client = financialClient, required = fals
                 <Text selectable numberOfLines={1} className="flex-1 text-[15px] font-bold tracking-wider text-ink">
                   {text.value}
                 </Text>
-                <CopyButton
-                  value={paymentMethodCopyValue(method)}
-                  accessibilityLabel="Copiar valor"
-                  variant="outline"
-                  onRefused={() => setError(COPY_ERROR)}
-                />
+                {copyValue ? (
+                  <CopyButton value={copyValue} accessibilityLabel="Copiar valor" variant="outline" onRefused={() => setError(COPY_ERROR)} />
+                ) : null}
               </View>
 
               {method.isDefault ? null : (

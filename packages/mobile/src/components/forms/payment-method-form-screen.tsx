@@ -1,4 +1,5 @@
 import { pixKeyField, PaymentProvider, type PaymentMethod, type PaymentMethodInput, PixKeyType } from "@receivy/common";
+import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
@@ -22,13 +23,16 @@ type PaymentMethodFormScreenProps = {
 
 const starMark = require("../../../assets/images/auth/star.svg");
 const checkMark = require("../../../assets/images/auth/check.svg");
+const plusMark = require("../../../assets/images/auth/plus.svg");
 
 const INFINITEPAY_CHECKOUT_URL = "https://app.infinitepay.io/external-checkout";
+const PAGSEGURO_TOKEN_HINT = "Gere o token no app PagBank em Vendas → Integrações → Gerar Token. Ele fica cifrado no Receivy.";
 
 const REQUIRED_NOTICE = "Você precisa de um meio de pagamento para criar cobranças.";
 const SAVE_ERROR = "Não foi possível salvar o meio de pagamento.";
 const EMPTY_PIX_ERROR = "Informe a chave Pix.";
 const EMPTY_TAG_ERROR = "Informe a InfiniteTag.";
+const EMPTY_TOKEN_ERROR = "Informe o token do PagBank.";
 
 /** The payment method form on its own screen, reached from the method list or the billing gate. */
 export function PaymentMethodFormScreen({ client = financialClient, profile = profileStore, returnTo, required = false, onSaved }: PaymentMethodFormScreenProps) {
@@ -38,6 +42,9 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
   const [key, setKey] = useState("");
   const [touched, setTouched] = useState(false);
   const [handle, setHandle] = useState("");
+  const [token, setToken] = useState("");
+  const [tokenFocused, setTokenFocused] = useState(false);
+  const [label, setLabel] = useState("");
   const [makeDefault, setMakeDefault] = useState(true);
   const [accountEmail, setAccountEmail] = useState("");
   const [accountPhone, setAccountPhone] = useState("");
@@ -119,13 +126,32 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
     setKey("");
   }
 
+  async function pasteToken() {
+    const text = await Clipboard.getStringAsync().catch(() => "");
+
+    if (!text) {
+      return;
+    }
+
+    setError("");
+    setToken(text);
+  }
+
   async function save() {
     setError("");
     setErrorStatus(0);
 
     let input: PaymentMethodInput;
 
-    if (provider === PaymentProvider.InfinitePay) {
+    if (provider === PaymentProvider.PagSeguro) {
+      if (!token.trim()) {
+        setError(EMPTY_TOKEN_ERROR);
+
+        return;
+      }
+
+      input = { provider: PaymentProvider.PagSeguro, token, ...(label ? { label } : {}) };
+    } else if (provider === PaymentProvider.InfinitePay) {
       if (!handle.trim()) {
         setError(EMPTY_TAG_ERROR);
 
@@ -182,6 +208,7 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
             {[
               { value: PaymentProvider.Pix, label: "Pix" },
               { value: PaymentProvider.InfinitePay, label: "InfinitePay" },
+              { value: PaymentProvider.PagSeguro, label: "PagBank" },
             ].map((option) => (
               <Pressable
                 key={option.value}
@@ -203,7 +230,7 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
 
         {provider === PaymentProvider.Pix ? (
           <PixKeyFields type={type} value={value} onPickType={pick} onChangeKey={change} onClear={clear} />
-        ) : (
+        ) : provider === PaymentProvider.InfinitePay ? (
           <View className="gap-1">
             <Text className="text-xs font-semibold text-muted">InfiniteTag</Text>
             <View className="h-12 flex-row items-center rounded-xl border border-outline/50 bg-surface px-3">
@@ -222,6 +249,58 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
               />
             </View>
             <Text className="text-xs leading-5 text-muted">É o nome de usuário do app InfinitePay. O checkout externo precisa estar ativo lá; a cobrança aceita Pix ou cartão em até 12x.</Text>
+          </View>
+        ) : (
+          <View className="gap-3">
+            <View className="gap-1">
+              <Text className="text-xs font-semibold text-muted">Token do PagBank</Text>
+              <View className="h-12 flex-row items-center rounded-xl border border-outline/50 bg-surface px-3">
+                <TextInput
+                  accessibilityLabel="Token do PagBank"
+                  value={token}
+                  onChangeText={(next) => {
+                    setError("");
+                    setToken(next);
+                  }}
+                  onFocus={() => setTokenFocused(true)}
+                  onBlur={() => setTokenFocused(false)}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  className="h-full flex-1 py-0 text-[16px] text-ink"
+                />
+                {tokenFocused && token ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Limpar"
+                    onPress={() => {
+                      setError("");
+                      setToken("");
+                    }}
+                    className="h-9 w-9 items-center justify-center rounded-full"
+                  >
+                    <Image source={plusMark} tintColor={colors.muted} style={{ width: 16, height: 16, transform: [{ rotate: "45deg" }] }} />
+                  </Pressable>
+                ) : (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Colar" onPress={() => void pasteToken()} className="h-9 items-center justify-center rounded-full px-2">
+                    <Text className="text-xs font-bold text-primary">Colar</Text>
+                  </Pressable>
+                )}
+              </View>
+              <Text className="text-xs leading-5 text-muted">{PAGSEGURO_TOKEN_HINT}</Text>
+            </View>
+            <View className="gap-1">
+              <Text className="text-xs font-semibold text-muted">Rótulo</Text>
+              <TextInput
+                accessibilityLabel="Rótulo"
+                value={label}
+                onChangeText={setLabel}
+                placeholder="PagBank"
+                placeholderTextColor={colors.muted}
+                maxLength={120}
+                className="h-12 rounded-xl border border-outline/50 bg-surface px-3.5 py-0 text-[16px] text-ink"
+              />
+            </View>
           </View>
         )}
 

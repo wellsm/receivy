@@ -594,13 +594,13 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                 )}
               </Text>
             </View>
-            {payment && (
+            {payment && paymentMethodCopyValue(payment) ? (
               <CopyButton
                 value={paymentMethodCopyValue(payment)}
                 accessibilityLabel="Copiar valor"
                 onRefused={() => setError("Não foi possível copiar a chave.")}
               />
-            )}
+            ) : null}
           </View>
         </View>
 

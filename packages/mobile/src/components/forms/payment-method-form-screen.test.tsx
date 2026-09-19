@@ -262,4 +262,58 @@ describe("PaymentMethodFormScreen", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button", { name: "Abrir configurações da InfinitePay" })).toBeNull();
   });
+
+  it("shows the PagBank token field with a hidden input", async () => {
+    await render(<PaymentMethodFormScreen client={client()} profile={profile()} />);
+
+    await fireEvent.press(screen.getByRole("radio", { name: "PagBank" }));
+
+    expect(screen.getByLabelText("Token do PagBank").props.secureTextEntry).toBe(true);
+  });
+
+  it("saves a PagBank token and label", async () => {
+    const api = client([]);
+
+    await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
+    await fireEvent.press(screen.getByRole("radio", { name: "PagBank" }));
+    await fireEvent.changeText(screen.getByLabelText("Token do PagBank"), "tok");
+    await fireEvent.changeText(screen.getByLabelText("Rótulo"), "Loja");
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+    await waitFor(() => expect(api.savePaymentMethod).toHaveBeenCalledWith({ provider: "pagseguro", token: "tok", label: "Loja" }));
+  });
+
+  it("refuses an empty PagBank token instead of letting the API answer for it", async () => {
+    const api = client([]);
+
+    await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
+    await fireEvent.press(screen.getByRole("radio", { name: "PagBank" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+    expect(await screen.findByText("Informe o token do PagBank.")).toBeOnTheScreen();
+    expect(api.savePaymentMethod).not.toHaveBeenCalled();
+  });
+
+  it("shows only the message on a PagBank 422, without the InfinitePay button", async () => {
+    const api = client([]);
+
+    api.savePaymentMethod.mockRejectedValue(new FinancialRequestError("Token do PagBank inválido.", 422));
+    await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
+    await fireEvent.press(screen.getByRole("radio", { name: "PagBank" }));
+    await fireEvent.changeText(screen.getByLabelText("Token do PagBank"), "tok");
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Token do PagBank inválido.");
+    expect(screen.queryByRole("button", { name: "Abrir configurações da InfinitePay" })).toBeNull();
+  });
+
+  it("pastes the clipboard into the PagBank token field", async () => {
+    jest.mocked(Clipboard.getStringAsync).mockResolvedValue("tok-from-clipboard");
+
+    await render(<PaymentMethodFormScreen client={client()} profile={profile()} />);
+    await fireEvent.press(screen.getByRole("radio", { name: "PagBank" }));
+    await fireEvent.press(screen.getByLabelText("Colar"));
+
+    await waitFor(() => expect(screen.getByLabelText("Token do PagBank")).toHaveDisplayValue("tok-from-clipboard"));
+  });
 });

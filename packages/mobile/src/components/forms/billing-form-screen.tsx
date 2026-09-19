@@ -67,6 +67,7 @@ const chevronMark = require("../../../assets/images/auth/chevron.svg");
 const calendarMark = require("../../../assets/images/auth/calendar.svg");
 const checkMark = require("../../../assets/images/auth/check.svg");
 const infinityMark = require("../../../assets/images/auth/infinity.svg");
+const bankMark = require("../../../assets/images/auth/bank.svg");
 
 const PIX_ICONS: Record<PixKeyType, number> = {
   cpf: require("../../../assets/images/auth/id-card.svg"),
@@ -77,6 +78,10 @@ const PIX_ICONS: Record<PixKeyType, number> = {
 };
 
 function iconOf(method: PaymentMethod): number {
+  if (method.provider === PaymentProvider.PagSeguro) {
+    return bankMark;
+  }
+
   if (method.provider === PaymentProvider.InfinitePay || !method.kind) {
     return infinityMark;
   }

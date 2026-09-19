@@ -147,8 +147,11 @@ export function PlanScreen() {
     if (paymentMethodId) {
       void act(async () => {
         await request<void>("/api/financial/plan/payment-method/confirm", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ paymentMethodId }) });
+
         setToast("Cartão atualizado");
       });
+    } else {
+      setError(ACTION_ERROR);
     }
   }
 

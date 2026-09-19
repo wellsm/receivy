@@ -4,7 +4,7 @@ import { Check, ChevronRight, Crown, KeyRound, Loader2, LogOut, Pencil, Trash2, 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, THEME_PREFERENCE_OPTIONS, type AuthUser } from "@receivy/common";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, PlanTier, THEME_PREFERENCE_OPTIONS, planName, type AuthUser } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { squareJpeg, uploadAvatar } from "@/lib/avatar-upload";
 import { useThemePreference } from "@/lib/theme";
@@ -438,7 +438,7 @@ export function ProfileScreen() {
               <div className="mx-4 h-px bg-outline/60 md:mx-0" />
               <Row icon={KeyRound} tone="success" label="Gerenciar meios de pagamento" title="Meios de pagamento" subtitle="Pix e InfinitePay para receber pagamentos" href="/settings/payment-methods" />
               <div className="mx-4 h-px bg-outline/60 md:mx-0" />
-              <Row icon={Crown} tone="primary" label="Gerenciar plano" title="Plano" subtitle="Grátis ou Básico, limites e cobrança" href="/settings/plan" />
+              <Row icon={Crown} tone="primary" label="Gerenciar plano" title="Plano" subtitle={`${planName(PlanTier.Free)} ou ${planName(PlanTier.Basic)}, limites e cobrança`} href="/settings/plan" />
             </section>
 
             <button

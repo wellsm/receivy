@@ -1,15 +1,17 @@
-# Perfil -> Pix key -> contact -> Contas -> charge -> share -> feed totals.
+# Perfil -> payment method -> contact -> Contas -> charge -> share -> feed totals.
 # Labels and inputs share the same string, so those inputs are addressed by
 # index 1. Tapping a section title dismisses the keyboard (the form's ScrollView
 # uses keyboardShouldPersistTaps="handled"), which keeps the fixed footer
 # reachable. Sub-screens now run under the native stack header, so "back" is a
 # tap on the previous screen's title in the header ("Perfil", "Contas").
-# Keys and contacts are registered on their own screens, reached from the FABs
+# Methods and contacts are registered on their own screens, reached from the FABs
 # of their lists; a save pops back to the list, so the list's own FAB label
-# ("Cadastrar nova chave") and the new row are what prove the return trip.
-# A fresh account has no Pix key and the billing form would bounce to the key
-# screen, so the key is registered first — the e-mail type is the default and
-# the field already carries the account e-mail. Both platforms open a native
+# ("Cadastrar novo meio" — the FAB's accessibilityLabel, lowercase, which is what
+# Maestro matches on iOS since the accessibilityLabel hides the child <Text>)
+# and the new row are what prove the return trip.
+# A fresh account has no payment method and the billing form would bounce to the
+# method screen, so the method is registered first — the e-mail Pix key type is
+# the default and the field already carries the account e-mail. Both platforms open a native
 # share sheet on publish and need dismissing before the charge-detail
 # assertions: Android shows "Sharing link" and closes on the hardware Back key;
 # iOS shows its own sheet, dismissed by tapping the "dismiss popup" backdrop.
@@ -21,21 +23,21 @@ appId: dev.receivy.local
     timeout: 15000
 - scrollUntilVisible:
     element:
-      text: "Gerenciar chaves Pix"
+      text: "Gerenciar meios de pagamento"
     direction: DOWN
-- tapOn: "Gerenciar chaves Pix"
+- tapOn: "Gerenciar meios de pagamento"
 - extendedWaitUntil:
-    visible: "Cadastrar nova chave"
+    visible: "Cadastrar novo meio"
     timeout: 15000
-- tapOn: "Cadastrar nova chave"
+- tapOn: "Cadastrar novo meio"
 - extendedWaitUntil:
-    visible: "Salvar chave Pix"
+    visible: "Salvar meio de pagamento"
     timeout: 15000
 - tapOn: "E-mail"
 - assertVisible: ${EMAIL}
-- tapOn: "Salvar chave Pix"
+- tapOn: "Salvar meio de pagamento"
 - extendedWaitUntil:
-    visible: "Cadastrar nova chave"
+    visible: "Cadastrar novo meio"
     timeout: 15000
 - assertVisible: ${EMAIL}
 - tapOn: "Perfil"

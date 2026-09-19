@@ -1,4 +1,4 @@
-import { normalizeContact, pixKeyField, PixKeyType, type Contact, type ContactInput, type ContactPaymentMethodInput, type PaymentMethod } from "@receivy/common";
+import { normalizeContact, paymentMethodText, PaymentProvider, pixKeyField, PixKeyType, type Contact, type ContactInput, type ContactPaymentMethodInput, type PaymentMethod } from "@receivy/common";
 import { Image } from "expo-image";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -23,15 +23,11 @@ type ContactFormScreenProps = {
   onSaved?: (contact: Contact) => void;
 };
 
-const KEY_LABELS: Record<PixKeyType, string> = {
-  cpf: "CPF",
-  cnpj: "CNPJ",
-  phone: "Celular",
-  email: "E-mail",
-  random: "Chave aleatória",
-};
-
 const trashMark = require("../../../assets/images/auth/trash.svg");
+
+function iconOf(method: PaymentMethod): number {
+  return PIX_TYPE_ICONS[method.kind ?? PixKeyType.Random];
+}
 
 const INTRO = "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento.";
 const EMAIL_NOTE = "Sem e-mail, a pessoa só recebe pelo link compartilhado. Quando ela entrar por um convite, você confirma quem é.";
@@ -187,7 +183,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
 
     const label = pixLabel.trim();
 
-    return { paymentMethod: { pixKeyType: pixType, pixKey: key, ...(label ? { label } : {}) } };
+    return { paymentMethod: { provider: PaymentProvider.Pix, kind: pixType, value: key, ...(label ? { label } : {}) } };
   }
 
   /**
@@ -308,53 +304,57 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
             <Text className="text-xs leading-5 text-muted">{PIX_NOTE}</Text>
           </View>
 
-          {keys.map((method) => (
-            <View key={method.id} className="gap-3 rounded-2xl border border-outline/30 bg-surface-muted/60 p-3">
-              <View className="flex-row items-center gap-3">
-                <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
-                  <Image source={PIX_TYPE_ICONS[method.pixKeyType]} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
-                </View>
-                <View className="flex-1 gap-0.5">
-                  <View className="flex-row items-center gap-2">
-                    <Text className="flex-shrink text-sm font-semibold text-ink" numberOfLines={1}>
-                      {method.label || KEY_LABELS[method.pixKeyType]}
-                    </Text>
-                    {method.isDefault ? <Text className="rounded-full bg-primary-soft/70 px-2 py-0.5 text-[11px] font-semibold text-primary-strong">Padrão</Text> : null}
-                  </View>
-                  <Text className="text-[11px] text-muted" numberOfLines={1}>
-                    {pixKeyField(method.pixKeyType).format(method.pixKey)}
-                  </Text>
-                </View>
-              </View>
+          {keys.map((method) => {
+            const text = paymentMethodText(method);
 
-              <View className="flex-row gap-2">
-                {method.isDefault ? null : (
+            return (
+              <View key={method.id} className="gap-3 rounded-2xl border border-outline/30 bg-surface-muted/60 p-3">
+                <View className="flex-row items-center gap-3">
+                  <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
+                    <Image source={iconOf(method)} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
+                  </View>
+                  <View className="flex-1 gap-0.5">
+                    <View className="flex-row items-center gap-2">
+                      <Text className="flex-shrink text-sm font-semibold text-ink" numberOfLines={1}>
+                        {method.label || text.title}
+                      </Text>
+                      {method.isDefault ? <Text className="rounded-full bg-primary-soft/70 px-2 py-0.5 text-[11px] font-semibold text-primary-strong">Padrão</Text> : null}
+                    </View>
+                    <Text className="text-[11px] text-muted" numberOfLines={1}>
+                      {text.value}
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="flex-row gap-2">
+                  {method.isDefault ? null : (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Definir padrão"
+                      accessibilityHint={`Usa a chave ${text.title} por padrão`}
+                      accessibilityState={{ disabled: busy }}
+                      disabled={busy}
+                      onPress={() => void act(() => financial.defaultPaymentMethod(method.id))}
+                      className="min-h-10 items-center justify-center rounded-lg border border-outline/40 px-3"
+                    >
+                      <Text className="text-xs font-semibold text-primary">Definir padrão</Text>
+                    </Pressable>
+                  )}
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Definir padrão"
-                    accessibilityHint={`Usa a chave ${KEY_LABELS[method.pixKeyType]} por padrão`}
+                    accessibilityLabel="Arquivar"
+                    accessibilityHint={`Arquiva a chave ${text.title}`}
                     accessibilityState={{ disabled: busy }}
                     disabled={busy}
-                    onPress={() => void act(() => financial.defaultPaymentMethod(method.id))}
-                    className="min-h-10 items-center justify-center rounded-lg border border-outline/40 px-3"
+                    onPress={() => setArchiving(method)}
+                    className="min-h-10 items-center justify-center rounded-lg px-3"
                   >
-                    <Text className="text-xs font-semibold text-primary">Definir padrão</Text>
+                    <Text className="text-xs font-semibold text-danger">Arquivar</Text>
                   </Pressable>
-                )}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Arquivar"
-                  accessibilityHint={`Arquiva a chave ${KEY_LABELS[method.pixKeyType]}`}
-                  accessibilityState={{ disabled: busy }}
-                  disabled={busy}
-                  onPress={() => setArchiving(method)}
-                  className="min-h-10 items-center justify-center rounded-lg px-3"
-                >
-                  <Text className="text-xs font-semibold text-danger">Arquivar</Text>
-                </Pressable>
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
 
           <PixKeyFields type={pixType} value={pixKey} disabled={busy} onPickType={pickPixType} onChangeKey={(raw) => setPixKey(pixKeyField(pixType).format(raw))} onClear={() => setPixKey("")} />
 
@@ -407,8 +407,8 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
                 </View>
               </View>
               <View className="gap-1 rounded-xl border border-outline/30 bg-surface-muted/70 p-3">
-                <Text className="text-[11px] font-medium text-muted">{KEY_LABELS[archiving.pixKeyType]}</Text>
-                <Text className="text-sm font-bold text-ink">{pixKeyField(archiving.pixKeyType).format(archiving.pixKey)}</Text>
+                <Text className="text-[11px] font-medium text-muted">{paymentMethodText(archiving).title}</Text>
+                <Text className="text-sm font-bold text-ink">{paymentMethodText(archiving).value}</Text>
               </View>
               <Text className="text-xs leading-5 text-muted">{ARCHIVE_NOTE}</Text>
               <View className="flex-row gap-2.5 pt-1">

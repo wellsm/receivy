@@ -53,13 +53,13 @@ Peça outro código depois de 60 s.
 - [ ] Salvar. Esperado: cai no feed (`/`) com "Sua timeline começa aqui".
 - [ ] Recarregar `/onboarding` logada. Esperado: não reaparece (status já `active`).
 
-## 3. Chaves Pix — Ana (`/settings/pix`)
+## 3. Meios de pagamento — Ana (`/settings/payment-methods`)
 
-- [ ] `Gerenciar chaves Pix` → `/settings/pix/new`. Cadastrar CPF `123.456.789-09`. Esperado: lista com a chave, marcada como padrão.
+- [ ] `Gerenciar meios de pagamento` → `Cadastrar Novo Meio` → `/settings/payment-methods/new`. Tipo `Pix`, cadastrar CPF `123.456.789-09`. Esperado: lista com o meio, selo "Padrão".
 - [ ] Cadastrar telefone `(11) 99999-0001`. Esperado: salva como `+5511999990001`.
-- [ ] Cadastrar o **mesmo CPF** de novo. Esperado: alerta "Esta chave Pix já foi cadastrada." (409, copy da API).
-- [ ] Tornar o telefone padrão; arquivar o CPF. Esperado: lista reflete; arquivada some do padrão.
-- [ ] Cadastrar CPF inválido `111.111.111-11`. Esperado: erro de validação sem sair da tela.
+- [ ] Cadastrar o **mesmo CPF** de novo. Esperado: alerta "Esse meio de pagamento já está cadastrado." (409, copy da API).
+- [ ] Tornar o telefone padrão; excluir o CPF (lixeira → confirmar "Excluir meio de pagamento?"). Esperado: lista reflete; "Meio de pagamento excluído."; CPF sai da lista.
+- [ ] Cadastrar CPF inválido `111.111.111-11`. Esperado: "Chave Pix inválida." sem sair da tela.
 
 ## 4. Contatos — Ana (`/contacts`)
 
@@ -74,7 +74,7 @@ Peça outro código depois de 60 s.
 
 ## 5. Conta a receber, parcela única, dividida — Ana (`/billings/new`)
 
-- [ ] Título "Jantar de sábado", 300,00, data de hoje, categoria `food`, "Receber via Pix" com a chave padrão.
+- [ ] Título "Jantar de sábado", 300,00, data de hoje, categoria `food`, "Selecionar meio de pagamento" com o meio padrão.
 - [ ] Divisão `equal` com Bruno + Carla + "Eu também participo". Esperado: 100,00 cada; cobrança da Ana marcada como liquidada no ciclo.
 - [ ] Salvar. Esperado: `/billings/{id}` com 2 cobranças pendentes (Bruno, Carla) + a sua já liquidada.
 - [ ] Recarregar e salvar o **mesmo formulário de novo** (voltar e reenviar). Esperado: não duplica (Idempotency-Key). Se a tela mandar chave nova, anote.
@@ -278,7 +278,7 @@ Como Ana, com Bruno e Carla na agenda (vencimento hoje, para o aviso inicial sai
 
 Como Ana:
 
-- [ ] Nova conta, "Vou receber", ligar "Já recebi". Esperado: somem Participantes, Divisão da Conta e "Receber via Pix"; aparecem "De quem" (placeholder "Ex.: Empresa X") e "Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento."
+- [ ] Nova conta, "Vou receber", ligar "Já recebi". Esperado: somem Participantes, Divisão da Conta e "Selecionar meio de pagamento"; aparecem "De quem" (placeholder "Ex.: Empresa X") e "Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento."
 - [ ] Salário recorrente: "Recorrente", mensal, vencimento hoje, categoria "Salário e renda", "De quem" = "Empresa X". Criar. Esperado: a cobrança de hoje nasce paga; o feed mostra "Salário · Empresa X" com o selo "Registro"; "Recebido" do mês soma o valor; nada chega no Mailpit.
 - [ ] Recorrente com data anterior a hoje: no web o calendário não deixa escolher (data mínima hoje); no mobile, digitar a data de ontem e criar. Esperado: "Registro recorrente começa hoje ou depois."
 - [ ] Avulso no passado: "Vou pagar", "Já paguei", "Para quem" = "Imobiliária", "À vista", vencimento no mês passado. Criar. Esperado: nasce paga, com `charge.paid { via: 'registered' }` e `paid_at` no início do dia do vencimento; "Pago" do mês passado soma o valor.
@@ -290,6 +290,25 @@ Como Ana:
 - [ ] Editar o salário: "Já recebi" aparece travado com "Não dá para mudar depois de criada."; trocar "De quem" para "Empresa Y" e salvar. Esperado: feed e detalhes mostram "Empresa Y".
 - [ ] `curl -X PATCH <api>/billings/<id> -H 'content-type: application/json' -d '{"settled":false}'` com o token da Ana. Esperado: 409 `SETTLED_LOCKED`.
 - [ ] Mobile: os mesmos passos no formulário (chave nativa), no detalhe da conta e na cobrança.
+
+## 22. Meios de pagamento / InfinitePay
+
+Local (`PAYMENT_METHOD_LINK=fake` no `packages/api/local.env`):
+
+- [ ] Como Ana, `/settings/payment-methods/new`, tipo `InfinitePay`, InfiniteTag `$qualquer`. Salvar. Esperado: aparece na lista dos meios ativos.
+- [ ] Nova conta a receber com Bruno usando esse meio. Abrir o detalhe da cobrança do Bruno. Esperado: tile `Copiar link de pagamento` (não `Copiar Chave Pix`).
+- [ ] Janela anônima, como Bruno (pagador): abrir o link público, tocar `Pagar`. Esperado: abre `/dev/infinitepay/<orderNsu>` (só existe em dev) com o botão `Simular pagamento`.
+- [ ] `Simular pagamento`. Esperado: volta para `/pay/<token>?order_nsu=…&transaction_nsu=…&slug=…`, o `provider-return` da API fecha a cobrança e a página mostra confirmação (`Ver comprovante da InfinitePay`); Ana recebe o push "Pagamento confirmado".
+
+Um handle real só é exercitado com `PAYMENT_METHOD_LINK=live` (pode ser em `dev`, se o dono já ativou lá):
+
+- [ ] Cadastrar um InfiniteTag **sem** o checkout externo ativado no app InfinitePay. Esperado: 422 com o botão `Abrir configurações da InfinitePay`.
+- [ ] Ativar o checkout externo no app InfinitePay, cadastrar o mesmo handle de novo. Esperado: salva.
+- [ ] Criar uma cobrança de R$ 1,00 com esse meio; pagar de verdade pelo link (Pix ou cartão). Esperado: webhook chega, evento `charge.paid { via: 'provider' }` na timeline de eventos, recibo (`Ver comprovante da InfinitePay`) visível para o dono e o pagador.
+
+Cobrança já cancelada:
+
+- [ ] Cancelar uma cobrança InfinitePay pendente. Pagar pelo link antigo (guardado antes de cancelar) mesmo assim. Esperado: cobrança segue `Cancelada` (não reabre), evento `charge.provider.ignored` na timeline, Ana recebe o push de aviso.
 
 ## Divergências
 

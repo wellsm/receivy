@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import { Alert, Share } from "react-native";
-import { BillingCategory, BillingFrequency, BillingState, BillingKind, BillingRecurrence, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, SplitMode, SplitPartKind, type BillingAllocation, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { BillingCategory, BillingFrequency, BillingState, BillingKind, BillingRecurrence, ChargeState, chargeShareText, Direction, PaymentProvider, PendingChargesAction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, SplitMode, SplitPartKind, type BillingAllocation, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
 
 jest.mock("expo-router", () => {
@@ -13,7 +13,7 @@ jest.mock("expo-router", () => {
 
 jest.mock("expo-clipboard", () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
 
-const PIX = { keyType: PixKeyType.Phone, key: "11987654321", label: "Inter" };
+const PIX = { provider: PaymentProvider.Pix, kind: PixKeyType.Phone, value: "11987654321", label: "Inter" };
 
 function charge(overrides: Partial<ChargeDetail> & { id: string; name: string }): ChargeDetail {
   const { name, ...rest } = overrides;
@@ -32,7 +32,9 @@ function charge(overrides: Partial<ChargeDetail> & { id: string; name: string })
     direction: Direction.Receivable,
     recipient: { userId: "u1", name, email: null },
     debtorId: "u1",
-    pix: PIX,
+    payment: PIX,
+    paymentLink: null,
+    receiptUrl: null,
     sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
@@ -142,7 +144,7 @@ describe("BillingDetailScreen", () => {
     expect(screen.getByText("R$ 120,00")).toBeOnTheScreen();
     expect(screen.getByText("66% liquidado")).toBeOnTheScreen();
     expect(screen.getByText("Falta R$ 60,00")).toBeOnTheScreen();
-    expect(screen.getByText("11987654321")).toBeOnTheScreen();
+    expect(screen.getByText("(11) 98765-4321")).toBeOnTheScreen();
     expect(screen.getByText("Ciclo 2 de 3")).toBeOnTheScreen();
 
     const lucas = screen.getByRole("button", { name: "Abrir cobrança de Lucas F." });
@@ -246,7 +248,7 @@ describe("BillingDetailScreen", () => {
   it("copies the Pix key and shares the link of a pending participant from the row", async () => {
     const { client } = await open();
 
-    await fireEvent.press(screen.getByRole("button", { name: "Copiar chave Pix" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Copiar valor" }));
 
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith("11987654321");
     expect(await screen.findByText("Copiado")).toBeOnTheScreen();
@@ -400,12 +402,12 @@ describe("BillingDetailScreen", () => {
 
   it("names the Pix key from the wallet while no charge has been generated", async () => {
     const detail = billing({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
-    const wallet = [{ id: "pix-2", type: "pix", pixKeyType: "email", pixKey: "ana@example.com", label: "Nubank", isDefault: true, archivedAt: null, createdAt: "" }];
+    const wallet = [{ id: "pix-2", provider: "pix", kind: "email", value: "ana@example.com", label: "Nubank", isDefault: true, archivedAt: null, createdAt: "" }];
 
     await open(makeClient(detail, { paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: wallet }) }));
 
     expect(screen.getByText("ana@example.com")).toBeOnTheScreen();
-    expect(screen.queryByText("Sem chave Pix vinculada")).toBeNull();
+    expect(screen.queryByText("Sem meio de pagamento vinculado")).toBeNull();
   });
 
   it("has no pause for a finite billing", async () => {
@@ -455,7 +457,7 @@ describe("BillingDetailScreen", () => {
   });
 
   it("shows a conta a pagar with its own key and without invites or links", async () => {
-    const own = charge({ id: "c7", name: "Ana", direction: Direction.Payable, ownedByViewer: true, counterpartName: "Ana", pix: null });
+    const own = charge({ id: "c7", name: "Ana", direction: Direction.Payable, ownedByViewer: true, counterpartName: "Ana", payment: null });
     const detail = billing({
       type: Direction.Payable,
       contact: { id: "c1", userId: "u1", name: "Ana", avatar: null },
@@ -469,7 +471,7 @@ describe("BillingDetailScreen", () => {
     expect(screen.getByText("A pagar")).toBeOnTheScreen();
     expect(screen.getByText("Total pago")).toBeOnTheScreen();
     expect(screen.getByText("ana@example.com")).toBeOnTheScreen();
-    expect(screen.getByRole("button", { name: "Copiar chave Pix" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Copiar valor" })).toBeOnTheScreen();
     expect(screen.getByText("Cobranças")).toBeOnTheScreen();
     expect(screen.queryByText("Participantes")).toBeNull();
     expect(screen.getByRole("button", { name: "Abrir cobrança de Ana" })).toBeOnTheScreen();
@@ -482,14 +484,14 @@ describe("BillingDetailScreen", () => {
   });
 
   it("names the owner's own bill and falls back to no key on a conta a pagar", async () => {
-    const own = charge({ id: "c7", name: "Você", direction: Direction.Payable, ownedByViewer: true, counterpartName: "Você", pix: null });
+    const own = charge({ id: "c7", name: "Você", direction: Direction.Payable, ownedByViewer: true, counterpartName: "Você", payment: null });
     const detail = billing({ type: Direction.Payable, contact: null, pix: null, paymentMethodId: undefined, charges: [own] });
 
     await open(makeClient(detail));
 
     expect(screen.getByRole("button", { name: "Abrir cobrança de Só comigo" })).toBeOnTheScreen();
-    expect(screen.getByText("Sem chave Pix vinculada")).toBeOnTheScreen();
-    expect(screen.queryByRole("button", { name: "Copiar chave Pix" })).toBeNull();
+    expect(screen.getByText("Sem meio de pagamento vinculado")).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Copiar valor" })).toBeNull();
   });
 
   it("badges each silenced charge on its own row and shows the participant action once", async () => {
@@ -539,7 +541,7 @@ describe("BillingDetailScreen", () => {
       name: "Empresa X",
       recipient: { userId: null, name: "Empresa X", email: null },
       debtorId: null,
-      pix: null,
+      payment: null,
       sharingState: SharingState.Closed,
       kind: BillingKind.Record,
     });
@@ -571,7 +573,7 @@ describe("BillingDetailScreen", () => {
       ownedByViewer: true,
       recipient: { userId: null, name: "Imobiliária", email: null },
       debtorId: null,
-      pix: null,
+      payment: null,
       kind: BillingKind.Record,
     });
 

@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, PaymentProvider, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
 import { ContactsRequestError } from "@/contacts/client";
@@ -32,16 +32,16 @@ function contactsApi(loaded: Contact = contact()) {
 /** The keys the owner filed under this contact, the way `GET /payment-methods?contactId=` answers them. */
 const nubank: PaymentMethod = {
   id: "pm-1",
-  type: "pix",
+  provider: PaymentProvider.Pix,
   label: "Nubank",
-  pixKey: "ana@example.com",
-  pixKeyType: PixKeyType.Email,
+  value: "ana@example.com",
+  kind: PixKeyType.Email,
   isDefault: true,
   contactId: "p1",
   archivedAt: null,
   createdAt: "2026-01-01T00:00:00Z",
 };
-const itau: PaymentMethod = { ...nubank, id: "pm-2", label: "Itaú", pixKey: "52998224725", pixKeyType: PixKeyType.Cpf, isDefault: false, createdAt: "2026-01-02T00:00:00Z" };
+const itau: PaymentMethod = { ...nubank, id: "pm-2", label: "Itaú", value: "52998224725", kind: PixKeyType.Cpf, isDefault: false, createdAt: "2026-01-02T00:00:00Z" };
 
 function financialApi(keys: PaymentMethod[] = []) {
   return {
@@ -209,7 +209,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() =>
-      expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", paymentMethod: { pixKeyType: "phone", pixKey: "+5511987654321", label: "Nubank" } }, undefined),
+      expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", paymentMethod: { provider: "pix", kind: "phone", value: "+5511987654321", label: "Nubank" } }, undefined),
     );
 
     expect(financial.paymentMethods).not.toHaveBeenCalled();
@@ -225,7 +225,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("E-mail Pix"), " Ana@Example.com ");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
-    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", paymentMethod: { pixKeyType: "email", pixKey: "Ana@Example.com" } }, undefined));
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", paymentMethod: { provider: "pix", kind: "email", value: "Ana@Example.com" } }, undefined));
   });
 
   it("files a new key under the contact being edited", async () => {
@@ -241,7 +241,7 @@ describe("ContactFormScreen", () => {
 
     await waitFor(() =>
       expect(client.save).toHaveBeenCalledWith(
-        { name: "Ana Paula Souza", email: "ana@example.com", paymentMethod: { pixKeyType: "cpf", pixKey: "52998224725" } },
+        { name: "Ana Paula Souza", email: "ana@example.com", paymentMethod: { provider: "pix", kind: "cpf", value: "52998224725" } },
         "p1",
       ),
     );

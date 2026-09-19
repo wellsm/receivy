@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Share, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, Text, View } from "react-native";
 import {
   BillingKind,
   calendarDate,
@@ -19,10 +19,13 @@ import {
   chargeShareText,
   chargeStatusLine,
   chargeTypeLabel,
+  ChargeState,
   ChargeTone,
   counterpartRoleLabel,
   formatMoney,
   ownerPays,
+  PaymentLinkState,
+  PaymentProvider,
   ProofKind,
   type ChargeDetail,
 } from "@receivy/common";
@@ -42,7 +45,7 @@ import { useThemeColors } from "@/theme/colors";
 export type ProofClient = Pick<FinancialClient, "startProofUpload" | "completeProofUpload" | "reviewProof" | "downloadProof" | "withdrawProof">;
 
 type Client = Pick<FinancialClient, "charge" | "cancel" | "pay" | "publicLink" | "publicChargeUrl"> &
-  Partial<ProofClient & Pick<FinancialClient, "reopen" | "paymentMethods" | "savePaymentMethod" | "declarePayment" | "setChargeNotify">>;
+  Partial<ProofClient & Pick<FinancialClient, "reopen" | "paymentMethods" | "savePaymentMethod" | "declarePayment" | "setChargeNotify" | "ensurePaymentLink">>;
 
 type ChargeDetailScreenProps = {
   id: string;
@@ -91,11 +94,11 @@ function payableGuidance(charge: ChargeDetail): string | null {
   }
 
   // The owner of a conta a pagar knows where to pay; the note only helps a debtor waiting on a key.
-  if (charge.pix || charge.ownedByViewer) {
+  if (charge.payment || charge.ownedByViewer) {
     return null;
   }
 
-  return "A chave Pix ainda não está disponível. Combine o pagamento com o credor.";
+  return "O meio de pagamento ainda não está disponível. Combine o pagamento com o credor.";
 }
 
 export function ChargeDetailScreen({ id, client = financialClient, notifications = notificationClient, onOpenProof }: ChargeDetailScreenProps) {
@@ -258,7 +261,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   function confirmRemind(detail: ChargeDetail) {
     Alert.alert(
       "Enviar lembrete?",
-      `Avisa ${detail.recipient.name} por notificação no app ou por e-mail, com o link de pagamento e a chave Pix. Só um lembrete a cada 24 horas.`,
+      `Avisa ${detail.recipient.name} por notificação no app ou por e-mail, com o link de pagamento. Só um lembrete a cada 24 horas.`,
       [
         { text: "Voltar", style: "cancel" },
         { text: "Enviar lembrete", onPress: () => void remind(detail) },
@@ -274,23 +277,35 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
     }
   }
 
-  async function copyPix(key: string) {
-    let done = false;
+  async function copyValue(value: string, done: string) {
+    let copied = false;
 
     try {
-      done = await Clipboard.setStringAsync(key);
+      copied = await Clipboard.setStringAsync(value);
     } catch {
-      done = false;
+      copied = false;
     }
 
-    if (!done) {
-      setError("Não foi possível copiar a chave.");
+    if (!copied) {
+      setError("Não foi possível copiar.");
 
       return;
     }
 
     setError("");
-    setNotice("Chave Pix copiada.");
+    setNotice(done);
+  }
+
+  async function regenerateLink() {
+    setBusy(true);
+
+    try {
+      setCharge(await client.ensurePaymentLink!(id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível gerar o link.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function uploadProof() {
@@ -458,6 +473,11 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
           <Text className="text-[11px] font-semibold uppercase tracking-wider text-muted">{receivable ? "Valor a receber" : "Valor a pagar"}</Text>
           <Text className="text-4xl font-extrabold tracking-tight text-primary-strong">{formatMoney(charge.amount)}</Text>
           <Text className={`text-xs font-medium ${STATUS_COLOR[status.tone]}`}>{status.text}</Text>
+          {charge.state === ChargeState.Paid && charge.receiptUrl ? (
+            <Pressable accessibilityRole="link" accessibilityLabel="Comprovante InfinitePay" onPress={() => void Linking.openURL(charge.receiptUrl!)} className="self-center">
+              <Text className="text-sm font-semibold text-primary">Comprovante InfinitePay</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {/* Quick actions: the shared helpers decide what each viewer may do */}
@@ -466,14 +486,17 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
             <View className="flex-row gap-2">
               {reopenable && <ActionTile label="Reabrir" icon={ICONS.edit} hint="Desfaz o pagamento e volta a cobrança para pendente" disabled={busy} onPress={confirmReopen} />}
               {charge.kind === BillingKind.Record && settleable && <ActionTile label="Marcar como pago" icon={ICONS.check} tone="primary" disabled={busy} onPress={() => confirmPaid(false)} />}
-              {!receivable && charge.pix && (
-                <ActionTile
-                  label="Copiar Chave Pix"
-                  icon={ICONS.copy}
-                  hint={ownBill ? "Copia a chave Pix da conta" : "Copia a chave Pix do credor"}
-                  disabled={busy}
-                  onPress={() => void copyPix(charge.pix!.key)}
-                />
+              {!receivable && charge.payment?.provider === PaymentProvider.Pix && (
+                <ActionTile label="Copiar Chave Pix" icon={ICONS.copy} hint={ownBill ? "Copia a chave Pix da conta" : "Copia a chave Pix do credor"} disabled={busy} onPress={() => void copyValue(charge.payment!.value, "Chave Pix copiada.")} />
+              )}
+              {charge.payment?.provider === PaymentProvider.InfinitePay && charge.paymentLink?.state === PaymentLinkState.Ready && (
+                <ActionTile label="Copiar link de pagamento" icon={ICONS.share} hint="Copia o link da InfinitePay" disabled={busy} onPress={() => void copyValue(charge.paymentLink!.url!, "Link copiado.")} />
+              )}
+              {charge.payment?.provider === PaymentProvider.InfinitePay && charge.paymentLink?.state === PaymentLinkState.Failed && client.ensurePaymentLink && (
+                <ActionTile label="Gerar link de novo" icon={ICONS.edit} hint="Pede um novo link à InfinitePay" disabled={busy} onPress={() => void regenerateLink()} />
+              )}
+              {charge.payment?.provider === PaymentProvider.InfinitePay && charge.paymentLink?.state === PaymentLinkState.Pending && (
+                <ActionTile label="Gerando link" icon={ICONS.edit} hint="O link da InfinitePay está sendo criado" disabled onPress={() => undefined} />
               )}
               {proofTile && (
                 <ActionTile

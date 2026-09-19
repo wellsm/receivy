@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Alert, Share } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { BillingKind, BillingRecurrence, ChargeState, Direction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import { BillingKind, BillingRecurrence, ChargeState, Direction, PaymentLinkState, PaymentProvider, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { ChargeDetailScreen } from "@/components/screens/charge-detail-screen";
 
 jest.mock("expo-router", () => {
@@ -32,7 +32,9 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
     proofState: null,
     recipient: { userId: "u1", name: "Ana", email: "ana@example.com" },
     debtorId: "u1",
-    pix: { keyType: PixKeyType.Email, key: "pix@example.com", label: "Principal" },
+    payment: { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: "pix@example.com", label: "Principal" },
+    paymentLink: null,
+    receiptUrl: null,
     sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
@@ -64,24 +66,24 @@ describe("ChargeDetailScreen", () => {
     jest.spyOn(Share, "share").mockResolvedValue({ action: Share.sharedAction });
 
     const client = {
-      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, pix: null, sharingState: SharingState.PixRequired })),
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, payment: null, sharingState: SharingState.PixRequired })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn().mockResolvedValue({ token: "fixture" }),
       publicChargeUrl: jest.fn().mockReturnValue("https://receivy.example/pay/fixture"),
       paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }),
-      savePaymentMethod: jest.fn().mockResolvedValue({ id: "method", pixKeyType: "email", pixKey: "pix@example.com", label: "Pix" }),
+      savePaymentMethod: jest.fn().mockResolvedValue({ id: "method", provider: "pix", kind: "email", value: "pix@example.com", label: "Pix" }),
     };
 
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
     await fireEvent.changeText(await screen.findByLabelText("Nova chave Pix"), "pix@example.com");
     await fireEvent.press(screen.getByRole("button", { name: "Salvar nova chave" }));
-    await screen.findByText("✓ EMAIL · pix@example.com");
-    await fireEvent.press(screen.getByRole("button", { name: "Publicar com este Pix" }));
+    await screen.findByText("✓ E-mail · pix@example.com");
+    await fireEvent.press(screen.getByRole("button", { name: "Publicar com este meio" }));
 
     await waitFor(() => expect(client.publicLink).toHaveBeenCalledWith("charge", false, "method"));
 
-    expect(client.savePaymentMethod).toHaveBeenCalledWith({ pixKeyType: "email", pixKey: "pix@example.com" });
+    expect(client.savePaymentMethod).toHaveBeenCalledWith({ provider: "pix", kind: "email", value: "pix@example.com" });
   });
 
   it("keeps debtor finance read-only and copies the literal Pix key", async () => {
@@ -98,6 +100,69 @@ describe("ChargeDetailScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Copiar Chave Pix" }));
 
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith("pix@example.com");
+  });
+
+  it("copies the InfinitePay link for the payer", async () => {
+    const client = {
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Payable, payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" }, paymentLink: { url: "https://checkout/abc", state: PaymentLinkState.Ready } })),
+      cancel: jest.fn(),
+      pay: jest.fn(),
+      publicLink: jest.fn(),
+      publicChargeUrl: jest.fn(),
+    };
+
+    await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
+    await fireEvent.press(await screen.findByLabelText("Copiar link de pagamento"));
+
+    expect(Clipboard.setStringAsync).toHaveBeenCalledWith("https://checkout/abc");
+  });
+
+  it("asks for a new link when the last one failed", async () => {
+    const ensure = jest.fn().mockResolvedValue(charge({ paymentLink: { url: "https://checkout/new", state: PaymentLinkState.Ready } }));
+    const client = {
+      charge: jest.fn().mockResolvedValue(
+        charge({
+          direction: Direction.Receivable,
+          ownedByViewer: true,
+          payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" },
+          paymentLink: { url: null, state: PaymentLinkState.Failed },
+        }),
+      ),
+      cancel: jest.fn(),
+      pay: jest.fn(),
+      publicLink: jest.fn(),
+      publicChargeUrl: jest.fn(),
+      ensurePaymentLink: ensure,
+    };
+
+    await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
+    await fireEvent.press(await screen.findByLabelText("Gerar link de novo"));
+
+    await waitFor(() => expect(ensure).toHaveBeenCalledWith("charge"));
+  });
+
+  it("shows a disabled tile while the InfinitePay link is still being generated", async () => {
+    const client = {
+      charge: jest.fn().mockResolvedValue(
+        charge({
+          direction: Direction.Receivable,
+          ownedByViewer: true,
+          payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" },
+          paymentLink: { url: null, state: PaymentLinkState.Pending },
+        }),
+      ),
+      cancel: jest.fn(),
+      pay: jest.fn(),
+      publicLink: jest.fn(),
+      publicChargeUrl: jest.fn(),
+    };
+
+    await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
+
+    const tile = await screen.findByLabelText("Gerando link");
+
+    expect(tile).toBeOnTheScreen();
+    expect(tile.props.accessibilityState.disabled).toBe(true);
   });
 
   it("never shows the viewer's own photo next to the counterpart when the counterpart has none", async () => {

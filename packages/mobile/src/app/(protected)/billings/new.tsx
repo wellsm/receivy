@@ -13,7 +13,7 @@ export default function NewBillingRoute() {
       // The key of a conta a pagar belongs to whoever receives: it is registered on their contact.
       onEditContact={(contactId) => router.push({ pathname: "/contacts/[id]/edit", params: { id: contactId, returnTo: "new-billing" } })}
       onCreatePix={(required) =>
-        router.push({ pathname: "/settings/pix/new", params: { returnTo: "new-billing", ...(required ? { required: "1" } : {}) } })
+        router.push({ pathname: "/settings/payment-methods/new", params: { returnTo: "new-billing", ...(required ? { required: "1" } : {}) } })
       }
     />
   );

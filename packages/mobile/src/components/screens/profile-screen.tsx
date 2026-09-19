@@ -18,7 +18,7 @@ type ProfileScreenProps = {
   store?: Pick<ProfileStore, "remember">;
   version?: string;
   onOpenContacts?: () => void;
-  onOpenPix?: () => void;
+  onOpenPaymentMethods?: () => void;
   onLoggedOut?: () => void;
 };
 
@@ -106,7 +106,7 @@ export function ProfileScreen({
   store = profileStore,
   version = Constants.expoConfig?.version ?? "1.0.0",
   onOpenContacts,
-  onOpenPix,
+  onOpenPaymentMethods,
   onLoggedOut,
 }: ProfileScreenProps) {
   const colors = useThemeColors();
@@ -337,10 +337,10 @@ export function ProfileScreen({
                   <Row
                     icon="key"
                     tone="success"
-                    label="Gerenciar chaves Pix"
-                    title="Minhas Chaves Pix"
-                    subtitle="Chaves cadastradas para receber pagamentos"
-                    onPress={onOpenPix}
+                    label="Gerenciar meios de pagamento"
+                    title="Meios de pagamento"
+                    subtitle="Pix e InfinitePay para receber"
+                    onPress={onOpenPaymentMethods}
                   />
                 </View>
               </Section>

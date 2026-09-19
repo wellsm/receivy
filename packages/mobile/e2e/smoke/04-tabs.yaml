@@ -11,15 +11,15 @@ appId: dev.receivy.local
     direction: DOWN
 - scrollUntilVisible:
     element:
-      text: "Gerenciar chaves Pix"
+      text: "Gerenciar meios de pagamento"
     direction: UP
-- tapOn: "Gerenciar chaves Pix"
+- tapOn: "Gerenciar meios de pagamento"
 - extendedWaitUntil:
-    visible: "Cadastrar nova chave"
+    visible: "Cadastrar novo meio"
     timeout: 15000
 - assertVisible: ${EMAIL}
-# The Pix screen runs under the native stack header: its back button carries the
-# previous screen's title, so "Perfil" is the way back.
+# The payment methods screen runs under the native stack header: its back button
+# carries the previous screen's title, so "Perfil" is the way back.
 - tapOn: "Perfil"
 - extendedWaitUntil:
     visible: "Gerenciar contatos"

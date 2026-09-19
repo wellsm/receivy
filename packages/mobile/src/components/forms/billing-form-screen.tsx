@@ -34,7 +34,10 @@ import {
   BillingRecurrence,
   type Contact,
   Direction,
+  paymentMethodText,
+  PaymentProvider,
   type PaymentMethod,
+  type PixKeyType,
   SplitMode,
   SplitPartKind,
   type SplitParty,
@@ -63,14 +66,23 @@ const keyMark = require("../../../assets/images/auth/key.svg");
 const chevronMark = require("../../../assets/images/auth/chevron.svg");
 const calendarMark = require("../../../assets/images/auth/calendar.svg");
 const checkMark = require("../../../assets/images/auth/check.svg");
+const infinityMark = require("../../../assets/images/auth/infinity.svg");
 
-const PIX_ICONS: Record<PaymentMethod["pixKeyType"], number> = {
+const PIX_ICONS: Record<PixKeyType, number> = {
   cpf: require("../../../assets/images/auth/id-card.svg"),
   cnpj: require("../../../assets/images/auth/building.svg"),
   phone: require("../../../assets/images/auth/phone.svg"),
   email: require("../../../assets/images/auth/mail.svg"),
   random: keyMark,
 };
+
+function iconOf(method: PaymentMethod): number {
+  if (method.provider === PaymentProvider.InfinitePay || !method.kind) {
+    return infinityMark;
+  }
+
+  return PIX_ICONS[method.kind];
+}
 
 type Client = Pick<FinancialClient, "paymentMethods" | "profile" | "createBilling" | "patchBilling">;
 type Attempt = { input: BillingInput; key: string; uncertain: boolean; applyTo?: EditScope };
@@ -95,8 +107,8 @@ type BillingFormScreenProps = {
 
 const FROZEN_NOTE = "Contas já geradas só permitem categoria, Pix e lembretes.";
 const LOAD_ERROR = "Não foi possível carregar os dados.";
-const PIX_GATE_TITLE = "Cadastre uma chave Pix";
-const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com a sua chave Pix. Cadastre uma e volte para continuar de onde parou.";
+const PIX_GATE_TITLE = "Cadastre um meio de pagamento";
+const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com o seu Pix ou sua InfinitePay. Cadastre um e volte para continuar de onde parou.";
 const NO_CONTACT_KEY = "Este contato ainda não tem chave Pix. Cadastre no contato.";
 const NO_VALUES: Record<string, string> = {};
 
@@ -139,14 +151,6 @@ const SPLIT_MODES: { value: SplitMode; label: string; name: string }[] = [
 ];
 
 const QUICK_DUE: { label: string; days: number }[] = [{ label: "Hoje", days: 0 }];
-
-const PIX_TYPE_LABELS: Record<PaymentMethod["pixKeyType"], string> = {
-  cpf: "CPF",
-  cnpj: "CNPJ",
-  email: "E-mail",
-  phone: "Celular",
-  random: "Aleatória",
-};
 
 function money(amountCents: number): string {
   return formatMoney({ amountCents, currency: "BRL" });
@@ -882,7 +886,7 @@ export function BillingFormScreen({
   const selectedPix = methods.find((method) => method.id === payingPix) ?? null;
   // One registered key has nothing to switch to; the sheet only opens with a real choice.
   const switchable = methods.length > 1 || (methods.length === 1 && !selectedPix);
-  const pixTitle = payable ? "Pagar via Pix" : "Receber via Pix";
+  const pixTitle = payable ? "Pagar via Pix" : "Receber por";
   const action = editing ? "Salvar conta" : "Criar conta";
   const retry = editing ? "Tentar salvar novamente" : "Tentar criar novamente";
   // Create-only, for parity with web: an edit's registro/recorrente past-dated draft can make the
@@ -959,13 +963,13 @@ export function BillingFormScreen({
             <Text className="text-center text-sm leading-5 text-muted">{PIX_GATE_NOTE}</Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Cadastrar chave Pix"
+              accessibilityLabel="Cadastrar meio de pagamento"
               accessibilityState={{ disabled: !onCreatePix }}
               disabled={!onCreatePix}
               onPress={() => onCreatePix && leaveTo(() => onCreatePix(true))}
               className="mt-2 h-12 w-full items-center justify-center rounded-xl bg-primary"
             >
-              <Text className="font-bold text-on-primary">Cadastrar chave Pix</Text>
+              <Text className="font-bold text-on-primary">Cadastrar meio de pagamento</Text>
             </Pressable>
           </View>
         ) : (
@@ -1359,14 +1363,14 @@ export function BillingFormScreen({
               >
                 <View className="flex-1 flex-row items-center gap-3">
                   <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
-                    <Image source={selectedPix ? PIX_ICONS[selectedPix.pixKeyType] : keyMark} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
+                    <Image source={selectedPix ? iconOf(selectedPix) : keyMark} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
                   </View>
                   <View className="flex-1">
                     <Text className="font-sans text-[13.5px] font-semibold text-ink" numberOfLines={1}>
-                      {selectedPix ? `${PIX_TYPE_LABELS[selectedPix.pixKeyType]}: ${abbreviate(selectedPix.pixKey)}` : "Selecionar chave Pix"}
+                      {selectedPix ? `${paymentMethodText(selectedPix).title}: ${abbreviate(paymentMethodText(selectedPix).value)}` : "Selecionar meio de pagamento"}
                     </Text>
                     <Text className="text-[11px] text-muted" numberOfLines={1}>
-                      {selectedPix ? (selectedPix.isDefault ? "Chave padrão" : "Chave secundária") : methods.length ? "Toque para escolher" : "Nenhuma chave cadastrada"}
+                      {selectedPix ? (selectedPix.isDefault ? "Meio padrão" : "Meio secundário") : methods.length ? "Toque para escolher" : "Nenhum meio cadastrado"}
                     </Text>
                   </View>
                 </View>
@@ -1386,12 +1390,13 @@ export function BillingFormScreen({
                 <ScrollView contentContainerClassName="gap-2" showsVerticalScrollIndicator={false}>
                   {methods.map((method) => {
                     const active = payingPix === method.id;
+                    const text = paymentMethodText(method);
 
                     return (
                       <Pressable
                         key={method.id}
                         accessibilityRole="button"
-                        accessibilityLabel={`${PIX_TYPE_LABELS[method.pixKeyType]} · ${abbreviate(method.pixKey)}`}
+                        accessibilityLabel={`${text.title} · ${abbreviate(text.value)}`}
                         accessibilityState={{ selected: active }}
                         onPress={() => {
                           update({ pix: method.id });
@@ -1400,17 +1405,17 @@ export function BillingFormScreen({
                         className={`min-h-16 flex-row items-center gap-3 rounded-2xl border px-4 py-3 ${active ? "border-primary bg-primary-soft/40" : "border-outline/40 bg-surface"}`}
                       >
                         <View className="h-9 w-9 items-center justify-center rounded-xl bg-primary-soft">
-                          <Image source={PIX_ICONS[method.pixKeyType]} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
+                          <Image source={iconOf(method)} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
                         </View>
                         <View className="flex-1">
                           <View className="flex-row items-center gap-2">
                             <Text className="text-sm font-semibold text-ink" numberOfLines={1}>
-                              {PIX_TYPE_LABELS[method.pixKeyType]}
+                              {text.title}
                             </Text>
                             {method.isDefault && <Text className="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-muted">Padrão</Text>}
                           </View>
                           <Text className="text-[11px] text-muted" numberOfLines={1}>
-                            {method.pixKey}
+                            {text.value}
                           </Text>
                         </View>
                         {active && <Image source={checkMark} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />}

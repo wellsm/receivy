@@ -10,6 +10,9 @@ import {
   chargeShareText,
   chargeStateTag,
   formatMoney,
+  paymentMethodCopyValue,
+  paymentMethodText,
+  PaymentProvider,
   pendingChargesOf,
   PendingChargesAction,
   SplitPartKind,
@@ -21,8 +24,6 @@ import {
   type ChargeDetail,
   type Money,
   type PaymentMethod,
-  type PixKeyType,
-  type PixSnapshot,
 } from "@receivy/common";
 import { ScopeModal } from "@/components/app/scope-modal";
 import { Toast } from "@/components/app/toast";
@@ -68,14 +69,6 @@ const LOAD_ERROR = "Não foi possível carregar a conta.";
 
 const STATE_LABELS = { active: "Ativa", paused: "Pausada", ended: "Encerrada" } as const;
 
-const PIX_TYPE_LABELS: Record<PixKeyType, string> = {
-  cpf: "CPF",
-  cnpj: "CNPJ",
-  email: "E-mail",
-  phone: "Celular",
-  random: "Aleatória",
-};
-
 const ICONS = {
   check: require("../../../assets/images/auth/check.svg"),
   edit: require("../../../assets/images/auth/edit.svg"),
@@ -116,10 +109,8 @@ function money(amountCents: number, currency: Money["currency"] = "BRL"): string
 }
 
 /** A billing without generated charges still points at its key; the wallet turns the id into something readable. */
-function pixFromWallet(methods: PaymentMethod[], paymentMethodId: string | undefined): PixSnapshot | null {
-  const method = methods.find((candidate) => candidate.id === paymentMethodId);
-
-  return method ? { keyType: method.pixKeyType, key: method.pixKey, label: method.label } : null;
+function methodFromWallet(methods: PaymentMethod[], paymentMethodId: string | undefined): PaymentMethod | undefined {
+  return methods.find((candidate) => candidate.id === paymentMethodId);
 }
 
 function cyclesOf(billing: BillingDetail): Cycle[] {
@@ -495,7 +486,11 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
   // A registro: the owner alone, already settled, with the other side named by the API.
   const settled = billing.kind === BillingKind.Record;
   // A conta a pagar carries its own key; a conta a receber points at one of the wallet.
-  const pix = payable ? billing.pix : (billing.charges.find((charge) => charge.pix)?.pix ?? pixFromWallet(methods, billing.paymentMethodId));
+  const payment = payable
+    ? billing.pix
+      ? { provider: PaymentProvider.Pix, kind: billing.pix.keyType, value: billing.pix.key }
+      : null
+    : (billing.charges.find((charge) => charge.payment)?.payment ?? methodFromWallet(methods, billing.paymentMethodId) ?? null);
   const ended = billing.state === "ended";
   // The owner shares links and reminds only on a conta a receber.
   const collecting = !payable && !ended;
@@ -589,17 +584,23 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
               <Image source={ICONS.key} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
               {/* Only the owner reaches this screen, so the key itself is safe to show here. */}
               <Text className="flex-1 text-[11px] text-muted" numberOfLines={1}>
-                {pix ? (
+                {payment ? (
                   <>
-                    {`Pix - ${PIX_TYPE_LABELS[pix.keyType]}: `}
-                    <Text className="font-medium text-ink">{pix.key}</Text>
+                    {`${paymentMethodText(payment).title}: `}
+                    <Text className="font-medium text-ink">{paymentMethodText(payment).value}</Text>
                   </>
                 ) : (
-                  "Sem chave Pix vinculada"
+                  "Sem meio de pagamento vinculado"
                 )}
               </Text>
             </View>
-            {pix && <CopyButton value={pix.key} accessibilityLabel="Copiar chave Pix" onRefused={() => setError("Não foi possível copiar a chave.")} />}
+            {payment && (
+              <CopyButton
+                value={paymentMethodCopyValue(payment)}
+                accessibilityLabel="Copiar valor"
+                onRefused={() => setError("Não foi possível copiar a chave.")}
+              />
+            )}
           </View>
         </View>
 

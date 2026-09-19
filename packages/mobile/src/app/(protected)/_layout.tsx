@@ -31,8 +31,8 @@ export default function ProtectedLayout() {
         <Stack.Screen name="contacts/new" options={{ title: "Novo contato" }} />
         <Stack.Screen name="contacts/[id]/edit" options={{ title: "Editar contato" }} />
         <Stack.Screen name="contacts/[id]" options={{ title: "Contato" }} />
-        <Stack.Screen name="settings/pix" options={{ title: "Minhas Chaves Pix" }} />
-        <Stack.Screen name="settings/pix/new" options={{ title: "Nova chave Pix" }} />
+        <Stack.Screen name="settings/payment-methods" options={{ title: "Meios de pagamento" }} />
+        <Stack.Screen name="settings/payment-methods/new" options={{ title: "Novo meio de pagamento" }} />
         <Stack.Screen name="billings/new" options={{ title: "Nova conta" }} />
         <Stack.Screen name="billings/[id]" options={{ title: "Detalhes da conta" }} />
         <Stack.Screen name="billings/[id]/edit" options={{ title: "Editar conta" }} />

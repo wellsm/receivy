@@ -59,6 +59,7 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     cancel(id: string) { return request<ChargeDetail>(`charges/${id}/cancel`, { method: "POST" }); },
     reopen(id: string) { return request<ChargeDetail>(`charges/${id}/reopen`, { method: "POST" }, "Não foi possível reabrir a cobrança."); },
     pay(id: string) { return request<ChargeDetail>(`charges/${id}/pay`, { method: "POST" }); },
+    ensurePaymentLink(id: string) { return request<ChargeDetail>(`charges/${id}/payment-link`, { method: "POST" }, "Não foi possível gerar o link."); },
     publicLink(id: string, rotate = false, paymentMethodId?: string) { return request<PublicLink>(`charges/${id}/public-link${rotate ? "/rotate" : ""}`, { method: "POST", ...(paymentMethodId ? { body: JSON.stringify({ paymentMethodId }) } : {}) }); },
     ledger(id: string, cursor?: string) { return request<ContactLedger>(`contacts/${id}/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`); },
     publicChargeUrl(token: string) {

@@ -57,9 +57,9 @@ describe("ProfileScreen", () => {
     expect(await screen.findByText("Lucas S.")).toBeOnTheScreen();
   });
 
-  it("navigates to contacts and pix keys", async () => {
+  it("navigates to contacts and payment methods", async () => {
     const onOpenContacts = jest.fn();
-    const onOpenPix = jest.fn();
+    const onOpenPaymentMethods = jest.fn();
 
     await render(
       <ProfileScreen
@@ -67,22 +67,22 @@ describe("ProfileScreen", () => {
         store={store}
         version="1.0.0"
         onOpenContacts={onOpenContacts}
-        onOpenPix={onOpenPix}
+        onOpenPaymentMethods={onOpenPaymentMethods}
       />,
     );
 
     expect(await screen.findByText("Meus Contatos")).toBeOnTheScreen();
     expect(screen.getByText("Gerenciar pessoas e dados salvos de cobrança")).toBeOnTheScreen();
-    expect(screen.getByText("Minhas Chaves Pix")).toBeOnTheScreen();
-    expect(screen.getByText("Chaves cadastradas para receber pagamentos")).toBeOnTheScreen();
+    expect(screen.getByText("Meios de pagamento")).toBeOnTheScreen();
+    expect(screen.getByText("Pix e InfinitePay para receber")).toBeOnTheScreen();
 
     await fireEvent.press(screen.getByLabelText("Gerenciar contatos"));
 
     expect(onOpenContacts).toHaveBeenCalled();
 
-    await fireEvent.press(screen.getByLabelText("Gerenciar chaves Pix"));
+    await fireEvent.press(screen.getByLabelText("Gerenciar meios de pagamento"));
 
-    expect(onOpenPix).toHaveBeenCalled();
+    expect(onOpenPaymentMethods).toHaveBeenCalled();
   });
 
   it("logs out only after confirming", async () => {

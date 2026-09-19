@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { PixKeyFormScreen } from "@/components/forms/pix-key-form-screen";
+import { PaymentMethodFormScreen } from "@/components/forms/payment-method-form-screen";
 
-export default function NewPixKeyRoute() {
+export default function NewPaymentMethodRoute() {
   const router = useRouter();
   const { returnTo, required } = useLocalSearchParams<{ returnTo?: string; required?: string }>();
 
   return (
-    <PixKeyFormScreen
+    <PaymentMethodFormScreen
       returnTo={returnTo}
       required={required === "1"}
       onSaved={() => {

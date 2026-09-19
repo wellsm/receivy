@@ -125,12 +125,12 @@ function contactsApi(pages: { contacts: Contact[]; nextCursor: string | null }[]
   return { list };
 }
 
-const nubank = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, contactId: null, archivedAt: null };
+const nubank = { id: "pix-1", label: "Nubank", provider: "pix", value: "ana@example.com", kind: "email", isDefault: true, contactId: null, archivedAt: null };
 
 /** Block 9.1: the keys the owner filed under each contact; a conta a pagar only picks among the seated contact's. */
-const anaKey = { id: "pix-ana", label: "Nubank da Ana", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, contactId: "p1", archivedAt: null };
-const anaSecondKey = { ...anaKey, id: "pix-ana-2", label: "Itaú da Ana", pixKey: "52998224725", pixKeyType: "cpf", isDefault: false };
-const brunoKey = { ...anaKey, id: "pix-bruno", label: "Bruno", pixKey: "bruno@example.com", contactId: "p2" };
+const anaKey = { id: "pix-ana", label: "Nubank da Ana", provider: "pix", value: "ana@example.com", kind: "email", isDefault: true, contactId: "p1", archivedAt: null };
+const anaSecondKey = { ...anaKey, id: "pix-ana-2", label: "Itaú da Ana", value: "52998224725", kind: "cpf", isDefault: false };
+const brunoKey = { ...anaKey, id: "pix-bruno", label: "Bruno", value: "bruno@example.com", contactId: "p2" };
 const CONTACT_KEYS: Record<string, unknown[]> = { p1: [anaKey, anaSecondKey], p2: [brunoKey] };
 
 /** Wallets without a key gate the form, so the shared fixture carries one. */
@@ -433,7 +433,7 @@ describe("BillingFormScreen", () => {
     expect(screen.getByText("Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento.")).toBeOnTheScreen();
     expect(screen.queryByText("Participantes")).toBeNull();
     expect(screen.queryByText("Divisão da Conta")).toBeNull();
-    expect(screen.queryByText("Receber via Pix")).toBeNull();
+    expect(screen.queryByText("Receber por")).toBeNull();
     expect(screen.getByText("De quem")).toBeOnTheScreen();
     expect(screen.getByText("Escolha quem pagou.")).toBeOnTheScreen();
 
@@ -890,7 +890,7 @@ describe("BillingFormScreen", () => {
     saveDraft({ ...EMPTY_BILLING_DRAFT("America/Sao_Paulo", "2026-09-08"), selected: ["u1"], amount: "85,00", pix: "pix-1" });
 
     const client = financialApi({
-      paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [{ id: "pix-2", label: "Nubank", pixKey: "a@b.com", isDefault: true, archivedAt: null }] }),
+      paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [{ id: "pix-2", label: "Nubank", provider: "pix", value: "a@b.com", kind: "email", isDefault: true, archivedAt: null }] }),
     });
 
     await quickForm(client, contactsApi(), { onCreateContact: jest.fn(), onCreatePix: jest.fn() });
@@ -906,12 +906,12 @@ describe("BillingFormScreen", () => {
 
     await render(<BillingFormScreen client={emptyWallet() as never} contacts={contactsApi()} onSaved={jest.fn()} onCreatePix={onCreatePix} />);
 
-    expect(await screen.findByText("Cadastre uma chave Pix")).toBeOnTheScreen();
+    expect(await screen.findByText("Cadastre um meio de pagamento")).toBeOnTheScreen();
     expect(onCreatePix).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Criar conta" })).toBeNull();
     expect(screen.queryByLabelText("Valor")).toBeNull();
 
-    await fireEvent.press(screen.getByRole("button", { name: "Cadastrar chave Pix" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Cadastrar meio de pagamento" }));
 
     expect(onCreatePix).toHaveBeenCalledWith(true);
     expect(takeDraft()).toMatchObject({ direction: "receivable" });
@@ -919,20 +919,20 @@ describe("BillingFormScreen", () => {
 
   it("never gates the form once a key exists", async () => {
     const client = financialApi({
-      paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [{ id: "pix-2", label: "Nubank", pixKey: "a@b.com", pixKeyType: "email", isDefault: true, archivedAt: null }] }),
+      paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [{ id: "pix-2", label: "Nubank", provider: "pix", value: "a@b.com", kind: "email", isDefault: true, archivedAt: null }] }),
     });
     const onCreatePix = jest.fn();
 
     await quickForm(client, contactsApi(), { onCreatePix });
 
-    expect(screen.queryByText("Cadastre uma chave Pix")).toBeNull();
+    expect(screen.queryByText("Cadastre um meio de pagamento")).toBeNull();
     expect(onCreatePix).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Criar conta" })).toBeEnabled();
   });
 
   it("preselects the default Pix key for a fresh billing", async () => {
     const client = financialApi({
-      paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [{ id: "pix-2", label: "Nubank", pixKey: "ana@example.com", isDefault: true, archivedAt: null }] }),
+      paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [{ id: "pix-2", label: "Nubank", provider: "pix", value: "ana@example.com", kind: "email", isDefault: true, archivedAt: null }] }),
     });
 
     await quickForm(client);
@@ -1015,7 +1015,9 @@ describe("BillingFormScreen", () => {
     direction: Direction.Receivable,
     recipient: { userId: "u1", name: "Ana", email: null },
     debtorId: "u1",
-    pix: null,
+    payment: null,
+    paymentLink: null,
+    receiptUrl: null,
     sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
@@ -1076,7 +1078,7 @@ describe("BillingFormScreen", () => {
     await render(<BillingFormScreen client={client as never} contacts={contactsApi()} billing={recurringPayable} onSaved={jest.fn()} onBack={jest.fn()} />);
     await screen.findByText("Editar conta");
 
-    await waitFor(() => expect(screen.getByText("Chave secundária")).toBeOnTheScreen());
+    await waitFor(() => expect(screen.getByText("Meio secundário")).toBeOnTheScreen());
 
     await fireEvent.press(screen.getByRole("button", { name: "Trocar chave Pix" }));
     await fireEvent.press(await screen.findByRole("button", { name: "E-mail · ana@example.com" }));
@@ -1133,7 +1135,7 @@ describe("BillingFormScreen", () => {
 
     expect(screen.getByRole("button", { name: "Vou pagar" })).toBeSelected();
     expect(screen.queryByText("Divisão da Conta")).toBeNull();
-    expect(screen.queryByText("Receber via Pix")).toBeNull();
+    expect(screen.queryByText("Receber por")).toBeNull();
     expect(screen.queryByLabelText("Eu também participo")).toBeNull();
     expect(screen.getByText("Valor")).toBeOnTheScreen();
     expect(screen.getByText("Escolha quem recebe.")).toBeOnTheScreen();
@@ -1152,7 +1154,7 @@ describe("BillingFormScreen", () => {
 
     await waitFor(() => expect(screen.getByText("E-mail: ana@example.com")).toBeOnTheScreen());
 
-    expect(screen.getByText("Chave padrão")).toBeOnTheScreen();
+    expect(screen.getByText("Meio padrão")).toBeOnTheScreen();
 
     await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
     await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
@@ -1178,10 +1180,10 @@ describe("BillingFormScreen", () => {
     await chooseToPay();
     await seatAna();
 
-    await waitFor(() => expect(screen.getByText("Chave padrão")).toBeOnTheScreen());
+    await waitFor(() => expect(screen.getByText("Meio padrão")).toBeOnTheScreen());
 
     await fireEvent.press(screen.getByRole("button", { name: "Trocar chave Pix" }));
-    await fireEvent.press(await screen.findByRole("button", { name: "CPF · 52998224725" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "CPF · 529.982.247-25" }));
 
     await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
     await fireEvent.changeText(screen.getByLabelText("Título"), "Aluguel");
@@ -1277,8 +1279,8 @@ describe("BillingFormScreen", () => {
     await pickAna();
 
     // Back on the owner's own wallet, which the fresh form had already preselected.
-    expect(screen.getByText("Receber via Pix")).toBeOnTheScreen();
-    expect(screen.getByText("Chave padrão")).toBeOnTheScreen();
+    expect(screen.getByText("Receber por")).toBeOnTheScreen();
+    expect(screen.getByText("Meio padrão")).toBeOnTheScreen();
 
     await fireEvent.changeText(screen.getByLabelText("Valor"), "10000");
     await fireEvent.changeText(screen.getByLabelText("Título"), "Jantar");
@@ -1338,11 +1340,11 @@ describe("BillingFormScreen", () => {
 
     await render(<BillingFormScreen client={emptyWallet() as never} contacts={contactsApi()} onSaved={jest.fn()} onCreatePix={onCreatePix} />);
 
-    expect(await screen.findByText("Cadastre uma chave Pix")).toBeOnTheScreen();
+    expect(await screen.findByText("Cadastre um meio de pagamento")).toBeOnTheScreen();
 
     await chooseToPay();
 
-    expect(screen.queryByText("Cadastre uma chave Pix")).toBeNull();
+    expect(screen.queryByText("Cadastre um meio de pagamento")).toBeNull();
     expect(screen.getByRole("button", { name: "Criar conta" })).toBeEnabled();
     expect(onCreatePix).not.toHaveBeenCalled();
   });
@@ -1359,8 +1361,8 @@ describe("BillingFormScreen", () => {
     expect(screen.getByRole("button", { name: "Vou receber" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Ana" })).toBeSelected();
     // The seeded key survives the contact's key list landing: it is one of them.
-    expect(await screen.findByText("CPF: 52998224725")).toBeOnTheScreen();
-    expect(screen.getByText("Chave secundária")).toBeOnTheScreen();
+    expect(await screen.findByText("CPF: 529.982.247-25")).toBeOnTheScreen();
+    expect(screen.getByText("Meio secundário")).toBeOnTheScreen();
     expect(screen.queryByLabelText("E-mail Pix")).toBeNull();
     expect(screen.queryByLabelText("Apelido da chave")).toBeNull();
     expect(screen.queryByRole("button", { name: "Convidar" })).toBeNull();
@@ -1432,7 +1434,7 @@ describe("BillingFormScreen", () => {
       "Adicionar pessoa",
       "Não notificar",
       "Eu também participo da divisão",
-      "Receber via Pix",
+      "Receber por",
       "Criar conta",
     ];
     const order = markers.map((marker) => json.indexOf(`"${marker}"`));

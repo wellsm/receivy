@@ -1,6 +1,6 @@
 import type { Service } from '@ez4/common';
 import { DatabaseTester } from '@ez4/local-database/test';
-import { BillingRecurrence, type ListCharge, SplitMode, SplitPartKind, UserStatus } from '@receivy/common';
+import { BillingRecurrence, type ListCharge, SplitMode, SplitPartKind, SubscriptionStatus, UserStatus } from '@receivy/common';
 import { createBilling } from '../../src/billings/services/billing';
 import { listChargesHandler } from '../../src/charges/endpoints/list';
 import { type ChargeService, createService as createChargeService } from '../../src/charges/services/charge';
@@ -8,6 +8,8 @@ import { type ContactService, createService as createContactService } from '../.
 import { createService as createPaymentMethodService, type PaymentMethodService } from '../../src/payment-methods/services/payment-method';
 import type { Db, DbClient } from '../../src/database';
 import type { NoticeContext } from '../../src/notifications/services/send';
+import { createService as createPlanService, type PlanService } from '../../src/plans/services/plan';
+import { SubscriptionRepository } from '../../src/plans/repositories/subscription';
 
 export const db = DatabaseTester.getClient<Db>('Db');
 
@@ -18,6 +20,23 @@ export const paymentMethods = createPaymentMethodService({
 } as unknown as Service.Context<PaymentMethodService>);
 export const contacts = createContactService({ db } as Service.Context<ContactService>);
 export const charges = createChargeService({ db } as Service.Context<ChargeService>);
+
+export const PLAN_VARIABLES = {
+  PLAN_BILLING: 'fake',
+  STRIPE_SECRET_KEY: 'disabled',
+  STRIPE_WEBHOOK_SECRET: 'whsec_fake',
+  STRIPE_PRICE_BASIC: 'price_basic',
+  EMAIL_TRANSPORT: 'disabled',
+  RESEND_API_KEY: 'disabled',
+  RESEND_FROM_EMAIL: 'disabled',
+  MAILPIT_API_URL: 'http://127.0.0.1:8025',
+  PUBLIC_WEB_ORIGIN: 'https://receivy.example',
+  NOTIFICATION_PUSH_TRANSPORT: 'disabled',
+  EXPO_ACCESS_TOKEN: 'disabled',
+  APP_STAGE: 'test'
+};
+
+export const plans = createPlanService({ db, variables: PLAN_VARIABLES } as unknown as Service.Context<PlanService>);
 
 export async function createUser(client: DbClient, input: { id: string; email: string; name: string; status?: UserStatus }) {
   const now = new Date().toISOString();
@@ -37,6 +56,14 @@ export async function createUser(client: DbClient, input: { id: string; email: s
       updated_at: now
     }
   });
+}
+
+/** Puts the owner on a live Basic subscription, so InfinitePay/PagBank fixtures (gated on the paid plan) can be created. */
+export async function grantBasicPlan(client: DbClient, ownerId: string) {
+  const now = new Date().toISOString();
+  const subscription = await SubscriptionRepository.insert(client, { ownerId, customerId: `cus_${ownerId}`, now });
+
+  await SubscriptionRepository.setSubscription(client, subscription.id, { stripeSubscriptionId: `sub_${ownerId}`, status: SubscriptionStatus.Active, now });
 }
 
 export async function cleanupUsers(client: DbClient, userIds: string[]) {
@@ -74,6 +101,7 @@ export async function cleanupUsers(client: DbClient, userIds: string[]) {
 
   await client.billing_guests.deleteMany({ where: { OR: [{ owner_id: { isIn: userIds } }, { user_id: { isIn: userIds } }] } });
   await client.payment_methods.deleteMany({ where: { owner_id: { isIn: userIds } } });
+  await client.subscriptions.deleteMany({ where: { owner_id: { isIn: userIds } } });
   await client.contacts.deleteMany({ where: { OR: [{ owner_id: { isIn: userIds } }, { user_id: { isIn: userIds } }] } });
   await client.device_tokens.deleteMany({ where: { user_id: { isIn: userIds } } });
   await client.events.deleteMany({ where: { OR: [{ actor_user_id: { isIn: userIds } }, { eventable_id: { isIn: userIds } }] } });

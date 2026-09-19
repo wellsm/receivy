@@ -3,6 +3,7 @@ import type { NamingStyle } from '@ez4/schema';
 import type { fakePayHandler } from './endpoints/fake-pay';
 import type { infinitePayWebhookHandler } from './endpoints/infinitepay';
 import type { pagSeguroWebhookHandler } from './endpoints/pagseguro';
+import type { stripeWebhookHandler } from './endpoints/stripe';
 
 export type WebhookRoutes = [
   Http.UseRoute<{
@@ -16,6 +17,11 @@ export type WebhookRoutes = [
     name: 'pagSeguroWebhook';
     path: 'POST /webhooks/pagseguro/{token}';
     handler: typeof pagSeguroWebhookHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'stripeWebhook';
+    path: 'POST /webhooks/stripe';
+    handler: typeof stripeWebhookHandler;
   }>,
   Http.UseRoute<{
     name: 'fakeCheckoutPay';

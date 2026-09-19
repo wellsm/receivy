@@ -22,6 +22,10 @@ export abstract class ForbiddenError extends ApiError {
   readonly status = 403;
 }
 
+export abstract class PaymentRequiredError extends ApiError {
+  readonly status = 402;
+}
+
 export abstract class UnprocessableEntityError extends ApiError {
   readonly status = 422;
 }

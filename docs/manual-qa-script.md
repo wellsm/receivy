@@ -333,6 +333,21 @@ Credencial revogada:
 - [ ] Arquivar o meio PagBank (o único de Ana). Esperado: `integrations.revoked_at` preenchido. Criar uma cobrança nova que ainda aponte para esse meio (via edição de uma conta existente) — esperado: `payment_link_state = failed`, evento `charge.payment_link.failed { reason: 'no_credential' }`, e-mail sem link.
 - [ ] Com dois meios PagBank cadastrados, arquivar um. Esperado: a integração segue ativa (o outro meio ainda a usa); só o arquivamento do último revoga.
 
+## 24. Plano pago (API)
+
+Local (`PLAN_BILLING=fake` no `packages/api/local.env`):
+
+- [ ] Como Ana (plano Grátis), criar 5 cobranças indefinidas. Esperado: as 5 salvam.
+- [ ] Criar uma 6ª cobrança indefinida. Esperado: 402 `PLAN_LIMIT_REACHED` com o paywall.
+- [ ] `POST /plan/subscribe`. Esperado: assina em processo (sem cartão), plano vira Básico.
+- [ ] Cadastrar um meio InfinitePay. Esperado: salva (antes do plano Básico, respondia 402 `PLAN_REQUIRED`).
+
+Dev (`PLAN_BILLING=live` no `packages/api/dev.env`), com `stripe listen --forward-to <api>/webhooks/stripe` rodando:
+
+- [ ] Assinar pelo web com o cartão de teste `4242 4242 4242 4242`. Esperado: evento `plan.subscribed` na timeline da conta.
+- [ ] Cancelar a assinatura no dashboard do Stripe. Esperado: evento `plan.canceled` na timeline da conta; billings em excesso ou com link de pagamento pausadas com evento `billing.paused { reason: 'plan' }`.
+- [ ] Reenviar o mesmo evento (`stripe events resend <event-id>`). Esperado: nenhum segundo downgrade (evento `plan.canceled` continua único na timeline).
+
 ## Divergências
 
 Copie um bloco por item:

@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { PaymentProvider, PixKeyType } from '@receivy/common';
+import { PaymentProvider, PixKeyType, SubscriptionStatus } from '@receivy/common';
 import { describe, expect, it, vi } from 'vitest';
 import { TooManyRequestsError } from '../../common/errors';
 import type { DbClient } from '../../database';
 import { IntegrationCredentialKind } from '../../integrations/schemas/integration';
+import { PlanRequiredError } from '../../plans/errors';
 import type { CheckoutClients } from '../../vendors/checkout/types';
 import { PagSeguroTokenInvalidError, PaymentCredentialKeyMissingError } from '../errors';
 import { archive, save } from './payment-method';
@@ -14,18 +15,35 @@ const OWNER_ID = 'owner-1';
 type Row = Record<string, unknown>;
 
 /** One payment method row and one integration row, tracked in-memory; `findOne` ignores `where` since each test keeps a single row. */
-function createDb(existingMethod?: Row, existingIntegration?: Row, options: { siblingLive?: boolean; quotaAttempts?: number } = {}) {
+function createDb(existingMethod?: Row, existingIntegration?: Row, options: { siblingLive?: boolean; quotaAttempts?: number; subscriptionSequence?: Row[] } = {}) {
   let methodRow: Row | null = existingMethod ? { ...existingMethod } : null;
   let integrationRow: Row | null = existingIntegration ? { ...existingIntegration } : null;
   const methodInserts: Row[] = [];
   const methodUpdates: Row[] = [];
   const integrationInserts: Row[] = [];
   const integrationUpdates: Row[] = [];
+  const subscriptionSequence = options.subscriptionSequence;
+  let subscriptionCall = 0;
 
   const db = {
     transaction: async (fn: (tx: DbClient) => Promise<unknown>) => fn(db),
     rawQuery: vi.fn(async () => [{ attempts: options.quotaAttempts ?? 1 }]),
     users: { findOne: vi.fn(async () => ({ id: OWNER_ID })) },
+    // Plan gating is not this file's concern by default: the owner is always on a live Basic subscription here,
+    // unless a test hands `subscriptionSequence` to answer one row per successive read (pre-check, then locked re-check).
+    subscriptions: {
+      findOne: vi.fn(async () => {
+        if (!subscriptionSequence) {
+          return { status: SubscriptionStatus.Active, current_period_end: null };
+        }
+
+        const row = subscriptionSequence[Math.min(subscriptionCall, subscriptionSequence.length - 1)];
+
+        subscriptionCall += 1;
+
+        return row;
+      })
+    },
     payment_methods: {
       findOne: vi.fn(async ({ select }: { select: Record<string, unknown> }) => {
         if (!methodRow) {
@@ -240,6 +258,23 @@ describe('PaymentMethodService PagBank', () => {
 
     expect(integrationUpdates).toHaveLength(1);
     expect(integrationUpdates[0]).toMatchObject({ revoked_at: expect.any(String) });
+  });
+
+  it('re-checks the checkout-link gate under the lock, catching a downgrade that commits between the pre-check and the transaction', async () => {
+    const { db, methodInserts, integrationInserts } = createDb(undefined, undefined, {
+      subscriptionSequence: [
+        { status: SubscriptionStatus.Active, current_period_end: null },
+        { status: SubscriptionStatus.Canceled, current_period_end: null }
+      ]
+    });
+    const verifyCredential = vi.fn(async () => ({ status: 'valid' as const }));
+    const clients = clientsWith(verifyCredential);
+    const variables = { PAYMENT_CREDENTIAL_KEY_B64: KEY_B64 };
+
+    await expect(save(db, clients, variables, OWNER_ID, { provider: PaymentProvider.PagSeguro, token: 'tok', label: 'Loja' })).rejects.toBeInstanceOf(PlanRequiredError);
+
+    expect(methodInserts).toHaveLength(0);
+    expect(integrationInserts).toHaveLength(0);
   });
 
   it('enforces the PagBank verify quota at 10 attempts per owner', async () => {

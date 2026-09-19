@@ -39,6 +39,7 @@ import type { ChargeNotifyScheduler } from '../../notifications/schedulers/charg
 import { noticeContext } from '../../notifications/services/context';
 import { announceCharges, type NoticeContext } from '../../notifications/services/send';
 import { PaymentMethodRepository } from '../../payment-methods/repositories/payment-method';
+import { assertCanCreateIndefinite } from '../../plans/services/limits';
 import { ProofRepository } from '../../proofs/repositories/proof';
 import { StoredProofState } from '../../charges/schemas/charge';
 import { AccountRepository } from '../../users/repositories/account';
@@ -311,6 +312,10 @@ export async function createBilling(
       throw new RangeError('O início não pode estar no passado.');
     }
 
+    if (input.recurrence === BillingRecurrence.Indefinite && !input.contactId && input.kind !== BillingKind.Record) {
+      await assertCanCreateIndefinite(tx, ownerId, now);
+    }
+
     // A conta a pagar names its receiving contact outside the split; the key it points at is filed under that contact.
     const contact = input.contactId ? await ContactRepository.user(tx, ownerId, input.contactId) : undefined;
     const payable: PayableMaterialization | undefined = contact ? { payer: ChargePayer.Owner, contactId: contact.contactId } : undefined;
@@ -502,6 +507,11 @@ export async function patchBilling(
     }
 
     const resumed = patch.state === BillingState.Active && row.state === BillingState.Paused;
+
+    if (resumed && row.recurrence === BillingRecurrence.Indefinite && !row.contact_id && row.kind !== BillingKind.Record) {
+      await assertCanCreateIndefinite(tx, ownerId, now);
+    }
+
     const boundary = addCalendarDays(today, -1);
     const startDate = patch.startDate ?? row.start_date;
     const dueRule = patch.dueRule ?? row.due_rule;

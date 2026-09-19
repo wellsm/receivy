@@ -59,6 +59,16 @@ the request listener logs it.
 | `PAGSEGURO_TOKEN_INVALID` | 422 | `POST /payment-methods` or `PATCH /payment-methods/{id}` with a PagBank `token` PagBank itself refused |
 | `PAYMENT_CREDENTIAL_KEY_MISSING` | 503 | `PAYMENT_CREDENTIAL_KEY_B64` is not configured while sealing a PagBank `token` |
 
+## Plan errors
+
+| Code | Status | When |
+|---|---|---|
+| `PLAN_LIMIT_REACHED` | 402 | creating or reactivating an indefinite billing past the plan's ceiling; `context.fields { limit, used, plan }` |
+| `PLAN_REQUIRED` | 402 | `POST /payment-methods` or `PATCH /payment-methods/{id}` with a checkout provider (InfinitePay, PagBank) on the free plan |
+| `PLAN_ALREADY_ACTIVE` | 409 | `POST /plan/subscribe` while a subscription is already Basic |
+| `PLAN_BILLING_DISABLED` | 503 | `POST /plan/subscribe`, `/cancel`, `/resume`, `/payment-method`, `/payment-method/confirm` while `PLAN_BILLING=disabled`; `GET /plan` and `GET /plan/invoices` keep answering the free plan, usage, and an empty invoice list |
+| `PLAN_UNAVAILABLE` | 503 | Stripe did not answer (or refused) a plan action |
+
 ## Quotas
 
 No quota is keyed by client IP: the stock gateway does not expose one, and browsers reach the API

@@ -42,7 +42,8 @@
     "@ez4/schema": "0.53.0",
     "@ez4/storage": "0.53.0",
     "@ez4/utils": "0.53.0",
-    "@receivy/common": "workspace:*"
+    "@receivy/common": "workspace:*",
+    "stripe": "^19.3.0"
   },
   "devDependencies": {
     "@ez4/aws-bucket": "0.53.0",

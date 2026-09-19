@@ -9,6 +9,7 @@ import { ContactRepository } from '../../contacts/repositories/contact';
 import type { Db, DbClient } from '../../database';
 import { IntegrationRepository } from '../../integrations/repositories/integration';
 import { IntegrationCredentialKind, type IntegrationCredentialsSchema } from '../../integrations/schemas/integration';
+import { assertCheckoutLinksAllowed } from '../../plans/services/limits';
 import { AccountRepository } from '../../users/repositories/account';
 import type { CheckoutClient, CheckoutClients } from '../../vendors/checkout/types';
 import {
@@ -120,13 +121,17 @@ export async function save(db: DbClient, clients: CheckoutClients, variables: Pa
   const contactId = input.provider === PaymentProvider.Pix ? input.contactId : undefined;
   let credentials: IntegrationCredentialsSchema | undefined;
 
+  const existing = id ? await PaymentMethodRepository.get(db, ownerId, id) : null;
+
+  if (id && (!existing || existing.archivedAt)) {
+    throw new HttpNotFoundError();
+  }
+
+  if (input.provider !== PaymentProvider.Pix && existing?.provider !== input.provider) {
+    await assertCheckoutLinksAllowed(db, ownerId, new Date());
+  }
+
   if (input.provider === PaymentProvider.PagSeguro) {
-    const existing = id ? await PaymentMethodRepository.get(db, ownerId, id) : null;
-
-    if (id && (!existing || existing.archivedAt)) {
-      throw new HttpNotFoundError();
-    }
-
     // A clipboard paste from the PagBank panel often carries a trailing newline; trim before it counts as present.
     const token = input.token?.trim();
 
@@ -163,12 +168,6 @@ export async function save(db: DbClient, clients: CheckoutClients, variables: Pa
   if (input.provider === PaymentProvider.InfinitePay) {
     // Best-effort pre-flight: the same checks the transaction runs, run once more so a request bound to fail
     // never burns a real InfinitePay link. The transaction below stays the authoritative guard either way.
-    const existing = id ? await PaymentMethodRepository.get(db, ownerId, id) : null;
-
-    if (id && (!existing || existing.archivedAt)) {
-      throw new HttpNotFoundError();
-    }
-
     if (existing?.contactId) {
       throw new HttpBadRequestError('Um contato só recebe por Pix.');
     }
@@ -197,6 +196,12 @@ export async function save(db: DbClient, clients: CheckoutClients, variables: Pa
 
     if (id && (!existing || existing.archivedAt)) {
       throw new HttpNotFoundError();
+    }
+
+    // Repeated under the lock: the pre-check above only fails fast before the vendor probe / PagBank verify runs;
+    // this is the authoritative check, against the plan's own constraint (a save racing a downgrade commit).
+    if (input.provider !== PaymentProvider.Pix && existing?.provider !== input.provider) {
+      await assertCheckoutLinksAllowed(tx, ownerId, new Date());
     }
 
     // A contact key is always Pix: nobody pays a person through their InfiniteTag.

@@ -8,7 +8,7 @@ import { EventRepository } from '../../src/common/repositories/events';
 import { PaymentMethodRepository } from '../../src/payment-methods/repositories/payment-method';
 import { fakeCheckout } from '../../src/vendors/checkout/fake';
 import type { CheckoutClients } from '../../src/vendors/checkout/types';
-import { charges, cleanupUsers, contacts, createOnceCharge, createUser, db, paymentMethods } from '../fixtures/financial';
+import { charges, cleanupUsers, contacts, createOnceCharge, createUser, db, grantBasicPlan, paymentMethods } from '../fixtures/financial';
 import { fakeNotice } from '../fixtures/scheduling';
 
 const OWNER = '99999999-9999-4999-8999-999999999993';
@@ -28,6 +28,7 @@ describe('PagBank charges', () => {
 
   before(async () => {
     await createUser(db, { id: OWNER, email: 'pb-owner@example.com', name: 'Dona Loja' });
+    await grantBasicPlan(db, OWNER);
     await createUser(db, { id: PAYER, email: 'pb-payer@example.com', name: 'Ana Paga' });
 
     const person = await contacts.save(OWNER, { name: 'Ana', email: 'pb-payer@example.com' });

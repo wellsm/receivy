@@ -102,6 +102,27 @@ or "unsupported" (nothing is recorded for "unsupported"); the mass cancel paths 
 `billings/services/billing.ts` (pausing/ending a billing, editing a month) only mark the charges cancelled
 and leave any open provider link behind.
 
+## Plano
+
+`syncSubscription` (`plans/services/sync.ts`) is the only place a plan notice goes out: it re-reads
+the subscription at Stripe, writes the transition, and after the transaction commits sends an
+e-mail + push to the owner through `notifyPlan` (`plans/services/notices.ts`). Failures never reach
+the caller — a failed notice is a `console.warn`, not a thrown error. Each notice also records one
+event on the owner's account (`EventableType.Account`): `plan.subscribed`, `plan.payment_failed` or
+`plan.canceled { subscriptionId, pausedIds }`. A downgrade additionally pauses every billing
+`applyDowngrade` picked (newest excess indefinite first, then every linked-checkout billing), each
+with its own `billing.paused { reason: 'plan' }` event.
+
+| When | Title | Subject |
+| --- | --- | --- |
+| Free → Basic (`plan.subscribed`) | Plano Básico ativo | Seu plano Básico está ativo |
+| a Stripe invoice fails while the subscription is `past_due` (`plan.payment_failed`) | Pagamento do plano falhou | Atualize o cartão do seu plano |
+| Basic → Free (`plan.canceled`) | Seu plano Básico acabou | Seu plano Básico acabou |
+
+The link in every plan notice points at `<PUBLIC_WEB_ORIGIN>/settings/plan`. Replaying the same
+Stripe event (`row.last_event_id` unchanged) skips the whole block: no second downgrade, no second
+notice.
+
 ## Sem avisos
 
 The owner of a conta a receber can switch off the automatic notices of one participant or of one charge

@@ -20,7 +20,7 @@ import { EditScopeNotRecurringError, PendingChargesWithoutStateError } from '../
 import { createBilling, patchBilling } from '../../src/billings/services/billing';
 import { StoredProofState } from '../../src/charges/schemas/charge';
 import { EventRepository } from '../../src/common/repositories/events';
-import { cleanupUsers, contacts, createUser, db, paymentMethods } from '../fixtures/financial';
+import { cleanupUsers, contacts, createUser, db, grantBasicPlan, paymentMethods } from '../fixtures/financial';
 import { fakeNotice } from '../fixtures/scheduling';
 
 const OWNER = 'b6666666-6666-4666-8666-666666666666';
@@ -77,6 +77,7 @@ describe('month materialized: pending charges and current month edits', () => {
     equal(database?.['name'], 'receivy_tests');
 
     await createUser(db, { id: OWNER, email: 'month-owner@example.com', name: 'Dona' });
+    await grantBasicPlan(db, OWNER);
 
     const ana = await contacts.save(OWNER, { name: 'Ana', email: 'month-ana@example.com' });
 

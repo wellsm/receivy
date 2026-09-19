@@ -46,6 +46,14 @@ import type {
 } from './payment-methods/errors';
 import type { PaymentMethodRoutes } from './payment-methods/routes';
 import type {
+  PlanAlreadyActiveError,
+  PlanBillingDisabledError,
+  PlanLimitReachedError,
+  PlanRequiredError,
+  PlanUnavailableError
+} from './plans/errors';
+import type { PlanRoutes } from './plans/routes';
+import type {
   ProofDeclarationForbiddenError,
   ProofInvalidFileError,
   ProofMissingError,
@@ -77,6 +85,7 @@ export declare class Api extends Http.Service {
       namingStyle: NamingStyle.CamelCase;
     };
     httpErrors: {
+      402: [PlanLimitReachedError, PlanRequiredError];
       403: [ProofDeclarationForbiddenError];
       409: [
         IdempotencyMismatchError,
@@ -113,7 +122,8 @@ export declare class Api extends Http.Service {
         ProofMissingError,
         PixRequiredError,
         PixSnapshotLockedError,
-        StaleSessionError
+        StaleSessionError,
+        PlanAlreadyActiveError
       ];
       422: [
         AvatarInvalidError,
@@ -128,7 +138,7 @@ export declare class Api extends Http.Service {
         PagSeguroTokenInvalidError
       ];
       429: [TooManyRequestsError, ReminderQuotaError];
-      503: [PaymentLinkUnavailableError, PaymentCredentialKeyMissingError];
+      503: [PaymentLinkUnavailableError, PaymentCredentialKeyMissingError, PlanBillingDisabledError, PlanUnavailableError];
     };
   }>;
 
@@ -137,6 +147,7 @@ export declare class Api extends Http.Service {
     ...UserRoutes,
     ...ContactRoutes,
     ...PaymentMethodRoutes,
+    ...PlanRoutes,
     ...BillingRoutes,
     ...ChargeRoutes,
     ...PublicRoutes,

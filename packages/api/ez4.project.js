@@ -100,6 +100,10 @@ export default {
     PUBLIC_WEB_ORIGIN: process.env.PUBLIC_WEB_ORIGIN ?? 'http://localhost:3000',
     PUBLIC_API_ORIGIN: process.env.PUBLIC_API_ORIGIN ?? 'http://127.0.0.1:3735/local-receivy-api',
     PAYMENT_METHOD_LINK: process.env.PAYMENT_METHOD_LINK ?? 'disabled',
-    PAYMENT_CREDENTIAL_KEY_B64: process.env.PAYMENT_CREDENTIAL_KEY_B64 ?? 'disabled'
+    PAYMENT_CREDENTIAL_KEY_B64: process.env.PAYMENT_CREDENTIAL_KEY_B64 ?? 'disabled',
+    PLAN_BILLING: process.env.PLAN_BILLING ?? 'disabled',
+    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? 'disabled',
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? 'disabled',
+    STRIPE_PRICE_BASIC: process.env.STRIPE_PRICE_BASIC ?? 'disabled'
   }
 };

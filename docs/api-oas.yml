@@ -450,6 +450,83 @@ paths:
       responses:
         204:
           description: "Successful response."
+  /plan:
+    get:
+      operationId: getPlan
+      security:
+        - sessionAuthorizer: []
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/getPlanHandler'
+  /plan/subscribe:
+    post:
+      operationId: subscribePlan
+      security:
+        - sessionAuthorizer: []
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/subscribePlanHandler'
+  /plan/cancel:
+    post:
+      operationId: cancelPlan
+      security:
+        - sessionAuthorizer: []
+      responses:
+        204:
+          description: "Successful response."
+  /plan/resume:
+    post:
+      operationId: resumePlan
+      security:
+        - sessionAuthorizer: []
+      responses:
+        204:
+          description: "Successful response."
+  /plan/payment-method:
+    post:
+      operationId: setupPlanPaymentMethod
+      security:
+        - sessionAuthorizer: []
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/setupPlanPaymentMethodHandler'
+  /plan/payment-method/confirm:
+    post:
+      operationId: confirmPlanPaymentMethod
+      security:
+        - sessionAuthorizer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/confirmPlanPaymentMethodHandler'
+      responses:
+        204:
+          description: "Successful response."
+  /plan/invoices:
+    get:
+      operationId: planInvoices
+      security:
+        - sessionAuthorizer: []
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/planInvoicesHandler'
   /billings:
     post:
       operationId: createBilling
@@ -1210,6 +1287,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/pagSeguroWebhookHandler'
+  /webhooks/stripe:
+    post:
+      operationId: stripeWebhook
+      parameters:
+        - name: stripe-signature
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 1024
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/stripeWebhookHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/stripeWebhookHandler'
   /dev/checkout/{provider}/{orderNsu}/pay:
     post:
       operationId: fakeCheckoutPay
@@ -1544,6 +1643,15 @@ components:
           format: uuid
       required:
         - provider
+    confirmPlanPaymentMethodHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        paymentMethodId:
+          type: string
+          maxLength: 64
+      required:
+        - paymentMethodId
     createBillingHandler:
       type: object
       additionalProperties: false
@@ -1963,6 +2071,8 @@ components:
           type: string
           maxLength: 40
     pagSeguroWebhookHandler:
+      type: string
+    stripeWebhookHandler:
       type: string
 
   responseSchemes:
@@ -2724,6 +2834,101 @@ components:
         - label
         - isDefault
         - createdAt
+    getPlanHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        plan:
+          enum: 
+            - 'free'
+            - 'basic'
+        status:
+          enum: 
+            - 'incomplete'
+            - 'active'
+            - 'past_due'
+            - 'canceled'
+        currentPeriodEnd:
+          type: string
+        cancelAtPeriodEnd:
+          type: boolean
+        usage:
+          type: object
+          additionalProperties: false
+          properties:
+            indefinite:
+              type: object
+              additionalProperties: false
+              properties:
+                used:
+                  type: number
+                limit:
+                  type: number
+              required:
+                - used
+                - limit
+          required:
+            - indefinite
+        checkoutLinks:
+          type: boolean
+        card:
+          type: object
+          additionalProperties: false
+          properties:
+            brand:
+              type: string
+            last4:
+              type: string
+          required:
+            - brand
+            - last4
+      required:
+        - plan
+        - cancelAtPeriodEnd
+        - usage
+        - checkoutLinks
+    subscribePlanHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        clientSecret:
+          type: string
+      required:
+        - clientSecret
+    setupPlanPaymentMethodHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        clientSecret:
+          type: string
+      required:
+        - clientSecret
+    planInvoicesHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        invoices:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              amountCents:
+                type: number
+              status:
+                type: string
+              paidAt:
+                type: string
+              pdfUrl:
+                type: string
+            required:
+              - id
+              - amountCents
+              - status
+      required:
+        - invoices
     createBillingHandler:
       type: object
       additionalProperties: false
@@ -8997,6 +9202,15 @@ components:
       required:
         - received
     pagSeguroWebhookHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        received:
+          type: boolean
+          enum: [true]
+      required:
+        - received
+    stripeWebhookHandler:
       type: object
       additionalProperties: false
       properties:

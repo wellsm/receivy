@@ -126,7 +126,7 @@ try {
     '-v',
     'ON_ERROR_STOP=1',
     '-c',
-    `INSERT INTO users (id,email,name,status,locale,timezone,country,currency,created_at,updated_at) VALUES ('11111111-1111-4111-8111-111111111111','billing-http@example.invalid','HTTP fixture','active','pt-BR','America/Sao_Paulo','BR','BRL',now(),now()); INSERT INTO session_families (id,user_id,created_at,last_seen_at) VALUES ('${familyId}','11111111-1111-4111-8111-111111111111',now(),now())`
+    `INSERT INTO users (id,email,name,status,locale,timezone,country,currency,created_at,updated_at) VALUES ('11111111-1111-4111-8111-111111111111','billing-http@example.invalid','HTTP fixture','active','pt-BR','America/Sao_Paulo','BR','BRL',now(),now()); INSERT INTO subscriptions (id,owner_id,provider,stripe_customer_id,plan,status,cancel_at_period_end,created_at,updated_at) VALUES ('71111111-1111-4111-8111-111111111111','11111111-1111-4111-8111-111111111111','stripe','cus_smoke','basic','active',false,now(),now()); INSERT INTO session_families (id,user_id,created_at,last_seen_at) VALUES ('${familyId}','11111111-1111-4111-8111-111111111111',now(),now())`
   ]);
 
   const authorization = `Bearer ${accessToken('11111111-1111-4111-8111-111111111111')}`;

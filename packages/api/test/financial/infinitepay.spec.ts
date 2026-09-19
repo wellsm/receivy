@@ -9,7 +9,7 @@ import { PaymentMethodTakenError } from '../../src/payment-methods/errors';
 import { publicChargeByToken, publishChargeLink } from '../../src/public/services/public-link';
 import { fakeCheckout, fakeLinkCount } from '../../src/vendors/checkout/fake';
 import type { CheckoutClient, CheckoutClients } from '../../src/vendors/checkout/types';
-import { charges, cleanupUsers, contacts, createOnceCharge, createUser, db, paymentMethods } from '../fixtures/financial';
+import { charges, cleanupUsers, contacts, createOnceCharge, createUser, db, grantBasicPlan, paymentMethods } from '../fixtures/financial';
 import { fakeNotice } from '../fixtures/scheduling';
 
 const OWNER = '99999999-9999-4999-8999-999999999991';
@@ -21,6 +21,7 @@ describe('InfinitePay charges', () => {
 
   before(async () => {
     await createUser(db, { id: OWNER, email: 'ip-owner@example.com', name: 'Dona Loja' });
+    await grantBasicPlan(db, OWNER);
     await createUser(db, { id: PAYER, email: 'ip-payer@example.com', name: 'Ana Paga' });
 
     const person = await contacts.save(OWNER, { name: 'Ana', email: 'ip-payer@example.com' });

@@ -9,7 +9,7 @@ import type {
   Direction,
   SplitMode
 } from '@receivy/common';
-import { BillingState as BillingStateEnum, Direction as DirectionEnum } from '@receivy/common';
+import { BillingKind as BillingKindEnum, BillingRecurrence as BillingRecurrenceEnum, BillingState as BillingStateEnum, Direction as DirectionEnum } from '@receivy/common';
 import { searchTerm } from '../../common/utils/search';
 import type { DbClient } from '../../database';
 import type { ListCursor } from '../utils/cursor';
@@ -239,6 +239,38 @@ export namespace BillingRepository {
   /** Every active assinatura, for the daily sweep. */
   export async function activeIndefiniteIds(db: DbClient, recurrence: BillingRecurrence, state: BillingState): Promise<string[]> {
     const { records } = await db.billings.findMany({ select: { id: true }, where: { recurrence, state }, order: { id: Order.Asc } });
+
+    return records.map((row) => row.id);
+  }
+
+  /** What the plan counts: the owner's live, active, receivable assinaturas. */
+  export async function countActiveIndefinite(db: DbClient, ownerId: string): Promise<number> {
+    return db.billings.count({
+      where: { owner_id: ownerId, recurrence: BillingRecurrenceEnum.Indefinite, state: BillingStateEnum.Active, kind: BillingKindEnum.Live, contact_id: { isNull: true } }
+    });
+  }
+
+  /** The owner's live, active, receivable assinaturas, newest first: what a downgrade trims. */
+  export async function activeIndefiniteByOwner(db: DbClient, ownerId: string): Promise<Array<{ id: string; created_at: string }>> {
+    const { records } = await db.billings.findMany({
+      select: { id: true, created_at: true },
+      where: { owner_id: ownerId, recurrence: BillingRecurrenceEnum.Indefinite, state: BillingStateEnum.Active, kind: BillingKindEnum.Live, contact_id: { isNull: true } },
+      order: { created_at: Order.Desc }
+    });
+
+    return records;
+  }
+
+  /** Every active billing of the owner paid through one of the given methods; a registro never depends on a checkout link. */
+  export async function activeByPaymentMethods(db: DbClient, ownerId: string, methodIds: string[]): Promise<string[]> {
+    if (!methodIds.length) {
+      return [];
+    }
+
+    const { records } = await db.billings.findMany({
+      select: { id: true },
+      where: { owner_id: ownerId, state: BillingStateEnum.Active, kind: BillingKindEnum.Live, payment_method_id: { isIn: methodIds } }
+    });
 
     return records.map((row) => row.id);
   }

@@ -1,6 +1,6 @@
 import { Order } from '@ez4/database';
 import { HttpNotFoundError } from '@ez4/gateway';
-import type { PaymentMethod, PaymentProvider, PixKeyType } from '@receivy/common';
+import { type PaymentMethod, PaymentProvider, type PixKeyType } from '@receivy/common';
 import type { DbClient } from '../../database';
 import { paymentMethodOf } from '../utils/dto';
 
@@ -204,5 +204,15 @@ export namespace PaymentMethodRepository {
       where: { id },
       data: { archived_at: sqlNull, is_default: isDefault, updated_at: now }
     });
+  }
+
+  /** Ids of the owner's live InfinitePay/PagBank methods: the ones a free plan cannot bill through. */
+  export async function checkoutMethodIds(db: DbClient, ownerId: string): Promise<string[]> {
+    const { records } = await db.payment_methods.findMany({
+      select: { id: true },
+      where: { owner_id: ownerId, provider: { not: PaymentProvider.Pix }, archived_at: { isNull: true } }
+    });
+
+    return records.map((row) => row.id);
   }
 }

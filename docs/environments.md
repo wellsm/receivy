@@ -48,6 +48,17 @@ API (`packages/api/dev.env.example` → `dev.env`, git-ignored; `prd.env` análo
   notificação assinada de verdade no `sandbox` (evento `charge.paid` ou `charge.provider.rejected`
   com `reason: 'signature'` na timeline da cobrança) — é a única prova de que o gateway entrega o
   corpo raw do PagBank sem reformatar.
+- Plano pago: `PLAN_BILLING=live` fala com o Stripe de verdade (`STRIPE_SECRET_KEY`,
+  `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BASIC`); `fake` ativa uma assinatura em processo, sem
+  cartão nem webhook (local/test); `disabled` (padrão quando ausente) responde 503 em
+  `subscribe`/`cancel`/`resume`/`payment-method`/`payment-method/confirm` — `GET /plan` e
+  `GET /plan/invoices` continuam respondendo o plano Grátis, o uso e uma lista de faturas vazia.
+  `live` sem `STRIPE_SECRET_KEY` real (ausente ou `disabled`) também responde 503 nessas mesmas
+  ações, sem tentar falar com o Stripe. `STRIPE_WEBHOOK_SECRET` sai do
+  `stripe listen --print-secret` localmente e do segredo de assinatura do endpoint no dev/prd.
+  `STRIPE_PRICE_BASIC` é o id do preço mensal do produto Básico (Stripe dashboard > Product
+  catalog). Antes de virar `live` em prd, verifique pelo menos um evento assinado de verdade pelo
+  `stripe listen`.
 - `PAYMENT_CREDENTIAL_KEY_B64`: chave AES-256-GCM (32 bytes em base64) que sela o token do
   PagBank antes de gravar em `integrations.credentials`. Gerar com
   `openssl rand -base64 32`. `disabled` (padrão quando ausente) responde

@@ -11,6 +11,7 @@ import type { ContactSchema } from './contacts/schemas/contact';
 import type { IntegrationSchema } from './integrations/schemas/integration';
 import type { DeviceTokenSchema } from './notifications/schemas/notification';
 import type { PaymentMethodSchema } from './payment-methods/schemas/payment-method';
+import type { SubscriptionSchema } from './plans/schemas/subscription';
 import type { ProofSchema } from './proofs/schemas/proof';
 import type { ProofThrottleSchema } from './proofs/schemas/proof-throttle';
 import type { LinkSchema } from './public/schemas/link';
@@ -59,6 +60,16 @@ export declare class Db extends Database.Service<PostgresEngine> {
         id: Index.Primary;
         'owner_id:provider:value': Index.Unique;
         owner_id: Index.Secondary;
+      };
+    }>,
+    Database.UseTable<{
+      name: 'subscriptions';
+      schema: SubscriptionSchema;
+      relations: { 'owner_id@owner': 'users:id' };
+      indexes: {
+        id: Index.Primary;
+        owner_id: Index.Unique;
+        stripe_subscription_id: Index.Secondary;
       };
     }>,
     Database.UseTable<{

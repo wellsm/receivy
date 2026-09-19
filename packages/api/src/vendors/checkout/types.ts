@@ -22,9 +22,10 @@ export type CheckoutLinkResult =
   | { status: 'unauthorized' }
   | { status: 'unavailable' };
 
+/** `expectedAmountCents` is what the charge asks for: real clients ignore it, the fake echoes it when another process made the link. */
 export type CheckoutCheckInput =
-  | { provider: PaymentProvider.InfinitePay; identity: string; orderNsu: string; transactionNsu: string; slug: string }
-  | { provider: PaymentProvider.PagSeguro; credential: string; orderId: string; transactionNsu: string };
+  | { provider: PaymentProvider.InfinitePay; identity: string; orderNsu: string; transactionNsu: string; slug: string; expectedAmountCents: number }
+  | { provider: PaymentProvider.PagSeguro; credential: string; orderId: string; transactionNsu: string; chargeId: string; expectedAmountCents: number };
 
 export type CheckoutCheckResult =
   | { status: 'checked'; paid: boolean; amountCents: number; paidAmountCents: number; captureMethod: string }

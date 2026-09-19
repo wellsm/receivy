@@ -581,6 +581,28 @@ describe("ChargeDetailScreen", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Link copiado.");
   });
 
+  it("shows the payment-link tile for a PagBank charge, but not for a Pix charge", async () => {
+    serve(
+      charge({
+        direction: Direction.Payable,
+        payment: { provider: PaymentProvider.PagSeguro, kind: null, value: "Loja PagBank", label: "PagBank" },
+        paymentLink: { url: "https://checkout/pagbank", state: PaymentLinkState.Ready },
+      }),
+    );
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    expect(await screen.findByRole("button", { name: "Copiar link de pagamento" })).toBeInTheDocument();
+
+    cleanup();
+    serve(charge({ direction: Direction.Payable, paymentLink: { url: "https://checkout/pix", state: PaymentLinkState.Ready } }));
+
+    render(<ChargeDetailScreen id="charge" />);
+    await screen.findByText("Aluguel");
+
+    expect(screen.queryByRole("button", { name: "Copiar link de pagamento" })).not.toBeInTheDocument();
+  });
+
   it("asks for a new link when the last one failed", async () => {
     const user = userEvent.setup();
     const calls = serve(

@@ -150,7 +150,7 @@ export enum PaymentProvider {
   PagSeguro = 'pagseguro'
 }
 
-/** Where the checkout link of an InfinitePay charge stands; null on a charge paid through a Pix key. */
+/** Where the checkout link of a checkout-provider (InfinitePay, PagBank) charge stands; null on a charge paid through a Pix key. */
 export enum PaymentLinkState {
   Pending = 'pending',
   Ready = 'ready',
@@ -162,7 +162,7 @@ export type PaymentMethod = {
   provider: PaymentProvider;
   /** The Pix key type; null on any other provider. */
   kind: PixKeyType | null;
-  /** The canonical Pix key, or the InfiniteTag without `$`. */
+  /** The canonical Pix key, the InfiniteTag without `$`, or — for PagBank — the same label shown to the owner, since there is no public value. */
   value: string;
   label: string;
   isDefault: boolean;
@@ -233,7 +233,7 @@ export type ChargeDetail = ChargeSummary & {
   /** The person on the other side of the owner: who owes, or on a conta a pagar who receives; null when the bill is the owner's alone. */
   debtorId: string | null;
   payment: PaymentSnapshot | null;
-  /** Only an InfinitePay charge has one; null otherwise. */
+  /** Only a charge paid through a checkout provider (InfinitePay, PagBank) has one; null on Pix. */
   paymentLink: PaymentLink | null;
   /** The provider's receipt once it confirmed the payment. */
   receiptUrl: string | null;
@@ -253,7 +253,7 @@ export type PublicChargeView = {
   dueDate: string;
   state: ChargeState;
   payment: PaymentSnapshot | null;
-  /** Only an InfinitePay charge has one; null otherwise. */
+  /** Only a charge paid through a checkout provider (InfinitePay, PagBank) has one; null on Pix. */
   paymentLink: PaymentLink | null;
   /** The provider's receipt once it confirmed the payment. */
   receiptUrl: string | null;

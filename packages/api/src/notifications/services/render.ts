@@ -36,7 +36,7 @@ export interface RenderInputs {
   from: string;
   /** A conta a pagar reminding its own owner: no public link, no "you received a charge" framing. */
   self?: boolean;
-  /** Changes the footnote: an InfinitePay charge is paid through its checkout link, not Pix directly. */
+  /** Changes the footnote: a checkout-provider charge (InfinitePay, PagBank) is paid through its checkout link, not Pix directly. */
   provider?: PaymentProvider;
 }
 

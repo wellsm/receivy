@@ -83,7 +83,10 @@ export function createPagSeguroClient(host: string, request: typeof fetch = glob
           return { status: 'unavailable' };
         }
 
-        const body = (await response.json().catch(() => ({}))) as { charges?: { id?: unknown; status?: unknown; amount?: { value?: unknown; summary?: { paid?: unknown } }; payment_method?: { type?: unknown } }[] };
+        const body = (await response.json().catch(() => ({}))) as {
+          reference_id?: unknown;
+          charges?: { id?: unknown; status?: unknown; amount?: { value?: unknown; summary?: { paid?: unknown } }; payment_method?: { type?: unknown } }[];
+        };
         const charges = (Array.isArray(body.charges) ? body.charges : []).map((charge) => ({
           id: typeof charge.id === 'string' ? charge.id : '',
           status: typeof charge.status === 'string' ? charge.status : '',
@@ -92,7 +95,7 @@ export function createPagSeguroClient(host: string, request: typeof fetch = glob
           method: typeof charge.payment_method?.type === 'string' ? charge.payment_method.type : ''
         }));
 
-        return { status: 'found', charges };
+        return { status: 'found', referenceId: typeof body.reference_id === 'string' ? body.reference_id : undefined, charges };
       } catch {
         return { status: 'unavailable' };
       }

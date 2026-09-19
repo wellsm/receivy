@@ -78,8 +78,8 @@ export async function settleByProvider(db: DbClient, clients: CheckoutClients, n
   const article = providerArticle(provider);
   const check = await clients[provider].checkPayment(
     input.provider === PaymentProvider.InfinitePay
-      ? { provider: input.provider, identity: payment.value, orderNsu: charge.id, transactionNsu: input.transactionNsu, slug: input.slug }
-      : { provider: input.provider, credential: input.credential, orderId: input.orderId, transactionNsu: input.transactionNsu }
+      ? { provider: input.provider, identity: payment.value, orderNsu: charge.id, transactionNsu: input.transactionNsu, slug: input.slug, expectedAmountCents: charge.amount_cents }
+      : { provider: input.provider, credential: input.credential, orderId: input.orderId, transactionNsu: input.transactionNsu, chargeId: input.chargeId, expectedAmountCents: charge.amount_cents }
   );
   const stamp = now.toISOString();
   const what = `${charge.description} · ${formatMoney({ amountCents: charge.amount_cents, currency: 'BRL' })}`;

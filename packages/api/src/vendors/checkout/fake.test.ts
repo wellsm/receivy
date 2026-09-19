@@ -31,7 +31,7 @@ describe('fakeCheckout', () => {
 
     await client.createLink({ orderNsu: 'order-2', amountCents: 1_000, description: 'Luz', expiresAt: EXPIRES });
 
-    expect(await client.checkPayment({ provider: PaymentProvider.PagSeguro, credential: 'token', orderId: 'order-2', transactionNsu: 'tx-1' })).toEqual({
+    expect(await client.checkPayment({ provider: PaymentProvider.PagSeguro, credential: 'token', orderId: 'order-2', transactionNsu: 'tx-1', chargeId: 'c1', expectedAmountCents: 1_000 })).toEqual({
       status: 'checked',
       paid: true,
       amountCents: 1_000,
@@ -45,9 +45,16 @@ describe('fakeCheckout', () => {
 
     await client.createLink({ orderNsu: 'order-3', amountCents: 1_000, description: 'Luz', expiresAt: EXPIRES });
 
-    const check = await client.checkPayment({ provider: PaymentProvider.PagSeguro, credential: 'token', orderId: 'order-3', transactionNsu: 'unpaid-1' });
+    const check = await client.checkPayment({ provider: PaymentProvider.PagSeguro, credential: 'token', orderId: 'order-3', transactionNsu: 'unpaid-1', chargeId: 'c1', expectedAmountCents: 1_000 });
 
     expect(check).toMatchObject({ status: 'checked', paid: false });
+  });
+
+  it('pays an order another process linked, trusting the expected amount', async () => {
+    const client = fakeCheckout('https://web.example', PaymentProvider.PagSeguro);
+    const check = await client.checkPayment({ provider: PaymentProvider.PagSeguro, credential: 'token', orderId: 'order-elsewhere', transactionNsu: 'tx-9', chargeId: 'c9', expectedAmountCents: 4_200 });
+
+    expect(check).toEqual({ status: 'checked', paid: true, amountCents: 4_200, paidAmountCents: 4_200, captureMethod: 'pix' });
   });
 
   it('accepts every credential and always inactivates', async () => {

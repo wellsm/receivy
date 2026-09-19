@@ -110,6 +110,16 @@ describe('PaymentMethodService PagBank', () => {
     expect(verifyCredential).not.toHaveBeenCalled();
   });
 
+  it('treats a whitespace-only token as absent', async () => {
+    const { db } = createDb();
+    const verifyCredential = vi.fn();
+    const clients = clientsWith(verifyCredential);
+    const variables = { PAYMENT_CREDENTIAL_KEY_B64: KEY_B64 };
+
+    await expect(save(db, clients, variables, OWNER_ID, { provider: PaymentProvider.PagSeguro, token: '   ', label: 'Loja' })).rejects.toThrow('Informe o token do PagBank.');
+    expect(verifyCredential).not.toHaveBeenCalled();
+  });
+
   it('refuses an invalid token with 422 and never writes', async () => {
     const { db, methodInserts, integrationInserts } = createDb();
     const verifyCredential = vi.fn(async () => ({ status: 'invalid' as const }));
@@ -162,6 +172,17 @@ describe('PaymentMethodService PagBank', () => {
     expect(method.kind).toBeNull();
     expect(method.value).toBe('Minha Loja');
     expect(method.label).toBe('Minha Loja');
+  });
+
+  it('trims the token before verifying and sealing it', async () => {
+    const { db } = createDb();
+    const verifyCredential = vi.fn(async () => ({ status: 'valid' as const }));
+    const clients = clientsWith(verifyCredential);
+    const variables = { PAYMENT_CREDENTIAL_KEY_B64: KEY_B64 };
+
+    await save(db, clients, variables, OWNER_ID, { provider: PaymentProvider.PagSeguro, token: '  real-secret-token\n', label: 'Minha Loja' });
+
+    expect(verifyCredential).toHaveBeenCalledWith('real-secret-token');
   });
 
   it('keeps the stored credential when editing without a token', async () => {

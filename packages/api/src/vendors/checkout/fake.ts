@@ -26,12 +26,14 @@ export function fakeCheckout(webOrigin: string, provider: CheckoutProvider): Che
       return { status: 'created', url: `${origin}/dev/checkout/${provider}/${input.orderNsu}${redirect}`, linkId: `fake-${input.orderNsu}` };
     },
 
+    // Every handler is its own bundle (and its own Lambda), so a link made by `ensurePaymentLink` is unknown here:
+    // the check trusts the amount the caller expects and only refuses an `unpaid` transaction.
     async checkPayment(input) {
       const orderNsu = input.provider === (provider as PaymentProvider) ? ('orderNsu' in input ? input.orderNsu : input.orderId) : '';
-      const linked = links.get(orderNsu);
-      const paid = !!linked && !input.transactionNsu.startsWith('unpaid');
+      const amountCents = links.get(orderNsu)?.amountCents ?? input.expectedAmountCents;
+      const paid = !input.transactionNsu.startsWith('unpaid');
 
-      return { status: 'checked', paid, amountCents: linked?.amountCents ?? 0, paidAmountCents: linked?.amountCents ?? 0, captureMethod: 'pix' };
+      return { status: 'checked', paid, amountCents, paidAmountCents: amountCents, captureMethod: 'pix' };
     },
 
     async inactivate() {

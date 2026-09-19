@@ -44,7 +44,10 @@ API (`packages/api/dev.env.example` → `dev.env`, git-ignored; `prd.env` análo
   dão nela no mesmo host); `sandbox` fala com o host de sandbox do PagBank; `fake`
   responde em processo e aponta o link para `/dev/checkout/<provider>/<id>` do web; `disabled`
   (padrão quando ausente) falha todo link com `PAYMENT_LINK_UNAVAILABLE`. `fake` no
-  local/test, `sandbox` no dev, `live` em produção.
+  local/test, `sandbox` no dev, `live` em produção. Antes de virar `live`, confira pelo menos uma
+  notificação assinada de verdade no `sandbox` (evento `charge.paid` ou `charge.provider.rejected`
+  com `reason: 'signature'` na timeline da cobrança) — é a única prova de que o gateway entrega o
+  corpo raw do PagBank sem reformatar.
 - `PAYMENT_CREDENTIAL_KEY_B64`: chave AES-256-GCM (32 bytes em base64) que sela o token do
   PagBank antes de gravar em `integrations.credentials`. Gerar com
   `openssl rand -base64 32`. `disabled` (padrão quando ausente) responde

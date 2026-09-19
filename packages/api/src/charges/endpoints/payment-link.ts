@@ -18,7 +18,7 @@ declare class ItemResponse implements Http.Response {
   body: ChargeDetail;
 }
 
-/** "Gerar link de novo": asks InfinitePay again for a charge whose link failed. A ready link answers as is. */
+/** "Gerar link de novo": asks the checkout provider again for a charge whose link failed. A ready link answers as is. */
 export async function ensurePaymentLinkHandler(
   { identity, parameters }: IdRequest,
   { db, avatarFiles, charges, variables }: Service.Context<ChargeProvider>

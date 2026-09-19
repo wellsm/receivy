@@ -79,6 +79,15 @@ const STATUS_COLOR = {
   info: "text-info",
 } as const;
 
+/** The checkout provider's name and its contracted prepositions: PagBank is masculine, InfinitePay is feminine. */
+function providerNameOf(provider: PaymentProvider): { name: string; da: string; a: string } {
+  if (provider === PaymentProvider.PagSeguro) {
+    return { name: "PagBank", da: "do PagBank", a: "ao PagBank" };
+  }
+
+  return { name: "InfinitePay", da: "da InfinitePay", a: "à InfinitePay" };
+}
+
 /** What a debtor sees instead of actions once the charge no longer accepts a payment. */
 function payableGuidance(charge: ChargeDetail): string | null {
   if (charge.direction !== "payable") {
@@ -404,6 +413,8 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   // A debtor sends the proof; the payee of a conta a pagar only reviews the one the owner sent.
   const proofTile = proofsEnabled && charge.kind !== BillingKind.Record && (!receivable || (ownerPays(charge) && viewable));
   const name = charge.counterpartName || charge.recipient.name;
+  // Any checkout provider (InfinitePay, PagBank…) gets link tiles; only Pix has no checkout link.
+  const hasCheckoutLink = charge.payment !== null && charge.payment.provider !== PaymentProvider.Pix;
 
   // The sticky footer either sends a file or opens the one already sent; a declaration has nothing to view.
   let footerLabel = "Ver comprovante enviado";
@@ -474,8 +485,13 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
           <Text className="text-4xl font-extrabold tracking-tight text-primary-strong">{formatMoney(charge.amount)}</Text>
           <Text className={`text-xs font-medium ${STATUS_COLOR[status.tone]}`}>{status.text}</Text>
           {charge.state === ChargeState.Paid && charge.receiptUrl ? (
-            <Pressable accessibilityRole="link" accessibilityLabel="Comprovante InfinitePay" onPress={() => void Linking.openURL(charge.receiptUrl!)} className="self-center">
-              <Text className="text-sm font-semibold text-primary">Comprovante InfinitePay</Text>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={`Comprovante ${charge.payment ? providerNameOf(charge.payment.provider).name : "InfinitePay"}`}
+              onPress={() => void Linking.openURL(charge.receiptUrl!)}
+              className="self-center"
+            >
+              <Text className="text-sm font-semibold text-primary">Comprovante {charge.payment ? providerNameOf(charge.payment.provider).name : "InfinitePay"}</Text>
             </Pressable>
           ) : null}
         </View>
@@ -489,14 +505,14 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
               {!receivable && charge.payment?.provider === PaymentProvider.Pix && (
                 <ActionTile label="Copiar Chave Pix" icon={ICONS.copy} hint={ownBill ? "Copia a chave Pix da conta" : "Copia a chave Pix do credor"} disabled={busy} onPress={() => void copyValue(charge.payment!.value, "Chave Pix copiada.")} />
               )}
-              {charge.payment?.provider === PaymentProvider.InfinitePay && charge.paymentLink?.state === PaymentLinkState.Ready && (
-                <ActionTile label="Copiar link de pagamento" icon={ICONS.share} hint="Copia o link da InfinitePay" disabled={busy} onPress={() => void copyValue(charge.paymentLink!.url!, "Link copiado.")} />
+              {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Ready && (
+                <ActionTile label="Copiar link de pagamento" icon={ICONS.share} hint={`Copia o link ${providerNameOf(charge.payment!.provider).da}`} disabled={busy} onPress={() => void copyValue(charge.paymentLink!.url!, "Link copiado.")} />
               )}
-              {charge.payment?.provider === PaymentProvider.InfinitePay && charge.paymentLink?.state === PaymentLinkState.Failed && client.ensurePaymentLink && (
-                <ActionTile label="Gerar link de novo" icon={ICONS.edit} hint="Pede um novo link à InfinitePay" disabled={busy} onPress={() => void regenerateLink()} />
+              {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Failed && client.ensurePaymentLink && (
+                <ActionTile label="Gerar link de novo" icon={ICONS.edit} hint={`Pede um novo link ${providerNameOf(charge.payment!.provider).a}`} disabled={busy} onPress={() => void regenerateLink()} />
               )}
-              {charge.payment?.provider === PaymentProvider.InfinitePay && charge.paymentLink?.state === PaymentLinkState.Pending && (
-                <ActionTile label="Gerando link" icon={ICONS.edit} hint="O link da InfinitePay está sendo criado" disabled onPress={() => undefined} />
+              {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Pending && (
+                <ActionTile label="Gerando link" icon={ICONS.edit} hint={`O link ${providerNameOf(charge.payment!.provider).da} está sendo criado`} disabled onPress={() => undefined} />
               )}
               {proofTile && (
                 <ActionTile

@@ -55,7 +55,7 @@ describe('settleByProvider', () => {
     const provider = links(paid);
 
     expect(await settleByProvider(db, provider, notices as never, input)).toBe('settled');
-    expect(provider.checkPayment).toHaveBeenCalledWith({ provider: PaymentProvider.InfinitePay, identity: 'loja', orderNsu: 'c1', transactionNsu: 'tx-1', slug: 'inv-1' });
+    expect(provider.checkPayment).toHaveBeenCalledWith({ provider: PaymentProvider.InfinitePay, identity: 'loja', orderNsu: 'c1', transactionNsu: 'tx-1', slug: 'inv-1', expectedAmountCents: 1000 });
     expect(updates.at(-1)).toMatchObject({ state: ChargeState.Paid, provider_transaction_id: 'tx-1', provider_receipt_url: 'https://receipt/1' });
     expect(events.at(-1)).toMatchObject({ type: 'charge.paid', payload: { via: 'provider', provider: 'infinitepay', transactionNsu: 'tx-1', paidAmountCents: 1010, captureMethod: 'pix' } });
   });
@@ -187,7 +187,7 @@ describe('settleByProvider', () => {
     const provider = links(paid);
 
     expect(await settleByProvider(db, provider, pagNotices as never, pagInput)).toBe('settled');
-    expect(provider.checkPayment).toHaveBeenCalledWith({ provider: PaymentProvider.PagSeguro, credential: 'tok', orderId: 'ORDE_1', transactionNsu: 'tx-1' });
+    expect(provider.checkPayment).toHaveBeenCalledWith({ provider: PaymentProvider.PagSeguro, credential: 'tok', orderId: 'ORDE_1', transactionNsu: 'tx-1', chargeId: 'c1', expectedAmountCents: 1000 });
     expect(events.at(-1)).toMatchObject({ type: 'charge.paid' });
     expect(events.at(-1)?.['payload']).not.toHaveProperty('credential');
     expect(pushCalls.map((call) => call.title)).toContain('Pagamento recebido pelo PagBank');

@@ -148,7 +148,7 @@ describe('pagSeguroWebhookHandler', () => {
     );
 
     expect(response).toEqual({ status: 200, body: { received: true } });
-    expect(client.checkPayment).toHaveBeenCalledWith({ provider: PaymentProvider.PagSeguro, credential: 'tok', orderId: 'ORDE_1', transactionNsu: 'CHAR_1' });
+    expect(client.checkPayment).toHaveBeenCalledWith({ provider: PaymentProvider.PagSeguro, credential: 'tok', orderId: 'ORDE_1', transactionNsu: 'CHAR_1', chargeId: CHARGE_ID, expectedAmountCents: 1000 });
     expect(updates.at(-1)).toMatchObject({ state: ChargeState.Paid, provider_transaction_id: 'CHAR_1' });
     expect(events.at(-1)).toMatchObject({ type: 'charge.paid' });
   });

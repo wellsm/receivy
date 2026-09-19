@@ -39,6 +39,11 @@ export function pagSeguroCheckout(client: PagSeguroClient): CheckoutClient {
         return order;
       }
 
+      // Defence in depth: an order pointed at another of the seller's own charges never settles this one.
+      if (order.referenceId !== undefined && order.referenceId !== input.chargeId) {
+        return { status: 'checked', paid: false, amountCents: 0, paidAmountCents: 0, captureMethod: '' };
+      }
+
       const charge = order.charges.find((item) => item.id === input.transactionNsu);
 
       if (!charge) {

@@ -24,7 +24,10 @@ export type PagSeguroOrderCharge = {
   method: string;
 };
 
-export type PagSeguroOrderResult = { status: 'found'; charges: PagSeguroOrderCharge[] } | { status: 'unauthorized' } | { status: 'unavailable' };
+export type PagSeguroOrderResult =
+  | { status: 'found'; referenceId?: string; charges: PagSeguroOrderCharge[] }
+  | { status: 'unauthorized' }
+  | { status: 'unavailable' };
 
 export type PagSeguroInactivateResult = { status: 'done' } | { status: 'unauthorized' } | { status: 'unavailable' };
 

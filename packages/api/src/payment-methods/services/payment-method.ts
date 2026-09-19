@@ -127,12 +127,15 @@ export async function save(db: DbClient, clients: CheckoutClients, variables: Pa
       throw new HttpNotFoundError();
     }
 
+    // A clipboard paste from the PagBank panel often carries a trailing newline; trim before it counts as present.
+    const token = input.token?.trim();
+
     // A token is required whenever the row is not already PagBank: on create, and when flipping a Pix/InfinitePay row into PagBank.
-    if (!input.token && existing?.provider !== PaymentProvider.PagSeguro) {
+    if (!token && existing?.provider !== PaymentProvider.PagSeguro) {
       throw new HttpBadRequestError('Informe o token do PagBank.');
     }
 
-    if (input.token) {
+    if (token) {
       let keyB64: string;
 
       try {
@@ -143,7 +146,7 @@ export async function save(db: DbClient, clients: CheckoutClients, variables: Pa
 
       await enforceQuota(db, `pagseguro-verify:${ownerId}`, 10);
 
-      const verified = await clients[PaymentProvider.PagSeguro].verifyCredential(input.token);
+      const verified = await clients[PaymentProvider.PagSeguro].verifyCredential(token);
 
       if (verified.status === 'invalid') {
         throw new PagSeguroTokenInvalidError();
@@ -153,7 +156,7 @@ export async function save(db: DbClient, clients: CheckoutClients, variables: Pa
         throw new PaymentLinkUnavailableError();
       }
 
-      credentials = { kind: IntegrationCredentialKind.Token, ciphertext: seal(input.token, keyB64) };
+      credentials = { kind: IntegrationCredentialKind.Token, ciphertext: seal(token, keyB64) };
     }
   }
 

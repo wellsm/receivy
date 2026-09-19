@@ -52,6 +52,15 @@ const STATUS_COLOR = {
   info: "text-info",
 } as const;
 
+/** The checkout provider's name and its contracted prepositions: PagBank is masculine, InfinitePay is feminine. */
+function providerNameOf(provider: PaymentProvider): { name: string; da: string; a: string } {
+  if (provider === PaymentProvider.PagSeguro) {
+    return { name: "PagBank", da: "do PagBank", a: "ao PagBank" };
+  }
+
+  return { name: "InfinitePay", da: "da InfinitePay", a: "à InfinitePay" };
+}
+
 async function request<T>(path: string, init: RequestInit = {}, fallback = LOAD_ERROR): Promise<T> {
   const response = await browserFetch(path, init);
 
@@ -367,6 +376,8 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   const declaration = proof?.kind === ProofKind.Declaration;
   // The card picks the file; this button only sends it, so it stays disabled until there is one.
   const footerLabel = uploadAllowed ? (proof && !declaration ? "Enviar novo comprovante" : "Enviar comprovante") : "Ver comprovante enviado";
+  // Any checkout provider (InfinitePay, PagBank…) gets link tiles; only Pix has no checkout link.
+  const hasCheckoutLink = charge.payment !== null && charge.payment.provider !== PaymentProvider.Pix;
 
   return (
     <section className="flex flex-col gap-4 pb-4">
@@ -425,7 +436,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
 
           {charge.state === "paid" && charge.receiptUrl && (
             <a href={charge.receiptUrl} target="_blank" rel="noopener noreferrer" className="self-center text-sm font-semibold text-primary">
-              Comprovante InfinitePay
+              Comprovante {charge.payment ? providerNameOf(charge.payment.provider).name : "InfinitePay"}
             </a>
           )}
 
@@ -436,14 +447,14 @@ export function ChargeDetailScreen({ id }: { id: string }) {
                 {!receivable && charge.payment?.provider === PaymentProvider.Pix && (
                   <ActionTile label="Copiar Chave Pix" icon={Copy} hint="Copia a chave Pix do credor" disabled={busy} onClick={() => void copyValue(charge.payment!.value, "Chave Pix copiada.")} />
                 )}
-                {charge.payment?.provider === PaymentProvider.InfinitePay && charge.paymentLink?.state === PaymentLinkState.Ready && (
-                  <ActionTile label="Copiar link de pagamento" icon={Link2} hint="Copia o link da InfinitePay" disabled={busy} onClick={() => void copyValue(charge.paymentLink!.url!, "Link copiado.")} />
+                {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Ready && (
+                  <ActionTile label="Copiar link de pagamento" icon={Link2} hint={`Copia o link ${providerNameOf(charge.payment!.provider).da}`} disabled={busy} onClick={() => void copyValue(charge.paymentLink!.url!, "Link copiado.")} />
                 )}
-                {charge.payment?.provider === PaymentProvider.InfinitePay && charge.paymentLink?.state === PaymentLinkState.Failed && (
-                  <ActionTile label="Gerar link de novo" icon={RefreshCw} hint="Pede um novo link à InfinitePay" disabled={busy} onClick={() => void regenerateLink()} />
+                {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Failed && (
+                  <ActionTile label="Gerar link de novo" icon={RefreshCw} hint={`Pede um novo link ${providerNameOf(charge.payment!.provider).a}`} disabled={busy} onClick={() => void regenerateLink()} />
                 )}
-                {charge.payment?.provider === PaymentProvider.InfinitePay && charge.paymentLink?.state === PaymentLinkState.Pending && (
-                  <ActionTile label="Gerando link" icon={Loader2} hint="O link da InfinitePay está sendo criado" disabled onClick={() => {}} />
+                {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Pending && (
+                  <ActionTile label="Gerando link" icon={Loader2} hint={`O link ${providerNameOf(charge.payment!.provider).da} está sendo criado`} disabled onClick={() => {}} />
                 )}
                 {(!receivable || ownBill) && proof && !declaration && (
                   <ActionTile label="Comprovante" icon={Eye} tone="primary" hint="Abre o comprovante enviado" disabled={busy} onClick={() => router.push(`/charges/${id}/proof`)} />

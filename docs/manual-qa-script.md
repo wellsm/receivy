@@ -297,7 +297,7 @@ Local (`PAYMENT_METHOD_LINK=fake` no `packages/api/local.env`):
 
 - [ ] Como Ana, `/settings/payment-methods/new`, tipo `InfinitePay`, InfiniteTag `$qualquer`. Salvar. Esperado: aparece na lista dos meios ativos.
 - [ ] Nova conta a receber com Bruno usando esse meio. Abrir o detalhe da cobrança do Bruno. Esperado: tile `Copiar link de pagamento` (não `Copiar Chave Pix`).
-- [ ] Janela anônima, como Bruno (pagador): abrir o link público, tocar `Pagar`. Esperado: abre `/dev/infinitepay/<orderNsu>` (só existe em dev) com o botão `Simular pagamento`.
+- [ ] Janela anônima, como Bruno (pagador): abrir o link público, tocar `Pagar`. Esperado: abre `/dev/checkout/infinitepay/<orderNsu>` (só existe em dev) com o botão `Simular pagamento`.
 - [ ] `Simular pagamento`. Esperado: volta para `/pay/<token>?order_nsu=…&transaction_nsu=…&slug=…`, o `provider-return` da API fecha a cobrança e a página mostra confirmação (`Ver comprovante da InfinitePay`); Ana recebe o push "Pagamento confirmado".
 
 Um handle real só é exercitado com `PAYMENT_METHOD_LINK=live` (pode ser em `dev`, se o dono já ativou lá):
@@ -309,6 +309,29 @@ Um handle real só é exercitado com `PAYMENT_METHOD_LINK=live` (pode ser em `de
 Cobrança já cancelada:
 
 - [ ] Cancelar uma cobrança InfinitePay pendente. Pagar pelo link antigo (guardado antes de cancelar) mesmo assim. Esperado: cobrança segue `Cancelada` (não reabre), evento `charge.provider.ignored` na timeline, Ana recebe o push de aviso.
+
+## 23. Meios de pagamento / PagBank
+
+Local (`PAYMENT_METHOD_LINK=fake` e `PAYMENT_CREDENTIAL_KEY_B64` preenchidos no `packages/api/local.env`):
+
+- [ ] Como Ana, `/settings/payment-methods/new`, tipo `PagBank`, qualquer token, rótulo `Loja`. Salvar. Esperado: aparece na lista sem o botão `Copiar valor`; na tabela `integrations` há uma linha `pagseguro` de Ana com `credentials.ciphertext` começando por `v1.` (o token nunca aparece em claro).
+- [ ] Nova conta a receber com Bruno usando esse meio. Abrir o detalhe da cobrança. Esperado: tile `Copiar link de pagamento`; o rodapé do e-mail diz "O pagamento acontece pelo link do PagBank de quem cobra.".
+- [ ] Janela anônima, como Bruno: abrir o link público, tocar `Pagar`. Esperado: abre `/dev/checkout/pagseguro/<orderNsu>` com o botão `Simular pagamento`.
+- [ ] `Simular pagamento`. Esperado: volta para `/pay/<token>?returned=1` já com "Pagamento confirmado" (a rota fake da API liquidou antes do redirect); evento `charge.paid { provider: 'pagseguro' }` na timeline; Ana recebe o push "Pagamento confirmado".
+- [ ] Recarregar a página pública. Esperado: continua `Paga`, sem novo evento (replay ignorado).
+- [ ] Criar uma segunda cobrança PagBank e cancelá-la pelo detalhe. Esperado: evento `charge.payment_link.inactivated` na timeline; abrir o link antigo mostra a cobrança cancelada, sem `Pagar`.
+
+Token real só com `PAYMENT_METHOD_LINK=sandbox` (dev) e um token de sandbox do PagBank:
+
+- [ ] Cadastrar PagBank com um token inválido. Esperado: 422 `Token inválido ou sem permissão.`, nenhuma integração salva. Repetir 11 vezes seguidas: a 11ª responde 429 (cota `pagseguro-verify`).
+- [ ] Cadastrar com o token de sandbox válido. Esperado: salva.
+- [ ] Criar uma cobrança de R$ 1,00 com esse meio; abrir `Pagar` (checkout sandbox do PagBank, Pix ou cartão de teste) e pagar. Esperado: o retorno cai em `/pay/<token>?returned=1` com o aviso "Pagamento em confirmação" que se recarrega sozinho; ao chegar o webhook, evento `charge.paid { provider: 'pagseguro' }`, página `Paga`, push para Ana.
+- [ ] Editar o meio sem informar token (placeholder `•••••• (mantido)`), só o rótulo. Esperado: salva sem revalidar; cobranças novas continuam ganhando link.
+
+Credencial revogada:
+
+- [ ] Arquivar o meio PagBank (o único de Ana). Esperado: `integrations.revoked_at` preenchido. Criar uma cobrança nova que ainda aponte para esse meio (via edição de uma conta existente) — esperado: `payment_link_state = failed`, evento `charge.payment_link.failed { reason: 'no_credential' }`, e-mail sem link.
+- [ ] Com dois meios PagBank cadastrados, arquivar um. Esperado: a integração segue ativa (o outro meio ainda a usa); só o arquivamento do último revoga.
 
 ## Divergências
 

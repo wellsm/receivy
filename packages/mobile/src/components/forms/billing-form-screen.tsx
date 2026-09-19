@@ -113,7 +113,7 @@ type BillingFormScreenProps = {
 const FROZEN_NOTE = "Contas já geradas só permitem categoria, Pix e lembretes.";
 const LOAD_ERROR = "Não foi possível carregar os dados.";
 const PIX_GATE_TITLE = "Cadastre um meio de pagamento";
-const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com o seu Pix ou sua InfinitePay. Cadastre um e volte para continuar de onde parou.";
+const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com o seu Pix, sua InfinitePay ou seu PagBank. Cadastre um e volte para continuar de onde parou.";
 const NO_CONTACT_KEY = "Este contato ainda não tem chave Pix. Cadastre no contato.";
 const NO_VALUES: Record<string, string> = {};
 

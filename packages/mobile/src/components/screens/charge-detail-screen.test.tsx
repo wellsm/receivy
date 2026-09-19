@@ -117,6 +117,41 @@ describe("ChargeDetailScreen", () => {
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith("https://checkout/abc");
   });
 
+  it("shows the payment-link tile for a PagBank charge", async () => {
+    const client = {
+      charge: jest.fn().mockResolvedValue(
+        charge({
+          direction: Direction.Payable,
+          payment: { provider: PaymentProvider.PagSeguro, kind: null, value: "Loja PagBank", label: "PagBank" },
+          paymentLink: { url: "https://checkout/pagbank", state: PaymentLinkState.Ready },
+        }),
+      ),
+      cancel: jest.fn(),
+      pay: jest.fn(),
+      publicLink: jest.fn(),
+      publicChargeUrl: jest.fn(),
+    };
+
+    await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
+
+    expect(await screen.findByLabelText("Copiar link de pagamento")).toBeOnTheScreen();
+  });
+
+  it("hides the payment-link tile for a Pix charge even when a stale link is present", async () => {
+    const client = {
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Payable, paymentLink: { url: "https://checkout/pix", state: PaymentLinkState.Ready } })),
+      cancel: jest.fn(),
+      pay: jest.fn(),
+      publicLink: jest.fn(),
+      publicChargeUrl: jest.fn(),
+    };
+
+    await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
+    await screen.findByText("Aluguel");
+
+    expect(screen.queryByLabelText("Copiar link de pagamento")).toBeNull();
+  });
+
   it("asks for a new link when the last one failed", async () => {
     const ensure = jest.fn().mockResolvedValue(charge({ paymentLink: { url: "https://checkout/new", state: PaymentLinkState.Ready } }));
     const client = {

@@ -1,4 +1,4 @@
-import type { BillingDetail, BillingGuestAction, BillingInput, BillingInvite, BillingPatch, BillingsPage, ChargeDetail, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, ContactLedger, ListCharge, PublicLink, ProofUploadTicket, ProofUploadInput } from "@receivy/common";
+import type { BillingDetail, BillingGuestAction, BillingInput, BillingInvite, BillingPatch, BillingsPage, ChargeDetail, PaymentMethod, PaymentMethodInput, PaymentMethodsPage, ContactLedger, ListCharge, PlanInvoice, PlanSummary, PublicLink, ProofUploadTicket, ProofUploadInput } from "@receivy/common";
 import { authClient } from "@/auth/client";
 import { apiErrorMessage } from "@receivy/common";
 
@@ -46,6 +46,8 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     savePaymentMethod(input: PaymentMethodInput, id?: string) { return request<PaymentMethod>(id ? `payment-methods/${id}` : "payment-methods", { method: id ? "PATCH" : "POST", body: JSON.stringify(input) }); },
     defaultPaymentMethod(id: string) { return request<PaymentMethod>(`payment-methods/${id}/default`, { method: "POST" }); },
     archivePaymentMethod(id: string) { return request<void>(`payment-methods/${id}/archive`, { method: "POST" }); },
+    plan() { return request<PlanSummary>("plan"); },
+    planInvoices() { return request<{ invoices: PlanInvoice[] }>("plan/invoices"); },
     charge(id: string) { return request<ChargeDetail>(`charges/${id}`); },
     startProofUpload(id: string, input: ProofUploadInput) { return request<ProofUploadTicket>(`charges/${id}/proof`, { method: "POST", body: JSON.stringify(input) }); },
     completeProofUpload(id: string) { return request<ChargeDetail>(`charges/${id}/proof/complete`, { method: "POST" }, "Não foi possível confirmar o envio."); },

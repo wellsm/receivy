@@ -333,7 +333,7 @@ Credencial revogada:
 - [ ] Arquivar o meio PagBank (o único de Ana). Esperado: `integrations.revoked_at` preenchido. Criar uma cobrança nova que ainda aponte para esse meio (via edição de uma conta existente) — esperado: `payment_link_state = failed`, evento `charge.payment_link.failed { reason: 'no_credential' }`, e-mail sem link.
 - [ ] Com dois meios PagBank cadastrados, arquivar um. Esperado: a integração segue ativa (o outro meio ainda a usa); só o arquivamento do último revoga.
 
-## 24. Plano pago (API)
+## 24. Plano pago (API e UI)
 
 Local (`PLAN_BILLING=fake` no `packages/api/local.env`):
 
@@ -347,6 +347,28 @@ Dev (`PLAN_BILLING=live` no `packages/api/dev.env`), com `stripe listen --forwar
 - [ ] Assinar pelo web com o cartão de teste `4242 4242 4242 4242`. Esperado: evento `plan.subscribed` na timeline da conta.
 - [ ] Cancelar a assinatura no dashboard do Stripe. Esperado: evento `plan.canceled` na timeline da conta; billings em excesso ou com link de pagamento pausadas com evento `billing.paused { reason: 'plan' }`.
 - [ ] Reenviar o mesmo evento (`stripe events resend <event-id>`). Esperado: nenhum segundo downgrade (evento `plan.canceled` continua único na timeline).
+
+Web local (`PLAN_BILLING=fake`, sem `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`):
+
+- [ ] Abrir `/settings/plan` como Ana (plano Grátis). Esperado: mostra Grátis, a barra de uso e a mensagem "Assinaturas indisponíveis neste ambiente." (sem botão "Assinar o Básico").
+- [ ] Com as 5 cobranças indefinidas já usadas, criar uma 6ª em `/billings/new`. Esperado: abre o paywall "Plano Básico" com a mensagem vinda da API.
+- [ ] Em `/settings/payment-methods`, abrir o chip InfinitePay com cadeado. Esperado: abre o mesmo paywall "Plano Básico".
+
+Web dev (`PLAN_BILLING=live`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` preenchida, `stripe listen --forward-to <api>/webhooks/stripe` rodando):
+
+- [ ] Em `/settings/plan`, clicar "Assinar o Básico". Esperado: abre o Payment Element inline.
+- [ ] Preencher o cartão `4242 4242 4242 4242` e confirmar. Esperado: mostra "Confirmando pagamento…" e, em até 30 s, "Plano Básico ativo".
+- [ ] Repetir a assinatura (conta nova) com o cartão `4000 0000 0000 0002`. Esperado: alerta de recusa do Stripe no próprio Payment Element; o formulário continua na tela.
+- [ ] Com o plano Básico ativo, clicar "Trocar cartão". Esperado: abre o Payment Element em modo setup e troca o cartão salvo.
+- [ ] Clicar "Cancelar ao fim do período". Esperado: o botão vira "Retomar" e aparece "Cancela em …" com a data.
+- [ ] Clicar "Retomar". Esperado: volta a "Cancelar ao fim do período" e some o "Cancela em …".
+- [ ] Com pelo menos uma fatura paga, conferir a lista "Faturas". Esperado: cada linha mostra a data, o valor e um link "PDF".
+
+Mobile (leitura, mesmo ambiente do web dev):
+
+- [ ] Abrir o Perfil. Esperado: card "Plano Grátis" (ou "Plano Básico", conforme o plano) com o uso de cobranças indefinidas e a nota "Gerencie seu plano no site.".
+- [ ] No Perfil → Meios de pagamento, tocar no chip InfinitePay com o plano Grátis. Esperado: mensagem "Limite do plano grátis. Gerencie seu plano no site.", sem botão nem link.
+- [ ] Com as 5 cobranças indefinidas usadas, tentar criar a 6ª. Esperado: mostra a mensagem de limite com o sufixo "Gerencie seu plano no site.", sem botão de ação.
 
 ## Divergências
 

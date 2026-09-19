@@ -75,7 +75,11 @@ API (`packages/api/dev.env.example` → `dev.env`, git-ignored; `prd.env` análo
 
 Web (`packages/web/.env.example`): `EZ4_API_URL` (API do stage), `WEB_APP_URL`
 (origem pública do próprio web; obrigatória atrás de proxy/container),
-`PROOF_UPLOAD_ORIGIN` (origem S3 de upload do stage), `NEXT_PUBLIC_OPERATOR_CONTACT`.
+`PROOF_UPLOAD_ORIGIN` (origem S3 de upload do stage), `NEXT_PUBLIC_OPERATOR_CONTACT`,
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (chave publicável do Stripe, segura no
+navegador; vazia esconde assinar/trocar cartão), `NEXT_PUBLIC_PLAN_BASIC_PRICE_CENTS`
+(preço do plano Básico só para exibição, em centavos; a cobrança real usa o
+preço cadastrado no Stripe).
 
 Mobile (`packages/mobile/.env.example` → `.env.local` ou variáveis do perfil EAS):
 `EXPO_PUBLIC_EZ4_API_URL` (API do stage), `EXPO_PUBLIC_WEB_URL` (web do stage).

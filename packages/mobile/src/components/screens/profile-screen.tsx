@@ -2,9 +2,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, THEME_PREFERENCE_OPTIONS, type AuthUser } from "@receivy/common";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, momentText, planName, PlanTier, THEME_PREFERENCE_OPTIONS, type AuthUser, type PlanSummary } from "@receivy/common";
 import { pickAndUploadAvatar } from "@/account/avatar";
 import { accountClient, type AccountClient } from "@/account/client";
+import { financialClient, type FinancialClient } from "@/financial/client";
 import { profileStore, type ProfileStore } from "@/account/profile";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
@@ -16,6 +17,7 @@ import { useThemePreference } from "@/theme/preference";
 type ProfileScreenProps = {
   client?: Pick<AccountClient, "profile" | "save" | "logout" | "erase" | "startAvatarUpload" | "completeAvatarUpload">;
   store?: Pick<ProfileStore, "remember">;
+  plans?: Pick<FinancialClient, "plan">;
   version?: string;
   onOpenContacts?: () => void;
   onOpenPaymentMethods?: () => void;
@@ -31,6 +33,7 @@ const ICONS = {
   group: require("../../../assets/images/auth/group.svg"),
   key: require("../../../assets/images/auth/key.svg"),
   logout: require("../../../assets/images/auth/logout.svg"),
+  star: require("../../../assets/images/auth/star.svg"),
   trash: require("../../../assets/images/auth/trash.svg"),
   warning: require("../../../assets/images/auth/warning.svg"),
 } as const;
@@ -104,6 +107,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export function ProfileScreen({
   client = accountClient,
   store = profileStore,
+  plans = financialClient,
   version = Constants.expoConfig?.version ?? "1.0.0",
   onOpenContacts,
   onOpenPaymentMethods,
@@ -120,6 +124,7 @@ export function ProfileScreen({
   const [photoBusy, setPhotoBusy] = useState(false);
   const [ended, setEnded] = useState(false);
   const [legal, setLegal] = useState<LegalKind | null>(null);
+  const [plan, setPlan] = useState<PlanSummary | null>(null);
   const [themePreference, chooseTheme] = useThemePreference();
 
   useEffect(() => {
@@ -141,6 +146,19 @@ export function ProfileScreen({
       active = false;
     };
   }, [client]);
+
+  useEffect(() => {
+    let active = true;
+
+    plans.plan().then(
+      (summary) => active && setPlan(summary),
+      () => active && setPlan(null),
+    );
+
+    return () => {
+      active = false;
+    };
+  }, [plans]);
 
   async function saveName() {
     const name = draft.trim();
@@ -320,6 +338,40 @@ export function ProfileScreen({
                   </Pressable>
                 )}
               </View>
+
+              {plan ? (
+                <Section title="PLANO">
+                  <View className="rounded-[20px] border border-outline bg-surface p-4">
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-base font-bold text-ink">{`Plano ${planName(plan.plan)}`}</Text>
+                      <Image source={ICONS.star} tintColor={colors.primaryStrong} style={{ width: 18, height: 18 }} />
+                    </View>
+
+                    <Text className="mt-2 text-sm text-ink">{`${plan.usage.indefinite.used} de ${plan.usage.indefinite.limit} cobranças indefinidas`}</Text>
+
+                    <View className="mt-2 h-2 overflow-hidden rounded-full bg-surface-muted">
+                      {(() => {
+                        const ratio = plan.usage.indefinite.used / Math.max(1, plan.usage.indefinite.limit);
+
+                        return (
+                          <View
+                            className={ratio >= 0.8 ? "h-full bg-warning" : "h-full bg-primary"}
+                            style={{ width: `${Math.min(100, ratio * 100)}%` }}
+                          />
+                        );
+                      })()}
+                    </View>
+
+                    {plan.plan === PlanTier.Basic && plan.currentPeriodEnd ? (
+                      <Text className="mt-2 text-sm text-muted">
+                        {plan.cancelAtPeriodEnd ? `Cancela em ${momentText(plan.currentPeriodEnd)}` : `Renova em ${momentText(plan.currentPeriodEnd)}`}
+                      </Text>
+                    ) : null}
+
+                    <Text className="mt-2 text-xs text-muted">Gerencie seu plano no site.</Text>
+                  </View>
+                </Section>
+              ) : null}
 
               <Section title="GERENCIAMENTO">
                 <View className="overflow-hidden rounded-[20px] border border-outline bg-surface">

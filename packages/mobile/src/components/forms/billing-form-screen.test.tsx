@@ -2,6 +2,7 @@ import { addCalendarDays, BillingCategory, BillingFrequency, BillingKind, Billin
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { FinancialRequestError } from "@/financial/client";
 import { clearDraft, patchDraft, saveDraft, takeDraft } from "@/financial/draft-store";
+import { PLAN_SITE_SUFFIX } from "@/financial/plan-copy";
 import { BillingFormScreen } from "@/components/forms/billing-form-screen";
 
 let mockKeys = 0;
@@ -970,6 +971,18 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Contato arquivado.");
+    expect(screen.getByLabelText("Título")).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Tentar criar novamente" })).toBeNull();
+  });
+
+  it("explains the plan limit and keeps the draft when the API answers 402", async () => {
+    const createBilling = jest.fn().mockRejectedValue(new FinancialRequestError("Você já tem 5 cobranças indefinidas ativas no plano Grátis.", 402));
+
+    await quickForm(financialApi({ createBilling }));
+    await fillQuickBilling();
+    await fireEvent.press(screen.getByRole("button", { name: "Criar conta" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(`Você já tem 5 cobranças indefinidas ativas no plano Grátis.${PLAN_SITE_SUFFIX}`);
     expect(screen.getByLabelText("Título")).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Tentar criar novamente" })).toBeNull();
   });

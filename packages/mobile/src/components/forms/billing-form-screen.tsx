@@ -54,6 +54,7 @@ import { ScopeModal } from "@/components/app/scope-modal";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { financialClient, FinancialRequestError, type FinancialClient } from "@/financial/client";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
+import { PLAN_SITE_SUFFIX } from "@/financial/plan-copy";
 import { contactsClient } from "@/contacts/client";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { CategorySelect } from "@/components/app/category-select";
@@ -666,7 +667,13 @@ export function BillingFormScreen({
       const uncertain = sent.uncertain || !(reason instanceof FinancialRequestError) || reason.status >= 500;
 
       setAttempt(uncertain ? { ...sent, uncertain: true } : null);
-      setError(reason instanceof Error ? reason.message : "Não foi possível salvar a conta.");
+      setError(
+        reason instanceof FinancialRequestError && reason.status === 402
+          ? `${reason.message}${PLAN_SITE_SUFFIX}`
+          : reason instanceof Error
+            ? reason.message
+            : "Não foi possível salvar a conta.",
+      );
       setBusy(false);
     }
   }

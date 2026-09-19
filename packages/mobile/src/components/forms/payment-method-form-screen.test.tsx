@@ -1,9 +1,10 @@
-import { EMPTY_BILLING_DRAFT, PaymentProvider, PixKeyType, UserStatus, type AuthUser, type PaymentMethod } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, PaymentProvider, PixKeyType, PlanTier, UserStatus, type AuthUser, type PaymentMethod, type PlanSummary } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 import { Linking } from "react-native";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
 import { FinancialRequestError } from "@/financial/client";
+import { PLAN_SITE_NOTE, PLAN_SITE_SUFFIX } from "@/financial/plan-copy";
 import { PaymentMethodFormScreen } from "@/components/forms/payment-method-form-screen";
 
 jest.mock("expo-clipboard", () => ({ setStringAsync: jest.fn().mockResolvedValue(true), getStringAsync: jest.fn().mockResolvedValue("") }));
@@ -23,11 +24,28 @@ function method(overrides: Partial<PaymentMethod> = {}): PaymentMethod {
   };
 }
 
-function client(items: PaymentMethod[] = []) {
+function planSummary(overrides: Partial<PlanSummary> = {}): PlanSummary {
+  return {
+    plan: PlanTier.Free,
+    status: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+    usage: { indefinite: { used: 0, limit: 5 } },
+    checkoutLinks: false,
+    card: null,
+    ...overrides,
+  };
+}
+
+const freeSummary = planSummary();
+const basicSummary = planSummary({ plan: PlanTier.Basic, checkoutLinks: true, usage: { indefinite: { used: 0, limit: 30 } } });
+
+function client(items: PaymentMethod[] = [], summary: PlanSummary = freeSummary) {
   return {
     paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: items }),
     savePaymentMethod: jest.fn().mockResolvedValue(method({ id: "saved" })),
     defaultPaymentMethod: jest.fn().mockResolvedValue(method()),
+    plan: jest.fn().mockResolvedValue(summary),
   };
 }
 
@@ -206,7 +224,7 @@ describe("PaymentMethodFormScreen", () => {
   });
 
   it("saves an InfiniteTag", async () => {
-    const api = client([]);
+    const api = client([], basicSummary);
 
     await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
     await fireEvent.press(screen.getByRole("radio", { name: "InfinitePay" }));
@@ -217,7 +235,7 @@ describe("PaymentMethodFormScreen", () => {
   });
 
   it("refuses an empty InfiniteTag instead of letting the API answer for it", async () => {
-    const api = client([]);
+    const api = client([], basicSummary);
 
     await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
     await fireEvent.press(screen.getByRole("radio", { name: "InfinitePay" }));
@@ -228,7 +246,7 @@ describe("PaymentMethodFormScreen", () => {
   });
 
   it("shows the InfinitePay switch when the checkout is off", async () => {
-    const api = client([]);
+    const api = client([], basicSummary);
 
     api.savePaymentMethod.mockRejectedValue(new FinancialRequestError("Ative o checkout externo no app da InfinitePay e tente de novo.", 422));
     await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
@@ -246,7 +264,7 @@ describe("PaymentMethodFormScreen", () => {
   });
 
   it("clears the 422 switch when the provider chip is toggled away and back", async () => {
-    const api = client([]);
+    const api = client([], basicSummary);
 
     api.savePaymentMethod.mockRejectedValue(new FinancialRequestError("Ative o checkout externo no app da InfinitePay e tente de novo.", 422));
     await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
@@ -264,7 +282,7 @@ describe("PaymentMethodFormScreen", () => {
   });
 
   it("shows the PagBank token field with a hidden input", async () => {
-    await render(<PaymentMethodFormScreen client={client()} profile={profile()} />);
+    await render(<PaymentMethodFormScreen client={client([], basicSummary)} profile={profile()} />);
 
     await fireEvent.press(screen.getByRole("radio", { name: "PagBank" }));
 
@@ -272,7 +290,7 @@ describe("PaymentMethodFormScreen", () => {
   });
 
   it("saves a PagBank token and label", async () => {
-    const api = client([]);
+    const api = client([], basicSummary);
 
     await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
     await fireEvent.press(screen.getByRole("radio", { name: "PagBank" }));
@@ -284,7 +302,7 @@ describe("PaymentMethodFormScreen", () => {
   });
 
   it("refuses an empty PagBank token instead of letting the API answer for it", async () => {
-    const api = client([]);
+    const api = client([], basicSummary);
 
     await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
     await fireEvent.press(screen.getByRole("radio", { name: "PagBank" }));
@@ -295,7 +313,7 @@ describe("PaymentMethodFormScreen", () => {
   });
 
   it("shows only the message on a PagBank 422, without the InfinitePay button", async () => {
-    const api = client([]);
+    const api = client([], basicSummary);
 
     api.savePaymentMethod.mockRejectedValue(new FinancialRequestError("Token do PagBank inválido.", 422));
     await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
@@ -310,10 +328,43 @@ describe("PaymentMethodFormScreen", () => {
   it("pastes the clipboard into the PagBank token field", async () => {
     jest.mocked(Clipboard.getStringAsync).mockResolvedValue("tok-from-clipboard");
 
-    await render(<PaymentMethodFormScreen client={client()} profile={profile()} />);
+    await render(<PaymentMethodFormScreen client={client([], basicSummary)} profile={profile()} />);
     await fireEvent.press(screen.getByRole("radio", { name: "PagBank" }));
     await fireEvent.press(screen.getByLabelText("Colar"));
 
     await waitFor(() => expect(screen.getByLabelText("Token do PagBank")).toHaveDisplayValue("tok-from-clipboard"));
+  });
+
+  it("disables InfinitePay and PagBank on the free plan and explains why", async () => {
+    await render(<PaymentMethodFormScreen client={client([], freeSummary)} profile={profile()} />);
+
+    const chip = await screen.findByRole("radio", { name: "InfinitePay" });
+
+    await waitFor(() => expect(chip.props.accessibilityState).toMatchObject({ disabled: true }));
+
+    await fireEvent.press(chip);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(PLAN_SITE_NOTE);
+    expect(screen.queryByRole("button", { name: "Abrir configurações da InfinitePay" })).toBeNull();
+    expect(screen.getByRole("radio", { name: "Pix" }).props.accessibilityState).toMatchObject({ checked: true });
+    expect(screen.getByRole("radio", { name: "InfinitePay" }).props.accessibilityState).toMatchObject({ checked: false });
+  });
+
+  it("keeps the chips enabled on the paid plan", async () => {
+    await render(<PaymentMethodFormScreen client={client([], basicSummary)} profile={profile()} />);
+
+    await waitFor(() => expect(screen.getByRole("radio", { name: "PagBank" }).props.accessibilityState?.disabled).toBeFalsy());
+  });
+
+  it("shows the site note when the API answers 402 on save", async () => {
+    const api = client([], basicSummary);
+
+    api.savePaymentMethod.mockRejectedValue(new FinancialRequestError("Links de pagamento fazem parte do plano Básico.", 402));
+    await render(<PaymentMethodFormScreen client={api} profile={profile()} />);
+    await fireEvent.press(screen.getByRole("radio", { name: "InfinitePay" }));
+    await fireEvent.changeText(screen.getByLabelText("InfiniteTag"), "loja");
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(`Links de pagamento fazem parte do plano Básico.${PLAN_SITE_SUFFIX}`);
   });
 });

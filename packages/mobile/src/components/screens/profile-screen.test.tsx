@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { ACCOUNT_DELETED } from "@receivy/common";
+import { ACCOUNT_DELETED, PlanTier, SubscriptionStatus } from "@receivy/common";
 import { ProfileScreen } from "@/components/screens/profile-screen";
+import { financialClient } from "@/financial/client";
 
 jest.mock("@/navigation/tab-header", () => ({ useTabHeader: () => {} }));
 jest.mock("@/account/avatar", () => ({ pickAndUploadAvatar: jest.fn(async () => ({ url: "https://bucket.test/new", version: "v2" })) }));
@@ -33,13 +34,18 @@ function client(
 }
 
 const store = { remember: jest.fn() };
+const plans = { plan: jest.fn().mockRejectedValue(new Error("offline")) };
 
 describe("ProfileScreen", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("shows identity, edits the name inline and remembers it", async () => {
     const save = jest.fn().mockResolvedValue({ ...user, name: "Lucas S." });
     const remember = jest.fn();
 
-    await render(<ProfileScreen client={client({ save })} store={{ remember }} version="1.0.0" />);
+    await render(<ProfileScreen client={client({ save })} store={{ remember }} plans={plans} version="1.0.0" />);
 
     expect(await screen.findByText("Lucas Silveira")).toBeOnTheScreen();
     expect(screen.getByText("L")).toBeOnTheScreen();
@@ -65,6 +71,7 @@ describe("ProfileScreen", () => {
       <ProfileScreen
         client={client()}
         store={store}
+        plans={plans}
         version="1.0.0"
         onOpenContacts={onOpenContacts}
         onOpenPaymentMethods={onOpenPaymentMethods}
@@ -89,7 +96,7 @@ describe("ProfileScreen", () => {
     const onLoggedOut = jest.fn();
     const api = client();
 
-    await render(<ProfileScreen client={api} store={store} version="1.0.0" onLoggedOut={onLoggedOut} />);
+    await render(<ProfileScreen client={api} store={store} plans={plans} version="1.0.0" onLoggedOut={onLoggedOut} />);
 
     await fireEvent.press(await screen.findByLabelText("Sair da conta"));
 
@@ -111,7 +118,7 @@ describe("ProfileScreen", () => {
     const onLoggedOut = jest.fn();
     const api = client();
 
-    await render(<ProfileScreen client={api} store={store} version="1.0.0" onLoggedOut={onLoggedOut} />);
+    await render(<ProfileScreen client={api} store={store} plans={plans} version="1.0.0" onLoggedOut={onLoggedOut} />);
 
     await fireEvent.press(await screen.findByLabelText("Excluir conta"));
 
@@ -128,7 +135,7 @@ describe("ProfileScreen", () => {
   });
 
   it("changes the photo through the picker", async () => {
-    await render(<ProfileScreen client={client()} store={store} version="1.0.0" />);
+    await render(<ProfileScreen client={client()} store={store} plans={plans} version="1.0.0" />);
 
     await fireEvent.press(await screen.findByLabelText("Trocar foto"));
 
@@ -139,7 +146,7 @@ describe("ProfileScreen", () => {
     const { Uniwind } = jest.requireMock("uniwind") as { Uniwind: { setTheme: jest.Mock } };
     const SecureStore = jest.requireMock("expo-secure-store") as { setItem: jest.Mock };
 
-    await render(<ProfileScreen client={client()} store={store} version="1.0.0" />);
+    await render(<ProfileScreen client={client()} store={store} plans={plans} version="1.0.0" />);
     await screen.findByText("Lucas Silveira");
 
     expect(screen.getByRole("radio", { name: "Sistema" })).toBeChecked();
@@ -149,5 +156,45 @@ describe("ProfileScreen", () => {
     expect(screen.getByRole("radio", { name: "Escuro" })).toBeChecked();
     expect(SecureStore.setItem).toHaveBeenCalledWith("receivy.theme", "dark");
     expect(Uniwind.setTheme).toHaveBeenCalledWith("dark");
+  });
+
+  it("shows the free plan card with its usage and no purchase action", async () => {
+    const plans = { plan: jest.fn().mockResolvedValue({ plan: PlanTier.Free, status: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, usage: { indefinite: { used: 3, limit: 5 } }, checkoutLinks: false, card: null }) };
+
+    await render(<ProfileScreen client={client()} store={store} plans={plans} version="1.0.0" />);
+
+    expect(await screen.findByText("Plano Grátis")).toBeTruthy();
+    expect(screen.getByText("3 de 5 cobranças indefinidas")).toBeTruthy();
+    expect(screen.getByText("Gerencie seu plano no site.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Assinar/ })).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("shows the paid plan with its renewal date", async () => {
+    const plans = { plan: jest.fn().mockResolvedValue({ plan: PlanTier.Basic, status: SubscriptionStatus.Active, currentPeriodEnd: "2026-10-19T12:00:00.000Z", cancelAtPeriodEnd: false, usage: { indefinite: { used: 12, limit: 30 } }, checkoutLinks: true, card: { brand: "visa", last4: "4242" } }) };
+
+    await render(<ProfileScreen client={client()} store={store} plans={plans} version="1.0.0" />);
+
+    expect(await screen.findByText("Plano Básico")).toBeTruthy();
+    expect(screen.getByText(/Renova em/)).toBeTruthy();
+  });
+
+  it("stays quiet when the plan cannot be read", async () => {
+    const plans = { plan: jest.fn().mockRejectedValue(new Error("offline")) };
+
+    await render(<ProfileScreen client={client()} store={store} plans={plans} version="1.0.0" />);
+
+    expect(await screen.findByText("Meios de pagamento")).toBeTruthy();
+    expect(screen.queryByText(/Plano /)).toBeNull();
+  });
+
+  it("wires the default financialClient into the plan card", async () => {
+    const freeSummary = { plan: PlanTier.Free, status: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, usage: { indefinite: { used: 3, limit: 5 } }, checkoutLinks: false, card: null };
+
+    jest.spyOn(financialClient, "plan").mockResolvedValue(freeSummary);
+
+    await render(<ProfileScreen client={client()} store={store} version="1.0.0" />);
+
+    expect(await screen.findByText("Plano Grátis")).toBeTruthy();
   });
 });

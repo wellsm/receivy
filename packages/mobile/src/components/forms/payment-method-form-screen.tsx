@@ -1,4 +1,4 @@
-import { pixKeyField, PaymentProvider, type PaymentMethod, type PaymentMethodInput, PixKeyType } from "@receivy/common";
+import { pixKeyField, PaymentProvider, type PaymentMethod, type PaymentMethodInput, PixKeyType, type PlanSummary } from "@receivy/common";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
@@ -8,9 +8,10 @@ import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { financialClient, FinancialRequestError, type FinancialClient } from "@/financial/client";
 import { patchDraft } from "@/financial/draft-store";
+import { PLAN_SITE_NOTE, PLAN_SITE_SUFFIX } from "@/financial/plan-copy";
 import { useThemeColors } from "@/theme/colors";
 
-type PaymentMethodFormClient = Pick<FinancialClient, "paymentMethods" | "savePaymentMethod" | "defaultPaymentMethod">;
+type PaymentMethodFormClient = Pick<FinancialClient, "paymentMethods" | "savePaymentMethod" | "defaultPaymentMethod" | "plan">;
 
 type PaymentMethodFormScreenProps = {
   client?: PaymentMethodFormClient;
@@ -51,6 +52,7 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [errorStatus, setErrorStatus] = useState(0);
+  const [plan, setPlan] = useState<PlanSummary | null>(null);
 
   // A ref, not state: the list request reads it from the closure created at mount.
   const defaultTouched = useRef(false);
@@ -71,6 +73,27 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
         setMakeDefault((current) => (defaultTouched.current ? current : !page.paymentMethods.some((method) => !method.archivedAt)));
       })
       .catch(() => undefined);
+
+    return () => {
+      live = false;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    let live = true;
+
+    void client
+      .plan()
+      .then((summary) => {
+        if (live) {
+          setPlan(summary);
+        }
+      })
+      .catch(() => {
+        if (live) {
+          setPlan(null);
+        }
+      });
 
     return () => {
       live = false;
@@ -102,6 +125,7 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
     };
   }, [profile]);
 
+  const locked = plan ? !plan.checkoutLinks : false;
   const spec = pixKeyField(type);
   // Most people register their own e-mail or phone, so an untouched field shows the
   // account value of that type. It stays editable: typing — or clearing it — takes
@@ -190,7 +214,13 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
 
       onSaved?.(saved);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : SAVE_ERROR);
+      setError(
+        reason instanceof FinancialRequestError && reason.status === 402
+          ? `${reason.message}${PLAN_SITE_SUFFIX}`
+          : reason instanceof Error
+            ? reason.message
+            : SAVE_ERROR,
+      );
       setErrorStatus(reason instanceof FinancialRequestError ? reason.status : 0);
     } finally {
       setBusy(false);
@@ -206,21 +236,28 @@ export function PaymentMethodFormScreen({ client = financialClient, profile = pr
           <Text className="text-xs font-semibold text-muted">Tipo de meio</Text>
           <View accessibilityRole="radiogroup" className="flex-row gap-2">
             {[
-              { value: PaymentProvider.Pix, label: "Pix" },
-              { value: PaymentProvider.InfinitePay, label: "InfinitePay" },
-              { value: PaymentProvider.PagSeguro, label: "PagBank" },
+              { value: PaymentProvider.Pix, label: "Pix", locked: false },
+              { value: PaymentProvider.InfinitePay, label: "InfinitePay", locked },
+              { value: PaymentProvider.PagSeguro, label: "PagBank", locked },
             ].map((option) => (
               <Pressable
                 key={option.value}
                 accessibilityRole="radio"
                 accessibilityLabel={option.label}
-                accessibilityState={{ checked: provider === option.value }}
+                accessibilityState={{ checked: provider === option.value, disabled: option.locked }}
                 onPress={() => {
+                  if (option.locked) {
+                    setError(PLAN_SITE_NOTE);
+                    setErrorStatus(402);
+
+                    return;
+                  }
+
                   setProvider(option.value);
                   setError("");
                   setErrorStatus(0);
                 }}
-                className={`min-h-11 flex-1 items-center justify-center rounded-xl border px-3 ${provider === option.value ? "border-primary bg-primary-soft/40" : "border-outline/40 bg-surface"}`}
+                className={`min-h-11 flex-1 items-center justify-center rounded-xl border px-3 ${provider === option.value ? "border-primary bg-primary-soft/40" : "border-outline/40 bg-surface"} ${option.locked ? "opacity-60" : ""}`}
               >
                 <Text className={`text-sm font-semibold ${provider === option.value ? "text-primary-strong" : "text-ink"}`}>{option.label}</Text>
               </Pressable>

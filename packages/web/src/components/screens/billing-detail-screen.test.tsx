@@ -290,7 +290,7 @@ it("copies the Pix key and shares the link of a pending participant from its row
   const calls = await open();
   const user = setup();
 
-  await user.click(screen.getByRole("button", { name: "Copiar chave Pix" }));
+  await user.click(screen.getByRole("button", { name: "Copiar valor" }));
 
   expect(writeText).toHaveBeenCalledWith("11987654321");
   expect(await screen.findByText("Copiado")).toBeInTheDocument();
@@ -437,7 +437,7 @@ it("names the Pix key from the wallet while no charge has been generated", async
   await open(detail, (path) => (path === "/api/financial/payment-methods" ? Response.json({ paymentMethods: wallet }) : undefined));
 
   expect(screen.getByText("ana@example.com")).toBeInTheDocument();
-  expect(screen.queryByText("Sem chave Pix vinculada")).not.toBeInTheDocument();
+  expect(screen.queryByText("Sem meio de pagamento vinculado")).not.toBeInTheDocument();
 });
 
 it("ends cancelling the pending charges, revokes the invite and hides the actions", async () => {
@@ -500,7 +500,7 @@ it("shows a conta a pagar with its inline key and receiving contact, without inv
   expect(screen.queryByRole("button", { name: "Compartilhar link de pagamento" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Editar" })).toHaveAttribute("title", "Categoria, Pix e lembretes");
 
-  await user.click(screen.getByRole("button", { name: "Copiar chave Pix" }));
+  await user.click(screen.getByRole("button", { name: "Copiar valor" }));
 
   expect(writeText).toHaveBeenCalledWith("ana@example.com");
   expect(calls).not.toContain("GET /api/financial/payment-methods/pix-1");

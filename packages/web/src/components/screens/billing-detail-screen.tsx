@@ -1,6 +1,6 @@
 "use client";
 
-import { billingCategoryLabel, BillingKind, calendarDate, chargeShareText, chargeStateTag, formatMoney, paymentMethodText, PaymentProvider, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod } from "@receivy/common";
+import { billingCategoryLabel, BillingKind, calendarDate, chargeShareText, chargeStateTag, formatMoney, paymentMethodCopyValue, paymentMethodText, PaymentProvider, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod } from "@receivy/common";
 import { Bell, BellOff, Check, CircleDashed, CirclePause, CirclePlay, CircleStop, KeyRound, Pencil, Receipt, RotateCcw, Share2, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -567,14 +567,14 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                   ) : payable ? (
                     "Sem chave Pix"
                   ) : (
-                    "Sem chave Pix vinculada"
+                    "Sem meio de pagamento vinculado"
                   )}
                 </span>
               </div>
               {payment && (
                 <CopyButton
-                  value={payment.provider === PaymentProvider.InfinitePay ? `$${payment.value}` : payment.value}
-                  ariaLabel="Copiar chave Pix"
+                  value={paymentMethodCopyValue(payment)}
+                  ariaLabel="Copiar valor"
                   onRefused={() => setError("Não foi possível copiar a chave.")}
                 />
               )}

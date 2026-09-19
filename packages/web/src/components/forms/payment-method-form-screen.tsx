@@ -12,6 +12,8 @@ import { ScreenFooter } from "@/components/ui/screen-footer";
 
 type PaymentMethodFormScreenProps = { returnTo?: string; required?: boolean };
 
+type ErrorPayload = { message?: string; context?: { code?: string; fields?: Record<string, string> } };
+
 const SAVE_ERROR = "Não foi possível salvar o meio de pagamento.";
 
 export function PaymentMethodFormScreen({ returnTo, required = false }: PaymentMethodFormScreenProps) {
@@ -109,10 +111,13 @@ export function PaymentMethodFormScreen({ returnTo, required = false }: PaymentM
       });
 
       if (!response.ok) {
-        const payload = await response.clone().json().catch(() => null);
+        const payload = (await response
+          .clone()
+          .json()
+          .catch(() => null)) as ErrorPayload | null;
 
         if (apiErrorCode(payload) === "INFINITEPAY_CHECKOUT_DISABLED") {
-          setError({ message: payload.message, redirectUrl: payload.context.fields?.redirectUrl });
+          setError({ message: payload?.message ?? SAVE_ERROR, redirectUrl: payload?.context?.fields?.redirectUrl });
 
           return;
         }

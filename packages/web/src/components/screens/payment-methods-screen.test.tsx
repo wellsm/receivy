@@ -52,7 +52,7 @@ it("lists the active keys with the type label, the masked key and the main badge
   expect(screen.getByText("CPF")).toBeInTheDocument();
   expect(screen.getByText("E-mail")).toBeInTheDocument();
   expect(screen.getByText("Padrão")).toBeInTheDocument();
-  expect(screen.getByText("Secundária")).toBeInTheDocument();
+  expect(screen.getByText("Secundário")).toBeInTheDocument();
   expect(screen.queryByText("Nubank")).not.toBeInTheDocument();
   expect(screen.getByText("Seus dados de recebimento ficam protegidos e nunca são compartilhados sem sua autorização.")).toBeInTheDocument();
 });

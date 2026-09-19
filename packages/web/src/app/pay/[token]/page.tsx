@@ -1,4 +1,4 @@
-import { formatMoney, type ChargeState, type PublicChargeView } from "@receivy/common";
+import { ChargeState, formatMoney, PaymentLinkState, PaymentProvider, type PublicChargeView } from "@receivy/common";
 import { ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -90,10 +90,10 @@ export default async function PublicChargePage({ params, searchParams }: { param
     );
   }
 
-  const payment = charge.state === "pending" ? charge.payment : null;
-  const pix = payment?.provider === "pix" ? payment : null;
-  const link = payment?.provider === "infinitepay" ? charge.paymentLink : null;
-  const numbered = Boolean(pix || link);
+  const payment = charge.state === ChargeState.Pending ? charge.payment : null;
+  const pix = payment?.provider === PaymentProvider.Pix ? payment : null;
+  const link = payment?.provider === PaymentProvider.InfinitePay ? charge.paymentLink : null;
+  const numbered = Boolean(pix || (link?.state === PaymentLinkState.Ready && link.url));
 
   return (
     <main className={PAGE}>
@@ -130,7 +130,7 @@ export default async function PublicChargePage({ params, searchParams }: { param
             </section>
           )}
 
-          {link && link.state === "ready" && link.url && (
+          {link && link.state === PaymentLinkState.Ready && link.url && (
             <section className="flex flex-col gap-2.5">
               <h2 className={SECTION_LABEL}>1 · PAGUE PELO LINK</h2>
               <div className="flex flex-col gap-3 rounded-2xl border border-outline/60 bg-surface-muted/50 p-4">
@@ -147,13 +147,13 @@ export default async function PublicChargePage({ params, searchParams }: { param
             </section>
           )}
 
-          {link && link.state !== "ready" && (
+          {link && link.state !== PaymentLinkState.Ready && (
             <p className="m-0 rounded-2xl border border-outline/60 bg-surface-muted/50 p-3.5 text-[12.5px] leading-normal text-muted" role="status">
               Estamos gerando o link de pagamento. Tente de novo em instantes, ou envie o comprovante abaixo.
             </p>
           )}
 
-          {charge.state === "paid" && (
+          {charge.state === ChargeState.Paid && (
             <section className="flex flex-col gap-2 rounded-2xl border border-success/40 bg-success-soft p-4">
               <h2 className="m-0 text-sm font-bold text-success">Pagamento confirmado</h2>
               {charge.receiptUrl && (
@@ -164,7 +164,7 @@ export default async function PublicChargePage({ params, searchParams }: { param
             </section>
           )}
 
-          {charge.state !== "paid" && (link?.state === "ready" ? (
+          {charge.state !== ChargeState.Paid && (link?.state === PaymentLinkState.Ready ? (
             <details className="flex flex-col gap-2.5">
               <summary className="cursor-pointer text-[12.5px] font-semibold text-muted">Pagou de outro jeito? Envie o comprovante</summary>
               <ProofPanel base={`/api/public-proof/${encodeURIComponent(token)}`} state={charge.state} uploadsEnabled={charge.uploadsEnabled} creditor={charge.creditorFirstName} />

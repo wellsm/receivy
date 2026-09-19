@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PaymentProvider, PixKeyType } from './contracts';
-import { paymentMethodText } from './payment-method-text';
+import { paymentMethodCopyValue, paymentMethodText } from './payment-method-text';
 
 describe('paymentMethodText', () => {
   it('names a Pix key by its kind and masks the value', () => {
@@ -9,5 +9,15 @@ describe('paymentMethodText', () => {
 
   it('shows an InfiniteTag with its dollar sign', () => {
     expect(paymentMethodText({ provider: PaymentProvider.InfinitePay, kind: null, value: 'minha.loja' })).toEqual({ title: 'InfinitePay', value: '$minha.loja' });
+  });
+});
+
+describe('paymentMethodCopyValue', () => {
+  it('prefixes an InfiniteTag with its dollar sign', () => {
+    expect(paymentMethodCopyValue({ provider: PaymentProvider.InfinitePay, value: 'minha.loja' })).toBe('$minha.loja');
+  });
+
+  it('copies a Pix key as-is', () => {
+    expect(paymentMethodCopyValue({ provider: PaymentProvider.Pix, value: 'pix@example.com' })).toBe('pix@example.com');
   });
 });

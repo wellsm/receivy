@@ -1,6 +1,6 @@
 "use client";
 
-import { paymentMethodText, PaymentProvider, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
+import { paymentMethodCopyValue, paymentMethodText, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
 import { Check, CircleCheck, Lock, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -139,7 +139,7 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
                           Padrão
                         </span>
                       ) : (
-                        <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-muted">Secundária</span>
+                        <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-muted">Secundário</span>
                       )}
                     </div>
                   </div>
@@ -163,7 +163,7 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
               <div className="flex items-center justify-between gap-2 rounded-xl border border-outline/30 bg-surface-muted/70 p-3">
                 <span className="min-w-0 flex-1 truncate text-[15px] font-bold tracking-wider text-ink">{text.value}</span>
                 <CopyButton
-                  value={method.provider === PaymentProvider.InfinitePay ? `$${method.value}` : method.value}
+                  value={paymentMethodCopyValue(method)}
                   ariaLabel="Copiar valor"
                   variant="outline"
                   onRefused={() => setError(COPY_ERROR)}

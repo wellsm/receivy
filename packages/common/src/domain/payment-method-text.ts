@@ -19,3 +19,12 @@ export function paymentMethodText(method: { provider: PaymentProvider; kind: Pix
 
   return { title: PIX_KIND_LABELS[method.kind], value: pixKeyField(method.kind).format(method.value) };
 }
+
+/** What the clipboard gets when a method's value is copied: the InfiniteTag with its `$` sign, or the Pix key as-is. */
+export function paymentMethodCopyValue(method: { provider: PaymentProvider; value: string }): string {
+  if (method.provider === PaymentProvider.InfinitePay) {
+    return `$${method.value}`;
+  }
+
+  return method.value;
+}

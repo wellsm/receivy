@@ -1,17 +1,17 @@
 import type { Client } from '@ez4/scheduler';
-import { addCalendarDays, ChargeState, PaymentLinkState, PaymentProvider } from '@receivy/common';
+import { addCalendarDays, ChargeState, PaymentLinkState } from '@receivy/common';
 import { billingRegistered } from '../../billings/utils/columns';
 import { effectiveReminders } from '../../billings/utils/reminders';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { StoredProofState } from '../../charges/schemas/charge';
-import { ensurePaymentLink } from '../../charges/services/payment-link';
+import { checkoutProviderOf, ensurePaymentLink } from '../../charges/services/payment-link';
 import { ownerPays, paymentOf } from '../../charges/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { DbClient } from '../../database';
 import { ProofRepository } from '../../proofs/repositories/proof';
 import { ensurePublicLink } from '../../public/services/links';
-import type { PaymentLinkProvider } from '../../vendors/infinitepay/types';
+import type { CheckoutClients } from '../../vendors/checkout/types';
 import { DeviceRepository } from '../repositories/device';
 import { EMAIL_FOLLOWUP_MS, instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
 import { NoticeTemplate, renderNotice } from './render';
@@ -37,7 +37,7 @@ export type NoticeContext = {
   config: NotificationConfig;
   transport: NotificationTransport;
   notify: NotifyScheduler;
-  links: PaymentLinkProvider;
+  links: CheckoutClients;
 };
 
 export const notifyIdentifier = (chargeId: string) => `charge:${chargeId}:notify`;
@@ -63,7 +63,7 @@ const NOTHING: SendResult = { channels: [] };
 
 /** What `ensurePaymentLink` needs, read off the notice config. */
 function linkConfig(config: NotificationConfig) {
-  return { apiOrigin: config.apiOrigin, webOrigin: config.publicOrigin, secret: config.secret };
+  return { apiOrigin: config.apiOrigin, webOrigin: config.publicOrigin, secret: config.secret, credentialKeyB64: config.credentialKeyB64 };
 }
 
 function noticePayload(template: NoticeTemplate, offsetDays?: number): Record<string, unknown> {
@@ -163,8 +163,10 @@ export async function sendChargeNotice(
     return skipped(db, chargeId, payload, SkipReason.PixRequired);
   }
 
-  // An InfinitePay charge is announced with its checkout link ready; a link still failing is tried once more here.
-  if (!ownBill && paymentOf(charge)?.provider === PaymentProvider.InfinitePay) {
+  const snapshot = paymentOf(charge);
+
+  // A checkout charge is announced with its link ready; a link still failing is tried once more here.
+  if (!ownBill && snapshot && checkoutProviderOf(snapshot.provider)) {
     const state = await ensurePaymentLink(db, context.links, linkConfig(context.config), chargeId, now, context.transport);
 
     if (state !== PaymentLinkState.Ready) {

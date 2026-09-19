@@ -14,7 +14,19 @@ export class InfinitePayCheckoutDisabledError extends UnprocessableEntityError {
 }
 
 export class PaymentLinkUnavailableError extends ServiceUnavailableError {
-  constructor(message = 'Não deu para falar com a InfinitePay agora. Tente de novo em instantes.') {
+  constructor(message = 'Não deu para falar com o provedor de pagamento agora. Tente de novo em instantes.') {
     super(message, 'PAYMENT_LINK_UNAVAILABLE');
+  }
+}
+
+export class PagSeguroTokenInvalidError extends UnprocessableEntityError {
+  constructor(message = 'Token inválido ou sem permissão.') {
+    super(message, 'PAGSEGURO_TOKEN_INVALID');
+  }
+}
+
+export class PaymentCredentialKeyMissingError extends ServiceUnavailableError {
+  constructor(message = 'O cofre de credenciais não está configurado.') {
+    super(message, 'PAYMENT_CREDENTIAL_KEY_MISSING');
   }
 }

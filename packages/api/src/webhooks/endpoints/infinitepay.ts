@@ -2,7 +2,8 @@ import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import { HttpBadRequestError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import { paymentLinkProvider } from '../../charges/services/payment-link';
+import { PaymentProvider } from '@receivy/common';
+import { checkoutClients } from '../../charges/services/payment-link';
 import { settleByProvider } from '../../charges/services/settle';
 import { notificationTransport } from '../../notifications/services/transport';
 import { PublicTokenPurpose, verifyPublicChargeToken } from '../../public/services/capability';
@@ -52,9 +53,9 @@ export async function infinitePayWebhookHandler({ parameters, body }: WebhookReq
 
   const outcome = await settleByProvider(
     db,
-    paymentLinkProvider(variables),
+    checkoutClients(variables),
     { transport: notificationTransport(variables), origin: variables.PUBLIC_WEB_ORIGIN },
-    { chargeId, transactionNsu: body.transaction_nsu, slug: body.invoice_slug, receiptUrl: body.receipt_url }
+    { provider: PaymentProvider.InfinitePay, chargeId, transactionNsu: body.transaction_nsu, slug: body.invoice_slug, receiptUrl: body.receipt_url }
   );
 
   console.info('InfinitePay webhook', { chargeId, outcome });

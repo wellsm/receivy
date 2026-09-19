@@ -6,7 +6,7 @@ import type { SessionIdentity } from '../../common/authorizers/session';
 import { notificationTransport } from '../../notifications/services/transport';
 import { AvatarRepository } from '../../users/repositories/avatar';
 import type { ChargeProvider } from '../provider';
-import { ensurePaymentLink, paymentLinkConfigFrom, paymentLinkProvider } from '../services/payment-link';
+import { checkoutClients, ensurePaymentLink, paymentLinkConfigFrom } from '../services/payment-link';
 
 declare class IdRequest implements Http.Request {
   identity: SessionIdentity;
@@ -27,7 +27,7 @@ export async function ensurePaymentLinkHandler(
 
   // Reading as the actor is the access check: owner, creditor and debtor may read, anyone else is refused.
   await charges.get(userId, parameters.id);
-  await ensurePaymentLink(db, paymentLinkProvider(variables), paymentLinkConfigFrom(variables), parameters.id, Date.now(), notificationTransport(variables));
+  await ensurePaymentLink(db, checkoutClients(variables), paymentLinkConfigFrom(variables), parameters.id, Date.now(), notificationTransport(variables));
 
   return { status: 200, body: await AvatarRepository.sign(avatarFiles, await charges.get(userId, parameters.id)) };
 }

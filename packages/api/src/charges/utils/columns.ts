@@ -20,6 +20,7 @@ export type PaymentSnapshotColumns = {
   kind?: PixKeyType | null;
   value: string;
   label: string;
+  integrationId?: string;
 };
 
 /** How this charge is paid, frozen at the moment it was published. */

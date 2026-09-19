@@ -8,6 +8,7 @@ import type { BillingGuestSchema } from './billings/schemas/billing-guest';
 import type { ChargeSchema } from './charges/schemas/charge';
 import type { EventSchema } from './common/schemas/event';
 import type { ContactSchema } from './contacts/schemas/contact';
+import type { IntegrationSchema } from './integrations/schemas/integration';
 import type { DeviceTokenSchema } from './notifications/schemas/notification';
 import type { PaymentMethodSchema } from './payment-methods/schemas/payment-method';
 import type { ProofSchema } from './proofs/schemas/proof';
@@ -41,9 +42,19 @@ export declare class Db extends Database.Service<PostgresEngine> {
       indexes: { id: Index.Primary };
     }>,
     Database.UseTable<{
+      name: 'integrations';
+      schema: IntegrationSchema;
+      relations: { 'owner_id@owner': 'users:id' };
+      indexes: {
+        id: Index.Primary;
+        'owner_id:provider': Index.Unique;
+        owner_id: Index.Secondary;
+      };
+    }>,
+    Database.UseTable<{
       name: 'payment_methods';
       schema: PaymentMethodSchema;
-      relations: { 'owner_id@owner': 'users:id'; 'contact_id@contact': 'contacts:id' };
+      relations: { 'owner_id@owner': 'users:id'; 'contact_id@contact': 'contacts:id'; 'integration_id@integration': 'integrations:id' };
       indexes: {
         id: Index.Primary;
         'owner_id:provider:value': Index.Unique;

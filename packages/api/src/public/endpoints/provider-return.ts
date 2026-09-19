@@ -2,8 +2,8 @@ import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import { HttpBadRequestError } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
-import type { PublicChargeView } from '@receivy/common';
-import { paymentLinkProvider } from '../../charges/services/payment-link';
+import { PaymentProvider, type PublicChargeView } from '@receivy/common';
+import { checkoutClients } from '../../charges/services/payment-link';
 import { settleByProvider } from '../../charges/services/settle';
 import { notificationTransport } from '../../notifications/services/transport';
 import { PaymentLinkUnavailableError } from '../../payment-methods/errors';
@@ -35,9 +35,9 @@ export async function providerReturnHandler({ parameters, body }: ProviderReturn
 
   const outcome = await settleByProvider(
     db,
-    paymentLinkProvider(variables),
+    checkoutClients(variables),
     { transport: notificationTransport(variables), origin: variables.PUBLIC_WEB_ORIGIN },
-    { chargeId: charge.id, transactionNsu: body.transactionNsu, slug: body.slug }
+    { provider: PaymentProvider.InfinitePay, chargeId: charge.id, transactionNsu: body.transactionNsu, slug: body.slug }
   );
 
   if (outcome === 'unavailable') {

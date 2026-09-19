@@ -1182,6 +1182,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/infinitePayWebhookHandler'
+  /webhooks/pagseguro/{token}:
+    post:
+      operationId: pagSeguroWebhook
+      parameters:
+        - name: x-authenticity-token
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 300
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/pagSeguroWebhookHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/pagSeguroWebhookHandler'
+  /dev/checkout/{provider}/{orderNsu}/pay:
+    post:
+      operationId: fakeCheckoutPay
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 40
+        - name: orderNsu
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/fakePayHandler'
 
 components:
   securitySchemes:
@@ -1372,6 +1423,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -1412,6 +1464,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -1439,6 +1492,7 @@ components:
           enum: 
             - 'pix'
             - 'infinitepay'
+            - 'pagseguro'
         kind:
           enum: 
             - 'cpf'
@@ -1449,6 +1503,9 @@ components:
         value:
           type: string
           maxLength: 254
+        token:
+          type: string
+          maxLength: 512
         label:
           type: string
           maxLength: 120
@@ -1457,7 +1514,6 @@ components:
           format: uuid
       required:
         - provider
-        - value
     editPaymentMethodHandler:
       type: object
       additionalProperties: false
@@ -1466,6 +1522,7 @@ components:
           enum: 
             - 'pix'
             - 'infinitepay'
+            - 'pagseguro'
         kind:
           enum: 
             - 'cpf'
@@ -1476,6 +1533,9 @@ components:
         value:
           type: string
           maxLength: 254
+        token:
+          type: string
+          maxLength: 512
         label:
           type: string
           maxLength: 120
@@ -1484,7 +1544,6 @@ components:
           format: uuid
       required:
         - provider
-        - value
     createBillingHandler:
       type: object
       additionalProperties: false
@@ -1903,6 +1962,8 @@ components:
         capture_method:
           type: string
           maxLength: 40
+    pagSeguroWebhookHandler:
+      type: string
 
   responseSchemes:
     healthHandler:
@@ -2523,6 +2584,7 @@ components:
                 enum: 
                   - 'pix'
                   - 'infinitepay'
+                  - 'pagseguro'
               kind:
                 enum: 
                   - 'cpf'
@@ -2561,6 +2623,7 @@ components:
           enum: 
             - 'pix'
             - 'infinitepay'
+            - 'pagseguro'
         kind:
           enum: 
             - 'cpf'
@@ -2597,6 +2660,7 @@ components:
           enum: 
             - 'pix'
             - 'infinitepay'
+            - 'pagseguro'
         kind:
           enum: 
             - 'cpf'
@@ -2633,6 +2697,7 @@ components:
           enum: 
             - 'pix'
             - 'infinitepay'
+            - 'pagseguro'
         kind:
           enum: 
             - 'cpf'
@@ -3102,6 +3167,7 @@ components:
                     enum: 
                       - 'pix'
                       - 'infinitepay'
+                      - 'pagseguro'
                   kind:
                     enum: 
                       - 'cpf'
@@ -3932,6 +3998,7 @@ components:
                     enum: 
                       - 'pix'
                       - 'infinitepay'
+                      - 'pagseguro'
                   kind:
                     enum: 
                       - 'cpf'
@@ -4608,6 +4675,7 @@ components:
                     enum: 
                       - 'pix'
                       - 'infinitepay'
+                      - 'pagseguro'
                   kind:
                     enum: 
                       - 'cpf'
@@ -5284,6 +5352,7 @@ components:
                     enum: 
                       - 'pix'
                       - 'infinitepay'
+                      - 'pagseguro'
                   kind:
                     enum: 
                       - 'cpf'
@@ -5960,6 +6029,7 @@ components:
                     enum: 
                       - 'pix'
                       - 'infinitepay'
+                      - 'pagseguro'
                   kind:
                     enum: 
                       - 'cpf'
@@ -6418,6 +6488,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -6627,6 +6698,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -6836,6 +6908,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -7045,6 +7118,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -7254,6 +7328,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -7463,6 +7538,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -7618,6 +7694,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -7692,6 +7769,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -8013,6 +8091,7 @@ components:
                     enum: 
                       - 'pix'
                       - 'infinitepay'
+                      - 'pagseguro'
                   kind:
                     enum: 
                       - 'cpf'
@@ -8241,6 +8320,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -8450,6 +8530,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -8747,6 +8828,7 @@ components:
               enum: 
                 - 'pix'
                 - 'infinitepay'
+                - 'pagseguro'
             kind:
               enum: 
                 - 'cpf'
@@ -8906,6 +8988,24 @@ components:
       required:
         - queued
     infinitePayWebhookHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        received:
+          type: boolean
+          enum: [true]
+      required:
+        - received
+    pagSeguroWebhookHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        received:
+          type: boolean
+          enum: [true]
+      required:
+        - received
+    fakePayHandler:
       type: object
       additionalProperties: false
       properties:

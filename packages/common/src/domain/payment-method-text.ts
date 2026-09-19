@@ -13,6 +13,10 @@ export type PaymentMethodText = { title: string; value: string };
 
 /** How a method reads on a list, a picker or a dialog: its kind as the title, its value as people know it. */
 export function paymentMethodText(method: { provider: PaymentProvider; kind: PixKeyType | null; value: string }): PaymentMethodText {
+  if (method.provider === PaymentProvider.PagSeguro) {
+    return { title: 'PagBank', value: method.value };
+  }
+
   if (method.provider === PaymentProvider.InfinitePay || !method.kind) {
     return { title: 'InfinitePay', value: `$${method.value}` };
   }
@@ -20,8 +24,12 @@ export function paymentMethodText(method: { provider: PaymentProvider; kind: Pix
   return { title: PIX_KIND_LABELS[method.kind], value: pixKeyField(method.kind).format(method.value) };
 }
 
-/** What the clipboard gets when a method's value is copied: the InfiniteTag with its `$` sign, or the Pix key as-is. */
+/** What the clipboard gets when a method's value is copied: the InfiniteTag with its `$` sign, or the Pix key as-is, nothing for a PagBank account (there is no public value). */
 export function paymentMethodCopyValue(method: { provider: PaymentProvider; value: string }): string {
+  if (method.provider === PaymentProvider.PagSeguro) {
+    return '';
+  }
+
   if (method.provider === PaymentProvider.InfinitePay) {
     return `$${method.value}`;
   }

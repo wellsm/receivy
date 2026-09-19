@@ -15,6 +15,7 @@ export interface PaymentSnapshotSchema {
   kind?: PixKeyType;
   value: String.Max<254>;
   label: String.Max<120>;
+  integrationId?: String.UUID;
 }
 
 export interface ProofFileSchema {
@@ -44,6 +45,8 @@ export interface ChargeSchema extends Database.Schema {
   /** InfinitePay checkout link of this charge; null on a charge paid through a Pix key. The real link carries a ~600-char `lenc` blob. */
   payment_link_url?: String.Max<2048>;
   payment_link_state?: PaymentLinkState;
+  /** The provider's own id of the checkout (PagBank `CHEC_…`), what "inactivate" needs. */
+  provider_link_id?: String.Max<120>;
   /** `transaction_nsu` of the payment the provider confirmed: the idempotency key of the settlement. */
   provider_transaction_id?: String.Max<120>;
   provider_receipt_url?: String.Max<2048>;

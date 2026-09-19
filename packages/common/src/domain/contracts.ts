@@ -146,7 +146,8 @@ export enum PixKeyType {
 
 export enum PaymentProvider {
   Pix = 'pix',
-  InfinitePay = 'infinitepay'
+  InfinitePay = 'infinitepay',
+  PagSeguro = 'pagseguro'
 }
 
 /** Where the checkout link of an InfinitePay charge stands; null on a charge paid through a Pix key. */
@@ -187,7 +188,14 @@ export type InfinitePayMethodInput = {
   label?: string;
 };
 
-export type PaymentMethodInput = PixMethodInput | InfinitePayMethodInput;
+export type PagSeguroMethodInput = {
+  provider: PaymentProvider.PagSeguro;
+  /** The seller's PagBank API token. Required on create; absent on edit keeps the stored one. Never returned. */
+  token?: string;
+  label?: string;
+};
+
+export type PaymentMethodInput = PixMethodInput | InfinitePayMethodInput | PagSeguroMethodInput;
 
 export type PaymentMethodsPage = { paymentMethods: PaymentMethod[] };
 

@@ -71,6 +71,7 @@ export declare class BillingService extends Factory.Service<BillingClient> {
   variables: {
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
     PAYMENT_METHOD_LINK: Environment.VariableOrValue<'PAYMENT_METHOD_LINK', 'disabled'>;
+    PAYMENT_CREDENTIAL_KEY_B64: Environment.VariableOrValue<'PAYMENT_CREDENTIAL_KEY_B64', 'disabled'>;
     EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
     RESEND_FROM_EMAIL: Environment.Variable<'RESEND_FROM_EMAIL'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
@@ -111,6 +112,8 @@ async function cancelPendingCharges(db: DbClient, ownerId: string, billingId: st
   const pending = await ChargeRepository.byBilling(db, billingId, { state: ChargeState.Pending, dueAfter: after, lock: true });
 
   for (const row of pending) {
+    // Mass cancel: no provider inactivation here, only the individual cancel does that
+    // (limitation recorded in docs/notifications.md).
     await ChargeRepository.markCancelled(db, row.id, now);
     await recordCharge(db, row.id, ownerId, 'charge.cancelled', now, { reason });
   }
@@ -207,7 +210,17 @@ async function rewriteMonthCharges(db: DbClient, row: BillingRow, patch: Billing
       amountCents: planned.amountCents,
       ...(moving ? { dueDate: planned.dueDate } : {}),
       ...(pixTouched
-        ? { payment: context!.payment ? { provider: context!.payment.provider, ...(context!.payment.kind ? { kind: context!.payment.kind } : {}), value: context!.payment.value, label: context!.payment.label } : null }
+        ? {
+            payment: context!.payment
+              ? {
+                  provider: context!.payment.provider,
+                  ...(context!.payment.kind ? { kind: context!.payment.kind } : {}),
+                  value: context!.payment.value,
+                  label: context!.payment.label,
+                  ...(context!.payment.integrationId ? { integrationId: context!.payment.integrationId } : {})
+                }
+              : null
+          }
         : {}),
       now
     });
@@ -215,6 +228,8 @@ async function rewriteMonthCharges(db: DbClient, row: BillingRow, patch: Billing
   }
 
   for (const charge of changes.cancel) {
+    // Mass cancel: no provider inactivation here, only the individual cancel does that
+    // (limitation recorded in docs/notifications.md).
     await ChargeRepository.markCancelled(db, charge.id, now);
     await recordCharge(db, charge.id, row.owner_id, 'charge.cancelled', now, { reason: ChargeCancelReason.BillingEdited });
   }

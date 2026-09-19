@@ -37,7 +37,13 @@ import type {
 import type { InviteRoutes } from './invites/routes';
 import type { DeviceOwnedElsewhereError, DeviceRegisteredError, ReminderQuotaError } from './notifications/errors';
 import type { NotificationRoutes } from './notifications/routes';
-import type { InfinitePayCheckoutDisabledError, PaymentLinkUnavailableError, PaymentMethodTakenError } from './payment-methods/errors';
+import type {
+  InfinitePayCheckoutDisabledError,
+  PagSeguroTokenInvalidError,
+  PaymentCredentialKeyMissingError,
+  PaymentLinkUnavailableError,
+  PaymentMethodTakenError
+} from './payment-methods/errors';
 import type { PaymentMethodRoutes } from './payment-methods/routes';
 import type {
   ProofDeclarationForbiddenError,
@@ -118,10 +124,11 @@ export declare class Api extends Http.Service {
         TimelineOverflowError,
         PendingChargesWithoutStateError,
         EditScopeNotRecurringError,
-        InfinitePayCheckoutDisabledError
+        InfinitePayCheckoutDisabledError,
+        PagSeguroTokenInvalidError
       ];
       429: [TooManyRequestsError, ReminderQuotaError];
-      503: [PaymentLinkUnavailableError];
+      503: [PaymentLinkUnavailableError, PaymentCredentialKeyMissingError];
     };
   }>;
 

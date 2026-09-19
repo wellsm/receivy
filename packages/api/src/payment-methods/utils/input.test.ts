@@ -25,4 +25,22 @@ describe('normalizePaymentMethod', () => {
     expect(() => normalizePaymentMethod({ provider: PaymentProvider.Pix, value: 'x' } as never)).toThrow('Chave Pix inválida.');
     expect(() => normalizePaymentMethod({ provider: PaymentProvider.InfinitePay, value: 'loja', label: 'x'.repeat(121) })).toThrow('Rótulo inválido.');
   });
+
+  it('defaults a PagBank method to the "PagBank" label when none is given', () => {
+    expect(normalizePaymentMethod({ provider: PaymentProvider.PagSeguro, token: 'tok' })).toEqual({
+      provider: PaymentProvider.PagSeguro,
+      kind: null,
+      value: 'PagBank',
+      label: 'PagBank'
+    });
+  });
+
+  it('uses the given label as both value and label for a PagBank method', () => {
+    expect(normalizePaymentMethod({ provider: PaymentProvider.PagSeguro, token: 'tok', label: ' Minha Conta ' })).toEqual({
+      provider: PaymentProvider.PagSeguro,
+      kind: null,
+      value: 'Minha Conta',
+      label: 'Minha Conta'
+    });
+  });
 });

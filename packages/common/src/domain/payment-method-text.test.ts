@@ -10,6 +10,11 @@ describe('paymentMethodText', () => {
   it('shows an InfiniteTag with its dollar sign', () => {
     expect(paymentMethodText({ provider: PaymentProvider.InfinitePay, kind: null, value: 'minha.loja' })).toEqual({ title: 'InfinitePay', value: '$minha.loja' });
   });
+
+  it('names a PagBank account by its label and copies nothing', () => {
+    expect(paymentMethodText({ provider: PaymentProvider.PagSeguro, kind: null, value: 'Conta da loja' })).toEqual({ title: 'PagBank', value: 'Conta da loja' });
+    expect(paymentMethodCopyValue({ provider: PaymentProvider.PagSeguro, value: 'Conta da loja' })).toBe('');
+  });
 });
 
 describe('paymentMethodCopyValue', () => {

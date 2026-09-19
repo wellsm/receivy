@@ -1,7 +1,7 @@
 import { ChargeState, PaymentProvider } from '@receivy/common';
 import { describe, expect, it, vi } from 'vitest';
 import type { DbClient } from '../../database';
-import type { PaymentLinkProvider } from '../../vendors/infinitepay/types';
+import type { CheckoutClient, CheckoutClients } from '../../vendors/checkout/types';
 import { settleByProvider } from './settle';
 
 const base = {
@@ -37,12 +37,16 @@ function dbWith(charge: Record<string, unknown>) {
   return { db, updates, events };
 }
 
-function links(check: Awaited<ReturnType<PaymentLinkProvider['checkPayment']>>) {
-  return { createLink: vi.fn(), checkPayment: vi.fn(async () => check) } as unknown as PaymentLinkProvider & { checkPayment: ReturnType<typeof vi.fn> };
+/** The same mock stands behind both providers: the charge's snapshot decides which one is asked. */
+function links(check: Awaited<ReturnType<CheckoutClient['checkPayment']>>) {
+  const client = { createLink: vi.fn(), checkPayment: vi.fn(async () => check), inactivate: vi.fn(), verifyCredential: vi.fn() };
+  const clients = { [PaymentProvider.InfinitePay]: client, [PaymentProvider.PagSeguro]: client } as unknown as CheckoutClients;
+
+  return Object.assign(clients, { checkPayment: client.checkPayment });
 }
 
 const notices = { transport: { push: vi.fn(async () => ({ status: 'disabled' as const })), email: vi.fn(), receipt: vi.fn() }, origin: 'https://web' };
-const input = { chargeId: 'c1', transactionNsu: 'tx-1', slug: 'inv-1', receiptUrl: 'https://receipt/1' };
+const input = { provider: PaymentProvider.InfinitePay as const, chargeId: 'c1', transactionNsu: 'tx-1', slug: 'inv-1', receiptUrl: 'https://receipt/1' };
 const paid = { status: 'checked' as const, paid: true, amountCents: 1000, paidAmountCents: 1010, captureMethod: 'pix' };
 
 describe('settleByProvider', () => {
@@ -51,7 +55,7 @@ describe('settleByProvider', () => {
     const provider = links(paid);
 
     expect(await settleByProvider(db, provider, notices as never, input)).toBe('settled');
-    expect(provider.checkPayment).toHaveBeenCalledWith({ handle: 'loja', orderNsu: 'c1', transactionNsu: 'tx-1', slug: 'inv-1' });
+    expect(provider.checkPayment).toHaveBeenCalledWith({ provider: PaymentProvider.InfinitePay, identity: 'loja', orderNsu: 'c1', transactionNsu: 'tx-1', slug: 'inv-1' });
     expect(updates.at(-1)).toMatchObject({ state: ChargeState.Paid, provider_transaction_id: 'tx-1', provider_receipt_url: 'https://receipt/1' });
     expect(events.at(-1)).toMatchObject({ type: 'charge.paid', payload: { via: 'provider', provider: 'infinitepay', transactionNsu: 'tx-1', paidAmountCents: 1010, captureMethod: 'pix' } });
   });
@@ -113,6 +117,22 @@ describe('settleByProvider', () => {
     expect(provider.checkPayment).not.toHaveBeenCalled();
   });
 
+  it('ignores a webhook of another provider than the one frozen on the charge', async () => {
+    const { db } = dbWith(base);
+    const provider = links(paid);
+
+    expect(await settleByProvider(db, provider, notices as never, { provider: PaymentProvider.PagSeguro, chargeId: 'c1', transactionNsu: 'tx-9', credential: 'token', orderId: 'ORDE_1' })).toBe('ignored');
+    expect(provider.checkPayment).not.toHaveBeenCalled();
+  });
+
+  it('records an unauthorized check as rejected', async () => {
+    const { db, updates, events } = dbWith(base);
+
+    expect(await settleByProvider(db, links({ status: 'unauthorized' }), notices as never, input)).toBe('rejected');
+    expect(updates).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ type: 'charge.provider.rejected', payload: { reason: 'unauthorized' } });
+  });
+
   it('answers unavailable when payment_check cannot be reached', async () => {
     const { db, updates } = dbWith(base);
 
@@ -142,5 +162,43 @@ describe('settleByProvider', () => {
     expect(await settleByProvider(db, links(paid), notices as never, input)).toBe('ignored');
     expect(updates).toHaveLength(0);
     expect(events.at(-1)).toMatchObject({ type: 'charge.provider.ignored', payload: { state: ChargeState.Cancelled, transactionNsu: 'tx-1' } });
+  });
+
+  const pagBase = { ...base, payment_snapshot: { provider: PaymentProvider.PagSeguro, value: 'Loja', label: 'Loja', integrationId: 'int-1' } };
+  const pagInput = { provider: PaymentProvider.PagSeguro as const, chargeId: 'c1', transactionNsu: 'tx-1', credential: 'tok', orderId: 'ORDE_1' };
+
+  it('settles a PagBank charge after a positive payment_check, and never writes the credential down', async () => {
+    const events: Record<string, unknown>[] = [];
+    const db = {
+      transaction: async (fn: (tx: DbClient) => Promise<unknown>) => fn(db),
+      charges: { findOne: vi.fn(async () => pagBase), updateOne: vi.fn(async () => pagBase) },
+      proofs: { findMany: vi.fn(async () => ({ records: [] })) },
+      events: { insertOne: vi.fn(async ({ data }: { data: Record<string, unknown> }) => events.push(data)), findMany: vi.fn(async () => ({ records: [] })) },
+      users: { findOne: vi.fn(async () => ({ id: 'payer', name: 'Ana Silva' })) },
+      device_tokens: { findMany: vi.fn(async () => ({ records: [{ id: 'd1', token: 'ExpoPushToken[x]' }] })) }
+    } as unknown as DbClient;
+    const pushCalls: { title: string }[] = [];
+    const push = vi.fn(async (call: { title: string }) => {
+      pushCalls.push(call);
+
+      return { status: 'accepted' as const, id: 't' };
+    });
+    const pagNotices = { transport: { push, email: vi.fn(), receipt: vi.fn() }, origin: 'https://web' };
+    const provider = links(paid);
+
+    expect(await settleByProvider(db, provider, pagNotices as never, pagInput)).toBe('settled');
+    expect(provider.checkPayment).toHaveBeenCalledWith({ provider: PaymentProvider.PagSeguro, credential: 'tok', orderId: 'ORDE_1', transactionNsu: 'tx-1' });
+    expect(events.at(-1)).toMatchObject({ type: 'charge.paid' });
+    expect(events.at(-1)?.['payload']).not.toHaveProperty('credential');
+    expect(pushCalls.map((call) => call.title)).toContain('Pagamento recebido pelo PagBank');
+  });
+
+  it('records a PagBank unauthorized check as rejected', async () => {
+    const { db, updates, events } = dbWith(pagBase);
+
+    expect(await settleByProvider(db, links({ status: 'unauthorized' }), notices as never, pagInput)).toBe('rejected');
+    expect(updates).toHaveLength(0);
+    expect(events.at(-1)).toMatchObject({ type: 'charge.provider.rejected', payload: { reason: 'unauthorized' } });
+    expect(events.at(-1)?.['payload']).not.toHaveProperty('credential');
   });
 });

@@ -2,15 +2,27 @@ import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
 import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import { type PaymentMethod, type PaymentMethodInput, PaymentProvider, type PixSnapshot } from '@receivy/common';
-import { paymentLinkProvider } from '../../charges/services/payment-link';
+import { checkoutClients } from '../../charges/services/payment-link';
+import { assertCredentialKeyConfigured, seal } from '../../common/services/secret-box';
 import { enforceQuota } from '../../common/utils/throttle';
 import { ContactRepository } from '../../contacts/repositories/contact';
 import type { Db, DbClient } from '../../database';
+import { IntegrationRepository } from '../../integrations/repositories/integration';
+import { IntegrationCredentialKind, type IntegrationCredentialsSchema } from '../../integrations/schemas/integration';
 import { AccountRepository } from '../../users/repositories/account';
-import type { PaymentLinkProvider } from '../../vendors/infinitepay/types';
-import { InfinitePayCheckoutDisabledError, PaymentLinkUnavailableError, PaymentMethodTakenError } from '../errors';
+import type { CheckoutClient, CheckoutClients } from '../../vendors/checkout/types';
+import {
+  InfinitePayCheckoutDisabledError,
+  PagSeguroTokenInvalidError,
+  PaymentCredentialKeyMissingError,
+  PaymentLinkUnavailableError,
+  PaymentMethodTakenError
+} from '../errors';
 import { PaymentMethodRepository } from '../repositories/payment-method';
 import { type NormalizedPaymentMethod, normalizePaymentMethod } from '../utils/input';
+
+/** Only what `save` needs to reach the credential vault; the HTTP provider and every caller expose it. */
+type PaymentMethodVariables = { PAYMENT_CREDENTIAL_KEY_B64?: string };
 
 export type PaymentMethodClient = {
   /** Creates a method, or edits one in place; the same value twice on one owner is refused whatever its scope. */
@@ -27,6 +39,7 @@ export declare class PaymentMethodService extends Factory.Service<PaymentMethodC
     PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
     PAYMENT_METHOD_LINK: Environment.VariableOrValue<'PAYMENT_METHOD_LINK', 'disabled'>;
+    PAYMENT_CREDENTIAL_KEY_B64: Environment.VariableOrValue<'PAYMENT_CREDENTIAL_KEY_B64', 'disabled'>;
   };
 
   services: {
@@ -84,25 +97,65 @@ export async function upsertContactKey(tx: DbClient, ownerId: string, contactId:
  * InfinitePay has no "does this handle exist" call: creating a one-real link is the probe. There is no way to
  * delete it afterwards; nobody pays it. A disabled checkout carries the switch's url back to the client.
  */
-async function probeHandle(links: PaymentLinkProvider, handle: string): Promise<void> {
-  const result = await links.createLink({
-    handle,
+async function probeHandle(client: CheckoutClient, handle: string): Promise<void> {
+  const result = await client.createLink({
+    identity: handle,
     orderNsu: `probe:${crypto.randomUUID()}`,
-    items: [{ quantity: 1, price: 100, description: 'Validação Receivy' }]
+    amountCents: 100,
+    description: 'Validação Receivy',
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString()
   });
 
   if (result.status === 'checkout_disabled') {
     throw new InfinitePayCheckoutDisabledError(result.redirectUrl);
   }
 
-  if (result.status === 'unavailable') {
+  if (result.status !== 'created') {
     throw new PaymentLinkUnavailableError();
   }
 }
 
-async function save(db: DbClient, links: PaymentLinkProvider, ownerId: string, input: PaymentMethodInput, id?: string): Promise<PaymentMethod> {
+export async function save(db: DbClient, clients: CheckoutClients, variables: PaymentMethodVariables, ownerId: string, input: PaymentMethodInput, id?: string): Promise<PaymentMethod> {
   const method: NormalizedPaymentMethod = normalizePaymentMethod(input);
   const contactId = input.provider === PaymentProvider.Pix ? input.contactId : undefined;
+  let credentials: IntegrationCredentialsSchema | undefined;
+
+  if (input.provider === PaymentProvider.PagSeguro) {
+    const existing = id ? await PaymentMethodRepository.get(db, ownerId, id) : null;
+
+    if (id && (!existing || existing.archivedAt)) {
+      throw new HttpNotFoundError();
+    }
+
+    // A token is required whenever the row is not already PagBank: on create, and when flipping a Pix/InfinitePay row into PagBank.
+    if (!input.token && existing?.provider !== PaymentProvider.PagSeguro) {
+      throw new HttpBadRequestError('Informe o token do PagBank.');
+    }
+
+    if (input.token) {
+      let keyB64: string;
+
+      try {
+        keyB64 = assertCredentialKeyConfigured(variables.PAYMENT_CREDENTIAL_KEY_B64 ?? 'disabled');
+      } catch {
+        throw new PaymentCredentialKeyMissingError();
+      }
+
+      await enforceQuota(db, `pagseguro-verify:${ownerId}`, 10);
+
+      const verified = await clients[PaymentProvider.PagSeguro].verifyCredential(input.token);
+
+      if (verified.status === 'invalid') {
+        throw new PagSeguroTokenInvalidError();
+      }
+
+      if (verified.status !== 'valid') {
+        throw new PaymentLinkUnavailableError();
+      }
+
+      credentials = { kind: IntegrationCredentialKind.Token, ciphertext: seal(input.token, keyB64) };
+    }
+  }
 
   if (input.provider === PaymentProvider.InfinitePay) {
     // Best-effort pre-flight: the same checks the transaction runs, run once more so a request bound to fail
@@ -126,7 +179,7 @@ async function save(db: DbClient, links: PaymentLinkProvider, ownerId: string, i
     // The handle did not change: it was already validated, no need to probe (and throttle) again.
     if (!existing || existing.value !== method.value) {
       await enforceQuota(db, `infinitepay-probe:${ownerId}`, 10);
-      await probeHandle(links, method.value);
+      await probeHandle(clients[PaymentProvider.InfinitePay], method.value);
     }
   }
 
@@ -155,18 +208,46 @@ async function save(db: DbClient, links: PaymentLinkProvider, ownerId: string, i
     }
 
     const now = new Date().toISOString();
+    let integrationId: string | null | undefined;
+    let touchesIntegration = false;
+
+    if (input.provider === PaymentProvider.PagSeguro) {
+      touchesIntegration = true;
+
+      if (credentials) {
+        const integration = await IntegrationRepository.upsert(tx, { ownerId, provider: PaymentProvider.PagSeguro, credentials, label: method.label, now });
+
+        integrationId = integration.id;
+      } else {
+        integrationId = existing ? await PaymentMethodRepository.integrationOf(tx, ownerId, existing.id) : null;
+      }
+    } else if (existing?.provider === PaymentProvider.PagSeguro) {
+      // Flipping a PagBank method to Pix/InfinitePay: the row no longer points at any integration, one revoke check away.
+      touchesIntegration = true;
+      integrationId = null;
+
+      const priorIntegrationId = await PaymentMethodRepository.integrationOf(tx, ownerId, existing.id);
+
+      if (priorIntegrationId) {
+        const stillShared = await PaymentMethodRepository.otherLiveByIntegration(tx, ownerId, priorIntegrationId, existing.id);
+
+        if (!stillShared) {
+          await IntegrationRepository.revoke(tx, priorIntegrationId, now);
+        }
+      }
+    }
 
     if (existing) {
-      return PaymentMethodRepository.update(tx, ownerId, existing.id, { ...method, now });
+      return PaymentMethodRepository.update(tx, ownerId, existing.id, { ...method, now, ...(touchesIntegration ? { integrationId } : {}) });
     }
 
     const anyLive = await PaymentMethodRepository.hasLive(tx, ownerId, contactId);
 
-    return PaymentMethodRepository.insert(tx, { ownerId, contactId, ...method, isDefault: !anyLive, now });
+    return PaymentMethodRepository.insert(tx, { ownerId, contactId, ...method, isDefault: !anyLive, now, ...(input.provider === PaymentProvider.PagSeguro ? { integrationId } : {}) });
   });
 }
 
-async function archive(db: DbClient, ownerId: string, id: string): Promise<void> {
+export async function archive(db: DbClient, ownerId: string, id: string): Promise<void> {
   await db.transaction(async (tx) => {
     await AccountRepository.lock(tx, ownerId);
 
@@ -184,6 +265,18 @@ async function archive(db: DbClient, ownerId: string, id: string): Promise<void>
 
     await PaymentMethodRepository.archive(tx, ownerId, id, now);
 
+    if (target.provider === PaymentProvider.PagSeguro) {
+      const integrationId = await PaymentMethodRepository.integrationOf(tx, ownerId, id);
+
+      if (integrationId) {
+        const stillShared = await PaymentMethodRepository.otherLiveByIntegration(tx, ownerId, integrationId, id);
+
+        if (!stillShared) {
+          await IntegrationRepository.revoke(tx, integrationId, now);
+        }
+      }
+    }
+
     if (!target.isDefault) {
       return;
     }
@@ -197,10 +290,10 @@ async function archive(db: DbClient, ownerId: string, id: string): Promise<void>
 }
 
 export function createService({ db, variables }: Service.Context<PaymentMethodService>): PaymentMethodClient {
-  const links = paymentLinkProvider(variables);
+  const clients = checkoutClients(variables);
 
   return {
-    save: (ownerId, input, id) => save(db, links, ownerId, input, id),
+    save: (ownerId, input, id) => save(db, clients, variables, ownerId, input, id),
     makeDefault: (ownerId, id) =>
       db.transaction(async (tx) => {
         await AccountRepository.lock(tx, ownerId);

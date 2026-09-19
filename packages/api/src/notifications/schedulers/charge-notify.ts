@@ -42,6 +42,7 @@ export declare class ChargeNotifyScheduler extends Cron.Service<ChargeNotifySche
   variables: {
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
     PAYMENT_METHOD_LINK: Environment.VariableOrValue<'PAYMENT_METHOD_LINK', 'disabled'>;
+    PAYMENT_CREDENTIAL_KEY_B64: Environment.VariableOrValue<'PAYMENT_CREDENTIAL_KEY_B64', 'disabled'>;
     EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
     RESEND_API_KEY: Environment.Variable<'RESEND_API_KEY'>;
     RESEND_FROM_EMAIL: Environment.VariableOrValue<'RESEND_FROM_EMAIL', 'disabled'>;

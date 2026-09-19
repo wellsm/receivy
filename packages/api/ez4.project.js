@@ -99,6 +99,7 @@ export default {
     EXPO_ACCESS_TOKEN: process.env.EXPO_ACCESS_TOKEN ?? 'disabled',
     PUBLIC_WEB_ORIGIN: process.env.PUBLIC_WEB_ORIGIN ?? 'http://localhost:3000',
     PUBLIC_API_ORIGIN: process.env.PUBLIC_API_ORIGIN ?? 'http://127.0.0.1:3735/local-receivy-api',
-    PAYMENT_METHOD_LINK: process.env.PAYMENT_METHOD_LINK ?? 'disabled'
+    PAYMENT_METHOD_LINK: process.env.PAYMENT_METHOD_LINK ?? 'disabled',
+    PAYMENT_CREDENTIAL_KEY_B64: process.env.PAYMENT_CREDENTIAL_KEY_B64 ?? 'disabled'
   }
 };

@@ -1,6 +1,6 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Cron } from '@ez4/scheduler';
-import { paymentLinkProvider } from '../../charges/services/payment-link';
+import { checkoutClients } from '../../charges/services/payment-link';
 import type { EmailService } from '../../common/services/email/service';
 import type { Db } from '../../database';
 import type { ChargeNotifyScheduler } from '../../notifications/schedulers/charge-notify';
@@ -36,6 +36,7 @@ export declare class BillingCron extends Cron.Service {
   variables: {
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
     PAYMENT_METHOD_LINK: Environment.VariableOrValue<'PAYMENT_METHOD_LINK', 'disabled'>;
+    PAYMENT_CREDENTIAL_KEY_B64: Environment.VariableOrValue<'PAYMENT_CREDENTIAL_KEY_B64', 'disabled'>;
     EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
     RESEND_API_KEY: Environment.Variable<'RESEND_API_KEY'>;
     RESEND_FROM_EMAIL: Environment.VariableOrValue<'RESEND_FROM_EMAIL', 'disabled'>;
@@ -56,7 +57,7 @@ export async function handler(
     config: notificationConfigFrom(variables),
     transport: notificationTransport(variables, globalThis.fetch, email),
     notify: chargeNotifyScheduler,
-    links: paymentLinkProvider(variables)
+    links: checkoutClients(variables)
   };
 
   const materialized = await materializeDueBillings(db, notice, now);

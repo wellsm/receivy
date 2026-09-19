@@ -7,8 +7,8 @@ import { EventRepository } from '../../src/common/repositories/events';
 import { NoticeTemplate, sendChargeNotice } from '../../src/notifications/services/send';
 import { PaymentMethodTakenError } from '../../src/payment-methods/errors';
 import { publicChargeByToken, publishChargeLink } from '../../src/public/services/public-link';
-import { createFakePaymentLinkProvider, fakeLinkCount } from '../../src/vendors/infinitepay/fake';
-import type { PaymentLinkProvider } from '../../src/vendors/infinitepay/types';
+import { fakeCheckout, fakeLinkCount } from '../../src/vendors/checkout/fake';
+import type { CheckoutClient, CheckoutClients } from '../../src/vendors/checkout/types';
 import { charges, cleanupUsers, contacts, createOnceCharge, createUser, db, paymentMethods } from '../fixtures/financial';
 import { fakeNotice } from '../fixtures/scheduling';
 
@@ -43,7 +43,7 @@ describe('InfinitePay charges', () => {
     equal(detail.payment?.provider, PaymentProvider.InfinitePay);
     equal(detail.payment?.value, 'minha.loja');
     equal(detail.paymentLink?.state, PaymentLinkState.Ready);
-    ok(detail.paymentLink?.url?.includes(`/dev/infinitepay/${chargeId}`));
+    ok(detail.paymentLink?.url?.includes(`/dev/checkout/infinitepay/${chargeId}`));
     equal((await EventRepository.list(db, chargeId, 'charge.payment_link.created')).length, 1);
   });
 
@@ -56,9 +56,12 @@ describe('InfinitePay charges', () => {
   });
 
   it('settles through payment_check once and replays after', async () => {
-    const links = createFakePaymentLinkProvider('https://receivy.example');
+    const links: CheckoutClients = {
+      [PaymentProvider.InfinitePay]: fakeCheckout('https://receivy.example', PaymentProvider.InfinitePay),
+      [PaymentProvider.PagSeguro]: fakeCheckout('https://receivy.example', PaymentProvider.PagSeguro)
+    };
     const notices = { transport: fakeNotice().sent.transport, origin: 'https://receivy.example' };
-    const input = { chargeId, transactionNsu: 'tx-1', slug: 'inv-1', receiptUrl: 'https://receipt/1' };
+    const input = { provider: PaymentProvider.InfinitePay as const, chargeId, transactionNsu: 'tx-1', slug: 'inv-1', receiptUrl: 'https://receipt/1' };
 
     equal(await settleByProvider(db, links, notices, input), 'settled');
     equal(await settleByProvider(db, links, notices, input), 'replayed');
@@ -109,11 +112,13 @@ describe('InfinitePay charges', () => {
 
   it('records link_pending and sends nothing while the checkout link stays unavailable', async () => {
     const notice = fakeNotice();
-    const brokenLinks: PaymentLinkProvider = {
+    const broken: CheckoutClient = {
       createLink: async () => ({ status: 'unavailable' }),
-      checkPayment: async () => ({ status: 'unavailable' })
+      checkPayment: async () => ({ status: 'unavailable' }),
+      inactivate: async () => ({ status: 'unavailable' }),
+      verifyCredential: async () => ({ status: 'unavailable' })
     };
-    const context = { ...notice.context, links: brokenLinks };
+    const context = { ...notice.context, links: { [PaymentProvider.InfinitePay]: broken, [PaymentProvider.PagSeguro]: broken } };
     const method = await paymentMethods.save(OWNER, { provider: PaymentProvider.InfinitePay, value: 'link-pending.tag' });
 
     const { chargeId: pendingId } = await createOnceCharge(

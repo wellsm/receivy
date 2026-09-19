@@ -6,7 +6,7 @@ import { ChargeClosedError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { StoredProofState } from '../../charges/schemas/charge';
 import { chargeForActor } from '../../charges/services/access';
-import { ensurePaymentLink, paymentLinkConfigFrom, paymentLinkProvider } from '../../charges/services/payment-link';
+import { checkoutClients, ensurePaymentLink, paymentLinkConfigFrom } from '../../charges/services/payment-link';
 import { creditorOf, ownerPays, paymentLinkOf, paymentOf, snapshotDto } from '../../charges/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
@@ -43,6 +43,7 @@ export declare class PublicLinkService extends Factory.Service<PublicLinkClient>
   variables: {
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
     PAYMENT_METHOD_LINK: Environment.VariableOrValue<'PAYMENT_METHOD_LINK', 'disabled'>;
+    PAYMENT_CREDENTIAL_KEY_B64: Environment.VariableOrValue<'PAYMENT_CREDENTIAL_KEY_B64', 'disabled'>;
     EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
     RESEND_FROM_EMAIL: Environment.Variable<'RESEND_FROM_EMAIL'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
@@ -112,7 +113,18 @@ export async function publishChargeLink(
       const method = await ownMethod(tx, creditorId, paymentMethodId, true);
       const stamp = new Date(nowSeconds * 1000).toISOString();
 
-      await ChargeRepository.setPayment(tx, row.id, { provider: method.provider, ...(method.kind ? { kind: method.kind } : {}), value: method.value, label: method.label }, stamp);
+      await ChargeRepository.setPayment(
+        tx,
+        row.id,
+        {
+          provider: method.provider,
+          ...(method.kind ? { kind: method.kind } : {}),
+          value: method.value,
+          label: method.label,
+          ...(method.integrationId ? { integrationId: method.integrationId } : {})
+        },
+        stamp
+      );
       await EventRepository.record(tx, { type: 'charge.pix_published', eventableType: EventableType.Charge, eventableId: row.id, actorId: creditorId, at: stamp });
 
       // The creation notice was skipped for lack of a key; it goes out once the link exists.
@@ -226,7 +238,7 @@ export async function publicChargeByToken(db: DbClient, token: string, secret: s
 
 export function createService({ db, email, chargeNotifyScheduler, variables }: Service.Context<PublicLinkService>): PublicLinkClient {
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
-  const links = paymentLinkProvider(variables);
+  const links = checkoutClients(variables);
   const linkConfig = paymentLinkConfigFrom(variables);
 
   return {

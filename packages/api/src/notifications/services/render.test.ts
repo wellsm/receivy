@@ -1,3 +1,4 @@
+import { PaymentProvider } from '@receivy/common';
 import { describe, expect, it } from 'vitest';
 import { NoticeTemplate, type RenderInputs, renderNotice } from './render';
 
@@ -49,6 +50,26 @@ describe('renderNotice', () => {
     expect(manual.text).toBe(reminder.text);
     expect(manual.html).toBe(reminder.html);
     expect(manual.url).toBe(reminder.url);
+  });
+});
+
+describe('renderNotice footnote by provider', () => {
+  it('mentions the Pix key by default, with no provider set', () => {
+    const notice = renderNotice(input, NoticeTemplate.Initial, 'fixture-secret');
+
+    expect(notice.html).toContain('O pagamento acontece direto entre vocês, pela chave Pix de quem cobra.');
+  });
+
+  it('mentions the InfinitePay checkout link for an InfinitePay charge', () => {
+    const notice = renderNotice({ ...input, provider: PaymentProvider.InfinitePay }, NoticeTemplate.Initial, 'fixture-secret');
+
+    expect(notice.html).toContain('O pagamento acontece pelo link da InfinitePay de quem cobra.');
+  });
+
+  it('mentions the PagBank checkout link for a PagSeguro charge', () => {
+    const notice = renderNotice({ ...input, provider: PaymentProvider.PagSeguro }, NoticeTemplate.Initial, 'fixture-secret');
+
+    expect(notice.html).toContain('O pagamento acontece pelo link do PagBank de quem cobra.');
   });
 });
 

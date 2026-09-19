@@ -13,7 +13,7 @@ mobile fala com a API diretamente e abre o web para links públicos.
 | E-mail | `mailpit`: caixa em <http://127.0.0.1:8025> (`file` grava `.eml` em `packages/api/.ez4/emails/`) | Resend, remetente `@receivy.wellsm.dev` | Resend, remetente no domínio real |
 | Comprovantes | adaptador local explícito | bucket `ProofFiles` do stage | bucket `ProofFiles` do stage |
 | Push | `disabled` | `disabled` até haver projeto Expo/APNs/FCM | idem |
-| Links de pagamento | `fake` | InfinitePay | InfinitePay |
+| Links de pagamento | `fake` | InfinitePay + PagBank (`sandbox`) | InfinitePay + PagBank (`live`) |
 
 `wellsm.dev` é um domínio pessoal compartilhado por vários apps em dev; cada app
 usa um subdomínio (`receivy.wellsm.dev`). O TLD `.dev` está na lista de HSTS
@@ -39,10 +39,18 @@ API (`packages/api/dev.env.example` → `dev.env`, git-ignored; `prd.env` análo
   `<web>/api/auth/<provedor>/callback` (ver `docs/oauth-setup.md`).
 - `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`. O mesmo
   `EMAIL_TRANSPORT` vale para código de login e para notificações.
-- Links de pagamento InfinitePay: `PAYMENT_METHOD_LINK=live` fala com a InfinitePay (cria
-  link de verdade, sem precisar de chave de API), `fake` responde em processo e aponta o
-  link para a página `/dev/infinitepay` do web, `disabled` (padrão quando ausente) falha
-  todo link com `PAYMENT_LINK_UNAVAILABLE`. `fake` no local/test, `live` no dev/prd.
+- Links de pagamento (InfinitePay, PagBank): `PAYMENT_METHOD_LINK=live` fala com os dois
+  provedores de verdade (a InfinitePay não tem sandbox própria, então `live` e `sandbox`
+  dão nela no mesmo host); `sandbox` fala com o host de sandbox do PagBank; `fake`
+  responde em processo e aponta o link para `/dev/checkout/<provider>/<id>` do web; `disabled`
+  (padrão quando ausente) falha todo link com `PAYMENT_LINK_UNAVAILABLE`. `fake` no
+  local/test, `sandbox` no dev, `live` em produção.
+- `PAYMENT_CREDENTIAL_KEY_B64`: chave AES-256-GCM (32 bytes em base64) que sela o token do
+  PagBank antes de gravar em `integrations.credentials`. Gerar com
+  `openssl rand -base64 32`. `disabled` (padrão quando ausente) responde
+  `PAYMENT_CREDENTIAL_KEY_MISSING` a qualquer tentativa de conectar uma conta PagBank.
+  Trocar a chave invalida toda credencial já selada: cada conta PagBank precisa ser
+  reconectada (novo token) depois da rotação.
 - `PUBLIC_API_ORIGIN`: origem pública da API, base do `webhook_url` que a API manda
   à InfinitePay. No local vale `http://127.0.0.1:3735/local-receivy-api`, que a
   InfinitePay não alcança — localmente é o retorno do pagador e o transporte

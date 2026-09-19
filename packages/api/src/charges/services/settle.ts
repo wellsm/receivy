@@ -5,16 +5,30 @@ import type { DbClient } from '../../database';
 import { pushToUser } from '../../notifications/services/direct';
 import type { NotificationTransport } from '../../notifications/services/transport';
 import { ProofRepository } from '../../proofs/repositories/proof';
-import type { PaymentLinkProvider } from '../../vendors/infinitepay/types';
+import type { CheckoutClients, CheckoutProvider } from '../../vendors/checkout/types';
 import { ChargeRepository } from '../repositories/charge';
 import { StoredProofState } from '../schemas/charge';
 import { creditorOf, debtorOf, ownerOf, paymentOf } from '../utils/columns';
+import { checkoutProviderOf } from './payment-link';
 
 export type SettleOutcome = 'settled' | 'replayed' | 'ignored' | 'rejected' | 'mismatch' | 'unavailable';
 
-export type SettleInput = { chargeId: string; transactionNsu: string; slug: string; receiptUrl?: string };
+export type SettleInput = { chargeId: string; transactionNsu: string; receiptUrl?: string } & (
+  | { provider: PaymentProvider.InfinitePay; slug: string }
+  | { provider: PaymentProvider.PagSeguro; credential: string; orderId: string }
+);
 
 export type SettleNotices = { transport: NotificationTransport; origin: string };
+
+/** How the provider is named to a person; the events keep the enum value. */
+function providerName(provider: CheckoutProvider): string {
+  return provider === PaymentProvider.PagSeguro ? 'PagBank' : 'InfinitePay';
+}
+
+/** PagBank is masculine ("pelo PagBank", "no PagBank"); InfinitePay stays feminine ("pela InfinitePay", "na InfinitePay"). */
+function providerArticle(provider: CheckoutProvider): { subject: string; in: string; by: string } {
+  return provider === PaymentProvider.PagSeguro ? { subject: 'O', in: 'no', by: 'pelo' } : { subject: 'A', in: 'na', by: 'pela' };
+}
 
 function record(db: DbClient, chargeId: string, type: string, payload: Record<string, unknown>, at: string) {
   return EventRepository.record(db, { type, eventableType: EventableType.Charge, eventableId: chargeId, payload, at });
@@ -35,7 +49,7 @@ function push(userId: string | undefined, title: string, body: string, chargeId:
   return userId ? [{ userId, title, body, chargeId }] : [];
 }
 
-/** Only a real InfinitePay receipt is kept: anything not starting with `https://` never reaches an event or a column. */
+/** Only a real provider receipt is kept: anything not starting with `https://` never reaches an event or a column. */
 function safeReceipt(url?: string): string | undefined {
   return url?.startsWith('https://') ? url : undefined;
 }
@@ -45,12 +59,14 @@ function safeReceipt(url?: string): string | undefined {
  * asked (`payment_check`) before the charge moves. Idempotent by transaction nsu. A charge that is no longer
  * pending is never moved: the owner hears about the money and decides.
  */
-export async function settleByProvider(db: DbClient, links: PaymentLinkProvider, notices: SettleNotices, input: SettleInput, now = new Date()): Promise<SettleOutcome> {
+export async function settleByProvider(db: DbClient, clients: CheckoutClients, notices: SettleNotices, input: SettleInput, now = new Date()): Promise<SettleOutcome> {
   const receiptUrl = safeReceipt(input.receiptUrl);
   const charge = await ChargeRepository.get(db, input.chargeId);
   const payment = charge ? paymentOf(charge) : null;
+  const provider = payment ? checkoutProviderOf(payment.provider) : null;
 
-  if (!charge || payment?.provider !== PaymentProvider.InfinitePay) {
+  // A webhook of one provider never settles a charge frozen on another.
+  if (!charge || !payment || !provider || provider !== input.provider) {
     return 'ignored';
   }
 
@@ -58,7 +74,13 @@ export async function settleByProvider(db: DbClient, links: PaymentLinkProvider,
     return 'replayed';
   }
 
-  const check = await links.checkPayment({ handle: payment.value, orderNsu: charge.id, transactionNsu: input.transactionNsu, slug: input.slug });
+  const name = providerName(provider);
+  const article = providerArticle(provider);
+  const check = await clients[provider].checkPayment(
+    input.provider === PaymentProvider.InfinitePay
+      ? { provider: input.provider, identity: payment.value, orderNsu: charge.id, transactionNsu: input.transactionNsu, slug: input.slug }
+      : { provider: input.provider, credential: input.credential, orderId: input.orderId, transactionNsu: input.transactionNsu }
+  );
   const stamp = now.toISOString();
   const what = `${charge.description} · ${formatMoney({ amountCents: charge.amount_cents, currency: 'BRL' })}`;
 
@@ -66,15 +88,28 @@ export async function settleByProvider(db: DbClient, links: PaymentLinkProvider,
     return 'unavailable';
   }
 
+  if (check.status === 'unauthorized') {
+    await record(db, charge.id, 'charge.provider.rejected', { transactionNsu: input.transactionNsu, reason: 'unauthorized' }, stamp);
+
+    return 'rejected';
+  }
+
   if (!check.paid) {
-    await record(db, charge.id, 'charge.provider.rejected', { transactionNsu: input.transactionNsu, slug: input.slug }, stamp);
+    await record(db, charge.id, 'charge.provider.rejected', { transactionNsu: input.transactionNsu, ...(input.provider === PaymentProvider.InfinitePay ? { slug: input.slug } : {}) }, stamp);
 
     return 'rejected';
   }
 
   if (check.amountCents < charge.amount_cents) {
     await record(db, charge.id, 'charge.provider.mismatch', { amountCents: check.amountCents, paidAmountCents: check.paidAmountCents, transactionNsu: input.transactionNsu }, stamp);
-    await tell(db, notices, ownerOf(charge), 'Valor divergente na InfinitePay', `A InfinitePay confirmou ${formatMoney({ amountCents: check.amountCents, currency: 'BRL' })} para ${what}. Confira antes de marcar como pago.`, charge.id);
+    await tell(
+      db,
+      notices,
+      ownerOf(charge),
+      `Valor divergente ${article.in} ${name}`,
+      `${article.subject} ${name} confirmou ${formatMoney({ amountCents: check.amountCents, currency: 'BRL' })} para ${what}. Confira antes de marcar como pago.`,
+      charge.id
+    );
 
     return 'mismatch';
   }
@@ -97,7 +132,7 @@ export async function settleByProvider(db: DbClient, links: PaymentLinkProvider,
         outcome: 'ignored' as const,
         pushes: push(
           ownerOf(locked),
-          'Pagamento recebido pela InfinitePay',
+          `Pagamento recebido ${article.by} ${name}`,
           `${what} já estava ${locked.state === ChargeState.Paid ? 'paga' : 'cancelada'} e recebeu um pagamento pelo link.`,
           locked.id
         )
@@ -119,15 +154,15 @@ export async function settleByProvider(db: DbClient, links: PaymentLinkProvider,
       tx,
       locked.id,
       'charge.paid',
-      { via: 'provider', provider: PaymentProvider.InfinitePay, transactionNsu: input.transactionNsu, paidAmountCents: check.paidAmountCents, captureMethod: check.captureMethod, receiptUrl },
+      { via: 'provider', provider, transactionNsu: input.transactionNsu, paidAmountCents: check.paidAmountCents, captureMethod: check.captureMethod, receiptUrl },
       stamp
     );
 
     return {
       outcome: 'settled' as const,
       pushes: [
-        ...push(creditorOf(locked), 'Pagamento recebido pela InfinitePay', `${what} foi paga pelo link.`, locked.id),
-        ...push(debtorOf(locked), 'Pagamento confirmado', `${what} foi confirmada pela InfinitePay.`, locked.id)
+        ...push(creditorOf(locked), `Pagamento recebido ${article.by} ${name}`, `${what} foi paga pelo link.`, locked.id),
+        ...push(debtorOf(locked), 'Pagamento confirmado', `${what} foi confirmada ${article.by} ${name}.`, locked.id)
       ]
     };
   });

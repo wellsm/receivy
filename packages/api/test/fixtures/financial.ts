@@ -14,7 +14,7 @@ export const db = DatabaseTester.getClient<Db>('Db');
 /** The factories the handlers use, built on the test database, so tests go through the same services. */
 export const paymentMethods = createPaymentMethodService({
   db,
-  variables: { PAYMENT_METHOD_LINK: 'fake', PUBLIC_WEB_ORIGIN: 'https://receivy.example' }
+  variables: { PAYMENT_METHOD_LINK: 'fake', PUBLIC_WEB_ORIGIN: 'https://receivy.example', PAYMENT_CREDENTIAL_KEY_B64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' }
 } as unknown as Service.Context<PaymentMethodService>);
 export const contacts = createContactService({ db } as Service.Context<ContactService>);
 export const charges = createChargeService({ db } as Service.Context<ChargeService>);

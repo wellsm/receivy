@@ -11,6 +11,19 @@ export const enum NoticeTemplate {
 
 const CLOSING = 'Se já pagou, envie o comprovante para revisão. O Receivy não movimenta dinheiro.';
 
+/** The footnote changes with how the charge is paid: a checkout link per provider, or a direct Pix key. */
+function footnoteOf(provider?: PaymentProvider): string {
+  if (provider === PaymentProvider.InfinitePay) {
+    return 'O pagamento acontece pelo link da InfinitePay de quem cobra.';
+  }
+
+  if (provider === PaymentProvider.PagSeguro) {
+    return 'O pagamento acontece pelo link do PagBank de quem cobra.';
+  }
+
+  return 'O pagamento acontece direto entre vocês, pela chave Pix de quem cobra.';
+}
+
 export interface RenderInputs {
   email?: string;
   name: string;
@@ -61,10 +74,7 @@ export function renderNotice(input: RenderInputs, template: NoticeTemplate, secr
     heading: opening,
     lead: initial ? 'Abra o link para ver os detalhes e pagar.' : 'Nada mudou desde o último aviso. O link de pagamento continua o mesmo.',
     body: [chargeRow(input.description, `R$ ${amount}`, due), buttonRow(url, 'Confira os detalhes'), noticeRow(CLOSING)].join(''),
-    footnote:
-      input.provider === PaymentProvider.InfinitePay
-        ? 'O pagamento acontece pelo link da InfinitePay de quem cobra.'
-        : 'O pagamento acontece direto entre vocês, pela chave Pix de quem cobra.',
+    footnote: footnoteOf(input.provider),
     preheader: opening
   });
 

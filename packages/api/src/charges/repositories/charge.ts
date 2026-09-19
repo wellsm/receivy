@@ -36,7 +36,13 @@ const sqlNull = null as unknown as undefined;
 
 /** The snapshot shaped for a write: `kind` only when the method carries one, the schema never stores `null`. */
 function paymentSnapshotWrite(payment: PaymentSnapshotColumns) {
-  return { provider: payment.provider, ...(payment.kind ? { kind: payment.kind } : {}), value: payment.value, label: payment.label };
+  return {
+    provider: payment.provider,
+    ...(payment.kind ? { kind: payment.kind } : {}),
+    value: payment.value,
+    label: payment.label,
+    ...(payment.integrationId ? { integrationId: payment.integrationId } : {})
+  };
 }
 
 /** Everything one charge detail needs from its joins, read in a single query per page. */
@@ -132,6 +138,7 @@ export namespace ChargeRepository {
     payment_snapshot?: PaymentSnapshotColumns;
     payment_link_url?: string;
     payment_link_state?: PaymentLinkState;
+    provider_link_id?: string;
     provider_transaction_id?: string;
     provider_receipt_url?: string;
     state: ChargeState;
@@ -158,6 +165,7 @@ export namespace ChargeRepository {
         payment_snapshot: true,
         payment_link_url: true,
         payment_link_state: true,
+        provider_link_id: true,
         provider_transaction_id: true,
         provider_receipt_url: true,
         state: true,
@@ -196,6 +204,7 @@ export namespace ChargeRepository {
         payment_snapshot: true,
         payment_link_url: true,
         payment_link_state: true,
+        provider_link_id: true,
         provider_transaction_id: true,
         provider_receipt_url: true,
         state: true,
@@ -248,6 +257,7 @@ export namespace ChargeRepository {
         payment_snapshot: true,
         payment_link_url: true,
         payment_link_state: true,
+        provider_link_id: true,
         provider_transaction_id: true,
         provider_receipt_url: true,
         state: true,
@@ -289,6 +299,7 @@ export namespace ChargeRepository {
         payment_snapshot: true,
         payment_link_url: true,
         payment_link_state: true,
+        provider_link_id: true,
         provider_transaction_id: true,
         provider_receipt_url: true,
         state: true,
@@ -393,6 +404,7 @@ export namespace ChargeRepository {
         payment_snapshot: true,
         payment_link_url: true,
         payment_link_state: true,
+        provider_link_id: true,
         provider_transaction_id: true,
         provider_receipt_url: true,
         state: true,
@@ -535,10 +547,15 @@ export namespace ChargeRepository {
   }
 
   /** Where the checkout link stands; `url` only comes with `ready`. */
-  export async function setPaymentLink(db: DbClient, id: string, input: { url?: string; state: PaymentLinkState }, now: string): Promise<void> {
+  export async function setPaymentLink(db: DbClient, id: string, input: { url?: string; linkId?: string; state: PaymentLinkState }, now: string): Promise<void> {
     await db.charges.updateOne({
       where: { id },
-      data: { payment_link_state: input.state, ...(input.url ? { payment_link_url: input.url } : {}), updated_at: now }
+      data: {
+        payment_link_state: input.state,
+        ...(input.url ? { payment_link_url: input.url } : {}),
+        ...(input.linkId ? { provider_link_id: input.linkId } : {}),
+        updated_at: now
+      }
     });
   }
 
@@ -592,6 +609,7 @@ export namespace ChargeRepository {
         payment_snapshot: true,
         payment_link_url: true,
         payment_link_state: true,
+        provider_link_id: true,
         provider_transaction_id: true,
         provider_receipt_url: true,
         state: true,

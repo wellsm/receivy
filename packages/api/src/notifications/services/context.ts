@@ -1,4 +1,4 @@
-import { paymentLinkProvider } from '../../charges/services/payment-link';
+import { checkoutClients } from '../../charges/services/payment-link';
 import type { EmailClient } from '../../common/services/email/client';
 import { type NotificationVariables, notificationConfigFrom } from './planner';
 import type { NoticeContext, NotifyScheduler } from './send';
@@ -16,6 +16,6 @@ export function noticeContext({ variables, email, chargeNotifyScheduler }: Produ
     config: notificationConfigFrom(variables),
     transport: notificationTransport(variables, globalThis.fetch, email),
     notify: chargeNotifyScheduler,
-    links: paymentLinkProvider(variables)
+    links: checkoutClients(variables)
   };
 }

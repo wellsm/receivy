@@ -19,6 +19,8 @@ export interface PaymentMethodSchema extends Database.Schema {
   kind?: PixKeyType;
   /** The canonical Pix key, or the InfiniteTag without `$`. */
   value?: String.Max<254>;
+  /** The provider account this method charges through; only providers that need a credential (PagBank) set it. */
+  integration_id?: String.UUID;
   label: String.Max<120>;
   is_default: boolean;
   archived_at?: String.DateTime;

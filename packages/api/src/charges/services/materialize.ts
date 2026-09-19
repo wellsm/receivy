@@ -70,7 +70,7 @@ export async function paymentSnapshot(
     throw new HttpNotFoundError('Meio de pagamento indisponível.');
   }
 
-  return { provider: key.provider, kind: key.kind, value: key.value, label: key.label };
+  return { provider: key.provider, kind: key.kind, value: key.value, label: key.label, ...(key.integrationId ? { integrationId: key.integrationId } : {}) };
 }
 
 /** Validates owner-scoped people/payment method and captures values before materialization. */
@@ -143,7 +143,13 @@ export async function persistChargePlan(
       // A registro is never paid through a link, so the wallet key stays out of it.
       payment:
         context.payment && !settlement.settled
-          ? { provider: context.payment.provider, ...(context.payment.kind ? { kind: context.payment.kind } : {}), value: context.payment.value, label: context.payment.label }
+          ? {
+              provider: context.payment.provider,
+              ...(context.payment.kind ? { kind: context.payment.kind } : {}),
+              value: context.payment.value,
+              label: context.payment.label,
+              ...(context.payment.integrationId ? { integrationId: context.payment.integrationId } : {})
+            }
           : null,
       notify: !recipient || !quiet.has(recipient.userId),
       now

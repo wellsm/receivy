@@ -56,6 +56,8 @@ the request listener logs it.
 | `PAYMENT_METHOD_TAKEN` | 409 | `POST /payment-methods` or `PATCH /payment-methods/{id}` with a `value` already registered for the owner (or the contact) |
 | `INFINITEPAY_CHECKOUT_DISABLED` | 422 | the InfinitePay handle has no external checkout enabled; `context.fields.redirectUrl` opens the app screen that turns it on |
 | `PAYMENT_LINK_UNAVAILABLE` | 503 | InfinitePay did not answer while probing the handle (`POST /payment-methods`) or confirming a payment (`POST /public/charges/{token}/provider-return`) |
+| `PAGSEGURO_TOKEN_INVALID` | 422 | `POST /payment-methods` or `PATCH /payment-methods/{id}` with a PagBank `token` PagBank itself refused |
+| `PAYMENT_CREDENTIAL_KEY_MISSING` | 503 | `PAYMENT_CREDENTIAL_KEY_B64` is not configured while sealing a PagBank `token` |
 
 ## Quotas
 
@@ -68,6 +70,7 @@ through the Next BFF anyway. Buckets are keyed by what the API verified:
 | `POST /auth/email/confirm` | the code itself | 5 attempts per code |
 | public charge / invite reads, `POST /public/charges/{token}/provider-return` | link `public_id`, after the token was verified; bucket `public-read` | 60 |
 | `POST /invites/{token}/accept` | invite `public_id` | 120 |
+| `POST /payment-methods` / `PATCH /payment-methods/{id}` with a PagBank `token` | owner id; bucket `pagseguro-verify` | 10 |
 | public proof upload / complete / withdraw | charge `public_id` | 12 |
 | `POST /charges/{id}/reminders` | charge | 1 per 24 h |
 

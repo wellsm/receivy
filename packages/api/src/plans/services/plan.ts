@@ -137,6 +137,19 @@ async function subscribe(db: DbClient, stripe: StripeClient, variables: PlanVari
       throw new PlanAlreadyActiveError();
     }
 
+    // Assinar, Voltar, Assinar again must confirm the subscription already waiting for its first payment, never open another.
+    if (current.stripe_subscription_id && current.status === SubscriptionStatus.Incomplete) {
+      const resumed = await stripe.resumeSubscription(current.stripe_subscription_id);
+
+      if (resumed.status === 'unavailable') {
+        throw new PlanUnavailableError();
+      }
+
+      if (resumed.status === 'ok') {
+        return { row: current, created: { subscriptionId: current.stripe_subscription_id, clientSecret: resumed.clientSecret } };
+      }
+    }
+
     const result = await stripe.createSubscription({ customerId: current.stripe_customer_id, priceId });
 
     if (result.status !== 'ok') {

@@ -1,6 +1,6 @@
 import { SubscriptionStatus } from '@receivy/common';
 import Stripe from 'stripe';
-import type { StripeCardResult, StripeClient, StripeCustomerResult, StripeDoneResult, StripeEventResult, StripeInvoicesResult, StripeSetupResult, StripeSubscribeResult, StripeSubscriptionResult, StripeSubscriptionState } from './types';
+import type { StripeCardResult, StripeClient, StripeCustomerResult, StripeDoneResult, StripeEventResult, StripeInvoicesResult, StripeResumeResult, StripeSetupResult, StripeSubscribeResult, StripeSubscriptionResult, StripeSubscriptionState } from './types';
 
 /** Stripe's own states collapsed to the plan's: anything unpaid still counts as the paid period until it ends. */
 function statusOf(status: string): SubscriptionStatus {
@@ -70,6 +70,23 @@ export function createStripeClient(secretKey: string, sdk: Stripe = new Stripe(s
         }
 
         return { status: 'ok', subscriptionId: subscription.id, clientSecret };
+      } catch {
+        return { status: 'unavailable' };
+      }
+    },
+
+    async resumeSubscription(subscriptionId): Promise<StripeResumeResult> {
+      try {
+        const subscription = await sdk.subscriptions.retrieve(subscriptionId, { expand: ['latest_invoice.confirmation_secret'] });
+
+        if (subscription.status !== 'incomplete') {
+          return { status: 'expired' };
+        }
+
+        const invoice = subscription.latest_invoice;
+        const clientSecret = invoice && typeof invoice !== 'string' ? invoice.confirmation_secret?.client_secret : undefined;
+
+        return clientSecret ? { status: 'ok', clientSecret } : { status: 'unavailable' };
       } catch {
         return { status: 'unavailable' };
       }

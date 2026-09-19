@@ -42,6 +42,14 @@ export function fakeStripe(): StripeClient {
       return { status: 'ok', subscription: stateOf(id) };
     },
 
+    async resumeSubscription(id) {
+      if (stateOf(id).status === SubscriptionStatus.Canceled) {
+        return { status: 'expired' };
+      }
+
+      return { status: 'ok', clientSecret: `pi_fake_${id}_secret` };
+    },
+
     async setCancelAtPeriodEnd(id, cancel) {
       const next = { ...stateOf(id), cancelAtPeriodEnd: cancel };
 

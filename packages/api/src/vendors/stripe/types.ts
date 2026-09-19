@@ -11,6 +11,8 @@ export type StripeSubscriptionState = {
 export type StripeCustomerResult = { status: 'ok'; customerId: string } | { status: 'unavailable' };
 export type StripeSubscribeResult = { status: 'ok'; subscriptionId: string; clientSecret: string } | { status: 'unavailable' };
 export type StripeSubscriptionResult = { status: 'ok'; subscription: StripeSubscriptionState } | { status: 'not_found' } | { status: 'unavailable' };
+/** `expired`: Stripe already gave up on the unpaid subscription (or it was canceled); a new one must be created. */
+export type StripeResumeResult = { status: 'ok'; clientSecret: string } | { status: 'expired' } | { status: 'unavailable' };
 export type StripeSetupResult = { status: 'ok'; clientSecret: string } | { status: 'unavailable' };
 export type StripeDoneResult = { status: 'ok' } | { status: 'unavailable' };
 export type StripeCardResult = { status: 'ok'; card: PlanCard | null } | { status: 'unavailable' };
@@ -23,6 +25,8 @@ export interface StripeClient {
   createCustomer(input: { ownerId: string; email?: string; name?: string }): Promise<StripeCustomerResult>;
   createSubscription(input: { customerId: string; priceId: string }): Promise<StripeSubscribeResult>;
   getSubscription(subscriptionId: string): Promise<StripeSubscriptionResult>;
+  /** The client secret of a subscription still waiting for its first payment, so the same one is confirmed instead of a new one created. */
+  resumeSubscription(subscriptionId: string): Promise<StripeResumeResult>;
   setCancelAtPeriodEnd(subscriptionId: string, cancel: boolean): Promise<StripeSubscriptionResult>;
   createSetupIntent(customerId: string): Promise<StripeSetupResult>;
   setDefaultPaymentMethod(input: { customerId: string; subscriptionId: string | null; paymentMethodId: string }): Promise<StripeDoneResult>;

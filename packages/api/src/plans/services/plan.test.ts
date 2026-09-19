@@ -98,3 +98,13 @@ describe('PlanService', () => {
     await expect(plans.confirmPaymentMethod('o1', 'pm_1')).resolves.toBeUndefined();
   });
 });
+
+describe('PlanService subscribe reuse', () => {
+  it('reuses the subscription still waiting for its first payment instead of creating another', async () => {
+    const { context, rows } = contextWith({ id: 'row-1', owner_id: 'o1', stripe_customer_id: 'cus_1', stripe_subscription_id: 'sub_fake_77', status: SubscriptionStatus.Incomplete, cancel_at_period_end: false });
+    const result = await createService(context).subscribe('o1', NOW);
+
+    expect(result.clientSecret).toBe('pi_fake_sub_fake_77_secret');
+    expect(rows.get('o1')).toMatchObject({ stripe_subscription_id: 'sub_fake_77' });
+  });
+});

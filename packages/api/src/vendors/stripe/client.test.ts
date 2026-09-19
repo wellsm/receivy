@@ -90,3 +90,20 @@ describe('createStripeClient', () => {
     expect(await client.defaultCard('cus_1')).toEqual({ status: 'ok', card: { brand: 'visa', last4: '4242' } });
   });
 });
+
+describe('resumeSubscription', () => {
+  it('hands back the client secret of a subscription still waiting for its first payment', async () => {
+    const sdk = sdkWith({ subscriptions: { retrieve: vi.fn(async () => ({ id: 'sub_1', status: 'incomplete', latest_invoice: { confirmation_secret: { client_secret: 'pi_secret_again' } } })) } });
+
+    expect(await createStripeClient('sk_test', sdk).resumeSubscription('sub_1')).toEqual({ status: 'ok', clientSecret: 'pi_secret_again' });
+    expect((sdk as never as { subscriptions: { retrieve: ReturnType<typeof vi.fn> } }).subscriptions.retrieve).toHaveBeenCalledWith('sub_1', { expand: ['latest_invoice.confirmation_secret'] });
+  });
+
+  it('answers expired once Stripe gave up on it, and unavailable on any failure', async () => {
+    const expired = createStripeClient('sk_test', sdkWith({ subscriptions: { retrieve: vi.fn(async () => ({ id: 'sub_1', status: 'incomplete_expired', latest_invoice: null })) } }));
+    const down = createStripeClient('sk_test', sdkWith({ subscriptions: { retrieve: vi.fn(async () => { throw new Error('ECONNRESET'); }) } }));
+
+    expect(await expired.resumeSubscription('sub_1')).toEqual({ status: 'expired' });
+    expect(await down.resumeSubscription('sub_1')).toEqual({ status: 'unavailable' });
+  });
+});

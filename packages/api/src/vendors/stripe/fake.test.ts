@@ -34,3 +34,16 @@ describe('fakeStripe', () => {
     expect(stripe.constructEvent('{', 'fake', 'x')).toEqual({ status: 'invalid' });
   });
 });
+
+describe('fakeStripe resume', () => {
+  it('resumes a subscription with the same client secret, and reports a canceled one as expired', async () => {
+    const stripe = fakeStripe();
+    const { subscriptionId } = (await stripe.createSubscription({ customerId: 'cus_fake_o1', priceId: 'price_x' })) as { subscriptionId: string };
+
+    expect(await stripe.resumeSubscription(subscriptionId)).toEqual({ status: 'ok', clientSecret: `pi_fake_${subscriptionId}_secret` });
+
+    fakeStripeSetStatus(subscriptionId, SubscriptionStatus.Canceled);
+
+    expect(await stripe.resumeSubscription(subscriptionId)).toEqual({ status: 'expired' });
+  });
+});

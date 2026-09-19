@@ -33,9 +33,9 @@ export function snapshotDto(payment: PaymentSnapshotColumns | null): PaymentSnap
   return payment ? { provider: payment.provider, kind: payment.kind ?? null, value: payment.value, label: payment.label } : null;
 }
 
-/** The checkout link of an InfinitePay charge; a Pix charge has none. A link never asked for reads as pending. */
+/** The checkout link of a charge paid through a provider (InfinitePay, PagBank); a Pix charge has none. A link never asked for reads as pending. */
 export function paymentLinkOf(row: { payment_snapshot?: PaymentSnapshotColumns; payment_link_url?: string; payment_link_state?: PaymentLinkState }): PaymentLink | null {
-  if (row.payment_snapshot?.provider !== PaymentProvider.InfinitePay) {
+  if (!row.payment_snapshot || row.payment_snapshot.provider === PaymentProvider.Pix) {
     return null;
   }
 

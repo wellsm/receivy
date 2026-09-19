@@ -64,6 +64,11 @@ describe('PagBank charges', () => {
     equal(row?.payment_link_state, PaymentLinkState.Ready);
     equal(row?.provider_link_id, `fake-${chargeId}`);
     equal((await EventRepository.list(db, chargeId, 'charge.payment_link.created')).length, 1);
+
+    const detail = await charges.get(OWNER, chargeId);
+
+    equal(detail.paymentLink?.state, PaymentLinkState.Ready);
+    ok(detail.paymentLink?.url?.includes(`/dev/checkout/pagseguro/${chargeId}`));
   });
 
   it('settles through the fake pay route path (settleByProvider with orderId) once and replays after', async () => {

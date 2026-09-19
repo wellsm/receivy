@@ -30,6 +30,8 @@ import {
   BillingRecurrence,
   Direction,
   EditScope,
+  paymentMethodText,
+  PaymentProvider,
   PixKeyType,
   SplitMode,
   SplitPartKind,
@@ -57,7 +59,7 @@ import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
 import { MonthSelect } from "@/components/app/month-select";
 import { SplitEditor, type SplitRow } from "@/components/app/split-editor";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
-import { PIX_TYPE_LABELS, PixTypeIcon } from "@/components/ui/pix-type-icon";
+import { ProviderIcon } from "@/components/ui/provider-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 
 type Attempt = { input: BillingInput; key: string; uncertain: boolean; applyTo?: EditScope };
@@ -68,11 +70,11 @@ type BillingFormScreenProps = {
 };
 
 const RETURN_TO = "/billings/new";
-const PIX_SETUP = `/settings/pix/new?returnTo=${encodeURIComponent(RETURN_TO)}&required=1`;
+const PIX_SETUP = `/settings/payment-methods/new?returnTo=${encodeURIComponent(RETURN_TO)}&required=1`;
 const NEW_CONTACT = `/contacts/new?returnTo=${encodeURIComponent(RETURN_TO)}`;
 const FROZEN_NOTE = "Contas já geradas só permitem categoria, Pix e lembretes.";
-const PIX_GATE_TITLE = "Cadastre uma chave Pix";
-const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com a sua chave Pix. Cadastre uma e volte para continuar de onde parou.";
+const PIX_GATE_TITLE = "Cadastre um meio de pagamento";
+const PIX_GATE_NOTE = "Uma conta a receber gera um link de pagamento com o seu Pix ou sua InfinitePay. Cadastre um e volte para continuar de onde parou.";
 const NO_CONTACT_KEY = "Este contato ainda não tem chave Pix. Cadastre no contato.";
 const NO_VALUES: Record<string, string> = {};
 
@@ -759,7 +761,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           <h2 className="m-0 text-xl font-bold text-primary-strong">{PIX_GATE_TITLE}</h2>
           <p className="m-0 max-w-sm text-sm leading-5 text-muted">{PIX_GATE_NOTE}</p>
           <button type="button" className="mt-2 h-12 w-full max-w-sm rounded-xl bg-primary font-bold text-on-primary" onClick={() => leaveTo(PIX_SETUP)}>
-            Cadastrar chave Pix
+            Cadastrar meio de pagamento
           </button>
         </section>
       ) : (
@@ -1109,10 +1111,10 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       {!settled && (!payable || Boolean(draft.payee)) && (
       <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0" disabled={locked}>
         <div className="flex items-center justify-between">
-          <span className={LABEL_CLASS}>{payable ? "Pagar via Pix" : "Receber via Pix"}</span>
+          <span className={LABEL_CLASS}>{payable ? "Pagar via Pix" : "Receber por"}</span>
           {!payable && !editing && !gate && (
             <button type="button" aria-label="Cadastrar chave" onClick={() => leaveTo(PIX_SETUP)} className="min-h-8 bg-transparent text-[11px] font-medium text-primary">
-              + Cadastrar nova chave
+              + Cadastrar meio de pagamento
             </button>
           )}
         </div>
@@ -1135,23 +1137,24 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           >
             <span className="flex min-w-0 flex-1 items-center gap-3">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">
-                <PixTypeIcon type={selectedPix?.pixKeyType ?? PixKeyType.Random} />
+                <ProviderIcon method={selectedPix ?? { provider: PaymentProvider.Pix, kind: PixKeyType.Random }} />
               </span>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-xs font-semibold text-ink">
-                  {selectedPix ? `${PIX_TYPE_LABELS[selectedPix.pixKeyType]}: ${abbreviate(selectedPix.pixKey)}` : "Selecionar chave Pix"}
+                  {selectedPix ? `${paymentMethodText(selectedPix).title}: ${abbreviate(paymentMethodText(selectedPix).value)}` : "Selecionar meio de pagamento"}
                 </span>
                 <span className="truncate text-[11px] text-muted">
-                  {selectedPix ? (selectedPix.isDefault ? "Chave padrão" : "Chave secundária") : methods.length ? "Clique para escolher" : "Nenhuma chave cadastrada"}
+                  {selectedPix ? (selectedPix.isDefault ? "Meio padrão" : "Meio secundário") : methods.length ? "Clique para escolher" : "Nenhum meio cadastrado"}
                 </span>
               </span>
             </span>
             {switchable && <ChevronDown size={16} aria-hidden="true" className="text-muted" />}
           </button>
           {pixOpen && (
-            <ul id="billing-pix-options" role="listbox" aria-label="Chave Pix" className="absolute left-0 right-0 top-full z-20 m-0 mt-2 flex list-none flex-col gap-2 rounded-2xl border border-outline/40 bg-canvas p-3 shadow-xl">
+            <ul id="billing-pix-options" role="listbox" aria-label="Meio de pagamento" className="absolute left-0 right-0 top-full z-20 m-0 mt-2 flex list-none flex-col gap-2 rounded-2xl border border-outline/40 bg-canvas p-3 shadow-xl">
               {methods.map(method => {
                 const active = draft.pix === method.id;
+                const text = paymentMethodText(method);
 
                 return (
                   <li key={method.id} role="option" aria-selected={active}>
@@ -1164,14 +1167,14 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
                       className={`flex min-h-16 w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${active ? "border-primary bg-primary-soft/40" : "border-outline/40 bg-surface"}`}
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">
-                        <PixTypeIcon type={method.pixKeyType} />
+                        <ProviderIcon method={method} />
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col">
                         <span className="flex items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-ink">{PIX_TYPE_LABELS[method.pixKeyType]}</span>
+                          <span className="truncate text-sm font-semibold text-ink">{text.title}</span>
                           {method.isDefault && <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-muted">Padrão</span>}
                         </span>
-                        <span className="truncate text-[11px] text-muted">{method.pixKey}</span>
+                        <span className="truncate text-[11px] text-muted">{text.value}</span>
                       </span>
                       {active && <Check size={18} aria-hidden="true" className="text-primary-strong" />}
                     </button>

@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, PaymentProvider, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
@@ -35,16 +35,16 @@ const ana: Contact = {
 /** The contact's own keys, the way `GET /payment-methods?contactId=` answers them. */
 const nubank: PaymentMethod = {
   id: "pm-1",
-  type: "pix",
+  provider: PaymentProvider.Pix,
   label: "Nubank",
-  pixKey: "ana@example.com",
-  pixKeyType: PixKeyType.Email,
+  value: "ana@example.com",
+  kind: PixKeyType.Email,
   isDefault: true,
   contactId: "c1",
   archivedAt: null,
   createdAt: "2026-01-01",
 };
-const itau: PaymentMethod = { ...nubank, id: "pm-2", label: "Itaú", pixKey: "52998224725", pixKeyType: PixKeyType.Cpf, isDefault: false, createdAt: "2026-01-02" };
+const itau: PaymentMethod = { ...nubank, id: "pm-2", label: "Itaú", value: "52998224725", kind: PixKeyType.Cpf, isDefault: false, createdAt: "2026-01-02" };
 
 type Sent = { path: string; init: RequestInit };
 
@@ -189,7 +189,7 @@ it("files the typed Pix key under the new contact", async () => {
 
   expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toEqual({
     name: "Ana Souza",
-    paymentMethod: { pixKeyType: "phone", pixKey: "+5511987654321", label: "Nubank" },
+    paymentMethod: { provider: "pix", kind: "phone", value: "+5511987654321", label: "Nubank" },
   });
 });
 
@@ -208,7 +208,7 @@ it("leaves the label out when only the key was typed", async () => {
 
   expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toEqual({
     name: "Ana Souza",
-    paymentMethod: { pixKeyType: "email", pixKey: "ana@example.com" },
+    paymentMethod: { provider: "pix", kind: "email", value: "ana@example.com" },
   });
 });
 

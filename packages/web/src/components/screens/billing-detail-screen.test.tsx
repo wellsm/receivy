@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { BillingCategory, BillingFrequency, BillingState, BillingKind, BillingRecurrence, ChargeState, chargeShareText, Direction, PendingChargesAction, PixKeyType, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { BillingCategory, BillingFrequency, BillingState, BillingKind, BillingRecurrence, ChargeState, chargeShareText, Direction, PaymentProvider, PendingChargesAction, PixKeyType, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
 
@@ -26,7 +26,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const PIX = { keyType: PixKeyType.Phone, key: "11987654321", label: "" };
+const PAYMENT = { provider: PaymentProvider.Pix, kind: PixKeyType.Phone, value: "11987654321", label: "" };
 
 function charge(overrides: Partial<ChargeDetail> & { id: string; name: string }): ChargeDetail {
   const { name, ...rest } = overrides;
@@ -45,7 +45,9 @@ function charge(overrides: Partial<ChargeDetail> & { id: string; name: string })
     direction: Direction.Receivable,
     recipient: { userId: "u1", name, email: null },
     debtorId: "u1",
-    pix: PIX,
+    payment: PAYMENT,
+    paymentLink: null,
+    receiptUrl: null,
     sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
@@ -178,7 +180,8 @@ it("sums the current cycle in the hero and lists its participants with their sta
   expect(screen.getByText("R$ 120,00")).toBeInTheDocument();
   expect(screen.getByText("66% liquidado")).toBeInTheDocument();
   expect(screen.getByText("Falta R$ 60,00")).toBeInTheDocument();
-  expect(screen.getByText("11987654321")).toBeInTheDocument();
+  // Was "11987654321" raw before payment display went through `paymentMethodText`, which formats a Pix phone key.
+  expect(screen.getByText("(11) 98765-4321")).toBeInTheDocument();
   expect(screen.getByText("Ciclo 2 de 3")).toBeInTheDocument();
 
   const lucas = screen.getByRole("button", { name: "Abrir cobrança de Lucas F." });
@@ -429,7 +432,7 @@ it("has no pause for a finite billing", async () => {
 
 it("names the Pix key from the wallet while no charge has been generated", async () => {
   const detail = billing({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
-  const wallet = [{ id: "pix-2", type: "pix", pixKeyType: "email", pixKey: "ana@example.com", label: "", isDefault: true, archivedAt: null, createdAt: "" }];
+  const wallet = [{ id: "pix-2", provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: "ana@example.com", label: "", isDefault: true, contactId: null, archivedAt: null, createdAt: "" }];
 
   await open(detail, (path) => (path === "/api/financial/payment-methods" ? Response.json({ paymentMethods: wallet }) : undefined));
 
@@ -658,7 +661,7 @@ it("heads a registro with its counterpart and hides the invite and the payment l
     name: "Empresa X",
     recipient: { userId: null, name: "Empresa X", email: null },
     debtorId: null,
-    pix: null,
+    payment: null,
     sharingState: SharingState.Closed,
     kind: BillingKind.Record,
   });
@@ -691,7 +694,7 @@ it("heads a registro a pagar with Para and names its rows after the counterpart"
     ownedByViewer: true,
     recipient: { userId: null, name: "Imobiliária", email: null },
     debtorId: null,
-    pix: null,
+    payment: null,
     kind: BillingKind.Record,
   });
 

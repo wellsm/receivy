@@ -128,18 +128,18 @@ describe("ProfileScreen", () => {
     await waitFor(() => expect(container.querySelector("img")).toHaveAttribute("src", "https://bucket.test/new"));
   });
 
-  it("links to contacts, pix keys, terms and privacy", async () => {
+  it("links to contacts, payment methods, terms and privacy", async () => {
     loadAccount();
 
     render(<ProfileScreen />);
 
     expect(await screen.findByRole("link", { name: "Gerenciar contatos" })).toHaveAttribute("href", "/contacts");
-    expect(screen.getByRole("link", { name: "Gerenciar chaves Pix" })).toHaveAttribute("href", "/settings/pix");
+    expect(screen.getByRole("link", { name: "Gerenciar meios de pagamento" })).toHaveAttribute("href", "/settings/payment-methods");
     expect(screen.getByRole("link", { name: "Termos" })).toHaveAttribute("href", "/terms");
     expect(screen.getByRole("link", { name: "Privacidade" })).toHaveAttribute("href", "/privacy");
     expect(screen.queryByText(/Receivy v/)).not.toBeInTheDocument();
     expect(screen.getByText("Meus Contatos")).toBeInTheDocument();
-    expect(screen.getByText("Minhas Chaves Pix")).toBeInTheDocument();
+    expect(screen.getByText("Meios de pagamento")).toBeInTheDocument();
   });
 
   it("logs out only after confirmation", async () => {

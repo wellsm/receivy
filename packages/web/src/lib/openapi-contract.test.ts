@@ -44,6 +44,8 @@ const DEDICATED_BFF = [
   "GET charges",
   "GET public/charges/{p}", "POST public/charges/{p}/proof", "GET public/charges/{p}/proof", "DELETE public/charges/{p}/proof", "POST public/charges/{p}/proof/complete",
   "POST public/charges/{p}/proof/declaration",
+  // The pay page is a server component and closes the charge with authApiFetch, like /pay itself.
+  "POST public/charges/{p}/provider-return",
   // Provider callbacks land on the web domain and are bridged to the API (lib/auth/provider-callback.ts).
   "GET auth/google/callback", "POST auth/apple/callback",
 ];
@@ -53,10 +55,12 @@ const WEB_EXCLUSIONS: Record<string, string> = {
   "POST devices": "push registration is native-only",
   "POST auth/apple/native/start": "native Sign in with Apple only",
   "POST auth/apple/native/exchange": "native Sign in with Apple only",
+  "POST webhooks/infinitepay/{p}": "InfinitePay posts here server-to-server; the browser never calls it",
 };
 // Authenticated paths the native app deliberately does not call yet.
 const NATIVE_DEFERRED: Record<string, string> = {
   "invites/{p}/accept": "an invite link always opens in the browser; there is no native join flow",
+  "webhooks/infinitepay/{p}": "InfinitePay posts here server-to-server; no client ever calls it",
 };
 
 describe("OpenAPI × BFF", () => {

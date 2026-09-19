@@ -1,6 +1,6 @@
 "use client";
 
-import { pixKeyField, PixKeyType, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
+import { apiErrorCode, pixKeyField, PaymentProvider, PixKeyType, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
 import { Check, Loader2, Star } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -10,22 +10,24 @@ import { responseMessage } from "@/lib/financial-response";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 
-type PixKeyFormScreenProps = { returnTo?: string; required?: boolean };
+type PaymentMethodFormScreenProps = { returnTo?: string; required?: boolean };
 
-const SAVE_ERROR = "Não foi possível salvar a chave Pix.";
+const SAVE_ERROR = "Não foi possível salvar o meio de pagamento.";
 
-export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScreenProps) {
+export function PaymentMethodFormScreen({ returnTo, required = false }: PaymentMethodFormScreenProps) {
   const router = useRouter();
+  const [provider, setProvider] = useState<PaymentProvider>(PaymentProvider.Pix);
   const [type, setType] = useState<PixKeyType>(PixKeyType.Email);
   const [key, setKey] = useState("");
   const [touched, setTouched] = useState(false);
+  const [handle, setHandle] = useState("");
   const [makeDefault, setMakeDefault] = useState(true);
   // A ref, not state: the list request reads it from a closure created at mount.
   const defaultTouched = useRef(false);
   const [accountEmail, setAccountEmail] = useState("");
   const [accountPhone, setAccountPhone] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ message: string; redirectUrl?: string }>({ message: "" });
 
   useEffect(() => {
     let live = true;
@@ -85,28 +87,36 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
     setType(next);
     setKey("");
     setTouched(false);
-    setError("");
+    setError({ message: "" });
   }
 
   function change(raw: string) {
-    setError("");
+    setError({ message: "" });
     setTouched(true);
     setKey(pixKeyField(type).format(raw));
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setError("");
+    setError({ message: "" });
     setBusy(true);
 
     try {
       const response = await browserFetch("/api/financial/payment-methods", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pixKeyType: type, pixKey: spec.unformat(value) }),
+        body: JSON.stringify(provider === PaymentProvider.InfinitePay ? { provider, value: handle } : { provider, kind: type, value: spec.unformat(value) }),
       });
 
       if (!response.ok) {
+        const payload = await response.clone().json().catch(() => null);
+
+        if (apiErrorCode(payload) === "INFINITEPAY_CHECKOUT_DISABLED") {
+          setError({ message: payload.message, redirectUrl: payload.context.fields?.redirectUrl });
+
+          return;
+        }
+
         throw new Error(await responseMessage(response, SAVE_ERROR));
       }
 
@@ -124,9 +134,9 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
         return;
       }
 
-      router.push("/settings/pix");
+      router.push("/settings/payment-methods");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : SAVE_ERROR);
+      setError({ message: reason instanceof Error ? reason.message : SAVE_ERROR });
     } finally {
       setBusy(false);
     }
@@ -136,23 +146,75 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
     <form className="mx-auto flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-2xl" onSubmit={submit}>
       {required && (
         <p className="m-0 rounded-xl bg-warning-soft p-4 text-sm font-semibold text-warning" role="status">
-          Você precisa de uma chave Pix para criar cobranças.
+          Você precisa de um meio de pagamento para criar cobranças.
         </p>
       )}
 
-      <PixKeyFields type={type} value={value} required onPickType={pick} onChange={change} />
+      <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+        <legend className="text-xs font-semibold text-muted">Tipo de meio</legend>
+        <div role="radiogroup" aria-label="Tipo de meio" className="flex gap-2">
+          {[
+            { value: PaymentProvider.Pix, label: "Pix" },
+            { value: PaymentProvider.InfinitePay, label: "InfinitePay" },
+          ].map(option => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={provider === option.value}
+              onClick={() => {
+                setProvider(option.value);
+                setError({ message: "" });
+              }}
+              className={`min-h-11 flex-1 rounded-xl border px-3 text-sm font-semibold ${provider === option.value ? "border-primary bg-primary-soft/40 text-primary-strong" : "border-outline/40 bg-surface text-ink"}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      {provider === PaymentProvider.Pix ? (
+        <PixKeyFields type={type} value={value} required onPickType={pick} onChange={change} />
+      ) : (
+        <div className="flex flex-col gap-1">
+          <label htmlFor="infinitepay-handle" className="text-xs font-semibold text-muted">
+            InfiniteTag
+          </label>
+          <div className="flex min-h-12 items-center rounded-xl border border-outline/50 bg-surface px-3">
+            <span aria-hidden="true" className="pr-1 text-sm font-bold text-muted">
+              $
+            </span>
+            <input
+              id="infinitepay-handle"
+              value={handle}
+              required
+              maxLength={41}
+              autoCapitalize="none"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={event => {
+                setError({ message: "" });
+                setHandle(event.target.value);
+              }}
+              className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none"
+            />
+          </div>
+          <p className="m-0 text-xs leading-5 text-muted">É o nome de usuário do app InfinitePay. O checkout externo precisa estar ativo lá; a cobrança aceita Pix ou cartão em até 12x.</p>
+        </div>
+      )}
 
       <section className="flex items-center justify-between gap-4 rounded-xl border border-outline/40 bg-surface p-4">
         <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor="pix-default" className="flex items-center gap-1.5 text-sm font-bold text-ink">
+          <label htmlFor="method-default" className="flex items-center gap-1.5 text-sm font-bold text-ink">
             <Star size={16} aria-hidden="true" className="fill-current text-success" />
-            Definir como chave principal
+            Definir como meio principal
           </label>
-          <p className="m-0 text-xs leading-5 text-muted">Esta chave será usada como padrão ao criar novas cobranças e links Pix.</p>
+          <p className="m-0 text-xs leading-5 text-muted">Este meio será usado como padrão ao criar novas cobranças.</p>
         </div>
         <span className="relative inline-flex shrink-0 items-center">
           <input
-            id="pix-default"
+            id="method-default"
             type="checkbox"
             className="peer sr-only"
             checked={makeDefault}
@@ -168,21 +230,26 @@ export function PixKeyFormScreen({ returnTo, required = false }: PixKeyFormScree
         </span>
       </section>
 
-      {error && (
-        <p className="m-0 rounded-xl bg-danger-soft p-4 text-sm text-danger" role="alert">
-          {error}
+      {error.message && (
+        <p className="m-0 flex flex-col gap-2 rounded-xl bg-danger-soft p-4 text-sm text-danger" role="alert">
+          {error.message}
+          {error.redirectUrl && (
+            <a href={error.redirectUrl} target="_blank" rel="noopener noreferrer" className="font-bold underline">
+              Abrir configurações da InfinitePay
+            </a>
+          )}
         </p>
       )}
 
       <ScreenFooter className="-mx-1 border-t border-outline/30 bg-canvas/95 px-1 pb-2 pt-4 backdrop-blur-md">
         <button
           type="submit"
-          aria-label="Salvar chave Pix"
+          aria-label="Salvar meio de pagamento"
           disabled={busy}
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary transition active:scale-[0.985] disabled:opacity-60"
         >
           {busy ? <Loader2 size={18} aria-hidden="true" className="animate-spin" /> : <Check size={18} aria-hidden="true" />}
-          {busy ? "Salvando…" : "Salvar Chave Pix"}
+          {busy ? "Salvando…" : "Salvar meio de pagamento"}
         </button>
       </ScreenFooter>
     </form>

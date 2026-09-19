@@ -1,6 +1,22 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BillingKind, BillingRecurrence, ChargeState, chargeShareText, Direction, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import {
+  BillingKind,
+  BillingRecurrence,
+  ChargeState,
+  chargeShareText,
+  Direction,
+  PaymentLinkState,
+  PaymentProvider,
+  PixKeyType,
+  ProofKind,
+  ProofMime,
+  ProofState,
+  SharingState,
+  type ChargeDetail,
+  type ChargeProof,
+} from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ChargeDetailScreen } from "@/components/screens/charge-detail-screen";
 
@@ -26,7 +42,9 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
     proofState: null,
     recipient: { userId: "u1", name: "Ana", email: null },
     debtorId: "u1",
-    pix: { keyType: PixKeyType.Email, key: "pix@example.com", label: "Principal" },
+    payment: { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: "pix@example.com", label: "Principal" },
+    paymentLink: null,
+    receiptUrl: null,
     sharingState: SharingState.Ready,
     proof: null,
     cancelledAt: null,
@@ -49,9 +67,13 @@ function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
   };
 }
 
-/** Routes the BFF calls the screen makes; unknown paths answer with the charge itself. */
+/** Routes the BFF calls the screen makes; unknown paths answer with the charge itself. Also records every call made. */
 function serve(detail: ChargeDetail, extra: Record<string, () => Response> = {}) {
+  const calls: [string, RequestInit | undefined][] = [];
+
   vi.mocked(browserFetch).mockImplementation(async (path, init) => {
+    calls.push([String(path), init]);
+
     const key = `${init?.method ?? "GET"} ${String(path)}`;
     const handler = Object.entries(extra).find(([route]) => route === key)?.[1];
 
@@ -61,6 +83,8 @@ function serve(detail: ChargeDetail, extra: Record<string, () => Response> = {})
 
     return Response.json(detail);
   });
+
+  return calls;
 }
 
 /** Every "marcar pago" entry point asks first; this answers the dialog. */
@@ -72,23 +96,38 @@ async function confirmMarkPaid() {
 
 describe("ChargeDetailScreen", () => {
   it("selects an owned Pix explicitly before first publication", async () => {
-    serve(charge({ direction: Direction.Receivable, pix: null, sharingState: SharingState.PixRequired }), {
-      "GET /api/financial/payment-methods": () => Response.json({ paymentMethods: [{ id: "method", label: "Principal", pixKey: "pix@example.com", pixKeyType: "email" }] }),
+    serve(charge({ direction: Direction.Receivable, payment: null, sharingState: SharingState.PixRequired }), {
+      "GET /api/financial/payment-methods": () =>
+        Response.json({
+          paymentMethods: [
+            {
+              id: "method",
+              provider: PaymentProvider.Pix,
+              kind: PixKeyType.Email,
+              value: "pix@example.com",
+              label: "Principal",
+              isDefault: true,
+              contactId: null,
+              archivedAt: null,
+              createdAt: "2026-01-01",
+            },
+          ],
+        }),
       "POST /api/financial/charges/charge/public-link": () => Response.json({ token: "fixture", expiresAt: "2030-01-01" }),
     });
 
     render(<ChargeDetailScreen id="charge" />);
 
-    await screen.findByRole("option", { name: "EMAIL · pix@example.com" });
+    await screen.findByRole("option", { name: "E-mail · pix@example.com" });
 
     fireEvent.change(await screen.findByLabelText("Pix para esta cobrança"), { target: { value: "method" } });
-    fireEvent.click(screen.getByRole("button", { name: "Publicar com este Pix" }));
+    fireEvent.click(screen.getByRole("button", { name: "Publicar com este meio" }));
 
     await waitFor(() => expect(browserFetch).toHaveBeenCalledWith("/api/financial/charges/charge/public-link", expect.objectContaining({ body: JSON.stringify({ paymentMethodId: "method" }) })));
   });
 
   it("shows honest manual-history guidance for a legacy published null snapshot", async () => {
-    serve(charge({ direction: Direction.Receivable, pix: null, sharingState: SharingState.LegacyWithoutPix }));
+    serve(charge({ direction: Direction.Receivable, payment: null, sharingState: SharingState.LegacyWithoutPix }));
 
     render(<ChargeDetailScreen id="charge" />);
 
@@ -228,7 +267,7 @@ describe("ChargeDetailScreen", () => {
   });
 
   it("names a conta a pagar without payee as the owner's alone", async () => {
-    serve(charge({ direction: Direction.Payable, ownedByViewer: true, hasPix: false, pix: null, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorId: null }));
+    serve(charge({ direction: Direction.Payable, ownedByViewer: true, hasPix: false, payment: null, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorId: null }));
 
     render(<ChargeDetailScreen id="charge" />);
 
@@ -519,5 +558,43 @@ describe("ChargeDetailScreen", () => {
     expect(screen.queryByRole("button", { name: "Compartilhar" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Não notificar esta cobrança" })).not.toBeInTheDocument();
     expect(screen.queryByText("Comprovante")).not.toBeInTheDocument();
+  });
+
+  it("copies the InfinitePay link for the payer", async () => {
+    const user = userEvent.setup();
+    const write = vi.fn().mockResolvedValue(undefined);
+
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: write }, configurable: true });
+    serve(
+      charge({
+        direction: Direction.Payable,
+        payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" },
+        paymentLink: { url: "https://checkout/abc", state: PaymentLinkState.Ready },
+      }),
+    );
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    await user.click(await screen.findByRole("button", { name: "Copiar link de pagamento" }));
+
+    expect(write).toHaveBeenCalledWith("https://checkout/abc");
+    expect(await screen.findByRole("status")).toHaveTextContent("Link copiado.");
+  });
+
+  it("asks for a new link when the last one failed", async () => {
+    const user = userEvent.setup();
+    const calls = serve(
+      charge({
+        direction: Direction.Receivable,
+        ownedByViewer: true,
+        payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" },
+        paymentLink: { url: null, state: PaymentLinkState.Failed },
+      }),
+    );
+
+    render(<ChargeDetailScreen id="charge" />);
+    await user.click(await screen.findByRole("button", { name: "Gerar link de novo" }));
+
+    await waitFor(() => expect(calls.some(([path, init]) => path.endsWith("/charges/charge/payment-link") && init?.method === "POST")).toBe(true));
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { billingCategoryLabel, BillingKind, calendarDate, chargeShareText, chargeStateTag, formatMoney, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod, type PixSnapshot } from "@receivy/common";
+import { billingCategoryLabel, BillingKind, calendarDate, chargeShareText, chargeStateTag, formatMoney, paymentMethodText, PaymentProvider, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod } from "@receivy/common";
 import { Bell, BellOff, Check, CircleDashed, CirclePause, CirclePlay, CircleStop, KeyRound, Pencil, Receipt, RotateCcw, Share2, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -13,7 +13,6 @@ import { CategoryIcon } from "@/components/ui/category-icon";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
-import { PIX_TYPE_LABELS } from "@/components/ui/pix-type-icon";
 import { StatusTag } from "@/components/ui/status-tag";
 
 /** One due date of the billing: the charges generated for it, oldest cycle first. */
@@ -82,10 +81,8 @@ function money(amountCents: number, currency: Money["currency"] = "BRL"): string
 }
 
 /** A billing without generated charges still points at its key; the wallet turns the id into something readable. */
-function pixFromWallet(methods: PaymentMethod[], paymentMethodId: string | undefined): PixSnapshot | null {
-  const method = methods.find((candidate) => candidate.id === paymentMethodId);
-
-  return method ? { keyType: method.pixKeyType, key: method.pixKey, label: method.label } : null;
+function methodFromWallet(methods: PaymentMethod[], paymentMethodId: string | undefined): PaymentMethod | undefined {
+  return methods.find((candidate) => candidate.id === paymentMethodId);
 }
 
 function cyclesOf(billing: BillingDetail): Cycle[] {
@@ -438,7 +435,11 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   const payable = billing.type === "payable";
   // A registro: the owner alone, already settled, with the other side named by the API.
   const settled = billing.kind === BillingKind.Record;
-  const pix = payable ? billing.pix : (billing.charges.find((charge) => charge.pix)?.pix ?? pixFromWallet(methods, billing.paymentMethodId));
+  const payment = payable
+    ? billing.pix
+      ? { provider: PaymentProvider.Pix, kind: billing.pix.keyType, value: billing.pix.key }
+      : null
+    : (billing.charges.find((charge) => charge.payment)?.payment ?? methodFromWallet(methods, billing.paymentMethodId) ?? null);
   const ended = billing.state === "ended";
   const currency = billing.total.currency;
   const stateTone = billing.state === "active" ? "success" : billing.state === "paused" ? "warning" : "neutral";
@@ -558,10 +559,10 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                 <KeyRound size={14} aria-hidden="true" className="shrink-0 text-primary-strong" />
                 {/* Only the owner reaches this screen, so the key itself is safe to show here. */}
                 <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
-                  {pix ? (
+                  {payment ? (
                     <>
-                      {`Pix - ${PIX_TYPE_LABELS[pix.keyType]}: `}
-                      <span className="font-medium text-ink">{pix.key}</span>
+                      {`${paymentMethodText(payment).title}: `}
+                      <span className="font-medium text-ink">{paymentMethodText(payment).value}</span>
                     </>
                   ) : payable ? (
                     "Sem chave Pix"
@@ -570,7 +571,13 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                   )}
                 </span>
               </div>
-              {pix && <CopyButton value={pix.key} ariaLabel="Copiar chave Pix" onRefused={() => setError("Não foi possível copiar a chave.")} />}
+              {payment && (
+                <CopyButton
+                  value={payment.provider === PaymentProvider.InfinitePay ? `$${payment.value}` : payment.value}
+                  ariaLabel="Copiar chave Pix"
+                  onRefused={() => setError("Não foi possível copiar a chave.")}
+                />
+              )}
             </div>
           </article>
 

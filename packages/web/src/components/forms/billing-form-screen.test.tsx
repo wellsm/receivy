@@ -26,13 +26,13 @@ const ana = { id: "c1", userId: "u1", name: "Ana Souza", nickname: "Ana", displa
 const bruno = { id: "c2", userId: "u2", name: "Bruno Lima", nickname: null, displayName: "Bruno Lima", email: "bruno@example.com", phone: null, status: "active", archivedAt: null, createdAt: "2026-01-01", lastBilledAt: null, activeCharges: 0 };
 /** No e-mail and no phone: a placeholder contact nobody can notify. */
 const carla = { id: "c3", userId: "u3", name: "Carla Dias", nickname: null, displayName: "Carla", email: "", phone: null, status: "pending", archivedAt: null, createdAt: "2026-01-01", lastBilledAt: null, activeCharges: 0 };
-const method = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, contactId: null, archivedAt: null };
+const method = { id: "pix-1", label: "Nubank", provider: "pix", value: "ana@example.com", kind: "email", isDefault: true, contactId: null, archivedAt: null };
 /** Block 9.1: the keys the owner filed under each contact; a conta a pagar only picks among the seated contact's. */
-const anaKey = { id: "pix-ana", label: "Nubank da Ana", pixKey: "ana@example.com", pixKeyType: "email", isDefault: true, contactId: "c1", archivedAt: null };
-const anaSecondKey = { id: "pix-ana-2", label: "Itaú da Ana", pixKey: "52998224725", pixKeyType: "cpf", isDefault: false, contactId: "c1", archivedAt: null };
-const brunoKey = { id: "pix-bruno", label: "Bruno", pixKey: "bruno@example.com", pixKeyType: "email", isDefault: true, contactId: "c2", archivedAt: null };
+const anaKey = { id: "pix-ana", label: "Nubank da Ana", provider: "pix", value: "ana@example.com", kind: "email", isDefault: true, contactId: "c1", archivedAt: null };
+const anaSecondKey = { id: "pix-ana-2", label: "Itaú da Ana", provider: "pix", value: "52998224725", kind: "cpf", isDefault: false, contactId: "c1", archivedAt: null };
+const brunoKey = { id: "pix-bruno", label: "Bruno", provider: "pix", value: "bruno@example.com", kind: "email", isDefault: true, contactId: "c2", archivedAt: null };
 const CONTACT_KEYS: Record<string, unknown[]> = { c1: [anaKey, anaSecondKey], c2: [brunoKey] };
-const PIX_SETUP = "/settings/pix/new?returnTo=%2Fbillings%2Fnew&required=1";
+const PIX_SETUP = "/settings/payment-methods/new?returnTo=%2Fbillings%2Fnew&required=1";
 
 type Sent = { path: string; init: RequestInit };
 
@@ -510,7 +510,7 @@ it("restores the stored draft when the form mounts", async () => {
 
   expect(await screen.findByLabelText("Valor total")).toHaveValue("80,00");
   expect(screen.getByRole("button", { name: /Ana/ })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Chave padrão");
+  expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Meio padrão");
   expect(window.sessionStorage.getItem("receivy.billingDraft")).toBeNull();
 });
 
@@ -713,7 +713,7 @@ it("records a registro naming the single contact who paid it, with nobody to spl
   expect(screen.getByText("Registro já quitado: ninguém recebe aviso. Cada ocorrência fica paga no vencimento.")).toBeInTheDocument();
   expect(screen.queryByText("Participantes")).not.toBeInTheDocument();
   expect(screen.queryByText("Divisão da Conta")).not.toBeInTheDocument();
-  expect(screen.queryByText("Receber via Pix")).not.toBeInTheDocument();
+  expect(screen.queryByText("Receber por")).not.toBeInTheDocument();
   expect(screen.getByText("De quem")).toBeInTheDocument();
   expect(screen.getByText("Escolha quem pagou.")).toBeInTheDocument();
 
@@ -789,12 +789,12 @@ it("hides the form behind a single call to action when the account has no key", 
 
   const { user } = renderForm();
 
-  expect(await screen.findByText("Cadastre uma chave Pix")).toBeInTheDocument();
+  expect(await screen.findByText("Cadastre um meio de pagamento")).toBeInTheDocument();
   expect(routerMock.push).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: "Criar conta" })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Valor total")).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Cadastrar chave Pix" }));
+  await user.click(screen.getByRole("button", { name: "Cadastrar meio de pagamento" }));
 
   expect(routerMock.push).toHaveBeenCalledWith(PIX_SETUP);
   expect(window.sessionStorage.getItem("receivy.billingDraft")).toContain('"direction":"receivable"');
@@ -807,7 +807,7 @@ it("keeps the form open for a conta a pagar even without a key", async () => {
 
   await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
 
-  expect(screen.queryByText("Cadastre uma chave Pix")).not.toBeInTheDocument();
+  expect(screen.queryByText("Cadastre um meio de pagamento")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Criar conta" })).toBeInTheDocument();
 });
 
@@ -816,11 +816,11 @@ it("opens the form of a registro a receber even without a key", async () => {
 
   const { user } = renderForm();
 
-  expect(await screen.findByText("Cadastre uma chave Pix")).toBeInTheDocument();
+  expect(await screen.findByText("Cadastre um meio de pagamento")).toBeInTheDocument();
 
   await user.click(screen.getByRole("switch", { name: "Já recebi" }));
 
-  expect(screen.queryByText("Cadastre uma chave Pix")).not.toBeInTheDocument();
+  expect(screen.queryByText("Cadastre um meio de pagamento")).not.toBeInTheDocument();
   expect(screen.getByText("De quem")).toBeInTheDocument();
 });
 
@@ -829,7 +829,7 @@ it("never gates the form once a key exists", async () => {
   renderForm();
 
   expect(await screen.findByRole("button", { name: /E-mail/ })).toBeInTheDocument();
-  expect(screen.queryByText("Cadastre uma chave Pix")).not.toBeInTheDocument();
+  expect(screen.queryByText("Cadastre um meio de pagamento")).not.toBeInTheDocument();
   expect(routerMock.push).not.toHaveBeenCalled();
 });
 
@@ -841,7 +841,7 @@ it("creates a conta a pagar without participants, naming the contact who receive
 
   expect(screen.queryByText("Participantes")).not.toBeInTheDocument();
   expect(screen.queryByText("Divisão da Conta")).not.toBeInTheDocument();
-  expect(screen.queryByText("Receber via Pix")).not.toBeInTheDocument();
+  expect(screen.queryByText("Receber por")).not.toBeInTheDocument();
   expect(screen.getByText("Para quem")).toBeInTheDocument();
   // The key is no longer typed here: it belongs to the contact.
   expect(screen.queryByRole("radiogroup", { name: "Tipo de chave" })).not.toBeInTheDocument();
@@ -855,7 +855,7 @@ it("creates a conta a pagar without participants, naming the contact who receive
   expect(await screen.findByText("Pagar via Pix")).toBeInTheDocument();
   expect(sent.some(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toBe(true);
 
-  await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Chave padrão"));
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Meio padrão"));
 
   await user.type(screen.getByLabelText("Valor total"), "100,00");
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
@@ -881,7 +881,7 @@ it("switches the conta a pagar to another key of the same contact", async () => 
   await seatAna(user);
 
   await user.click(await screen.findByRole("button", { name: /E-mail/ }));
-  await user.click(within(screen.getByRole("listbox", { name: "Chave Pix" })).getByRole("button", { name: /CPF/ }));
+  await user.click(within(screen.getByRole("listbox", { name: "Meio de pagamento" })).getByRole("button", { name: /CPF/ }));
 
   await user.type(screen.getByLabelText("Valor total"), "100,00");
   await user.click(screen.getByRole("button", { name: "Criar conta" }));
@@ -896,7 +896,7 @@ it("resets the key to the wallet default when the direction flips back from a co
   await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
   await seatAna(user);
   // The seated contact's default key lands before the flip.
-  await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Chave padrão"));
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Meio padrão"));
 
   await user.click(await screen.findByRole("radio", { name: "Vou receber" }));
   await pickAna(user);
@@ -917,7 +917,7 @@ it("re-picks the default key when the receiving seat moves to another contact", 
   await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
   await seatAna(user);
 
-  await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Chave padrão"));
+  await vi.waitFor(() => expect(screen.getByRole("button", { name: /E-mail/ })).toHaveTextContent("Meio padrão"));
 
   await user.click(screen.getByRole("button", { name: /Trocar/ }));
 
@@ -1093,7 +1093,7 @@ it("seeds a conta a pagar with its receiving contact and its key, and patches th
   expect(screen.getByRole("radio", { name: "Vou pagar" })).toBeChecked();
   expect(screen.getByRole("radio", { name: "Vou pagar" })).toBeDisabled();
   // The seeded key survives the contact's key list landing: it is one of them.
-  expect(await screen.findByRole("button", { name: /CPF/ })).toHaveTextContent("Chave secundária");
+  expect(await screen.findByRole("button", { name: /CPF/ })).toHaveTextContent("Meio secundário");
   expect(screen.queryByLabelText("E-mail Pix")).not.toBeInTheDocument();
   expect(screen.queryByText("Participantes")).not.toBeInTheDocument();
 
@@ -1148,7 +1148,7 @@ it("asks for the scope when the key of a recorrente conta a pagar moves to anoth
   const { user } = renderForm(recurringPayable);
 
   await user.click(await screen.findByRole("button", { name: /CPF/ }));
-  await user.click(within(screen.getByRole("listbox", { name: "Chave Pix" })).getByRole("button", { name: /E-mail/ }));
+  await user.click(within(screen.getByRole("listbox", { name: "Meio de pagamento" })).getByRole("button", { name: /E-mail/ }));
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
   const dialog = await screen.findByRole("dialog", { name: "Aplicar às cobranças deste mês?" });
@@ -1243,7 +1243,9 @@ const monthCharge: ChargeDetail = {
   direction: Direction.Receivable,
   recipient: { userId: "u1", name: "Ana", email: null },
   debtorId: "u1",
-  pix: null,
+  payment: null,
+  paymentLink: null,
+  receiptUrl: null,
   sharingState: SharingState.Ready,
   proof: null,
   cancelledAt: null,
@@ -1382,7 +1384,7 @@ it("orders the sections Direção, Valor, Título e categoria, Frequência, Divi
   const modality = screen.getByRole("radiogroup", { name: "Modalidade" });
   const due = screen.getByLabelText("Vencimento");
   const split = screen.getByText("Divisão da Conta");
-  const pix = screen.getByText("Receber via Pix");
+  const pix = screen.getByText("Receber por");
 
   expect(isBefore(direction, amount)).toBe(true);
   expect(isBefore(amount, title)).toBe(true);

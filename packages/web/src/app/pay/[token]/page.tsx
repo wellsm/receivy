@@ -37,26 +37,38 @@ function Brand() {
   );
 }
 
-function NoAccountNote({ creditor, className, iconClassName }: { creditor: string; className: string; iconClassName: string }) {
+function NoAccountNote({ creditor, automatic, className, iconClassName }: { creditor: string; automatic: boolean; className: string; iconClassName: string }) {
   return (
     <p className={`m-0 items-start gap-2.5 text-xs leading-normal ${className}`}>
       <span aria-hidden="true" className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[10px] ${iconClassName}`}>
         <ShieldCheck size={15} />
       </span>
-      <span>Você não precisa criar conta. {creditor} confirma o pagamento depois de revisar o comprovante.</span>
+      <span>
+        Você não precisa criar conta. {automatic ? "O pagamento pelo link é confirmado automaticamente." : `${creditor} confirma o pagamento depois de revisar o comprovante.`}
+      </span>
     </p>
   );
 }
 
-export default async function PublicChargePage({ params }: { params: Promise<{ token: string }> }) {
+export default async function PublicChargePage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { token } = await params;
+  const query = await searchParams;
+  const returned = query.order_nsu && query.transaction_nsu && query.slug ? { orderNsu: query.order_nsu, transactionNsu: query.transaction_nsu, slug: query.slug } : null;
   let charge: PublicChargeView | null = null;
 
   try {
-    const response = await authApiFetch(`public/charges/${encodeURIComponent(token)}`, { method: "GET" });
+    // Back from InfinitePay: the ids in the url close the charge (after payment_check) before the page renders.
+    const response = returned
+      ? await authApiFetch(`public/charges/${encodeURIComponent(token)}/provider-return`, { method: "POST", body: JSON.stringify(returned) })
+      : await authApiFetch(`public/charges/${encodeURIComponent(token)}`, { method: "GET" });
 
     if (response.ok) {
       charge = await response.json();
+    } else if (returned) {
+      // A refused return (wrong ids, provider down) still shows the charge as it is.
+      const fallback = await authApiFetch(`public/charges/${encodeURIComponent(token)}`, { method: "GET" });
+
+      charge = fallback.ok ? await fallback.json() : null;
     }
   } catch {
     // A missing or unreachable charge falls through to the truthful unavailable state below.
@@ -78,7 +90,10 @@ export default async function PublicChargePage({ params }: { params: Promise<{ t
     );
   }
 
-  const pix = charge.state === "pending" ? charge.pix : null;
+  const payment = charge.state === "pending" ? charge.payment : null;
+  const pix = payment?.provider === "pix" ? payment : null;
+  const link = payment?.provider === "infinitepay" ? charge.paymentLink : null;
+  const numbered = Boolean(pix || link);
 
   return (
     <main className={PAGE}>
@@ -95,7 +110,7 @@ export default async function PublicChargePage({ params }: { params: Promise<{ t
             </div>
           </div>
 
-          <NoAccountNote creditor={charge.creditorFirstName} className="hidden text-on-primary/85 md:flex" iconClassName="bg-on-primary/20" />
+          <NoAccountNote creditor={charge.creditorFirstName} automatic={Boolean(link)} className="hidden text-on-primary/85 md:flex" iconClassName="bg-on-primary/20" />
         </section>
 
         <div className={BODY}>
@@ -105,22 +120,63 @@ export default async function PublicChargePage({ params }: { params: Promise<{ t
               <div className="flex flex-col gap-3 rounded-2xl border border-outline/60 bg-surface-muted/50 p-4 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
                   <span className="text-[11.5px] text-muted">Chave Pix</span>
-                  <code className="mt-0.5 block break-all font-sans text-[15px] font-semibold text-ink">{pix.key}</code>
+                  <code className="mt-0.5 block break-all font-sans text-[15px] font-semibold text-ink">{pix.value}</code>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <PublicPixCopy pixKey={pix.key} />
+                  <PublicPixCopy pixKey={pix.value} />
                 </div>
               </div>
               <p className="m-0 text-[12.5px] leading-normal text-muted">Confira o nome do destinatário no seu banco antes de transferir.</p>
             </section>
           )}
 
-          <section className="flex flex-col gap-2.5">
-            <h2 className={SECTION_LABEL}>{pix ? "2 · ENVIE O COMPROVANTE" : "ENVIE O COMPROVANTE"}</h2>
-            <ProofPanel base={`/api/public-proof/${encodeURIComponent(token)}`} state={charge.state} uploadsEnabled={charge.uploadsEnabled} creditor={charge.creditorFirstName} />
-          </section>
+          {link && link.state === "ready" && link.url && (
+            <section className="flex flex-col gap-2.5">
+              <h2 className={SECTION_LABEL}>1 · PAGUE PELO LINK</h2>
+              <div className="flex flex-col gap-3 rounded-2xl border border-outline/60 bg-surface-muted/50 p-4">
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-[15px] font-bold text-on-primary transition hover:bg-primary-strong"
+                >
+                  Pagar
+                </a>
+                <p className="m-0 text-[12.5px] leading-normal text-muted">Pix ou cartão em até 12x, pela InfinitePay. A confirmação chega sozinha depois do pagamento.</p>
+              </div>
+            </section>
+          )}
 
-          <NoAccountNote creditor={charge.creditorFirstName} className="flex rounded-2xl border border-outline/60 bg-surface-muted/50 p-3.5 text-muted md:hidden" iconClassName="bg-success-soft text-success" />
+          {link && link.state !== "ready" && (
+            <p className="m-0 rounded-2xl border border-outline/60 bg-surface-muted/50 p-3.5 text-[12.5px] leading-normal text-muted" role="status">
+              Estamos gerando o link de pagamento. Tente de novo em instantes, ou envie o comprovante abaixo.
+            </p>
+          )}
+
+          {charge.state === "paid" && (
+            <section className="flex flex-col gap-2 rounded-2xl border border-success/40 bg-success-soft p-4">
+              <h2 className="m-0 text-sm font-bold text-success">Pagamento confirmado</h2>
+              {charge.receiptUrl && (
+                <a href={charge.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-[12.5px] font-semibold text-primary">
+                  Ver comprovante da InfinitePay
+                </a>
+              )}
+            </section>
+          )}
+
+          {charge.state !== "paid" && (link?.state === "ready" ? (
+            <details className="flex flex-col gap-2.5">
+              <summary className="cursor-pointer text-[12.5px] font-semibold text-muted">Pagou de outro jeito? Envie o comprovante</summary>
+              <ProofPanel base={`/api/public-proof/${encodeURIComponent(token)}`} state={charge.state} uploadsEnabled={charge.uploadsEnabled} creditor={charge.creditorFirstName} />
+            </details>
+          ) : (
+            <section className="flex flex-col gap-2.5">
+              <h2 className={SECTION_LABEL}>{numbered ? "2 · ENVIE O COMPROVANTE" : "ENVIE O COMPROVANTE"}</h2>
+              <ProofPanel base={`/api/public-proof/${encodeURIComponent(token)}`} state={charge.state} uploadsEnabled={charge.uploadsEnabled} creditor={charge.creditorFirstName} />
+            </section>
+          ))}
+
+          <NoAccountNote creditor={charge.creditorFirstName} automatic={Boolean(link)} className="flex rounded-2xl border border-outline/60 bg-surface-muted/50 p-3.5 text-muted md:hidden" iconClassName="bg-success-soft text-success" />
 
           <Link className="self-center text-[12.5px] font-semibold text-primary md:self-start" href="/login">
             Criar conta para acompanhar tudo

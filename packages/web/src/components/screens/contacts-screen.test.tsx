@@ -6,8 +6,8 @@ import ContactsPage from "@/app/(protected)/contacts/page";
 import NewContactPage from "@/app/(protected)/contacts/new/page";
 import EditContactPage from "@/app/(protected)/contacts/[id]/edit/page";
 import ContactPage from "@/app/(protected)/contacts/[id]/page";
-import PixSettingsPage from "@/app/(protected)/settings/pix/page";
-import NewPixKeyPage from "@/app/(protected)/settings/pix/new/page";
+import PaymentMethodsPage from "@/app/(protected)/settings/payment-methods/page";
+import NewPaymentMethodPage from "@/app/(protected)/settings/payment-methods/new/page";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 
 const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
@@ -215,25 +215,25 @@ describe("back button destinations", () => {
     expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/contacts/ana");
   });
 
-  it("names the screen the Pix keys page came from", async () => {
+  it("names the screen the payment methods page came from", async () => {
     emptyApi();
-    render(await PixSettingsPage({ searchParams: Promise.resolve({ returnTo: "/billings/new", required: "1" }) }));
+    render(await PaymentMethodsPage({ searchParams: Promise.resolve({ returnTo: "/billings/new", required: "1" }) }));
 
     expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/billings/new");
-    expect(screen.getByText("Você precisa de uma chave Pix para criar cobranças.")).toBeInTheDocument();
+    expect(screen.getByText("Você precisa de um meio de pagamento para criar cobranças.")).toBeInTheDocument();
   });
 
-  it("falls back to the profile on the Pix keys page", async () => {
+  it("falls back to the profile on the payment methods page", async () => {
     emptyApi();
-    render(await PixSettingsPage({ searchParams: Promise.resolve({}) }));
+    render(await PaymentMethodsPage({ searchParams: Promise.resolve({}) }));
 
     expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/settings");
   });
 
-  it("sends the Pix key form back to the key list", async () => {
+  it("sends the payment method form back to the method list", async () => {
     emptyApi();
-    render(await NewPixKeyPage({ searchParams: Promise.resolve({}) }));
+    render(await NewPaymentMethodPage({ searchParams: Promise.resolve({}) }));
 
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/settings/pix");
+    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/settings/payment-methods");
   });
 });

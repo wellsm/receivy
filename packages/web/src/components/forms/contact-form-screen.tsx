@@ -1,6 +1,6 @@
 "use client";
 
-import { normalizeContact, pixKeyField, PixKeyType, type Contact, type ContactPaymentMethodInput, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
+import { normalizeContact, paymentMethodText, pixKeyField, PaymentProvider, PixKeyType, type Contact, type ContactPaymentMethodInput, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -9,7 +9,7 @@ import { patchDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { PIX_TYPE_LABELS, PixTypeIcon } from "@/components/ui/pix-type-icon";
+import { ProviderIcon } from "@/components/ui/provider-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 
 type ContactFormScreenProps = { contactId?: string; returnTo?: string };
@@ -144,7 +144,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
 
     const label = pixLabel.trim();
 
-    return { paymentMethod: { pixKeyType: pixType, pixKey: key, ...(label ? { label } : {}) } };
+    return { paymentMethod: { provider: PaymentProvider.Pix, kind: pixType, value: key, ...(label ? { label } : {}) } };
   }
 
   function closeDialog() {
@@ -293,14 +293,14 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
             {keys.map(key => (
               <li key={key.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-outline/30 bg-surface-muted/60 p-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary-strong">
-                  <PixTypeIcon type={key.pixKeyType} size={18} />
+                  <ProviderIcon method={key} size={18} />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="flex items-center gap-2">
-                    <span className="truncate text-sm font-semibold text-ink">{key.label || PIX_TYPE_LABELS[key.pixKeyType]}</span>
+                    <span className="truncate text-sm font-semibold text-ink">{key.label || paymentMethodText(key).title}</span>
                     {key.isDefault && <span className="rounded-full bg-primary-soft/70 px-2 py-0.5 text-[11px] font-semibold text-primary-strong">Padrão</span>}
                   </span>
-                  <span className="truncate text-[11px] text-muted">{pixKeyField(key.pixKeyType).format(key.pixKey)}</span>
+                  <span className="truncate text-[11px] text-muted">{paymentMethodText(key).value}</span>
                 </span>
                 <span className="flex items-center gap-2">
                   {!key.isDefault && (
@@ -361,8 +361,8 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
           icon={Trash2}
           detail={
             <>
-              <span className="text-[11px] font-medium text-muted">{PIX_TYPE_LABELS[archiving.pixKeyType]}</span>
-              <span className="text-sm font-bold text-ink">{pixKeyField(archiving.pixKeyType).format(archiving.pixKey)}</span>
+              <span className="text-[11px] font-medium text-muted">{paymentMethodText(archiving).title}</span>
+              <span className="text-sm font-bold text-ink">{paymentMethodText(archiving).value}</span>
             </>
           }
           explanation="A chave sai das próximas contas a pagar deste contato. As contas já criadas não mudam."

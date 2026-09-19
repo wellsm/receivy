@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft } from "@/lib/billing-draft";
-import { PixKeyFormScreen } from "@/components/forms/pix-key-form-screen";
+import { PaymentMethodFormScreen } from "@/components/forms/payment-method-form-screen";
 
 const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
 
@@ -18,11 +18,12 @@ afterEach(() => {
   window.sessionStorage.clear();
 });
 
-const saved = { id: "pix-1", label: "Nubank", pixKey: "ana@example.com", pixKeyType: "email", isDefault: false, archivedAt: null };
+const saved = { id: "pix-1", provider: "pix", kind: "email", value: "ana@example.com", label: "Nubank", isDefault: false, contactId: null, archivedAt: null, createdAt: "2026-09-01T00:00:00Z" };
 
 type Sent = { path: string; init: RequestInit };
+type ApiOptions = { existing?: unknown[]; save?: Response };
 
-function api(existing: unknown[] = []) {
+function api({ existing = [], save }: ApiOptions = {}) {
   const sent: Sent[] = [];
 
   vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
@@ -37,13 +38,17 @@ function api(existing: unknown[] = []) {
     }
 
     if (init.method === "POST") {
-      return Response.json(saved, { status: 201 });
+      return save ?? Response.json(saved, { status: 201 });
     }
 
     return Response.json({ paymentMethods: existing });
   });
 
   return sent;
+}
+
+function created(sent: Sent[]) {
+  return sent.find(entry => entry.init.method === "POST" && entry.path === "/api/financial/payment-methods");
 }
 
 async function ready() {
@@ -54,7 +59,7 @@ async function ready() {
 
 it("prefills the e-mail key with the account e-mail and keeps it editable", async () => {
   api();
-  render(<PixKeyFormScreen />);
+  render(<PaymentMethodFormScreen />);
 
   const field = await screen.findByLabelText("E-mail Pix");
 
@@ -67,7 +72,7 @@ it("prefills the e-mail key with the account e-mail and keeps it editable", asyn
 
 it("prefills the phone key with the account phone once that type is picked", async () => {
   api();
-  render(<PixKeyFormScreen />);
+  render(<PaymentMethodFormScreen />);
 
   await vi.waitFor(() => expect(screen.getByLabelText("E-mail Pix")).toHaveValue("conta@example.com"));
 
@@ -78,7 +83,7 @@ it("prefills the phone key with the account phone once that type is picked", asy
 
 it("switches the field label, placeholder and mask with the key type", async () => {
   api();
-  render(<PixKeyFormScreen />);
+  render(<PaymentMethodFormScreen />);
 
   const user = await ready();
 
@@ -96,7 +101,7 @@ it("switches the field label, placeholder and mask with the key type", async () 
 
 it("pastes into the field and then offers to clear it", async () => {
   api();
-  render(<PixKeyFormScreen />);
+  render(<PaymentMethodFormScreen />);
 
   const user = await ready();
 
@@ -116,39 +121,37 @@ it("pastes into the field and then offers to clear it", async () => {
 it("saves the unmasked key without a nickname and promotes it to the main key", async () => {
   const sent = api();
 
-  render(<PixKeyFormScreen />);
+  render(<PaymentMethodFormScreen />);
 
   const user = await ready();
 
   await user.click(screen.getByRole("radio", { name: "CPF" }));
   await user.type(screen.getByLabelText("CPF do titular"), "52998224725");
 
-  expect(screen.getByLabelText("Definir como chave principal")).toBeChecked();
+  expect(screen.getByLabelText("Definir como meio principal")).toBeChecked();
   expect(screen.queryByLabelText("Banco (opcional)")).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Salvar chave Pix" }));
+  await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/settings/pix"));
+  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/settings/payment-methods"));
 
-  const created = sent.find(entry => entry.init.method === "POST" && entry.path === "/api/financial/payment-methods");
-
-  expect(JSON.parse(String(created?.init.body))).toEqual({ pixKeyType: "cpf", pixKey: "52998224725" });
+  expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "pix", kind: "cpf", value: "52998224725" });
   expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pix-1/default")).toBe(true);
 });
 
 it("leaves the main key toggle off when the account already has keys", async () => {
-  const sent = api([{ ...saved, id: "pix-0", isDefault: true }]);
+  const sent = api({ existing: [{ ...saved, id: "pix-0", isDefault: true }] });
 
-  render(<PixKeyFormScreen />);
+  render(<PaymentMethodFormScreen />);
 
   const user = await ready();
 
-  await vi.waitFor(() => expect(screen.getByLabelText("Definir como chave principal")).not.toBeChecked());
+  await vi.waitFor(() => expect(screen.getByLabelText("Definir como meio principal")).not.toBeChecked());
 
   await user.type(screen.getByLabelText("E-mail Pix"), "outra@example.com");
-  await user.click(screen.getByRole("button", { name: "Salvar chave Pix" }));
+  await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/settings/pix"));
+  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/settings/payment-methods"));
 
   expect(sent.some(entry => entry.path.endsWith("/default"))).toBe(false);
 });
@@ -156,17 +159,52 @@ it("leaves the main key toggle off when the account already has keys", async () 
 it("hands the new key back to the billing draft and returns to the form", async () => {
   saveDraft({ ...EMPTY_BILLING_DRAFT("America/Sao_Paulo", "2026-09-08"), selected: ["p1"] }, "/billings/new");
   api();
-  render(<PixKeyFormScreen returnTo="/billings/new" required />);
+  render(<PaymentMethodFormScreen returnTo="/billings/new" required />);
 
   const user = await ready();
 
-  expect(screen.getByText("Você precisa de uma chave Pix para criar cobranças.")).toBeInTheDocument();
+  expect(screen.getByText("Você precisa de um meio de pagamento para criar cobranças.")).toBeInTheDocument();
 
   await vi.waitFor(() => expect(screen.getByLabelText("E-mail Pix")).toHaveValue("conta@example.com"));
 
-  await user.click(screen.getByRole("button", { name: "Salvar chave Pix" }));
+  await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
   await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/billings/new"));
 
   expect(takeDraft()?.draft.pix).toBe("pix-1");
+});
+
+it("saves an InfiniteTag without the dollar sign", async () => {
+  const sent = api();
+  const user = userEvent.setup();
+
+  render(<PaymentMethodFormScreen />);
+  await ready();
+
+  await user.click(screen.getByRole("radio", { name: "InfinitePay" }));
+  await user.type(screen.getByLabelText("InfiniteTag"), "$Minha.Loja");
+  await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+  await vi.waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "infinitepay", value: "$Minha.Loja" }));
+});
+
+it("points at the InfinitePay switch when the checkout is off", async () => {
+  api({
+    save: Response.json(
+      { type: "error", message: "Ative o checkout externo no app da InfinitePay e tente de novo.", context: { code: "INFINITEPAY_CHECKOUT_DISABLED", fields: { redirectUrl: "https://app.infinitepay.io/x" } } },
+      { status: 422 },
+    ),
+  });
+
+  const user = userEvent.setup();
+
+  render(<PaymentMethodFormScreen />);
+  await ready();
+
+  await user.click(screen.getByRole("radio", { name: "InfinitePay" }));
+  await user.type(screen.getByLabelText("InfiniteTag"), "loja");
+  await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Ative o checkout externo");
+  expect(screen.getByRole("link", { name: "Abrir configurações da InfinitePay" })).toHaveAttribute("href", "https://app.infinitepay.io/x");
 });

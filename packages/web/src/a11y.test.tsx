@@ -9,8 +9,8 @@ import { CodeScreen } from "@/components/screens/code-screen";
 import { FeedScreen } from "@/components/screens/feed-screen";
 import { ContactsScreen } from "@/components/screens/contacts-screen";
 import { ContactFormScreen } from "@/components/forms/contact-form-screen";
-import { PixSettingsScreen } from "@/components/screens/pix-settings-screen";
-import { PixKeyFormScreen } from "@/components/forms/pix-key-form-screen";
+import { PaymentMethodsScreen } from "@/components/screens/payment-methods-screen";
+import { PaymentMethodFormScreen } from "@/components/forms/payment-method-form-screen";
 import { ProfileScreen } from "@/components/screens/profile-screen";
 import { BillingFormScreen } from "@/components/forms/billing-form-screen";
 import { JoinInviteScreen } from "@/components/screens/join-invite-screen";
@@ -36,6 +36,7 @@ async function expectNoViolations(container: HTMLElement) {
 const user = { id: "user", email: "fixture@example.com", name: "Ana", phone: null, avatar: null, status: "active", locale: "pt-BR", timezone: "America/Sao_Paulo", country: "BR", currency: "BRL" };
 const contact = { id: "contact-1", userId: "user-1", name: "Ana Souza", nickname: "Ana", displayName: "Ana", email: "ana@example.com", phone: null, status: "pending", archivedAt: null, createdAt: "2026-09-01", lastBilledAt: null, activeCharges: 1 };
 const pixMethod = { id: "pix-1", label: "Nubank", pixKey: "52998224725", pixKeyType: "cpf", isDefault: true, archivedAt: null };
+const paymentMethod = { id: "pix-1", label: "Nubank", provider: "pix", kind: "cpf", value: "52998224725", isDefault: true, contactId: null, archivedAt: null, createdAt: "2026-09-01T00:00:00Z" };
 const invite = { creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 12_000, currency: "BRL" as const }, recurrence: BillingRecurrence.Once, participantCount: 3, category: BillingCategory.Food, expired: false };
 
 describe("accessibility of the main web screens", () => {
@@ -133,28 +134,29 @@ describe("accessibility of the main web screens", () => {
     await expectNoViolations(container);
   });
 
-  it("Pix key list names its per-key actions and has no axe violations", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ paymentMethods: [pixMethod] }));
+  it("payment methods list names its per-key actions and has no axe violations", async () => {
+    vi.mocked(browserFetch).mockResolvedValue(Response.json({ paymentMethods: [paymentMethod] }));
 
-    const { container } = render(<PixSettingsScreen />);
+    const { container } = render(<PaymentMethodsScreen />);
 
-    expect(await screen.findByRole("button", { name: "Copiar chave" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Copiar valor" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Excluir" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Cadastrar nova chave" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cadastrar novo meio" })).toBeInTheDocument();
 
     await expectNoViolations(container);
   });
 
-  it("Pix key form exposes the type radiogroup and has no axe violations", async () => {
+  it("payment method form exposes the provider and key type radiogroups and has no axe violations", async () => {
     vi.mocked(browserFetch).mockImplementation(async path =>
       String(path) === "/api/auth/me" ? Response.json({ user: { email: "ana@example.com" } }) : Response.json({ paymentMethods: [] }),
     );
 
-    const { container } = render(<PixKeyFormScreen />);
+    const { container } = render(<PaymentMethodFormScreen />);
 
-    expect(await screen.findByRole("radiogroup", { name: "Tipo de chave" })).toBeInTheDocument();
+    expect(await screen.findByRole("radiogroup", { name: "Tipo de meio" })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Tipo de chave" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "CPF" })).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByRole("button", { name: "Salvar chave Pix" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Salvar meio de pagamento" })).toBeInTheDocument();
 
     await expectNoViolations(container);
   });

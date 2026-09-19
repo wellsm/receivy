@@ -436,7 +436,7 @@ export function ProfileScreen() {
 
               <Row icon={Users} tone="primary" label="Gerenciar contatos" title="Meus Contatos" subtitle="Gerenciar pessoas e dados salvos de cobrança" href="/contacts" />
               <div className="mx-4 h-px bg-outline/60 md:mx-0" />
-              <Row icon={KeyRound} tone="success" label="Gerenciar chaves Pix" title="Minhas Chaves Pix" subtitle="Chaves cadastradas para receber pagamentos" href="/settings/pix" />
+              <Row icon={KeyRound} tone="success" label="Gerenciar meios de pagamento" title="Meios de pagamento" subtitle="Pix e InfinitePay para receber pagamentos" href="/settings/payment-methods" />
             </section>
 
             <button

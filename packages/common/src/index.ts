@@ -28,5 +28,6 @@ export * from './domain/financial-form';
 export * from './domain/handle';
 export * from './domain/money';
 export * from './domain/notifications';
+export * from './domain/payment-method-text';
 export * from './domain/pix-key';
 export * from './domain/split';

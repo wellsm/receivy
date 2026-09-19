@@ -92,8 +92,14 @@ export default async function PublicChargePage({ params, searchParams }: { param
 
   const payment = charge.state === ChargeState.Pending ? charge.payment : null;
   const pix = payment?.provider === PaymentProvider.Pix ? payment : null;
-  const link = payment?.provider === PaymentProvider.InfinitePay ? charge.paymentLink : null;
+  const link = payment?.provider === PaymentProvider.InfinitePay || payment?.provider === PaymentProvider.PagSeguro ? charge.paymentLink : null;
   const numbered = Boolean(pix || (link?.state === PaymentLinkState.Ready && link.url));
+  const linkHint =
+    payment?.provider === PaymentProvider.PagSeguro
+      ? "Pix ou cartão, pelo PagBank. A confirmação chega sozinha depois do pagamento."
+      : "Pix ou cartão em até 12x, pela InfinitePay. A confirmação chega sozinha depois do pagamento.";
+  // PagBank returns the payer to the redirect url unchanged (no ids); `?returned=1` is the only signal it gives back.
+  const confirming = query.returned === "1" && charge.state === ChargeState.Pending && payment?.provider === PaymentProvider.PagSeguro;
 
   return (
     <main className={PAGE}>
@@ -142,7 +148,7 @@ export default async function PublicChargePage({ params, searchParams }: { param
                 >
                   Pagar
                 </a>
-                <p className="m-0 text-[12.5px] leading-normal text-muted">Pix ou cartão em até 12x, pela InfinitePay. A confirmação chega sozinha depois do pagamento.</p>
+                <p className="m-0 text-[12.5px] leading-normal text-muted">{linkHint}</p>
               </div>
             </section>
           )}
@@ -153,12 +159,21 @@ export default async function PublicChargePage({ params, searchParams }: { param
             </p>
           )}
 
+          {confirming && (
+            <>
+              <meta httpEquiv="refresh" content="10" />
+              <p className="m-0 rounded-2xl border border-info/40 bg-info-soft p-3.5 text-[12.5px] leading-normal text-info" role="status">
+                Pagamento em confirmação: se você pagou, isto atualiza em instantes.
+              </p>
+            </>
+          )}
+
           {charge.state === ChargeState.Paid && (
             <section className="flex flex-col gap-2 rounded-2xl border border-success/40 bg-success-soft p-4">
               <h2 className="m-0 text-sm font-bold text-success">Pagamento confirmado</h2>
               {charge.receiptUrl && (
                 <a href={charge.receiptUrl} target="_blank" rel="noopener noreferrer" className="text-[12.5px] font-semibold text-primary">
-                  Ver comprovante da InfinitePay
+                  Ver comprovante
                 </a>
               )}
             </section>

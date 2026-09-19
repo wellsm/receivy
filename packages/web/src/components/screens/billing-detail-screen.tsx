@@ -440,6 +440,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
       ? { provider: PaymentProvider.Pix, kind: billing.pix.keyType, value: billing.pix.key }
       : null
     : (billing.charges.find((charge) => charge.payment)?.payment ?? methodFromWallet(methods, billing.paymentMethodId) ?? null);
+  const copyValue = payment ? paymentMethodCopyValue(payment) : "";
   const ended = billing.state === "ended";
   const currency = billing.total.currency;
   const stateTone = billing.state === "active" ? "success" : billing.state === "paused" ? "warning" : "neutral";
@@ -571,9 +572,9 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                   )}
                 </span>
               </div>
-              {payment && (
+              {copyValue && (
                 <CopyButton
-                  value={paymentMethodCopyValue(payment)}
+                  value={copyValue}
                   ariaLabel="Copiar valor"
                   onRefused={() => setError("Não foi possível copiar a chave.")}
                 />

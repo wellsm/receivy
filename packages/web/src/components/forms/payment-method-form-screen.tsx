@@ -10,19 +10,22 @@ import { responseMessage } from "@/lib/financial-response";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 
-type PaymentMethodFormScreenProps = { returnTo?: string; required?: boolean };
+type PaymentMethodFormScreenProps = { returnTo?: string; required?: boolean; method?: PaymentMethod };
 
 type ErrorPayload = { message?: string; context?: { code?: string; fields?: Record<string, string> } };
 
 const SAVE_ERROR = "Não foi possível salvar o meio de pagamento.";
 
-export function PaymentMethodFormScreen({ returnTo, required = false }: PaymentMethodFormScreenProps) {
+export function PaymentMethodFormScreen({ returnTo, required = false, method }: PaymentMethodFormScreenProps) {
   const router = useRouter();
-  const [provider, setProvider] = useState<PaymentProvider>(PaymentProvider.Pix);
+  const editing = Boolean(method);
+  const [provider, setProvider] = useState<PaymentProvider>(method?.provider ?? PaymentProvider.Pix);
   const [type, setType] = useState<PixKeyType>(PixKeyType.Email);
   const [key, setKey] = useState("");
   const [touched, setTouched] = useState(false);
   const [handle, setHandle] = useState("");
+  const [token, setToken] = useState("");
+  const [label, setLabel] = useState(method?.label ?? "");
   const [makeDefault, setMakeDefault] = useState(true);
   // A ref, not state: the list request reads it from a closure created at mount.
   const defaultTouched = useRef(false);
@@ -107,7 +110,13 @@ export function PaymentMethodFormScreen({ returnTo, required = false }: PaymentM
       const response = await browserFetch("/api/financial/payment-methods", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(provider === PaymentProvider.InfinitePay ? { provider, value: handle } : { provider, kind: type, value: spec.unformat(value) }),
+        body: JSON.stringify(
+          provider === PaymentProvider.InfinitePay
+            ? { provider, value: handle }
+            : provider === PaymentProvider.PagSeguro
+              ? { provider, ...(token ? { token } : {}), ...(label ? { label } : {}) }
+              : { provider, kind: type, value: spec.unformat(value) },
+        ),
       });
 
       if (!response.ok) {
@@ -118,6 +127,12 @@ export function PaymentMethodFormScreen({ returnTo, required = false }: PaymentM
 
         if (apiErrorCode(payload) === "INFINITEPAY_CHECKOUT_DISABLED") {
           setError({ message: payload?.message ?? SAVE_ERROR, redirectUrl: payload?.context?.fields?.redirectUrl });
+
+          return;
+        }
+
+        if (apiErrorCode(payload) === "PAGSEGURO_TOKEN_INVALID") {
+          setError({ message: payload?.message ?? SAVE_ERROR });
 
           return;
         }
@@ -161,6 +176,7 @@ export function PaymentMethodFormScreen({ returnTo, required = false }: PaymentM
           {[
             { value: PaymentProvider.Pix, label: "Pix" },
             { value: PaymentProvider.InfinitePay, label: "InfinitePay" },
+            { value: PaymentProvider.PagSeguro, label: "PagBank" },
           ].map(option => (
             <button
               key={option.value}
@@ -181,7 +197,7 @@ export function PaymentMethodFormScreen({ returnTo, required = false }: PaymentM
 
       {provider === PaymentProvider.Pix ? (
         <PixKeyFields type={type} value={value} required onPickType={pick} onChange={change} />
-      ) : (
+      ) : provider === PaymentProvider.InfinitePay ? (
         <div className="flex flex-col gap-1">
           <label htmlFor="infinitepay-handle" className="text-xs font-semibold text-muted">
             InfiniteTag
@@ -206,6 +222,18 @@ export function PaymentMethodFormScreen({ returnTo, required = false }: PaymentM
             />
           </div>
           <p className="m-0 text-xs leading-5 text-muted">É o nome de usuário do app InfinitePay. O checkout externo precisa estar ativo lá; a cobrança aceita Pix ou cartão em até 12x.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="pagseguro-token" className="text-xs font-semibold text-muted">Token do PagBank</label>
+            <input id="pagseguro-token" type="password" value={token} required={!editing} autoCapitalize="none" autoComplete="off" spellCheck={false} placeholder={editing ? "•••••• (mantido)" : ""} onChange={event => { setError({ message: "" }); setToken(event.target.value); }} className="min-h-12 rounded-xl border border-outline/50 bg-surface px-3 text-sm text-ink" />
+            <p className="m-0 text-xs leading-5 text-muted">Gere o token no app PagBank em Vendas → Integrações → Gerar Token. Ele fica cifrado no Receivy.</p>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="pagseguro-label" className="text-xs font-semibold text-muted">Rótulo</label>
+            <input id="pagseguro-label" value={label} maxLength={120} placeholder="PagBank" onChange={event => setLabel(event.target.value)} className="min-h-12 rounded-xl border border-outline/50 bg-surface px-3 text-sm text-ink" />
+          </div>
         </div>
       )}
 

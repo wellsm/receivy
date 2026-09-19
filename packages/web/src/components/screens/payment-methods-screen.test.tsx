@@ -19,6 +19,7 @@ afterEach(() => {
 const main = { id: "pix-1", label: "Nubank", provider: "pix", kind: "cpf", value: "52998224725", isDefault: true, archivedAt: null, contactId: null, createdAt: "2026-09-01T00:00:00Z" };
 const other = { id: "pix-2", label: "", provider: "pix", kind: "email", value: "ana@example.com", isDefault: false, archivedAt: null, contactId: null, createdAt: "2026-09-01T00:00:00Z" };
 const tag = { id: "ip-1", label: "Loja", provider: "infinitepay", kind: null, value: "minha.loja", isDefault: false, archivedAt: null, contactId: null, createdAt: "2026-09-02T00:00:00Z" };
+const pagbank = { id: "pb-1", label: "Loja", provider: "pagseguro", kind: null, value: "Loja", isDefault: false, archivedAt: null, contactId: null, createdAt: "2026-09-03T00:00:00Z" };
 
 function api(methods: unknown[] = [main, other]) {
   const sent: { path: string; init: RequestInit }[] = [];
@@ -63,6 +64,14 @@ it("lists an InfinitePay method with its tag", async () => {
 
   expect(await screen.findByText("InfinitePay")).toBeInTheDocument();
   expect(screen.getByText("$minha.loja")).toBeInTheDocument();
+});
+
+it("lists a PagBank method without a copy button", async () => {
+  api([main, pagbank]);
+  render(<PaymentMethodsScreen />);
+
+  expect(await screen.findByText("PagBank")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Copiar valor" })).toHaveLength(1);
 });
 
 it("copies a key to the clipboard and confirms inline", async () => {

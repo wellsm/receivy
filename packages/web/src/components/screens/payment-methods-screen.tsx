@@ -122,6 +122,7 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
       <div className="grid gap-3.5 md:grid-cols-2">
         {items.map(method => {
           const text = paymentMethodText(method);
+          const copyValue = paymentMethodCopyValue(method);
 
           return (
             <article key={method.id} className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4 shadow-sm">
@@ -162,12 +163,14 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
 
               <div className="flex items-center justify-between gap-2 rounded-xl border border-outline/30 bg-surface-muted/70 p-3">
                 <span className="min-w-0 flex-1 truncate text-[15px] font-bold tracking-wider text-ink">{text.value}</span>
-                <CopyButton
-                  value={paymentMethodCopyValue(method)}
-                  ariaLabel="Copiar valor"
-                  variant="outline"
-                  onRefused={() => setError(COPY_ERROR)}
-                />
+                {copyValue && (
+                  <CopyButton
+                    value={copyValue}
+                    ariaLabel="Copiar valor"
+                    variant="outline"
+                    onRefused={() => setError(COPY_ERROR)}
+                  />
+                )}
               </div>
 
               {!method.isDefault && (

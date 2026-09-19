@@ -208,3 +208,76 @@ it("points at the InfinitePay switch when the checkout is off", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Ative o checkout externo");
   expect(screen.getByRole("link", { name: "Abrir configurações da InfinitePay" })).toHaveAttribute("href", "https://app.infinitepay.io/x");
 });
+
+const pagbank = { id: "pb-1", provider: "pagseguro", kind: null, value: "Loja", label: "Loja", isDefault: false, contactId: null, archivedAt: null, createdAt: "2026-09-01T00:00:00Z" };
+
+it("shows the PagBank token and label fields once that chip is picked", async () => {
+  api();
+  render(<PaymentMethodFormScreen />);
+
+  const user = await ready();
+
+  await user.click(screen.getByRole("radio", { name: "PagBank" }));
+
+  const token = screen.getByLabelText("Token do PagBank");
+
+  expect(token).toHaveAttribute("type", "password");
+  expect(screen.getByLabelText("Rótulo")).toBeInTheDocument();
+
+  await user.type(token, "tok");
+  await user.type(screen.getByLabelText("Rótulo"), "Loja");
+
+  expect(token).toHaveValue("tok");
+});
+
+it("saves a PagBank token with its label", async () => {
+  const sent = api();
+  const user = userEvent.setup();
+
+  render(<PaymentMethodFormScreen />);
+  await ready();
+
+  await user.click(screen.getByRole("radio", { name: "PagBank" }));
+  await user.type(screen.getByLabelText("Token do PagBank"), "tok");
+  await user.type(screen.getByLabelText("Rótulo"), "Loja");
+  await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+  await vi.waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "pagseguro", token: "tok", label: "Loja" }));
+});
+
+it("shows the invalid token message from PagBank", async () => {
+  api({
+    save: Response.json(
+      { type: "error", message: "Token inválido ou sem permissão.", context: { code: "PAGSEGURO_TOKEN_INVALID" } },
+      { status: 422 },
+    ),
+  });
+
+  const user = userEvent.setup();
+
+  render(<PaymentMethodFormScreen />);
+  await ready();
+
+  await user.click(screen.getByRole("radio", { name: "PagBank" }));
+  await user.type(screen.getByLabelText("Token do PagBank"), "tok-ruim");
+  await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Token inválido ou sem permissão.");
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
+});
+
+it("shows the kept-token placeholder when editing a PagBank method and omits an empty token", async () => {
+  const sent = api();
+  const user = userEvent.setup();
+
+  render(<PaymentMethodFormScreen method={pagbank as never} />);
+
+  const token = await screen.findByLabelText("Token do PagBank");
+
+  expect(token).toHaveAttribute("placeholder", "•••••• (mantido)");
+  expect(token).not.toBeRequired();
+
+  await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+  await vi.waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "pagseguro", label: "Loja" }));
+});

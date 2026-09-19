@@ -559,6 +559,28 @@ it("creates the billing in one step, with category, shares and an idempotency ke
   expect(screen.getByRole("button", { name: "Criar conta" })).toBeDisabled();
 });
 
+it("opens the paywall on a plan limit and keeps the draft instead of clearing it", async () => {
+  const sent = api((_path, init) =>
+    init.method === "POST"
+      ? Response.json(
+          { message: "Você já tem 5 cobranças indefinidas ativas no plano Grátis.", context: { code: "PLAN_LIMIT_REACHED", fields: { limit: "5", used: "5", plan: "free" } } },
+          { status: 402 },
+        )
+      : undefined,
+  );
+  const { user, onSaved } = renderForm();
+
+  await pickAna(user);
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+  await user.click(screen.getByRole("button", { name: "Criar conta" }));
+
+  expect(await screen.findByRole("dialog", { name: "Plano Básico" })).toBeInTheDocument();
+  expect(screen.getByText("Você já tem 5 cobranças indefinidas ativas no plano Grátis.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Valor total")).toHaveValue("100,00");
+  expect(onSaved).not.toHaveBeenCalled();
+  expect(sent.some(entry => entry.init.method === "POST")).toBe(true);
+});
+
 it("keeps the payload and the idempotency key across an uncertain retry", async () => {
   let attempts = 0;
   const sent = api((_path, init) => {

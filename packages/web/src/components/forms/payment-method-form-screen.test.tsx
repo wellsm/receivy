@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, PlanTier, SubscriptionStatus, type PlanSummary } from "@receivy/common";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
@@ -20,14 +20,21 @@ afterEach(() => {
 
 const saved = { id: "pix-1", provider: "pix", kind: "email", value: "ana@example.com", label: "Nubank", isDefault: false, contactId: null, archivedAt: null, createdAt: "2026-09-01T00:00:00Z" };
 
-type Sent = { path: string; init: RequestInit };
-type ApiOptions = { existing?: unknown[]; save?: Response };
+const freePlan: PlanSummary = { plan: PlanTier.Free, status: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, usage: { indefinite: { used: 0, limit: 5 } }, checkoutLinks: false, card: null };
+const basicPlan: PlanSummary = { plan: PlanTier.Basic, status: SubscriptionStatus.Active, currentPeriodEnd: "2026-10-19T12:00:00.000Z", cancelAtPeriodEnd: false, usage: { indefinite: { used: 3, limit: 30 } }, checkoutLinks: true, card: null };
 
-function api({ existing = [], save }: ApiOptions = {}) {
+type Sent = { path: string; init: RequestInit };
+type ApiOptions = { existing?: unknown[]; save?: Response; plan?: PlanSummary };
+
+function api({ existing = [], save, plan = freePlan }: ApiOptions = {}) {
   const sent: Sent[] = [];
 
   vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
     sent.push({ path, init });
+
+    if (path === "/api/financial/plan") {
+      return Response.json(plan);
+    }
 
     if (path === "/api/auth/me") {
       return Response.json({ user: { email: "conta@example.com", phone: "+5511987654321" } });
@@ -175,7 +182,7 @@ it("hands the new key back to the billing draft and returns to the form", async 
 });
 
 it("saves an InfiniteTag without the dollar sign", async () => {
-  const sent = api();
+  const sent = api({ plan: basicPlan });
   const user = userEvent.setup();
 
   render(<PaymentMethodFormScreen />);
@@ -190,6 +197,7 @@ it("saves an InfiniteTag without the dollar sign", async () => {
 
 it("points at the InfinitePay switch when the checkout is off", async () => {
   api({
+    plan: basicPlan,
     save: Response.json(
       { type: "error", message: "Ative o checkout externo no app da InfinitePay e tente de novo.", context: { code: "INFINITEPAY_CHECKOUT_DISABLED", fields: { redirectUrl: "https://app.infinitepay.io/x" } } },
       { status: 422 },
@@ -212,7 +220,7 @@ it("points at the InfinitePay switch when the checkout is off", async () => {
 const pagbank = { id: "pb-1", provider: "pagseguro", kind: null, value: "Loja", label: "Loja", isDefault: false, contactId: null, archivedAt: null, createdAt: "2026-09-01T00:00:00Z" };
 
 it("shows the PagBank token and label fields once that chip is picked", async () => {
-  api();
+  api({ plan: basicPlan });
   render(<PaymentMethodFormScreen />);
 
   const user = await ready();
@@ -231,7 +239,7 @@ it("shows the PagBank token and label fields once that chip is picked", async ()
 });
 
 it("saves a PagBank token with its label", async () => {
-  const sent = api();
+  const sent = api({ plan: basicPlan });
   const user = userEvent.setup();
 
   render(<PaymentMethodFormScreen />);
@@ -247,6 +255,7 @@ it("saves a PagBank token with its label", async () => {
 
 it("shows the invalid token message from PagBank", async () => {
   api({
+    plan: basicPlan,
     save: Response.json(
       { type: "error", message: "Token inválido ou sem permissão.", context: { code: "PAGSEGURO_TOKEN_INVALID" } },
       { status: 422 },
@@ -280,4 +289,46 @@ it("shows the kept-token placeholder when editing a PagBank method and omits an 
   await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
   await vi.waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "pagseguro", label: "Loja" }));
+});
+
+it("locks InfinitePay and PagBank on the free plan and opens the paywall on click", async () => {
+  api();
+  render(<PaymentMethodFormScreen />);
+
+  const infinite = await screen.findByRole("radio", { name: /InfinitePay/ });
+
+  expect(infinite).toHaveAttribute("aria-disabled", "true");
+  await userEvent.click(infinite);
+  expect(await screen.findByRole("dialog", { name: "Plano Básico" })).toBeInTheDocument();
+  expect(screen.getByText("Links de pagamento fazem parte do plano Básico.")).toBeInTheDocument();
+  // The paywall opens instead of switching the provider: Pix stays picked.
+  expect(screen.getByRole("radio", { name: "Pix" })).toHaveAttribute("aria-checked", "true");
+  expect(infinite).toHaveAttribute("aria-checked", "false");
+  expect(screen.queryByLabelText("InfiniteTag")).not.toBeInTheDocument();
+});
+
+it("keeps the chips enabled on the paid plan", async () => {
+  api({ plan: basicPlan });
+  render(<PaymentMethodFormScreen />);
+
+  const user = await ready();
+
+  await user.click(screen.getByRole("radio", { name: "PagBank" }));
+
+  expect(screen.getByLabelText("Token do PagBank")).toBeInTheDocument();
+});
+
+it("opens the paywall when the API answers 402 anyway", async () => {
+  api({ plan: basicPlan, save: Response.json({ message: "Links de pagamento fazem parte do plano Básico.", context: { code: "PLAN_REQUIRED" } }, { status: 402 }) });
+
+  const user = userEvent.setup();
+
+  render(<PaymentMethodFormScreen />);
+  await ready();
+
+  await user.click(screen.getByRole("radio", { name: "InfinitePay" }));
+  await user.type(screen.getByLabelText("InfiniteTag"), "loja");
+  await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
+
+  expect(await screen.findByRole("dialog", { name: "Plano Básico" })).toBeInTheDocument();
 });

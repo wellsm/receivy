@@ -1,12 +1,14 @@
 "use client";
 
-import { apiErrorCode, pixKeyField, PaymentProvider, PixKeyType, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
-import { Check, Loader2, Star } from "lucide-react";
+import { apiErrorCode, pixKeyField, planErrorOf, PaymentProvider, PixKeyType, PlanErrorCode, type PaymentMethod, type PaymentMethodsPage, type PlanErrorPayload, type PlanSummary } from "@receivy/common";
+import { Check, Loader2, Lock, Star } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { patchDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
+import { loadPlanSummary } from "@/lib/plan-summary";
+import { PlanPaywall } from "@/components/app/plan-paywall";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 
@@ -33,6 +35,8 @@ export function PaymentMethodFormScreen({ returnTo, required = false, method }: 
   const [accountPhone, setAccountPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; redirectUrl?: string }>({ message: "" });
+  const [plan, setPlan] = useState<PlanSummary | null>(null);
+  const [paywall, setPaywall] = useState<PlanErrorPayload | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -76,10 +80,19 @@ export function PaymentMethodFormScreen({ returnTo, required = false, method }: 
       })
       .catch(() => undefined);
 
+    void loadPlanSummary().then(summary => {
+      if (live) {
+        setPlan(summary);
+      }
+    });
+
     return () => {
       live = false;
     };
   }, []);
+
+  // No answer yet: the form never gates on its own, only the API does.
+  const locked = plan ? !plan.checkoutLinks : false;
 
   const spec = pixKeyField(type);
   // Most people register their own e-mail or phone, so an untouched field shows the
@@ -137,6 +150,14 @@ export function PaymentMethodFormScreen({ returnTo, required = false, method }: 
           return;
         }
 
+        const planError = planErrorOf(payload);
+
+        if (planError) {
+          setPaywall(planError);
+
+          return;
+        }
+
         throw new Error(await responseMessage(response, SAVE_ERROR));
       }
 
@@ -174,21 +195,29 @@ export function PaymentMethodFormScreen({ returnTo, required = false, method }: 
         <legend className="text-xs font-semibold text-muted">Tipo de meio</legend>
         <div role="radiogroup" aria-label="Tipo de meio" className="flex gap-2">
           {[
-            { value: PaymentProvider.Pix, label: "Pix" },
-            { value: PaymentProvider.InfinitePay, label: "InfinitePay" },
-            { value: PaymentProvider.PagSeguro, label: "PagBank" },
+            { value: PaymentProvider.Pix, label: "Pix", locked: false },
+            { value: PaymentProvider.InfinitePay, label: "InfinitePay", locked },
+            { value: PaymentProvider.PagSeguro, label: "PagBank", locked },
           ].map(option => (
             <button
               key={option.value}
               type="button"
               role="radio"
               aria-checked={provider === option.value}
+              aria-disabled={option.locked}
               onClick={() => {
+                if (option.locked) {
+                  setPaywall({ code: PlanErrorCode.Required, message: "Links de pagamento fazem parte do plano Básico.", fields: {} });
+
+                  return;
+                }
+
                 setProvider(option.value);
                 setError({ message: "" });
               }}
-              className={`min-h-11 flex-1 rounded-xl border px-3 text-sm font-semibold ${provider === option.value ? "border-primary bg-primary-soft/40 text-primary-strong" : "border-outline/40 bg-surface text-ink"}`}
+              className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 text-sm font-semibold ${provider === option.value ? "border-primary bg-primary-soft/40 text-primary-strong" : "border-outline/40 bg-surface text-ink"}`}
             >
+              {option.locked && <Lock size={14} aria-hidden="true" />}
               {option.label}
             </button>
           ))}
@@ -285,6 +314,8 @@ export function PaymentMethodFormScreen({ returnTo, required = false, method }: 
           {busy ? "Salvando…" : "Salvar meio de pagamento"}
         </button>
       </ScreenFooter>
+
+      {paywall && <PlanPaywall error={paywall} onClose={() => setPaywall(null)} />}
     </form>
   );
 }

@@ -62,3 +62,50 @@ export type PlanInvoice = { id: string; amountCents: number; status: string; pai
 export type SubscribeResult = { clientSecret: string };
 
 export type SetupResult = { clientSecret: string };
+
+export const PLAN_NAMES: Record<PlanTier, string> = {
+  [PlanTier.Free]: 'Grátis',
+  [PlanTier.Basic]: 'Básico'
+};
+
+export function planName(tier: PlanTier): string {
+  return PLAN_NAMES[tier];
+}
+
+export const enum PlanErrorCode {
+  LimitReached = 'PLAN_LIMIT_REACHED',
+  Required = 'PLAN_REQUIRED'
+}
+
+export type PlanErrorPayload = { code: PlanErrorCode; message: string; fields: { limit?: number; used?: number; plan?: PlanTier } };
+
+type ErrorBody = { message?: unknown; context?: { code?: unknown; fields?: Record<string, unknown> } };
+
+function numberField(value: unknown): number | undefined {
+  const parsed = typeof value === 'string' ? Number(value) : undefined;
+
+  return parsed !== undefined && Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/** The two 402s the clients act on; anything else is somebody else's error. */
+export function planErrorOf(body: unknown): PlanErrorPayload | null {
+  const error = body as ErrorBody | null;
+  const code = error?.context?.code;
+
+  if (code !== PlanErrorCode.LimitReached && code !== PlanErrorCode.Required) {
+    return null;
+  }
+
+  const fields = error?.context?.fields ?? {};
+  const plan = fields.plan === PlanTier.Free || fields.plan === PlanTier.Basic ? fields.plan : undefined;
+
+  return {
+    code: code as PlanErrorCode,
+    message: typeof error?.message === 'string' ? error.message : '',
+    fields: {
+      ...(numberField(fields.limit) !== undefined ? { limit: numberField(fields.limit) } : {}),
+      ...(numberField(fields.used) !== undefined ? { used: numberField(fields.used) } : {}),
+      ...(plan ? { plan } : {})
+    }
+  };
+}

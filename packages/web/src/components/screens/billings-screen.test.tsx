@@ -1,3 +1,4 @@
+import { PlanTier, SubscriptionStatus, type PlanSummary } from "@receivy/common";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
@@ -66,13 +67,26 @@ function isList(path: string): boolean {
   return path === "/api/financial/billings" || path.startsWith("/api/financial/billings?");
 }
 
+/** Well under the 80% threshold, so no test that ignores the plan ever trips the usage pill. */
+const defaultPlan: PlanSummary = { plan: PlanTier.Free, status: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, usage: { indefinite: { used: 0, limit: 5 } }, checkoutLinks: false, card: null };
+
 function mockApi(handler: Handler): string[] {
   const calls: string[] = [];
 
   vi.mocked(browserFetch).mockImplementation(async (path, init) => {
     calls.push(`${init?.method ?? "GET"} ${path}`);
 
-    return handler(path, init) ?? Response.json({ billings: [], nextCursor: null });
+    const custom = handler(path, init);
+
+    if (custom) {
+      return custom;
+    }
+
+    if (path === "/api/financial/plan") {
+      return Response.json(defaultPlan);
+    }
+
+    return Response.json({ billings: [], nextCursor: null });
   });
 
   return calls;
@@ -299,4 +313,29 @@ it("loads the next page when asked", async () => {
   expect(await screen.findByRole("article", { name: "Cobrança Aluguel" })).toBeInTheDocument();
   expect(screen.getByRole("article", { name: "Cobrança Churrasco" })).toBeInTheDocument();
   expect(calls.some((call) => call.includes("cursor=c2"))).toBe(true);
+});
+
+it("shows the usage pill next to Nova conta when close to the plan limit", async () => {
+  const basicUsage: PlanSummary = { plan: PlanTier.Basic, status: SubscriptionStatus.Active, currentPeriodEnd: "2026-10-19T12:00:00.000Z", cancelAtPeriodEnd: false, usage: { indefinite: { used: 4, limit: 5 } }, checkoutLinks: true, card: null };
+
+  mockApi((path) => (path === "/api/financial/plan" ? Response.json(basicUsage) : undefined));
+
+  render(<BillingsScreen />);
+
+  const pill = await screen.findByRole("link", { name: "4 de 5 cobranças indefinidas" });
+
+  expect(pill).toHaveAttribute("href", "/settings/plan");
+});
+
+it("hides the usage pill when far from the plan limit", async () => {
+  const farFromLimit: PlanSummary = { plan: PlanTier.Free, status: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, usage: { indefinite: { used: 2, limit: 5 } }, checkoutLinks: false, card: null };
+
+  const calls = mockApi((path) => (path === "/api/financial/plan" ? Response.json(farFromLimit) : undefined));
+
+  render(<BillingsScreen />);
+
+  await screen.findByText("Nenhuma conta ainda");
+  await vi.waitFor(() => expect(calls).toContain("GET /api/financial/plan"));
+
+  expect(screen.queryByRole("link", { name: /cobranças indefinidas/ })).not.toBeInTheDocument();
 });

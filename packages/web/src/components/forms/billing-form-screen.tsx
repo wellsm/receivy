@@ -23,6 +23,7 @@ import {
   splitPartyKey,
   splitParties,
   canNotifyContact,
+  planErrorOf,
   untilInstallmentPreview,
   BillingDueRule,
   BillingFrequency,
@@ -44,6 +45,7 @@ import {
   type Contact,
   type ContactsPage,
   type PaymentMethodsPage,
+  type PlanErrorPayload,
   type SplitParty,
   type SplitValues,
 } from "@receivy/common";
@@ -53,6 +55,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
+import { PlanPaywall } from "@/components/app/plan-paywall";
 import { ScopeDialog } from "@/components/app/scope-dialog";
 import { CategorySelect } from "@/components/app/category-select";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
@@ -116,10 +119,27 @@ const SPLIT_MODES: { value: SplitMode; label: string; name: string }[] = [
 const INPUT_CLASS = "h-12 w-full rounded-[14px] border border-outline bg-surface px-3.5 text-[15px] font-medium text-ink disabled:opacity-60";
 const LABEL_CLASS = "ml-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted";
 
+/** The plan's 402: the save catch branches on it instead of showing the generic save error. */
+class PlanError extends Error {
+  constructor(readonly plan: PlanErrorPayload) {
+    super(plan.message);
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await browserFetch(path, init);
 
   if (!response.ok) {
+    const payload = await response
+      .clone()
+      .json()
+      .catch(() => null);
+    const planError = planErrorOf(payload);
+
+    if (planError) {
+      throw new PlanError(planError);
+    }
+
     const error = new Error(await responseMessage(response, "Não foi possível salvar. Tente novamente."));
 
     throw Object.assign(error, { status: response.status });
@@ -253,6 +273,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [gated, setGated] = useState(false);
+  const [paywall, setPaywall] = useState<PlanErrorPayload | null>(null);
   const restored = useRef<StoredDraft | null>(null);
   const addContact = useRef<HTMLButtonElement>(null);
   const pickPayee = useRef<HTMLButtonElement>(null);
@@ -463,6 +484,16 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       // would flash the button back to idle while this screen is still on top.
       onSaved(saved);
     } catch (reason) {
+      // The plan's 402 keeps the draft as-is and skips the retry flow: the person comes
+      // back to the same form after subscribing, or picks a smaller ask.
+      if (reason instanceof PlanError) {
+        setAttempt(null);
+        setPaywall(reason.plan);
+        setBusy(false);
+
+        return;
+      }
+
       const status = (reason as { status?: number }).status;
       const uncertain = sent.uncertain || !status || status >= 500;
 
@@ -1232,6 +1263,8 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           onCancel={() => setScopeAttempt(null)}
         />
       )}
+
+      {paywall && <PlanPaywall error={paywall} onClose={() => setPaywall(null)} />}
     </form>
   );
 }

@@ -15,6 +15,8 @@
     "@fontsource-variable/public-sans": "^5.3.0",
     "@fontsource-variable/space-grotesk": "^5.3.0",
     "@receivy/common": "workspace:*",
+    "@stripe/react-stripe-js": "^6.10.0",
+    "@stripe/stripe-js": "^9.16.0",
     "clsx": "catalog:",
     "lucide-react": "catalog:",
     "next": "^16.2.6",

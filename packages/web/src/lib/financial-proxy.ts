@@ -20,6 +20,7 @@ export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["POST", /^invites\/[^/]+\/accept$/],
   ["GET", /^payment-methods$/], ["POST", /^payment-methods$/], ["PATCH", new RegExp(`^payment-methods/${ID}$`)],
   ["POST", new RegExp(`^payment-methods/${ID}/(?:default|archive)$`)],
+  ["GET", /^plan$/], ["POST", /^plan\/(?:subscribe|cancel|resume|payment-method|payment-method\/confirm)$/], ["GET", /^plan\/invoices$/],
   ["GET", new RegExp(`^charges/${ID}$`)], ["POST", new RegExp(`^charges/${ID}/(?:cancel|pay|reopen|public-link|public-link/rotate|payment-link)$`)],
   ["GET", new RegExp(`^contacts/${ID}/ledger$`)],
   ["POST", new RegExp(`^charges/${ID}/proof(?:/review|/complete|/declaration)?$`)], ["DELETE", new RegExp(`^charges/${ID}/proof$`)],

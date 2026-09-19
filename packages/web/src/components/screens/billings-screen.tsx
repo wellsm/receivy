@@ -1,12 +1,13 @@
 "use client";
 
-import { BillingState, billingShareAction, calendarDate, Direction, type BillingSummary, type BillingsPage } from "@receivy/common";
+import { BillingState, billingShareAction, calendarDate, Direction, type BillingSummary, type BillingsPage, type PlanSummary } from "@receivy/common";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
+import { loadPlanSummary } from "@/lib/plan-summary";
 import { BILLING_ROW_COLUMNS, BillingCard } from "@/components/ui/billing-card";
 
 const LIST_ERROR = "Não foi possível carregar suas cobranças.";
@@ -69,6 +70,7 @@ export function BillingsScreen() {
   const [direction, setDirection] = useState<Direction | "">("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [plan, setPlan] = useState<PlanSummary | null>(null);
   const requests = useRef(0);
   const today = calendarDate();
 
@@ -103,6 +105,10 @@ export function BillingsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadPlanSummary().then(setPlan);
+  }, []);
 
   async function copy(value: string) {
     setNotice("");
@@ -160,6 +166,11 @@ export function BillingsScreen() {
               onChange={(event) => setTerm(event.target.value)}
             />
           </label>
+          {plan && plan.usage.indefinite.used >= Math.ceil(plan.usage.indefinite.limit * 0.8) && (
+            <Link href="/settings/plan" className="self-center shrink-0 whitespace-nowrap rounded-full bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">
+              {`${plan.usage.indefinite.used} de ${plan.usage.indefinite.limit} cobranças indefinidas`}
+            </Link>
+          )}
           <Link
             className="hidden h-[42px] shrink-0 items-center gap-2 rounded-xl bg-primary px-4 text-[13.5px] font-bold text-on-primary md:ml-auto md:inline-flex"
             href="/billings/new"

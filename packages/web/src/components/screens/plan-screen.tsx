@@ -1,6 +1,13 @@
 "use client";
 
-import { formatMoney, momentText, type PlanInvoice, type PlanSummary, PlanTier, planName } from "@receivy/common";
+import {
+  formatMoney,
+  momentText,
+  type PlanInvoice,
+  type PlanSummary,
+  PlanTier,
+  planName,
+} from "@receivy/common";
 import { CreditCard, Crown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
@@ -12,20 +19,34 @@ import { Toast } from "@/components/app/toast";
 const LOAD_ERROR = "Não foi possível carregar seu plano.";
 const ACTION_ERROR = "Não foi possível atualizar seu plano.";
 const UNAVAILABLE = "Assinaturas indisponíveis neste ambiente.";
-const POLL_TIMEOUT_MESSAGE = "Ainda confirmando o pagamento. Recarregue a página em instantes ou confira seu e-mail.";
+const POLL_TIMEOUT_MESSAGE =
+  "Ainda confirmando o pagamento. Recarregue a página em instantes ou confira seu e-mail.";
 const POLL_MS = 2_000;
 const POLL_LIMIT = 15;
 
+const INVOICE_LABELS: Record<string, string> = { paid: "Paga", open: "Em aberto" };
+
+/** The API only hands over paid and open invoices; anything else falls back to Stripe's own word. */
+function invoiceLabel(status: string): string {
+  return INVOICE_LABELS[status] ?? status;
+}
+
 type Checkout = { mode: "subscribe" | "setup"; clientSecret: string } | null;
 
-async function request<T>(path: string, init?: RequestInit, fallback = ACTION_ERROR): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  fallback = ACTION_ERROR,
+): Promise<T> {
   const response = await browserFetch(path, init);
 
   if (!response.ok) {
     throw new Error(await responseMessage(response, fallback));
   }
 
-  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+  return response.status === 204
+    ? (undefined as T)
+    : ((await response.json()) as T);
 }
 
 function UsageBar({ used, limit }: { used: number; limit: number }) {
@@ -34,8 +55,17 @@ function UsageBar({ used, limit }: { used: number; limit: number }) {
   return (
     <div>
       <p className="m-0 text-sm text-ink">{`${used} de ${limit} cobranças indefinidas`}</p>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-valuemin={0} aria-valuemax={limit} aria-valuenow={used}>
-        <div className={`h-full rounded-full ${ratio >= 0.8 ? "bg-warning" : "bg-primary"}`} style={{ width: `${ratio * 100}%` }} />
+      <div
+        className="mt-2 h-2 overflow-hidden rounded-full bg-surface-muted"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={limit}
+        aria-valuenow={used}
+      >
+        <div
+          className={`h-full rounded-full ${ratio >= 0.8 ? "bg-warning" : "bg-primary"}`}
+          style={{ width: `${ratio * 100}%` }}
+        />
       </div>
     </div>
   );
@@ -53,7 +83,14 @@ export function PlanScreen() {
   const polls = useRef(0);
 
   const load = useCallback(() => {
-    return Promise.all([request<PlanSummary>("/api/financial/plan", undefined, LOAD_ERROR), request<{ invoices: PlanInvoice[] }>("/api/financial/plan/invoices", undefined, LOAD_ERROR)])
+    return Promise.all([
+      request<PlanSummary>("/api/financial/plan", undefined, LOAD_ERROR),
+      request<{ invoices: PlanInvoice[] }>(
+        "/api/financial/plan/invoices",
+        undefined,
+        LOAD_ERROR,
+      ),
+    ])
       .then(([plan, page]) => {
         setSummary(plan);
         setInvoices(page.invoices);
@@ -119,7 +156,10 @@ export function PlanScreen() {
 
   function subscribe() {
     return act(async () => {
-      const { clientSecret } = await request<{ clientSecret: string }>("/api/financial/plan/subscribe", { method: "POST" });
+      const { clientSecret } = await request<{ clientSecret: string }>(
+        "/api/financial/plan/subscribe",
+        { method: "POST" },
+      );
 
       setCheckout({ mode: "subscribe", clientSecret });
     });
@@ -127,7 +167,10 @@ export function PlanScreen() {
 
   function changeCard() {
     return act(async () => {
-      const { clientSecret } = await request<{ clientSecret: string }>("/api/financial/plan/payment-method", { method: "POST" });
+      const { clientSecret } = await request<{ clientSecret: string }>(
+        "/api/financial/plan/payment-method",
+        { method: "POST" },
+      );
 
       setCheckout({ mode: "setup", clientSecret });
     });
@@ -146,7 +189,11 @@ export function PlanScreen() {
 
     if (paymentMethodId) {
       void act(async () => {
-        await request<void>("/api/financial/plan/payment-method/confirm", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ paymentMethodId }) });
+        await request<void>("/api/financial/plan/payment-method/confirm", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ paymentMethodId }),
+        });
 
         setToast("Cartão atualizado");
       });
@@ -161,49 +208,118 @@ export function PlanScreen() {
 
   const paid = summary.plan === PlanTier.Basic;
   const stripeOn = stripeConfigured();
-  const when = summary.currentPeriodEnd ? momentText(summary.currentPeriodEnd) : null;
+  const when = summary.currentPeriodEnd
+    ? momentText(summary.currentPeriodEnd)
+    : null;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
       <section className="rounded-[20px] border border-outline bg-surface p-5">
         <div className="flex items-center justify-between">
           <h2 className="m-0 font-display text-lg font-bold text-ink">Plano</h2>
-          <span className={`rounded-full px-3 py-1 text-xs font-bold ${paid ? "bg-primary-soft text-primary-strong" : "bg-surface-muted text-muted"}`}>{planName(summary.plan)}</span>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-bold ${paid ? "bg-primary-soft text-primary-strong" : "bg-surface-muted text-muted"}`}
+          >
+            {planName(summary.plan)}
+          </span>
         </div>
         <div className="mt-4">
-          <UsageBar used={summary.usage.indefinite.used} limit={summary.usage.indefinite.limit} />
+          <UsageBar
+            used={summary.usage.indefinite.used}
+            limit={summary.usage.indefinite.limit}
+          />
         </div>
-        {paid && when ? <p className="mt-3 text-sm text-muted">{summary.cancelAtPeriodEnd ? `Cancela em ${when}` : `Renova em ${when}`}</p> : null}
+        {paid && when ? (
+          <p className="mt-3 text-sm text-muted">
+            {summary.cancelAtPeriodEnd
+              ? `Cancela em ${when}`
+              : `Renova em ${when}`}
+          </p>
+        ) : null}
         {paid && summary.card ? (
           <p className="mt-1 flex items-center gap-2 text-sm text-ink">
             <CreditCard size={16} aria-hidden="true" />
             {`${summary.card.brand} •••• ${summary.card.last4}`}
           </p>
         ) : null}
-        {!paid && PLAN_BASIC_PRICE_CENTS > 0 ? <p className="mt-3 text-sm text-muted">{`${formatMoney({ amountCents: PLAN_BASIC_PRICE_CENTS, currency: "BRL" })}/mês`}</p> : null}
-        {error ? <p role="alert" className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">{error}</p> : null}
-        {confirming ? <p role="status" className="mt-3 text-sm text-muted">Confirmando pagamento…</p> : null}
+        {!paid && PLAN_BASIC_PRICE_CENTS > 0 ? (
+          <p className="mt-3 text-sm text-muted">{`${formatMoney({ amountCents: PLAN_BASIC_PRICE_CENTS, currency: "BRL" })}/mês`}</p>
+        ) : null}
+        {error ? (
+          <p
+            role="alert"
+            className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger"
+          >
+            {error}
+          </p>
+        ) : null}
+        {confirming ? (
+          <p role="status" className="mt-3 text-sm text-muted">
+            Confirmando pagamento…
+          </p>
+        ) : null}
         {checkout ? (
           <div className="mt-4">
-            <PlanCheckout mode={checkout.mode} clientSecret={checkout.clientSecret} onDone={onCheckoutDone} onCancel={() => setCheckout(null)} />
+            <PlanCheckout
+              mode={checkout.mode}
+              clientSecret={checkout.clientSecret}
+              onDone={onCheckoutDone}
+              onCancel={() => setCheckout(null)}
+            />
           </div>
         ) : null}
         {!checkout && !confirming ? (
           <div className="mt-4 flex flex-col gap-2">
-            {!stripeOn ? <p className="m-0 text-sm text-muted">{UNAVAILABLE}</p> : null}
-            {pollTimedOut ? <p role="status" className="m-0 text-sm text-muted">{POLL_TIMEOUT_MESSAGE}</p> : null}
+            {!stripeOn ? (
+              <p className="m-0 text-sm text-muted">{UNAVAILABLE}</p>
+            ) : null}
+            {pollTimedOut ? (
+              <p role="status" className="m-0 text-sm text-muted">
+                {POLL_TIMEOUT_MESSAGE}
+              </p>
+            ) : null}
             {!paid && stripeOn && !pollTimedOut ? (
-              <button type="button" onClick={() => void subscribe()} disabled={busy} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 font-bold text-on-primary disabled:opacity-60">
+              <button
+                type="button"
+                onClick={() => void subscribe()}
+                disabled={busy}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 font-bold text-on-primary disabled:opacity-60"
+              >
                 <Crown size={18} aria-hidden="true" />
                 Assinar o Básico
               </button>
             ) : null}
             {paid ? (
               <>
-                <button type="button" onClick={() => void act(() => request<void>(summary.cancelAtPeriodEnd ? "/api/financial/plan/resume" : "/api/financial/plan/cancel", { method: "POST" }))} disabled={busy} className="min-h-12 rounded-xl border border-outline font-semibold text-ink">
-                  {summary.cancelAtPeriodEnd ? "Retomar" : "Cancelar ao fim do período"}
+                <button
+                  type="button"
+                  onClick={() =>
+                    void act(() =>
+                      request<void>(
+                        summary.cancelAtPeriodEnd
+                          ? "/api/financial/plan/resume"
+                          : "/api/financial/plan/cancel",
+                        { method: "POST" },
+                      ),
+                    )
+                  }
+                  disabled={busy}
+                  className="min-h-12 rounded-xl border border-outline font-semibold text-ink"
+                >
+                  {summary.cancelAtPeriodEnd
+                    ? "Retomar"
+                    : "Cancelar ao fim do período"}
                 </button>
-                {stripeOn ? <button type="button" onClick={() => void changeCard()} disabled={busy} className="min-h-12 rounded-xl border border-outline font-semibold text-ink">Trocar cartão</button> : null}
+                {stripeOn ? (
+                  <button
+                    type="button"
+                    onClick={() => void changeCard()}
+                    disabled={busy}
+                    className="min-h-12 rounded-xl border border-outline font-semibold text-ink"
+                  >
+                    Trocar cartão
+                  </button>
+                ) : null}
               </>
             ) : null}
           </div>
@@ -213,11 +329,30 @@ export function PlanScreen() {
         <section className="rounded-[20px] border border-outline bg-surface p-5">
           <h3 className="m-0 text-base font-bold text-ink">Faturas</h3>
           <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0">
-            {invoices.map(invoice => (
-              <li key={invoice.id} className="flex items-center justify-between text-sm">
-                <span className="text-muted">{invoice.paidAt ? momentText(invoice.paidAt) : invoice.status}</span>
-                <span className="font-semibold text-ink">{formatMoney({ amountCents: invoice.amountCents, currency: "BRL" })}</span>
-                {invoice.pdfUrl ? <a href={invoice.pdfUrl} target="_blank" rel="noreferrer" className="font-semibold text-primary">PDF</a> : null}
+            {invoices.map((invoice) => (
+              <li
+                key={invoice.id}
+                className="flex items-center justify-between text-sm"
+              >
+                <span className="text-muted">
+                  {invoice.paidAt ? momentText(invoice.paidAt) : invoiceLabel(invoice.status)}
+                </span>
+                <span className="font-semibold text-ink">
+                  {formatMoney({
+                    amountCents: invoice.amountCents,
+                    currency: "BRL",
+                  })}
+                </span>
+                {invoice.pdfUrl ? (
+                  <a
+                    href={invoice.pdfUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-primary"
+                  >
+                    PDF
+                  </a>
+                ) : null}
               </li>
             ))}
           </ul>

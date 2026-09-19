@@ -153,9 +153,19 @@ export function createStripeClient(secretKey: string, sdk: Stripe = new Stripe(s
       try {
         const page = await sdk.invoices.list({ customer: customerId, limit });
 
+        // Only what the owner can act on or keep: paid ones, and the open one a retry cycle is still trying to collect.
+        // Drafts, voided (expired unpaid subscriptions) and uncollectible ones are Stripe's bookkeeping, not theirs.
         return {
           status: 'ok',
-          invoices: page.data.map((invoice) => ({ id: invoice.id, amountCents: invoice.amount_paid, status: invoice.status ?? 'draft', paidAt: isoOf(invoice.status_transitions.paid_at), pdfUrl: invoice.invoice_pdf ?? null }))
+          invoices: page.data
+            .filter((invoice) => invoice.status === 'paid' || invoice.status === 'open')
+            .map((invoice) => ({
+              id: invoice.id,
+              amountCents: invoice.status === 'paid' ? invoice.amount_paid : invoice.amount_due,
+              status: invoice.status ?? 'draft',
+              paidAt: isoOf(invoice.status_transitions.paid_at),
+              pdfUrl: invoice.invoice_pdf ?? null
+            }))
         };
       } catch {
         return { status: 'unavailable' };

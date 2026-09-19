@@ -32,7 +32,12 @@ function api(summaries: PlanSummary[]) {
     }
 
     if (path === "/api/financial/plan/invoices") {
-      return Response.json({ invoices: [{ id: "in_1", amountCents: 1990, status: "paid", paidAt: "2026-09-19T12:00:00.000Z", pdfUrl: "https://stripe.example/in_1.pdf" }] });
+      return Response.json({
+        invoices: [
+          { id: "in_1", amountCents: 1990, status: "paid", paidAt: "2026-09-19T12:00:00.000Z", pdfUrl: "https://stripe.example/in_1.pdf" },
+          { id: "in_2", amountCents: 1990, status: "open", paidAt: null, pdfUrl: null },
+        ],
+      });
     }
 
     if (path === "/api/financial/plan/subscribe" || path === "/api/financial/plan/payment-method") {
@@ -86,6 +91,8 @@ it("shows the paid plan with card, renewal, invoices, cancel and card change", a
   expect(screen.getByText("visa •••• 4242")).toBeInTheDocument();
   expect(screen.getByText(/Renova em/)).toBeInTheDocument();
   expect(await screen.findByRole("link", { name: "PDF" })).toHaveAttribute("href", "https://stripe.example/in_1.pdf");
+  expect(screen.getByText("Em aberto")).toBeInTheDocument();
+  expect(screen.queryByText("open")).not.toBeInTheDocument();
 
   await userEvent.click(screen.getByRole("button", { name: "Cancelar ao fim do período" }));
   expect(sent.some(({ path, init }) => path === "/api/financial/plan/cancel" && init?.method === "POST")).toBe(true);

@@ -23,7 +23,16 @@ function sdkWith(overrides: Record<string, unknown> = {}) {
       update: vi.fn(async () => ({ id: 'sub_1', customer: 'cus_1', status: 'active', cancel_at_period_end: true, items: { data: [{ current_period_end: PERIOD_END }] } }))
     },
     setupIntents: { create: vi.fn(async () => ({ client_secret: 'seti_secret' })) },
-    invoices: { list: vi.fn(async () => ({ data: [{ id: 'in_1', amount_paid: 1990, status: 'paid', status_transitions: { paid_at: PERIOD_END }, invoice_pdf: 'https://stripe.example/in_1.pdf' }] })) },
+    invoices: {
+      list: vi.fn(async () => ({
+        data: [
+          { id: 'in_1', amount_paid: 1990, amount_due: 1990, status: 'paid', status_transitions: { paid_at: PERIOD_END }, invoice_pdf: 'https://stripe.example/in_1.pdf' },
+          { id: 'in_2', amount_paid: 0, amount_due: 1990, status: 'open', status_transitions: { paid_at: null }, invoice_pdf: null },
+          { id: 'in_3', amount_paid: 0, amount_due: 1990, status: 'void', status_transitions: { paid_at: null }, invoice_pdf: null },
+          { id: 'in_4', amount_paid: 0, amount_due: 1990, status: 'uncollectible', status_transitions: { paid_at: null }, invoice_pdf: null }
+        ]
+      }))
+    },
     webhooks: { constructEvent: vi.fn(() => ({ id: 'evt_1', type: 'customer.subscription.updated', created: PERIOD_END, data: { object: { object: 'subscription', id: 'sub_1' } } })) },
     ...overrides
   } as never;
@@ -83,10 +92,16 @@ describe('createStripeClient', () => {
     expect(client.constructEvent('{}', undefined, 'whsec')).toEqual({ status: 'invalid' });
   });
 
-  it('lists invoices as the client reads them and reads the default card', async () => {
+  it('lists only paid and open invoices, with the amount due on an open one, and reads the default card', async () => {
     const client = createStripeClient('sk_test', sdkWith());
 
-    expect(await client.listInvoices('cus_1', 12)).toEqual({ status: 'ok', invoices: [{ id: 'in_1', amountCents: 1990, status: 'paid', paidAt: new Date(PERIOD_END * 1000).toISOString(), pdfUrl: 'https://stripe.example/in_1.pdf' }] });
+    expect(await client.listInvoices('cus_1', 12)).toEqual({
+      status: 'ok',
+      invoices: [
+        { id: 'in_1', amountCents: 1990, status: 'paid', paidAt: new Date(PERIOD_END * 1000).toISOString(), pdfUrl: 'https://stripe.example/in_1.pdf' },
+        { id: 'in_2', amountCents: 1990, status: 'open', paidAt: null, pdfUrl: null }
+      ]
+    });
     expect(await client.defaultCard('cus_1')).toEqual({ status: 'ok', card: { brand: 'visa', last4: '4242' } });
   });
 });

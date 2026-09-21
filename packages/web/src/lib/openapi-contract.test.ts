@@ -46,10 +46,14 @@ const DEDICATED_BFF = [
   "POST public/charges/{p}/proof/declaration",
   // The pay page is a server component and closes the charge with authApiFetch, like /pay itself.
   "POST public/charges/{p}/provider-return",
+  // Back from the checkout, the pay page resolves the signed-in participant's charge server-side (lib/auth/own-charge.ts).
+  "GET charges/by-link/{p}",
   // Provider callbacks land on the web domain and are bridged to the API (lib/auth/provider-callback.ts).
   "GET auth/google/callback", "POST auth/apple/callback",
   // The dev fake-checkout pay route (server-only, 404s outside fake mode) posts to the API on the browser's behalf.
   "POST dev/checkout/{p}/{p}/pay",
+  // The e-mail footer lands on /opt-out/[token], a server component; the "Voltar a receber" button goes through /api/public/opt-out.
+  "POST public/notices/opt-out/{p}", "DELETE public/notices/opt-out/{p}",
 ];
 // API operations the browser intentionally never calls.
 const WEB_EXCLUSIONS: Record<string, string> = {
@@ -73,6 +77,8 @@ const NATIVE_DEFERRED: Record<string, string> = {
   "plan/resume": "managed on the web only",
   "plan/payment-method": "managed on the web only",
   "plan/payment-method/confirm": "managed on the web only",
+  "charges/by-link/{p}": "the checkout returns to the web pay page; the app reloads the charge when the in-app browser closes",
+  "public/notices/opt-out/{p}": "the e-mail footer always opens in the browser",
 };
 
 describe("OpenAPI × BFF", () => {

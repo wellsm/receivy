@@ -35,6 +35,8 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     displayName: "Ana Paula Souza",
     email: "ana@example.com",
     phone: null,
+    phoneSource: null,
+    whatsappConsentAt: null,
     status: UserStatus.Active,
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",

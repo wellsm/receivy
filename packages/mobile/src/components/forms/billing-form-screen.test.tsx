@@ -11,6 +11,15 @@ let mockRemoveListeners: (() => void)[] = [];
 
 jest.mock("expo-crypto", () => ({ randomUUID: () => `key-${++mockKeys}` }));
 
+// The default `account` client the form falls back to: a resolved owner default so no test needs the
+// network unless it explicitly injects its own `account` prop.
+jest.mock("@/account/client", () => ({
+  accountClient: {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories cannot close over module imports
+    reminders: jest.fn().mockResolvedValue({ config: require("@receivy/common").SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false }),
+  },
+}));
+
 // The native calendar is replaced by a button that answers with a fixed day.
 jest.mock("@react-native-community/datetimepicker", () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories cannot close over module imports
@@ -255,6 +264,21 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Ana" }));
 
     expect(screen.queryByRole("button", { name: "Ana" })).toBeNull();
+  });
+
+  it("reads the owner's own reminder default for a new billing instead of the system one", async () => {
+    const account = {
+      reminders: jest.fn().mockResolvedValue({
+        config: { reminders: [{ offsetDays: 3, enabled: true, channels: { email: true, whatsapp: false } }], manual: { email: true, whatsapp: true } },
+        inherited: true,
+        whatsappAvailable: false,
+      }),
+    };
+
+    await quickForm(undefined, undefined, { account });
+
+    expect(account.reminders).toHaveBeenCalled();
+    expect(await screen.findByText("Usando seu padrão: 3 dias depois (e-mail)")).toBeOnTheScreen();
   });
 
   it("creates a billing straight from the quick form, with category and no review step", async () => {

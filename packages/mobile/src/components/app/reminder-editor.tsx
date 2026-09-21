@@ -35,27 +35,20 @@ function ChannelChip({
 }) {
   const off = disabled || locked !== null;
   const on = checked && !locked;
-  // Test-only hook: RNTL's fireEvent(chip, "valueChange", value) exercises the toggle the same way a
-  // real press does. React Native ignores the unknown prop on the native side.
-  const testHooks = { onValueChange: (value: boolean) => onChange(value) } as object;
 
   return (
     <Pressable
       accessibilityRole="switch"
       accessibilityLabel={name}
-      // Pressable's own `disabled` prop, when set, overrides whatever `accessibilityState.disabled` is
-      // passed here — so the literal prop stays off the form's busy flag only, letting the lock still
-      // report through `accessibilityState` while the value stays toggleable and saved ahead of the
-      // feature going live (a paywalled one is checked server-side on save).
       accessibilityState={{ checked: on, disabled: off }}
+      disabled={off}
       onPress={() => {
-        if (disabled) {
+        if (off) {
           return;
         }
 
         onChange(!checked);
       }}
-      {...testHooks}
       className={`h-8 flex-row items-center gap-1.5 rounded-full border px-3 ${on ? "border-primary bg-primary-soft" : "border-outline"} ${off ? "opacity-60" : ""}`}
     >
       <Text className={`font-sans text-xs font-semibold ${on ? "text-primary-strong" : "text-muted"}`}>{label}</Text>

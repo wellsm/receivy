@@ -69,7 +69,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("E-mail (opcional)"), " Ana@Example.com ");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
-    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Paula Souza", email: "ana@example.com" }, undefined));
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Paula Souza", email: "ana@example.com", whatsappConsent: false }, undefined));
 
     expect(client.get).not.toHaveBeenCalled();
   });
@@ -86,7 +86,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
-    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana" }, undefined));
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana", whatsappConsent: false }, undefined));
 
     expect(client.save.mock.calls[0]?.[0]).not.toHaveProperty("email");
   });
@@ -114,7 +114,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("E-mail (opcional)"), "ana@example.com");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
-    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Paula Souza", nickname: "Aninha", email: "ana@example.com" }, undefined));
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Paula Souza", nickname: "Aninha", email: "ana@example.com", whatsappConsent: false }, undefined));
   });
 
   it("loads the contact being edited and keeps its fields editable while pending", async () => {
@@ -133,7 +133,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("Apelido"), "Ana P.");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
-    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Paula Souza", nickname: "Ana P.", email: "ana@example.com" }, "p1"));
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Paula Souza", nickname: "Ana P.", email: "ana@example.com", whatsappConsent: false }, "p1"));
   });
 
   it("freezes the name and the e-mail of an active contact", async () => {
@@ -211,7 +211,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() =>
-      expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", paymentMethod: { provider: "pix", kind: "phone", value: "+5511987654321", label: "Nubank" } }, undefined),
+      expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", whatsappConsent: false, paymentMethod: { provider: "pix", kind: "phone", value: "+5511987654321", label: "Nubank" } }, undefined),
     );
 
     expect(financial.paymentMethods).not.toHaveBeenCalled();
@@ -227,7 +227,7 @@ describe("ContactFormScreen", () => {
     await fireEvent.changeText(screen.getByLabelText("E-mail Pix"), " Ana@Example.com ");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
-    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", paymentMethod: { provider: "pix", kind: "email", value: "Ana@Example.com" } }, undefined));
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana Souza", whatsappConsent: false, paymentMethod: { provider: "pix", kind: "email", value: "Ana@Example.com" } }, undefined));
   });
 
   it("files a new key under the contact being edited", async () => {
@@ -243,7 +243,7 @@ describe("ContactFormScreen", () => {
 
     await waitFor(() =>
       expect(client.save).toHaveBeenCalledWith(
-        { name: "Ana Paula Souza", email: "ana@example.com", paymentMethod: { provider: "pix", kind: "cpf", value: "52998224725" } },
+        { name: "Ana Paula Souza", email: "ana@example.com", whatsappConsent: false, paymentMethod: { provider: "pix", kind: "cpf", value: "52998224725" } },
         "p1",
       ),
     );

@@ -221,17 +221,9 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
 
   /** The person's own phone, once filed, always wins: the owner's field only travels while it is still theirs to edit. */
   function phoneInput(): { phone?: string; whatsappConsent?: boolean } {
-    if (phoneSource === PhoneSource.Person) {
-      return {};
-    }
+    const phoneEditable = phoneSource !== PhoneSource.Person;
 
-    const trimmed = phone.trim();
-
-    if (!trimmed) {
-      return {};
-    }
-
-    return { phone: trimmed, whatsappConsent };
+    return { ...(phoneEditable ? { phone } : {}), whatsappConsent };
   }
 
   async function save() {

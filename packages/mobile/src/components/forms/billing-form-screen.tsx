@@ -57,6 +57,7 @@ import { MonthSelect } from "@/components/app/month-select";
 import { ReminderEditor } from "@/components/app/reminder-editor";
 import { ScopeModal } from "@/components/app/scope-modal";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
+import { accountClient, type AccountClient } from "@/account/client";
 import { financialClient, FinancialRequestError, type FinancialClient } from "@/financial/client";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
 import { PLAN_SITE_SUFFIX } from "@/financial/plan-copy";
@@ -101,6 +102,8 @@ type Attempt = { input: BillingInput; key: string; uncertain: boolean; applyTo?:
 type BillingFormScreenProps = {
   client?: Client;
   contacts?: Pick<typeof contactsClient, "list">;
+  /** The owner's reminder default: only read on a brand-new billing, to seed `effective`. */
+  account?: Pick<AccountClient, "reminders">;
   billing?: BillingDetail | null;
   onSaved: (billing: BillingDetail) => void;
   /**
@@ -376,6 +379,7 @@ function TypeButton({ label, active, disabled, onPress }: { label: string; activ
 export function BillingFormScreen({
   client = financialClient,
   contacts = contactsClient,
+  account = accountClient,
   billing = null,
   onSaved,
   onBack,
@@ -405,11 +409,12 @@ export function BillingFormScreen({
   const [ready, setReady] = useState(false);
   const [gated, setGated] = useState(false);
   const [plan, setPlan] = useState<PlanTier>(PlanTier.Free);
+  // What actually fires while the draft inherits the default: the billing's own effective reminders on
+  // edit, the owner's account default on creation (fetched below, falling back to the system one).
+  // WhatsApp is not wired up here yet, so it never unlocks.
+  const [effective, setEffective] = useState<ReminderRule[]>(() => billing?.effectiveReminders ?? SYSTEM_REMINDER_CONFIG.reminders);
   const loaded = useRef(false);
 
-  // What actually fires while the draft inherits the default: the billing's own effective reminders on
-  // edit, the system default on creation. WhatsApp is not wired up here yet, so it never unlocks.
-  const effective: ReminderRule[] = billing?.effectiveReminders ?? SYSTEM_REMINDER_CONFIG.reminders;
   const whatsappGate = { available: false, planAllows: plan === PlanTier.Basic };
 
   useEffect(() => {
@@ -424,6 +429,25 @@ export function BillingFormScreen({
       live = false;
     };
   }, [client]);
+
+  useEffect(() => {
+    // Editing already carries the billing's own effective reminders; a creation has none yet, so
+    // the inherited summary reads the owner's account default, falling back to the system one.
+    if (billing) {
+      return;
+    }
+
+    let live = true;
+
+    account.reminders().then(
+      (settings) => live && setEffective(settings.config.reminders),
+      () => undefined,
+    );
+
+    return () => {
+      live = false;
+    };
+  }, [account, billing]);
 
   const editing = Boolean(billing);
   const locked = Boolean(attempt);

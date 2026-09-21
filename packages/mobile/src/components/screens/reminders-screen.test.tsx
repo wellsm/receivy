@@ -38,10 +38,11 @@ describe("RemindersScreen", () => {
   });
 
   it("saves channels and clears back to the default", async () => {
-    const api = client();
+    // WhatsApp must be both plan-allowed and transport-available to exercise the toggle itself.
+    const api = client({ reminders: jest.fn().mockResolvedValue({ config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: true }) });
 
     await render(<RemindersScreen client={api} plans={plans} />);
-    await fireEvent(await screen.findByLabelText("WhatsApp no lembrete no dia"), "valueChange", true);
+    await fireEvent.press(await screen.findByLabelText("WhatsApp no lembrete no dia"));
     await fireEvent.press(screen.getByLabelText("Salvar"));
 
     expect(api.saveReminders).toHaveBeenCalledWith(expect.objectContaining({ reminders: [expect.objectContaining({ channels: { email: true, whatsapp: true } })] }));

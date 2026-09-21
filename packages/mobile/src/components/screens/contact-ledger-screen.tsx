@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Share, Text, View } from "react-native";
-import { calendarDate, formatMoney, formatPhoneBR, initialsOf, type ChargeDetail, type Contact, type ContactLedger } from "@receivy/common";
+import { calendarDate, formatMoney, formatPhoneBR, initialsOf, NOBODY_REACHABLE, type ChargeDetail, type Contact, type ContactLedger } from "@receivy/common";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { ActionTile } from "@/components/ui/action-tile";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
@@ -175,7 +175,7 @@ export function ContactLedgerScreen({
     const result = await run(() => notifications.remind(charge.id), "Não foi possível enviar o lembrete.");
 
     if (result) {
-      setNotice(result.queued ? "Lembrete enviado." : "Este contato ainda não recebe lembretes.");
+      setNotice(result.channels.length ? "Lembrete enviado." : NOBODY_REACHABLE);
     }
   }
 

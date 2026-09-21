@@ -1,5 +1,6 @@
 import type {
   DeviceRegistration,
+  ManualReminderResult,
   NotificationDevice,
 } from "@receivy/common";
 import { authClient } from "@/auth/client";
@@ -36,9 +37,11 @@ export function createNotificationClient(
         body: JSON.stringify(input),
       }),
     remind: (id: string) =>
-      request<{ queued: boolean }>(`charges/${id}/reminders`, {
+      request<ManualReminderResult>(`charges/${id}/reminders`, {
         method: "POST",
       }),
+    remindPreview: (id: string) =>
+      request<ManualReminderResult>(`charges/${id}/reminders/preview`),
   };
 }
 

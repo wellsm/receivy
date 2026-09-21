@@ -1,7 +1,7 @@
-import { normalizeContact, paymentMethodText, PaymentProvider, pixKeyField, PixKeyType, type Contact, type ContactInput, type ContactPaymentMethodInput, type PaymentMethod } from "@receivy/common";
+import { normalizeContact, paymentMethodText, PaymentProvider, PhoneSource, pixKeyField, PixKeyType, type Contact, type ContactInput, type ContactPaymentMethodInput, type PaymentMethod } from "@receivy/common";
 import { Image } from "expo-image";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { PixKeyFields, PIX_TYPE_ICONS } from "@/components/app/pix-key-fields";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { financialClient, type FinancialClient } from "@/financial/client";
@@ -32,6 +32,7 @@ function iconOf(method: PaymentMethod): number {
 const INTRO = "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento.";
 const EMAIL_NOTE = "Sem e-mail, a pessoa só recebe pelo link compartilhado. Quando ela entrar por um convite, você confirma quem é.";
 const LINKED_NOTE = "Contato vinculado a uma conta: só o apelido pode mudar.";
+const PHONE_LOCKED_NOTE = "Número informado pela própria pessoa";
 const TAKEN_NOTE = "Esse e-mail já pertence a outra conta ou contato.";
 const LOAD_ERROR = "Não foi possível carregar o contato.";
 const SAVE_ERROR = "Não foi possível salvar o contato.";
@@ -93,6 +94,9 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [phoneSource, setPhoneSource] = useState<PhoneSource | null>(null);
+  const [whatsappConsent, setWhatsappConsent] = useState(false);
   const [linked, setLinked] = useState(false);
   const [pixType, setPixType] = useState<PixKeyType>(PixKeyType.Email);
   // The key as the person sees it: masked for the current type, canonicalized only on save.
@@ -153,6 +157,9 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
         setName(contact.name);
         setNickname(contact.nickname ?? "");
         setEmail(contact.email);
+        setPhone(contact.phone ?? "");
+        setPhoneSource(contact.phoneSource);
+        setWhatsappConsent(Boolean(contact.whatsappConsentAt));
         // Once the person signed in, name and e-mail are theirs; only the nickname stays with the owner.
         setLinked(contact.status === "active");
       })
@@ -212,13 +219,28 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
     setBusy(false);
   }
 
+  /** The person's own phone, once filed, always wins: the owner's field only travels while it is still theirs to edit. */
+  function phoneInput(): { phone?: string; whatsappConsent?: boolean } {
+    if (phoneSource === PhoneSource.Person) {
+      return {};
+    }
+
+    const trimmed = phone.trim();
+
+    if (!trimmed) {
+      return {};
+    }
+
+    return { phone: trimmed, whatsappConsent };
+  }
+
   async function save() {
     setError("");
 
     let input: ContactInput;
 
     try {
-      input = normalizeContact({ name, nickname, email, ...paymentMethodInput() });
+      input = normalizeContact({ name, nickname, email, ...phoneInput(), ...paymentMethodInput() });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : INVALID_ERROR);
 
@@ -296,6 +318,30 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
               className={linked ? FROZEN_CLASS : FIELD_CLASS}
             />
           </Field>
+
+          <Field label="WhatsApp" hint={phoneSource === PhoneSource.Person ? PHONE_LOCKED_NOTE : undefined}>
+            <TextInput
+              accessibilityLabel="WhatsApp"
+              accessibilityState={{ disabled: phoneSource === PhoneSource.Person }}
+              placeholder="(11) 98765-4321"
+              placeholderTextColor={colors.muted}
+              keyboardType="phone-pad"
+              editable={phoneSource !== PhoneSource.Person}
+              value={phone}
+              onChangeText={setPhone}
+              className={phoneSource === PhoneSource.Person ? FROZEN_CLASS : FIELD_CLASS}
+            />
+          </Field>
+
+          <View className="flex-row items-center justify-between gap-3">
+            <Text className="flex-1 text-sm text-ink">Essa pessoa concordou em receber cobranças por WhatsApp</Text>
+            <Switch
+              accessibilityLabel="Essa pessoa concordou em receber cobranças por WhatsApp"
+              value={whatsappConsent}
+              onValueChange={setWhatsappConsent}
+              trackColor={{ true: colors.primary }}
+            />
+          </View>
         </View>
 
         <View className="gap-4 rounded-3xl border border-outline/40 bg-surface p-5">

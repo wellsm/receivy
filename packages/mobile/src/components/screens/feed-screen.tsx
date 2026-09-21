@@ -25,6 +25,7 @@ import {
   groupChargesByDay,
   type ListCharge,
   type ListChargeItem,
+  type ManualReminderResult,
   monthTabs,
   openChargesTotal,
 } from "@receivy/common";
@@ -38,7 +39,7 @@ import { useThemeColors } from "@/theme/colors";
 
 type FeedScreenProps = {
   client?: Pick<FinancialClient, "charges"> & Partial<Pick<FinancialClient, "pay" | "declarePayment">>;
-  notifications?: Pick<typeof notificationClient, "remind">;
+  notifications?: Pick<typeof notificationClient, "remind"> & Partial<Pick<typeof notificationClient, "remindPreview">>;
   onOpenCharge?: (id: string) => void;
 };
 
@@ -272,6 +273,8 @@ export function FeedScreen({
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [remindTarget, setRemindTarget] = useState<ChargeSummary | null>(null);
+  const [remindPreview, setRemindPreview] = useState<ManualReminderResult | null>(null);
+  const [remindLoading, setRemindLoading] = useState(false);
   // The selected month persists across refocus/refresh; only picking another tab resets and reloads.
   const [month, setMonth] = useState(() => currentMonth(new Date()));
   const monthRef = useRef(month);
@@ -335,6 +338,24 @@ export function FeedScreen({
     setMonth(value);
     monthRef.current = value;
     void load(value);
+  }
+
+  // The preview loads as soon as the sheet opens, so it always answers before the person taps Enviar.
+  function openRemind(target: ChargeSummary) {
+    setRemindTarget(target);
+    setRemindPreview(null);
+
+    if (!notifications.remindPreview) {
+      return;
+    }
+
+    setRemindLoading(true);
+
+    notifications
+      .remindPreview(target.id)
+      .then(setRemindPreview)
+      .catch(() => setRemindPreview({ channels: [], dropped: [] }))
+      .finally(() => setRemindLoading(false));
   }
 
   async function remind(chargeId: string) {
@@ -430,7 +451,7 @@ export function FeedScreen({
         today={today}
         reminded={reminded[item.id] ?? null}
         onOpen={() => onOpenCharge?.(item.id)}
-        onRemind={() => setRemindTarget(charge)}
+        onRemind={() => openRemind(charge)}
         onMarkPaid={() => confirmMarkPaid(charge)}
         onDeclare={() => confirmDeclare(charge)}
       />
@@ -496,6 +517,8 @@ export function FeedScreen({
         <RemindSheet
           charge={remindTarget}
           today={today}
+          preview={remindPreview}
+          loading={remindLoading}
           onClose={() => setRemindTarget(null)}
           onSend={() => {
             setRemindTarget(null);

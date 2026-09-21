@@ -8,6 +8,7 @@ export default function SettingsRoute() {
     <ProfileScreen
       onOpenContacts={() => router.push("/contacts")}
       onOpenPaymentMethods={() => router.push("/settings/payment-methods")}
+      onOpenReminders={() => router.push("/settings/reminders")}
       onLoggedOut={() => router.replace("/login")}
     />
   );

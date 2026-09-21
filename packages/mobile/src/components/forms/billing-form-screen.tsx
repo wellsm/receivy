@@ -36,8 +36,12 @@ import {
   Direction,
   paymentMethodText,
   PaymentProvider,
+  PlanTier,
   type PaymentMethod,
   type PixKeyType,
+  type ReminderRule,
+  reminderSummary,
+  SYSTEM_REMINDER_CONFIG,
   SplitMode,
   SplitPartKind,
   type SplitParty,
@@ -50,6 +54,7 @@ import { Image } from "expo-image";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, useColorScheme, View } from "react-native";
 import { MonthSelect } from "@/components/app/month-select";
+import { ReminderEditor } from "@/components/app/reminder-editor";
 import { ScopeModal } from "@/components/app/scope-modal";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { financialClient, FinancialRequestError, type FinancialClient } from "@/financial/client";
@@ -90,7 +95,7 @@ function iconOf(method: PaymentMethod): number {
   return PIX_ICONS[method.kind];
 }
 
-type Client = Pick<FinancialClient, "paymentMethods" | "profile" | "createBilling" | "patchBilling">;
+type Client = Pick<FinancialClient, "paymentMethods" | "profile" | "createBilling" | "patchBilling"> & Partial<Pick<FinancialClient, "plan">>;
 type Attempt = { input: BillingInput; key: string; uncertain: boolean; applyTo?: EditScope };
 
 type BillingFormScreenProps = {
@@ -261,7 +266,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     mode: billing.split.mode,
     values: valuesFromBilling(billing),
     category: billing.category,
-    reminders: billing.reminders.map((reminder) => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
+    reminders: billing.reminders ? billing.reminders.map((reminder) => ({ ...reminder, offsetDays: String(reminder.offsetDays) })) : null,
     notify: notifyFromBilling(billing),
     settled: billing.kind === BillingKind.Record,
   };
@@ -277,6 +282,8 @@ function unknownContact(userId: string): Contact {
     displayName: "Contato",
     email: "",
     phone: null,
+    phoneSource: null,
+    whatsappConsentAt: null,
     status: UserStatus.Pending,
     archivedAt: null,
     createdAt: "",
@@ -397,7 +404,26 @@ export function BillingFormScreen({
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [gated, setGated] = useState(false);
+  const [plan, setPlan] = useState<PlanTier>(PlanTier.Free);
   const loaded = useRef(false);
+
+  // What actually fires while the draft inherits the default: the billing's own effective reminders on
+  // edit, the system default on creation. WhatsApp is not wired up here yet, so it never unlocks.
+  const effective: ReminderRule[] = billing?.effectiveReminders ?? SYSTEM_REMINDER_CONFIG.reminders;
+  const whatsappGate = { available: false, planAllows: plan === PlanTier.Basic };
+
+  useEffect(() => {
+    let live = true;
+
+    client.plan?.().then(
+      (summary) => live && setPlan(summary.plan),
+      () => undefined,
+    );
+
+    return () => {
+      live = false;
+    };
+  }, [client]);
 
   const editing = Boolean(billing);
   const locked = Boolean(attempt);
@@ -632,7 +658,7 @@ export function BillingFormScreen({
       paymentMethodId: input.paymentMethodId,
       clearPaymentMethod: !input.paymentMethodId,
       ...(toPayable ? seatPatch(input) : {}),
-      reminders: input.reminders,
+      ...(input.reminders ? { reminders: input.reminders } : billing?.reminders ? { clearReminders: true } : {}),
       category: input.category,
     };
 
@@ -1217,6 +1243,42 @@ export function BillingFormScreen({
               </View>
             ) : (
               <Text className="text-[11px] text-muted">{SEAT_HINTS[draft.direction]}</Text>
+            )}
+          </View>
+        )}
+
+        {/* Lembretes: a registro never notifies anyone, so it has none. */}
+        {!settled && (
+          <View className="gap-2">
+            <SectionLabel>LEMBRETES</SectionLabel>
+
+            {draft.reminders === null ? (
+              <View className="flex-row items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-2.5">
+                <Text className="flex-1 font-sans text-sm text-ink">Usando seu padrão: {reminderSummary(effective)}</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Personalizar"
+                  accessibilityState={{ disabled: locked }}
+                  disabled={locked}
+                  onPress={() => update({ reminders: effective.map((rule) => ({ ...rule, offsetDays: String(rule.offsetDays) })) })}
+                >
+                  <Text className="font-sans text-sm font-semibold text-primary">Personalizar</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <ReminderEditor rules={draft.reminders} onChange={(reminders) => update({ reminders })} whatsapp={whatsappGate} disabled={locked} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Voltar ao padrão"
+                  accessibilityState={{ disabled: locked }}
+                  disabled={locked}
+                  onPress={() => update({ reminders: null })}
+                  className="self-start"
+                >
+                  <Text className="font-sans text-sm font-semibold text-muted">Voltar ao padrão</Text>
+                </Pressable>
+              </>
             )}
           </View>
         )}

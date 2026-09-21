@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT, PaymentProvider, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, PaymentProvider, PhoneSource, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { clearDraft, saveDraft, takeDraft } from "@/financial/draft-store";
 import { ContactsRequestError } from "@/contacts/client";
@@ -13,6 +13,8 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     displayName: "Ana Paula Souza",
     email: "ana@example.com",
     phone: null,
+    phoneSource: null,
+    whatsappConsentAt: null,
     status: UserStatus.Pending,
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
@@ -364,5 +366,30 @@ describe("ContactFormScreen", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
 
     expect(takeDraft()?.selected).toEqual([]);
+  });
+
+  it("saves the typed WhatsApp number and consent", async () => {
+    const client = contactsApi();
+
+    await render(<ContactFormScreen client={client} />);
+
+    await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
+    await fireEvent.changeText(screen.getByLabelText("WhatsApp"), "11987654321");
+    await fireEvent(screen.getByLabelText("Essa pessoa concordou em receber cobranças por WhatsApp"), "valueChange", true);
+    await fireEvent.press(screen.getByLabelText("Salvar contato"));
+
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana", phone: "+5511987654321", whatsappConsent: true }, undefined));
+  });
+
+  it("freezes the WhatsApp number the person filed themselves", async () => {
+    const client = contactsApi(contact({ phone: "+5511987654321", phoneSource: PhoneSource.Person }));
+
+    await render(<ContactFormScreen contactId="p1" client={client} financial={financialApi()} />);
+
+    const field = await screen.findByLabelText("WhatsApp");
+
+    expect(field).toHaveDisplayValue("+5511987654321");
+    expect(field).toBeDisabled();
+    expect(screen.getByText("Número informado pela própria pessoa")).toBeOnTheScreen();
   });
 });

@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Alert, Share } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { BillingKind, BillingRecurrence, ChargeState, Direction, PaymentLinkState, PaymentProvider, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
+import * as WebBrowser from "expo-web-browser";
+import { BillingKind, BillingRecurrence, ChargeState, Direction, NoticeChannel, PaymentLinkState, PaymentProvider, PixKeyType, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
 import { ChargeDetailScreen } from "@/components/screens/charge-detail-screen";
 
 jest.mock("expo-router", () => {
@@ -12,6 +13,7 @@ jest.mock("expo-router", () => {
 });
 
 jest.mock("expo-clipboard", () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
+jest.mock("expo-web-browser", () => ({ openBrowserAsync: jest.fn().mockResolvedValue({ type: "dismiss" }) }));
 jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
 jest.mock("expo-file-system", () => ({ File: class {} }));
 jest.mock("expo/fetch", () => ({ fetch: jest.fn() }));
@@ -59,7 +61,10 @@ function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
 
 const TICKET = { uploadUrl: "https://private.test/put", expiresAt: "2026-09-05T14:40:00Z" };
 
-const notifications = { remind: jest.fn().mockResolvedValue({ queued: true }) };
+const notifications = {
+  remind: jest.fn().mockResolvedValue({ channels: [NoticeChannel.Push], dropped: [] }),
+  remindPreview: jest.fn().mockResolvedValue({ channels: [NoticeChannel.Push], dropped: [] }),
+};
 
 describe("ChargeDetailScreen", () => {
   it("creates and explicitly selects an owned Pix before sharing", async () => {
@@ -102,9 +107,26 @@ describe("ChargeDetailScreen", () => {
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith("pix@example.com");
   });
 
-  it("copies the InfinitePay link for the payer", async () => {
+  it("opens the InfinitePay checkout in the app browser for the payer and reloads the charge on return", async () => {
     const client = {
       charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Payable, payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" }, paymentLink: { url: "https://checkout/abc", state: PaymentLinkState.Ready } })),
+      cancel: jest.fn(),
+      pay: jest.fn(),
+      publicLink: jest.fn(),
+      publicChargeUrl: jest.fn(),
+    };
+
+    await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
+    await fireEvent.press(await screen.findByLabelText("Pagar pelo link"));
+
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith("https://checkout/abc");
+    await waitFor(() => expect(client.charge).toHaveBeenCalledTimes(2));
+    expect(screen.queryByLabelText("Copiar link de pagamento")).toBeNull();
+  });
+
+  it("keeps the copy tile for the creditor, who shares the link instead of paying it", async () => {
+    const client = {
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable, ownedByViewer: true, payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" }, paymentLink: { url: "https://checkout/abc", state: PaymentLinkState.Ready } })),
       cancel: jest.fn(),
       pay: jest.fn(),
       publicLink: jest.fn(),
@@ -115,9 +137,47 @@ describe("ChargeDetailScreen", () => {
     await fireEvent.press(await screen.findByLabelText("Copiar link de pagamento"));
 
     expect(Clipboard.setStringAsync).toHaveBeenCalledWith("https://checkout/abc");
+    expect(screen.queryByLabelText("Pagar pelo link")).toBeNull();
   });
 
-  it("shows the payment-link tile for a PagBank charge", async () => {
+  it("back from the checkout still pending: says the payment is being confirmed and asks again until it is paid", async () => {
+    jest.useFakeTimers();
+
+    const pending = charge({
+      direction: Direction.Payable,
+      payment: { provider: PaymentProvider.PagSeguro, kind: null, value: "Loja PagBank", label: "PagBank" },
+      paymentLink: { url: "https://checkout/pagbank", state: PaymentLinkState.Ready },
+    });
+    const client = {
+      charge: jest.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(pending).mockResolvedValue({ ...pending, state: ChargeState.Paid, paidAt: "2026-09-19" }),
+      cancel: jest.fn(),
+      pay: jest.fn(),
+      publicLink: jest.fn(),
+      publicChargeUrl: jest.fn(),
+    };
+
+    await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
+    await fireEvent.press(await screen.findByLabelText("Pagar pelo link"));
+
+    expect(await screen.findByText("Pagamento em confirmação: se você pagou, isto atualiza em instantes.")).toBeOnTheScreen();
+    expect(client.charge).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+
+    expect(client.charge).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(screen.queryByText("Pagamento em confirmação: se você pagou, isto atualiza em instantes.")).toBeNull());
+
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+    });
+
+    expect(client.charge).toHaveBeenCalledTimes(3);
+    jest.useRealTimers();
+  });
+
+  it("shows the pay tile for a PagBank charge", async () => {
     const client = {
       charge: jest.fn().mockResolvedValue(
         charge({
@@ -134,7 +194,7 @@ describe("ChargeDetailScreen", () => {
 
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
 
-    expect(await screen.findByLabelText("Copiar link de pagamento")).toBeOnTheScreen();
+    expect(await screen.findByLabelText("Pagar pelo link")).toBeOnTheScreen();
   });
 
   it("hides the payment-link tile for a Pix charge even when a stale link is present", async () => {
@@ -149,7 +209,7 @@ describe("ChargeDetailScreen", () => {
     await render(<ChargeDetailScreen id="charge" client={client} notifications={notifications} />);
     await screen.findByText("Aluguel");
 
-    expect(screen.queryByLabelText("Copiar link de pagamento")).toBeNull();
+    expect(screen.queryByLabelText("Pagar pelo link")).toBeNull();
   });
 
   it("asks for a new link when the last one failed", async () => {
@@ -347,9 +407,7 @@ describe("ChargeDetailScreen", () => {
   });
 
   it("marks a charge without proof as paid directly and reminds the debtor", async () => {
-    jest
-      .spyOn(Alert, "alert")
-      .mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga" || button.text === "Enviar lembrete")?.onPress?.());
+    jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
 
     const client = {
       charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable })),
@@ -366,7 +424,10 @@ describe("ChargeDetailScreen", () => {
 
     await fireEvent.press(await screen.findByRole("button", { name: "Lembrar" }));
 
-    expect(Alert.alert).toHaveBeenCalledWith("Enviar lembrete?", expect.stringContaining("Avisa Ana por notificação no app ou por e-mail"), expect.any(Array));
+    expect(await screen.findByText(/Vai por/)).toBeOnTheScreen();
+
+    await waitFor(() => expect(notifications.remindPreview).toHaveBeenCalledWith("charge"));
+    await fireEvent.press(screen.getByRole("button", { name: "Enviar lembrete" }));
 
     await waitFor(() => expect(notifications.remind).toHaveBeenCalledWith("charge"));
 

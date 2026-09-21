@@ -11,6 +11,7 @@ import {
   type ListCharge,
   type ListChargeItem,
   monthLabel,
+  NoticeChannel,
   ProofKind,
   ProofState,
   shiftMonth,
@@ -126,10 +127,11 @@ describe("FeedScreen", () => {
       charge({ id: "c5", description: "Consultoria", amountCents: 20000, state: ChargeState.Paid }),
       charge({ id: "c6", description: "Luz", type: Direction.Payable, ownedByViewer: false, amountCents: 5000, state: ChargeState.Paid }),
     ]);
-    const remind = jest.fn().mockResolvedValue({ queued: true });
+    const remind = jest.fn().mockResolvedValue({ channels: [NoticeChannel.Push], dropped: [] });
+    const remindPreview = jest.fn().mockResolvedValue({ channels: [NoticeChannel.Push], dropped: [] });
     const openCharge = jest.fn();
 
-    await renderFeed(<FeedScreen client={{ charges }} notifications={{ remind }} onOpenCharge={openCharge} />);
+    await renderFeed(<FeedScreen client={{ charges }} notifications={{ remind, remindPreview }} onOpenCharge={openCharge} />);
 
     // A receber: 3 × 87,42 still open; a pagar: 27,90 open. Realizado: 200,00 received − 50,00 paid.
     expect(await screen.findByText(/262,26/)).toBeOnTheScreen();
@@ -155,7 +157,8 @@ describe("FeedScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Lembrar" }));
 
     expect(screen.getByText("Lembrar João")).toBeOnTheScreen();
-    expect(screen.getByText(/Claude Team · R\$\s87,42 · atrasado\. Avisa por notificação no app ou por e-mail/)).toBeOnTheScreen();
+    expect(screen.getByText(/Claude Team · R\$\s87,42 · atrasado\./)).toBeOnTheScreen();
+    expect(await screen.findByText("Vai por: notificação no app")).toBeOnTheScreen();
     expect(remind).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByRole("button", { name: "Enviar lembrete" }));

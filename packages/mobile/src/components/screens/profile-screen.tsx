@@ -21,12 +21,14 @@ type ProfileScreenProps = {
   version?: string;
   onOpenContacts?: () => void;
   onOpenPaymentMethods?: () => void;
+  onOpenReminders?: () => void;
   onLoggedOut?: () => void;
 };
 
 type Dialog = "logout" | "delete" | null;
 
 const ICONS = {
+  bell: require("../../../assets/images/auth/bell.svg"),
   check: require("../../../assets/images/auth/check.svg"),
   chevron: require("../../../assets/images/auth/chevron.svg"),
   edit: require("../../../assets/images/auth/edit.svg"),
@@ -111,6 +113,7 @@ export function ProfileScreen({
   version = Constants.expoConfig?.version ?? "1.0.0",
   onOpenContacts,
   onOpenPaymentMethods,
+  onOpenReminders,
   onLoggedOut,
 }: ProfileScreenProps) {
   const colors = useThemeColors();
@@ -393,6 +396,17 @@ export function ProfileScreen({
                     title="Meios de pagamento"
                     subtitle="Pix e InfinitePay para receber"
                     onPress={onOpenPaymentMethods}
+                  />
+
+                  <View className="mx-4 h-px bg-outline/60" />
+
+                  <Row
+                    icon="bell"
+                    tone="primary"
+                    label="Configurar lembretes"
+                    title="Lembretes"
+                    subtitle="Quando e por onde avisar quem te deve"
+                    onPress={onOpenReminders}
                   />
                 </View>
               </Section>

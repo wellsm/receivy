@@ -97,6 +97,8 @@ function contact(id: string, userId: string, name: string, lastBilledAt: string 
     displayName: name,
     email: `${name.toLowerCase()}@example.com`,
     phone: null,
+    phoneSource: null,
+    whatsappConsentAt: null,
     status: UserStatus.Active,
     archivedAt: null,
     createdAt: "2026-09-01T00:00:00Z",
@@ -206,7 +208,8 @@ const onceBilling: BillingDetail = {
   updatedAt: "2026-09-01T00:00:00Z",
   timezone: "America/Sao_Paulo",
   paymentMethodId: "pix-1",
-  reminders: [{ offsetDays: 0, enabled: true }],
+  reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }],
+  effectiveReminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }],
   split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
   allocations: [],
   charges: [],
@@ -1007,7 +1010,7 @@ describe("BillingFormScreen", () => {
     expect(patchBilling).toHaveBeenCalledWith("b1", {
       paymentMethodId: "pix-1",
       clearPaymentMethod: false,
-      reminders: [{ offsetDays: 0, enabled: true }],
+      reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }],
       category: "transport",
     });
     expect(client.createBilling).not.toHaveBeenCalled();
@@ -1387,7 +1390,7 @@ describe("BillingFormScreen", () => {
     expect(patchBilling).toHaveBeenCalledWith("b1", {
       paymentMethodId: "pix-ana-2",
       clearPaymentMethod: false,
-      reminders: [{ offsetDays: 0, enabled: true }],
+      reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }],
       category: "food",
     });
   });

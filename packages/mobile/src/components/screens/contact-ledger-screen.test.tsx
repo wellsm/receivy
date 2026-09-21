@@ -172,7 +172,7 @@ describe("ContactLedgerScreen", () => {
   it("shares the payment link and reminds from an active charge", async () => {
     jest.spyOn(Share, "share").mockResolvedValue({ action: Share.sharedAction });
 
-    const notifications = { remind: jest.fn().mockResolvedValue({ queued: true }) };
+    const notifications = { remind: jest.fn().mockResolvedValue({ channels: ["push"], dropped: [] }) };
     const client = makeClient(ledger({}, [charge({ id: "c1" })]));
 
     await render(<ContactLedgerScreen id="p1" client={client} notifications={notifications} />);

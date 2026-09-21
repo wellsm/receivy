@@ -1,4 +1,4 @@
-import type { AuthUser, AccountProfileInput, AvatarMime, AvatarUploadTicket, UserAvatar } from "@receivy/common";
+import type { AuthUser, AccountProfileInput, AvatarMime, AvatarUploadTicket, ReminderConfig, ReminderSettings, UserAvatar } from "@receivy/common";
 import { authClient } from "@/auth/client";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> { const response = await authClient.authenticatedFetch(path, init);
@@ -20,6 +20,9 @@ export const accountClient = {
   logout: () => authClient.logout(),
   startAvatarUpload: (mime: AvatarMime) => request<AvatarUploadTicket>("account/avatar", { method: "POST", body: JSON.stringify({ mime }) }),
   completeAvatarUpload: async () => (await request<{ avatar: UserAvatar }>("account/avatar/complete", { method: "POST" })).avatar,
+  reminders: () => request<ReminderSettings>("account/reminders"),
+  saveReminders: (config: ReminderConfig) => request<ReminderSettings>("account/reminders", { method: "PUT", body: JSON.stringify(config) }),
+  clearReminders: () => request<ReminderSettings>("account/reminders", { method: "DELETE" }),
 };
 
 export type AccountClient = typeof accountClient;

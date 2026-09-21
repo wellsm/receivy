@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, Text, View } from "react-native";
 import {
   BillingKind,
@@ -24,14 +25,17 @@ import {
   counterpartRoleLabel,
   formatMoney,
   ownerPays,
+  NOBODY_REACHABLE,
   PaymentLinkState,
   PaymentProvider,
   ProofKind,
   type ChargeDetail,
+  type ManualReminderResult,
 } from "@receivy/common";
 import { FirstSharePix } from "@/components/app/first-share-pix";
 import { ProofCard } from "@/components/app/proof-card";
 import { RejectReasonSheet } from "@/components/app/reject-reason-sheet";
+import { RemindSheet } from "@/components/app/remind-sheet";
 import { Toast } from "@/components/app/toast";
 import { ActionTile } from "@/components/ui/action-tile";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
@@ -50,17 +54,22 @@ type Client = Pick<FinancialClient, "charge" | "cancel" | "pay" | "publicLink" |
 type ChargeDetailScreenProps = {
   id: string;
   client?: Client;
-  notifications?: Pick<typeof notificationClient, "remind">;
+  notifications?: Pick<typeof notificationClient, "remind"> & Partial<Pick<typeof notificationClient, "remindPreview">>;
   /** Opens the proof viewer; also used as the preview right after the debtor sends a file. */
   onOpenProof?: () => void;
 };
 
 const LOAD_ERROR = "Não foi possível carregar a cobrança.";
+const CONFIRMING_NOTICE = "Pagamento em confirmação: se você pagou, isto atualiza em instantes.";
+// Back from a checkout still pending: how often, and for how long, the screen asks again before giving up.
+const CONFIRMATION_INTERVAL_MS = 5_000;
+const CONFIRMATION_TICKS = 12;
 
 const ICONS = {
   check: require("../../../assets/images/auth/check.svg"),
   share: require("../../../assets/images/auth/share.svg"),
   bell: require("../../../assets/images/auth/bell.svg"),
+  bank: require("../../../assets/images/auth/bank.svg"),
   stop: require("../../../assets/images/auth/stop.svg"),
   edit: require("../../../assets/images/auth/edit.svg"),
   copy: require("../../../assets/images/auth/copy.svg"),
@@ -117,6 +126,11 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  // Set once the in-app browser of the checkout closes: a pending charge is then shown as confirming and refetched for a while.
+  const [returned, setReturned] = useState(false);
+  const [remindOpen, setRemindOpen] = useState(false);
+  const [remindPreview, setRemindPreview] = useState<ManualReminderResult | null>(null);
+  const [remindLoading, setRemindLoading] = useState(false);
 
   const load = useCallback(() => {
     let live = true;
@@ -140,6 +154,43 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
 
   // The proof viewer sits on top of this route, so every return refreshes the state.
   useFocusEffect(load);
+
+  // The provider's webhook may land any second after the return: ask again for a while, then stop.
+  const awaiting = returned && charge?.state === "pending" && charge.payment !== null && charge.payment?.provider !== PaymentProvider.Pix;
+
+  useEffect(() => {
+    if (!awaiting) {
+      return;
+    }
+
+    let ticks = 0;
+    const timer = setInterval(() => {
+      ticks += 1;
+
+      if (ticks > CONFIRMATION_TICKS) {
+        clearInterval(timer);
+
+        return;
+      }
+
+      client
+        .charge(id)
+        .then(setCharge)
+        .catch(() => undefined);
+    }, CONFIRMATION_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [awaiting, client, id]);
+
+  /** The checkout opens in the in-app browser; closing it lands back here, on a fresh copy of the charge. */
+  async function payByLink(url: string) {
+    await run(async () => {
+      await WebBrowser.openBrowserAsync(url);
+
+      setCharge(await client.charge(id));
+      setReturned(true);
+    }, "Não foi possível abrir o link.");
+  }
 
   async function run<T>(action: () => Promise<T>, fallback: string): Promise<T | undefined> {
     setBusy(true);
@@ -267,22 +318,30 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
     }, "Não foi possível compartilhar o link.");
   }
 
-  function confirmRemind(detail: ChargeDetail) {
-    Alert.alert(
-      "Enviar lembrete?",
-      `Avisa ${detail.recipient.name} por notificação no app ou por e-mail, com o link de pagamento. Só um lembrete a cada 24 horas.`,
-      [
-        { text: "Voltar", style: "cancel" },
-        { text: "Enviar lembrete", onPress: () => void remind(detail) },
-      ],
-    );
+  function openRemind() {
+    setRemindOpen(true);
+    setRemindPreview(null);
+
+    if (!notifications.remindPreview) {
+      return;
+    }
+
+    setRemindLoading(true);
+
+    notifications
+      .remindPreview(id)
+      .then(setRemindPreview)
+      .catch(() => setRemindPreview({ channels: [], dropped: [] }))
+      .finally(() => setRemindLoading(false));
   }
 
   async function remind(detail: ChargeDetail) {
+    setRemindOpen(false);
+
     const result = await run(() => notifications.remind(detail.id), "Não foi possível enviar o lembrete.");
 
     if (result) {
-      setNotice(result.queued ? `Lembrete enviado para ${detail.recipient.name}.` : `${detail.recipient.name} ainda não recebe lembretes.`);
+      setNotice(result.channels.length ? `Lembrete enviado para ${detail.recipient.name}.` : NOBODY_REACHABLE);
     }
   }
 
@@ -433,6 +492,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
             {error}
           </Text>
         ) : null}
+        {awaiting ? <Text className="rounded-xl bg-info-soft p-3 text-sm text-info">{CONFIRMING_NOTICE}</Text> : null}
 
         {/* Hero: the same card the billing detail opens with, scoped to one person */}
         <View className="gap-3 rounded-2xl border border-outline/30 bg-surface p-5">
@@ -505,7 +565,10 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
               {!receivable && charge.payment?.provider === PaymentProvider.Pix && (
                 <ActionTile label="Copiar Chave Pix" icon={ICONS.copy} hint={ownBill ? "Copia a chave Pix da conta" : "Copia a chave Pix do credor"} disabled={busy} onPress={() => void copyValue(charge.payment!.value, "Chave Pix copiada.")} />
               )}
-              {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Ready && (
+              {!receivable && hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Ready && (
+                <ActionTile label="Pagar pelo link" icon={ICONS.bank} tone="primary" hint={`Abre o checkout ${providerNameOf(charge.payment!.provider).da} e volta para cá`} disabled={busy} onPress={() => void payByLink(charge.paymentLink!.url!)} />
+              )}
+              {receivable && hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Ready && (
                 <ActionTile label="Copiar link de pagamento" icon={ICONS.share} hint={`Copia o link ${providerNameOf(charge.payment!.provider).da}`} disabled={busy} onPress={() => void copyValue(charge.paymentLink!.url!, "Link copiado.")} />
               )}
               {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Failed && client.ensurePaymentLink && (
@@ -525,7 +588,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
                 />
               )}
               {share && <ActionTile label="Compartilhar" icon={ICONS.share} hint="Envia o link público de pagamento" disabled={busy} onPress={() => void shareLink()} />}
-              {remindable && <ActionTile label="Lembrar" icon={ICONS.bell} hint="Envia um lembrete de pagamento" disabled={busy} onPress={() => confirmRemind(charge)} />}
+              {remindable && <ActionTile label="Lembrar" icon={ICONS.bell} hint="Envia um lembrete de pagamento" disabled={busy} onPress={openRemind} />}
               {cancellable && <ActionTile label="Cancelar" icon={ICONS.stop} tone="danger" hint="Encerra a cobrança sem pagamento" disabled={busy} onPress={confirmCancel} />}
             </View>
             {share && (
@@ -603,6 +666,17 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
       )}
 
       <RejectReasonSheet visible={rejecting} busy={busy} onCancel={() => setRejecting(false)} onConfirm={(reason) => void rejectDeclaration(reason)} />
+
+      {remindOpen && (
+        <RemindSheet
+          charge={charge}
+          today={today}
+          preview={remindPreview}
+          loading={remindLoading}
+          onClose={() => setRemindOpen(false)}
+          onSend={() => void remind(charge)}
+        />
+      )}
 
       {notice ? <Toast message={notice} onDismiss={() => setNotice("")} /> : null}
     </SafeAreaView>

@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { Modal, Pressable, Text, View } from "react-native";
-import { type ChargeSummary, feedDayLabel, formatMoney } from "@receivy/common";
+import { type ChargeSummary, feedDayLabel, formatMoney, type ManualReminderResult, NOBODY_REACHABLE, remindLines } from "@receivy/common";
 import { useThemeColors } from "@/theme/colors";
 
 const copyMark = require("../../../assets/images/auth/copy.svg");
@@ -8,9 +8,14 @@ const copyMark = require("../../../assets/images/auth/copy.svg");
 type RemindSheetProps = {
   charge: ChargeSummary;
   today: string;
+  /** `null` while the preview has not answered yet. */
+  preview: ManualReminderResult | null;
+  loading: boolean;
   onSend: () => void;
   onClose: () => void;
 };
+
+const LOADING_COPY = "Conferindo por onde avisar…";
 
 function dueText(charge: ChargeSummary, today: string): string {
   if (charge.dueDate < today) {
@@ -20,12 +25,15 @@ function dueText(charge: ChargeSummary, today: string): string {
   return `vence ${feedDayLabel(charge.dueDate, today).toLowerCase()}`;
 }
 
-/** Confirms a reminder before it goes out; the API picks push or e-mail, so the sheet only previews the message. */
-export function RemindSheet({ charge, today, onSend, onClose }: RemindSheetProps) {
+/** Confirms a reminder before it goes out; the preview names which channels will actually reach the person. */
+export function RemindSheet({ charge, today, preview, loading, onSend, onClose }: RemindSheetProps) {
   const colors = useThemeColors();
   const firstName = charge.counterpartName.trim().split(/\s+/)[0] ?? charge.counterpartName;
   const amount = formatMoney(charge.amount);
   const due = dueText(charge, today);
+  const nobody = preview !== null && preview.channels.length === 0;
+  const { going, dropped } = preview ? remindLines(preview) : { going: "", dropped: [] };
+  const disabled = loading || nobody;
 
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose}>
@@ -39,8 +47,18 @@ export function RemindSheet({ charge, today, onSend, onClose }: RemindSheetProps
             Lembrar {firstName}
           </Text>
           <Text className="font-sans text-[13px] leading-5 text-muted">
-            {charge.description} · {amount} · {due}. Avisa por notificação no app ou por e-mail, um lembrete a cada 24 horas.
+            {charge.description} · {amount} · {due}.
           </Text>
+          {loading ? (
+            <Text className="font-sans text-[13px] leading-5 text-muted">{LOADING_COPY}</Text>
+          ) : nobody ? (
+            <Text className="font-sans text-[13px] leading-5 text-muted">{NOBODY_REACHABLE}</Text>
+          ) : (
+            <Text className="font-sans text-[13px] leading-5 text-muted">
+              <Text>{`Vai por: ${going}`}</Text>
+              <Text>{". Um lembrete a cada 24 horas."}</Text>
+            </Text>
+          )}
         </View>
 
         <View className="gap-2 rounded-2xl border border-outline/60 bg-canvas p-3.5">
@@ -55,6 +73,16 @@ export function RemindSheet({ charge, today, onSend, onClose }: RemindSheetProps
           </View>
         </View>
 
+        {dropped.length > 0 ? (
+          <View className="gap-0.5">
+            {dropped.map((line) => (
+              <Text key={line} className="text-[12px] text-muted">
+                {line}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
         <View className="flex-row gap-2.5">
           <Pressable
             accessibilityRole="button"
@@ -68,8 +96,10 @@ export function RemindSheet({ charge, today, onSend, onClose }: RemindSheetProps
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Enviar lembrete"
+            accessibilityState={{ disabled }}
+            disabled={disabled}
             onPress={onSend}
-            className="h-[52px] flex-1 items-center justify-center rounded-2xl bg-primary"
+            className={`h-[52px] flex-1 items-center justify-center rounded-2xl bg-primary ${disabled ? "opacity-50" : ""}`}
           >
             <Text className="font-sans text-[15px] font-bold text-on-primary">Enviar lembrete</Text>
           </Pressable>

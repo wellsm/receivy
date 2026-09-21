@@ -31,7 +31,7 @@ import {
 } from "@receivy/common";
 import { Bell, BellOff, CalendarDays, Check, CircleStop, CloudUpload, Copy, CreditCard, Eye, Link2, Loader2, RefreshCw, RotateCcw, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
 import { uploadProofFile } from "@/lib/proof-upload";
@@ -121,6 +121,8 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
   const [confirmRemind, setConfirmRemind] = useState(false);
   const [remindPreview, setRemindPreview] = useState<ManualReminderResult | null>(null);
   const [remindPreviewLoading, setRemindPreviewLoading] = useState(false);
+  // Bumped on every open and cancel, so a preview response only lands when it still answers the latest ask.
+  const remindToken = useRef(0);
   // How the payment lands: accepting the file under review or by hand; `null` keeps the dialog closed.
   const [confirmPaid, setConfirmPaid] = useState<"review" | "pay" | null>(null);
   const [confirmDeclare, setConfirmDeclare] = useState(false);
@@ -293,13 +295,29 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
   }
 
   function openRemind() {
+    const token = ++remindToken.current;
+
     setConfirmRemind(true);
     setRemindPreview(null);
     setRemindPreviewLoading(true);
 
     request<ManualReminderResult>(`${base}/reminders/preview`, {}, "Não foi possível conferir os avisos.")
-      .then(setRemindPreview)
-      .finally(() => setRemindPreviewLoading(false));
+      .then((result) => {
+        if (remindToken.current === token) {
+          setRemindPreview(result);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (remindToken.current === token) {
+          setRemindPreviewLoading(false);
+        }
+      });
+  }
+
+  function closeRemind() {
+    remindToken.current += 1;
+    setConfirmRemind(false);
   }
 
   async function remind(detail: ChargeDetail) {
@@ -652,7 +670,7 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
           loading={remindPreviewLoading}
           busy={busy}
           onConfirm={() => void remind(charge)}
-          onCancel={() => setConfirmRemind(false)}
+          onCancel={closeRemind}
         />
       )}
 

@@ -374,6 +374,45 @@ describe("ChargeDetailScreen", () => {
     expect(screen.getByRole("button", { name: "Enviar lembrete" })).toHaveProperty("disabled", true);
   });
 
+  it("keeps the newest preview when a stale request resolves after the dialog reopens", async () => {
+    const previews: ((result: { channels: NoticeChannel[]; dropped: { channel: NoticeChannel; reason: DropReason }[] }) => void)[] = [];
+
+    vi.mocked(browserFetch).mockImplementation(async (path, init) => {
+      if ((init?.method ?? "GET") === "GET" && String(path) === "/api/financial/charges/charge/reminders/preview") {
+        return new Promise<Response>((resolve) => {
+          previews.push((result) => resolve(Response.json(result)));
+        });
+      }
+
+      return Response.json(charge({ direction: Direction.Receivable }));
+    });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
+
+    const firstDialog = await screen.findByRole("dialog", { name: "Lembrar Ana?" });
+
+    fireEvent.click(within(firstDialog).getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lembrar" }));
+
+    await screen.findByRole("dialog", { name: "Lembrar Ana?" });
+
+    expect(previews).toHaveLength(2);
+
+    // The second (current) open answers first; the stale first open answers later and must be ignored.
+    previews[1]!({ channels: [], dropped: [{ channel: NoticeChannel.Email, reason: DropReason.NoEmail }] });
+
+    expect(await screen.findByText("Ninguém alcançável. Compartilhe o link direto.")).toBeInTheDocument();
+
+    previews[0]!({ channels: [NoticeChannel.Push], dropped: [] });
+
+    await Promise.resolve();
+
+    expect(screen.getByText("Ninguém alcançável. Compartilhe o link direto.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviar lembrete" })).toHaveProperty("disabled", true);
+  });
+
   it("reopens a paid receivable charge after confirmation", async () => {
     // Pinned well after the fixture's due date (2026-09-10) so the reopened charge deterministically reads
     // as overdue, regardless of the real clock.

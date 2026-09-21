@@ -71,8 +71,8 @@ export function ConfirmDialog({ title, subtitle, icon: Icon, detail, explanation
         {explanation && <p className="m-0 text-xs leading-5 text-muted">{explanation}</p>}
         {details && details.length > 0 && (
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
-            {details.map((line) => (
-              <li key={line} className="text-xs text-muted">
+            {details.map((line, index) => (
+              <li key={`${index}-${line}`} className="text-xs text-muted">
                 {line}
               </li>
             ))}

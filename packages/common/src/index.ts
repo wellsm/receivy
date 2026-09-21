@@ -33,4 +33,5 @@ export * from './domain/phone';
 export * from './domain/pix-key';
 export * from './domain/plan';
 export * from './domain/reminders';
+export * from './domain/reminders-copy';
 export * from './domain/split';

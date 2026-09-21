@@ -11,6 +11,7 @@ const ID = "[A-Za-z0-9-]+";
 export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["PATCH", /^account\/profile$/], ["DELETE", /^account$/],
   ["POST", /^account\/avatar(?:\/complete)?$/],
+  ["GET", /^account\/reminders$/], ["PUT", /^account\/reminders$/], ["DELETE", /^account\/reminders$/],
   ["POST", new RegExp(`^charges/${ID}/reminders$`)],
   ["GET", /^billings(?:\?.*)?$/], ["POST", /^billings$/], ["GET", new RegExp(`^billings/${ID}$`)],
   ["PATCH", new RegExp(`^billings/${ID}$`)],

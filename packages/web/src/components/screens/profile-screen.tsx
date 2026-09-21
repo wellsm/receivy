@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Crown, KeyRound, Loader2, LogOut, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
+import { Bell, Check, ChevronRight, Crown, KeyRound, Loader2, LogOut, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -437,6 +437,8 @@ export function ProfileScreen() {
               <Row icon={Users} tone="primary" label="Gerenciar contatos" title="Meus Contatos" subtitle="Gerenciar pessoas e dados salvos de cobrança" href="/contacts" />
               <div className="mx-4 h-px bg-outline/60 md:mx-0" />
               <Row icon={KeyRound} tone="success" label="Gerenciar meios de pagamento" title="Meios de pagamento" subtitle="Pix e InfinitePay para receber pagamentos" href="/settings/payment-methods" />
+              <div className="mx-4 h-px bg-outline/60 md:mx-0" />
+              <Row icon={Bell} tone="primary" label="Configurar lembretes" title="Lembretes" subtitle="Quando e por onde avisar quem te deve" href="/settings/reminders" />
               <div className="mx-4 h-px bg-outline/60 md:mx-0" />
               <Row icon={Crown} tone="primary" label="Gerenciar plano" title="Plano" subtitle={`${planName(PlanTier.Free)} ou ${planName(PlanTier.Basic)}, limites e cobrança`} href="/settings/plan" />
             </section>

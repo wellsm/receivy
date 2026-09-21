@@ -1,4 +1,4 @@
-import { addCalendarDays, BillingCategory, BillingFrequency, BillingKind, BillingState, BillingRecurrence, calendarDate, ChargeState, Direction, EMPTY_BILLING_DRAFT, endOfMonth, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
+import { addCalendarDays, BillingCategory, BillingFrequency, BillingKind, BillingState, BillingRecurrence, calendarDate, ChargeState, Direction, EMPTY_BILLING_DRAFT, endOfMonth, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, type BillingDetail, type BillingPatch, type ChargeDetail, type ReminderRule } from "@receivy/common";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
@@ -1037,6 +1037,8 @@ it("never offers a Pix selector on a conta a pagar with no seated contact", asyn
   expect(screen.getByText("Escolha quem recebe.")).toBeInTheDocument();
 });
 
+const emailReminder: ReminderRule = { offsetDays: -3, enabled: true, channels: { email: true, whatsapp: false } };
+
 const onceBilling: BillingDetail = {
   id: "b1",
   recurrence: BillingRecurrence.Once,
@@ -1053,7 +1055,8 @@ const onceBilling: BillingDetail = {
   updatedAt: "2026-09-01T00:00:00Z",
   timezone: TIMEZONE,
   paymentMethodId: "pix-1",
-  reminders: [{ offsetDays: -3, enabled: true }],
+  reminders: [emailReminder],
+  effectiveReminders: [emailReminder],
   split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
   allocations: [],
   charges: [],
@@ -1084,9 +1087,55 @@ it("freezes a finite billing and patches only category, Pix and reminders", asyn
   expect(JSON.parse(String(patch?.init.body))).toEqual({
     paymentMethodId: "pix-1",
     clearPaymentMethod: false,
-    reminders: [{ offsetDays: -3, enabled: true }],
+    reminders: [emailReminder],
     category: "other",
   });
+});
+
+let reminderSent: Sent[] = [];
+
+/** Same fetch-mock arrangement as `api()`, over a receivable billing whose reminders and effective reminders are given. */
+function arrangeBilling(overrides: { reminders: ReminderRule[] | null; effectiveReminders: ReminderRule[] }): BillingDetail {
+  const billing: BillingDetail = { ...onceBilling, reminders: overrides.reminders, effectiveReminders: overrides.effectiveReminders };
+
+  reminderSent = api((_path, init) => (init.method === "PATCH" ? Response.json(billing) : undefined));
+
+  return billing;
+}
+
+function lastPatchBody(): BillingPatch {
+  const patch = reminderSent.find(entry => entry.init.method === "PATCH");
+
+  return JSON.parse(String(patch?.init.body)) as BillingPatch;
+}
+
+it("shows the inherited default and only sends reminders after customising", async () => {
+  const billing = arrangeBilling({ reminders: null, effectiveReminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }] });
+  const { user } = renderForm(billing);
+
+  expect(await screen.findByText("Usando seu padrão: no dia (e-mail)")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  const patch = lastPatchBody();
+
+  expect(patch.reminders).toBeUndefined();
+  expect(patch.clearReminders).toBeUndefined();
+});
+
+it("customises, sends the rules, and clears back to the default", async () => {
+  const billing = arrangeBilling({
+    reminders: [{ offsetDays: 3, enabled: true, channels: { email: true, whatsapp: false } }],
+    effectiveReminders: [{ offsetDays: 3, enabled: true, channels: { email: true, whatsapp: false } }],
+  });
+  const { user } = renderForm(billing);
+
+  expect(await screen.findByRole("spinbutton", { name: "Dias do lembrete 1" })).toHaveProperty("value", "3");
+
+  await user.click(screen.getByRole("button", { name: "Voltar ao padrão" }));
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  expect(lastPatchBody().clearReminders).toBe(true);
 });
 
 const untilBilling: BillingDetail = { ...onceBilling, id: "b5", recurrence: BillingRecurrence.Until, endDate: "2026-12-31", installmentCount: 3, total: { amountCents: 3_334, currency: "BRL" } };
@@ -1128,7 +1177,7 @@ it("seeds a conta a pagar with its receiving contact and its key, and patches th
   expect(body).toMatchObject({
     paymentMethodId: "pix-ana-2",
     clearPaymentMethod: false,
-    reminders: [{ offsetDays: -3, enabled: true }],
+    reminders: [emailReminder],
     category: "other",
   });
   // The seat did not move, so the patch leaves the receiving contact alone.

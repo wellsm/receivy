@@ -34,8 +34,11 @@ import {
   paymentMethodText,
   PaymentProvider,
   PixKeyType,
+  PlanTier,
+  reminderSummary,
   SplitMode,
   SplitPartKind,
+  SYSTEM_REMINDER_CONFIG,
   UserStatus,
   type BillingDetail,
   type BillingDraft,
@@ -46,6 +49,8 @@ import {
   type ContactsPage,
   type PaymentMethodsPage,
   type PlanErrorPayload,
+  type ReminderRule,
+  type ReminderSettings,
   type SplitParty,
   type SplitValues,
 } from "@receivy/common";
@@ -55,6 +60,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
+import { loadPlanSummary } from "@/lib/plan-summary";
+import { ReminderEditor } from "@/components/app/reminder-editor";
 import { PlanPaywall } from "@/components/app/plan-paywall";
 import { ScopeDialog } from "@/components/app/scope-dialog";
 import { CategorySelect } from "@/components/app/category-select";
@@ -226,7 +233,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     mode: billing.split.mode,
     values: valuesFromBilling(billing),
     category: billing.category,
-    reminders: billing.reminders.map(reminder => ({ ...reminder, offsetDays: String(reminder.offsetDays) })),
+    reminders: billing.reminders ? billing.reminders.map(reminder => ({ ...reminder, offsetDays: String(reminder.offsetDays) })) : null,
     notify: notifyFromBilling(billing),
     settled: billing.kind === BillingKind.Record,
   };
@@ -234,7 +241,22 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
 
 /** A participant the agenda no longer lists (archived, or another owner's contact): the chip still needs a name. */
 function unknownContact(userId: string): Contact {
-  return { id: userId, userId, name: "Contato", nickname: null, displayName: "Contato", email: "", phone: null, status: UserStatus.Pending, archivedAt: null, createdAt: "", lastBilledAt: null, activeCharges: 0 };
+  return {
+    id: userId,
+    userId,
+    name: "Contato",
+    nickname: null,
+    displayName: "Contato",
+    email: "",
+    phone: null,
+    phoneSource: null,
+    whatsappConsentAt: null,
+    status: UserStatus.Pending,
+    archivedAt: null,
+    createdAt: "",
+    lastBilledAt: null,
+    activeCharges: 0,
+  };
 }
 
 function abbreviate(pixKey: string): string {
@@ -274,6 +296,10 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   const [ready, setReady] = useState(false);
   const [gated, setGated] = useState(false);
   const [paywall, setPaywall] = useState<PlanErrorPayload | null>(null);
+  // What actually fires while the draft inherits the default: the billing's own on edit, the
+  // owner's account default on creation (fetched below, falling back to the system default).
+  const [effective, setEffective] = useState<ReminderRule[]>(() => billing?.effectiveReminders ?? SYSTEM_REMINDER_CONFIG.reminders);
+  const [plan, setPlan] = useState<PlanTier>(PlanTier.Free);
   const restored = useRef<StoredDraft | null>(null);
   const addContact = useRef<HTMLButtonElement>(null);
   const pickPayee = useRef<HTMLButtonElement>(null);
@@ -336,6 +362,38 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
 
         setDraft(current => (stored ? stored.draft : current));
         setError((reason as Error).message);
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [billing]);
+
+  useEffect(() => {
+    void loadPlanSummary().then(summary => {
+      if (summary) {
+        setPlan(summary.plan);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    // Editing already carries the billing's own effective reminders; a creation has none yet, so
+    // the inherited summary reads the owner's account default, falling back to the system one.
+    if (billing) {
+      return;
+    }
+
+    let live = true;
+
+    void request<ReminderSettings>("/api/financial/account/reminders")
+      .then(settings => {
+        if (live) {
+          setEffective(settings.config.reminders);
+        }
+      })
+      .catch(() => {
+        // Keeps the system default already set.
       });
 
     return () => {
@@ -526,7 +584,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       paymentMethodId: input.paymentMethodId,
       clearPaymentMethod: !input.paymentMethodId,
       ...(toPayable ? seatPatch(input) : {}),
-      reminders: input.reminders,
+      ...(input.reminders ? { reminders: input.reminders } : billing?.reminders ? { clearReminders: true } : {}),
       category: input.category,
     };
 
@@ -628,6 +686,9 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   // Nothing reaches a contact without an e-mail or a phone, so the switch never shows for them.
   const notifiable = chosen.filter(canNotifyContact);
   const notifiableIds = new Set(notifiable.map(contact => contact.userId));
+  // WhatsApp reminders are not wired up on this form yet: it always reads as unavailable, so the
+  // chip shows "Em breve" on a plan that could use it, "Plano Básico" on one that could not.
+  const whatsappGate = { available: false, planAllows: plan === PlanTier.Basic };
 
   function nameOf(key: string): string {
     if (key === "owner") {
@@ -1011,6 +1072,33 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
                 }
           }
         />
+      )}
+
+      {/* Lembretes: a registro never notifies anyone, so it has none. */}
+      {!settled && (
+        <section className="flex flex-col gap-2">
+          <h3 className="m-0 text-xs font-semibold tracking-[0.06em] text-muted">LEMBRETES</h3>
+          {draft.reminders === null ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-2.5">
+              <span className="text-sm text-ink">Usando seu padrão: {reminderSummary(effective)}</span>
+              <button
+                type="button"
+                className="text-sm font-semibold text-primary"
+                disabled={locked}
+                onClick={() => update({ reminders: effective.map(rule => ({ ...rule, offsetDays: String(rule.offsetDays) })) })}
+              >
+                Personalizar
+              </button>
+            </div>
+          ) : (
+            <>
+              <ReminderEditor rules={draft.reminders} onChange={reminders => update({ reminders })} whatsapp={whatsappGate} disabled={locked} />
+              <button type="button" className="self-start text-sm font-semibold text-muted" disabled={locked} onClick={() => update({ reminders: null })}>
+                Voltar ao padrão
+              </button>
+            </>
+          )}
+        </section>
       )}
 
       {/* Divisão: mode tabs, participant list, Adicionar below it, then Não notificar and Eu também participo */}

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { issuePublicChargeToken, PublicTokenPurpose, verifyPublicChargeToken } from './capability';
+import { issueOptOutToken, issuePublicChargeToken, PublicTokenPurpose, verifyOptOutToken, verifyPublicChargeToken } from './capability';
 
 const secret = 'test-capability-secret-that-is-not-used-outside-tests';
 const publicId = 'w2OT1RsBRwcc0SDRB8-PJw';
+const userId = 'b1111111-1111-4111-8111-111111111111';
+const email = 'opt-out-target@example.com';
 
 describe('public charge capability', () => {
   it('binds the public id and the expiration', () => {
@@ -51,5 +53,38 @@ describe('public charge capability', () => {
     expect(() =>
       issuePublicChargeToken({ publicId, expiresAtSeconds: 2_000, secret: 'disabled', purpose: PublicTokenPurpose.Charge })
     ).toThrow('Public link secret is not configured');
+  });
+});
+
+describe('opt-out capability', () => {
+  it('round-trips the signed user id and e-mail', () => {
+    const token = issueOptOutToken({ userId, email, secret });
+
+    expect(verifyOptOutToken(token, { userId, email, secret })).toEqual({ userId });
+  });
+
+  it('rejects a token signed with another secret', () => {
+    const token = issueOptOutToken({ userId, email, secret });
+
+    expect(() => verifyOptOutToken(token, { userId, email, secret: 'another-secret-that-is-not-used-outside-tests' })).toThrow(
+      'Invalid public capability'
+    );
+  });
+
+  it('rejects the token once the account e-mail has changed', () => {
+    const token = issueOptOutToken({ userId, email, secret });
+
+    expect(() => verifyOptOutToken(token, { userId, email: 'someone-else@example.com', secret })).toThrow('Invalid public capability');
+  });
+
+  it('rejects a token with extra segments', () => {
+    const token = issueOptOutToken({ userId, email, secret });
+
+    expect(() => verifyOptOutToken(`${token}.extra`, { userId, email, secret })).toThrow('Invalid public capability');
+  });
+
+  it('rejects a malformed token', () => {
+    expect(() => verifyOptOutToken(userId, { userId, email, secret })).toThrow('Invalid public capability');
+    expect(() => verifyOptOutToken('', { userId, email, secret })).toThrow('Invalid public capability');
   });
 });

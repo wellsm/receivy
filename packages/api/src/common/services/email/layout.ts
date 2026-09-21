@@ -127,6 +127,17 @@ export function buttonRow(href: string, label: string): string {
   ].join('');
 }
 
+/** The same panel as `noticeRow`, holding a single link: the closing advisory that has somewhere to go. */
+export function linkRow(href: string, label: string): string {
+  return [
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;border:1px solid ${OUTLINE};border-left:4px solid ${PRIMARY};border-radius:12px;">`,
+    `<tr><td style="padding:14px 16px;font-family:${FONT};font-size:13px;line-height:1.55;color:${INK};">`,
+    `<a href="${escapeHtml(href)}" style="color:${PRIMARY};text-decoration:underline;">${escapeHtml(label)}</a>`,
+    '</td></tr>',
+    '</table>'
+  ].join('');
+}
+
 /** The closing advisory inside the card, marked by a left rule. */
 export function noticeRow(text: string): string {
   return [

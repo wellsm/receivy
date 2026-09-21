@@ -312,7 +312,7 @@ describe('month materialized: pending charges and current month edits', () => {
       db,
       OWNER,
       reminded.id,
-      { reminders: [{ offsetDays: -1, enabled: true }], applyTo: EditScope.CurrentMonth },
+      { reminders: [{ offsetDays: -1, enabled: true, channels: { email: true, whatsapp: false } }], applyTo: EditScope.CurrentMonth },
       date('2026-03-06')
     );
 
@@ -372,7 +372,7 @@ describe('month materialized: pending charges and current month edits', () => {
   });
 
   it('never cancels a paused recorrente on Pausar, even a charge an early reminder already put in next month', async () => {
-    const earlyReminder = { reminders: [{ offsetDays: -5, enabled: true }] };
+    const earlyReminder = { reminders: [{ offsetDays: -5, enabled: true, channels: { email: true, whatsapp: false } }] };
 
     // materializationHorizon('2026-03-29', [-5]) = max(endOfMonth = '2026-03-31', '2026-03-29' + 5 = '2026-04-03')
     // = '2026-04-03': the April 3 occurrence already exists at creation, one day before the reminder

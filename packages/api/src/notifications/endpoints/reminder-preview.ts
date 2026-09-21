@@ -10,11 +10,11 @@ declare class IdRequest implements Http.Request {
   parameters: { id: String.UUID };
 }
 
-declare class QueuedResponse implements Http.Response {
-  status: 202;
+declare class PreviewResponse implements Http.Response {
+  status: 200;
   body: ManualReminderResult;
 }
 
-export async function manualReminderHandler({ identity, parameters }: IdRequest, { notifications }: Service.Context<NotificationProvider>): Promise<QueuedResponse> {
-  return { status: 202, body: await notifications.manualReminder(identity.userId, parameters.id) };
+export async function reminderPreviewHandler({ identity, parameters }: IdRequest, { notifications }: Service.Context<NotificationProvider>): Promise<PreviewResponse> {
+  return { status: 200, body: await notifications.reminderPreview(identity.userId, parameters.id) };
 }

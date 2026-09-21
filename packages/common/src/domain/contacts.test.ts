@@ -41,6 +41,14 @@ describe('contacts', () => {
   ])('rejects %j', (input) => {
     expect(() => normalizeContact(input)).toThrow();
   });
+  it('normalizes the phone and keeps the consent flag', () => {
+    expect(normalizeContact({ name: 'Ana', phone: '(11) 98888-7777', whatsappConsent: true })).toEqual({
+      name: 'Ana',
+      phone: '+5511988887777',
+      whatsappConsent: true
+    });
+    expect(() => normalizeContact({ name: 'Ana', phone: 'x' })).toThrow('Informe um telefone válido.');
+  });
 });
 
 describe('canNotifyContact', () => {

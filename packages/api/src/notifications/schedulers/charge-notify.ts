@@ -6,19 +6,17 @@ import type { EmailService } from '../../common/services/email/service';
 import type { Db } from '../../database';
 import { noticeContext } from '../services/context';
 import type { NoticeTemplate } from '../services/render';
-import { followUpCharge, notifyCharge } from '../services/send';
+import { notifyCharge } from '../services/send';
 
 export type ChargeNotifySchedule = {
   chargeId: String.UUID;
   template: NoticeTemplate;
-  stage: 'first' | 'followup';
   offsetDays?: number;
 };
 
 /**
  * `charge:<id>:notify`: one dynamic schedule per charge. The daily run arms it at 06:00 of the billing
- * timezone for a reminder; `notifyCharge` re-arms it two hours later for the e-mail follow-up after a
- * push. Every hop is hours away, never days.
+ * timezone for the reminder that is due; the notice goes out on the channels that rule asks for.
  */
 export declare class ChargeNotifyScheduler extends Cron.Service<ChargeNotifySchedule> {
   group: 'charge-notify';
@@ -56,19 +54,11 @@ export declare class ChargeNotifyScheduler extends Cron.Service<ChargeNotifySche
 
 export async function handler(
   request: Cron.Incoming<ChargeNotifySchedule>,
-  { db, variables, email, chargeNotifyScheduler }: Service.Context<ChargeNotifyScheduler>
+  { db, variables, email }: Service.Context<ChargeNotifyScheduler>
 ): Promise<void> {
   const event = request.event;
   const now = Date.now();
-  const notice = noticeContext({ variables, email, chargeNotifyScheduler });
-
-  if (event.stage === 'followup') {
-    const { channels } = await followUpCharge(db, notice, event, now);
-
-    console.info('Charge notify follow-up', { chargeId: event.chargeId, template: event.template, channels });
-
-    return;
-  }
+  const notice = noticeContext({ variables, email });
 
   // A redelivery must not send the same reminder twice.
   const already = (await EventRepository.list(db, event.chargeId, 'notice.sent')).some(

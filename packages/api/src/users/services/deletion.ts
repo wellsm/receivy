@@ -106,6 +106,7 @@ export async function eraseAccount(db: DbClient, userId: string, confirmation: s
     await BillingGuestRepository.removeOf(tx, userId);
     await ContactRepository.removeAgenda(tx, userId);
     await ContactRepository.archiveMentions(tx, userId, now);
+    await ContactRepository.clearReach(tx, userId, now);
 
     for (const billingId of billingIds) {
       if (!(await ChargeRepository.hasAny(tx, billingId))) {

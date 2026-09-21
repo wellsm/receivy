@@ -26,6 +26,8 @@ export namespace EmailInputs {
      * Stable idempotency key for retried deliveries (notifications).
      */
     key?: string;
+    /** Extra SMTP headers (List-Unsubscribe); transports without header support ignore them. */
+    headers?: Record<string, string>;
   };
 }
 

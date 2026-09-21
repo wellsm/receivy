@@ -14,3 +14,22 @@ export type NotificationDevice = {
   active: boolean;
   createdAt: string;
 };
+
+export const enum NoticeChannel {
+  Push = 'push',
+  Email = 'email',
+  WhatsApp = 'whatsapp'
+}
+
+export const enum DropReason {
+  NoEmail = 'no_email',
+  NoPhone = 'no_phone',
+  NoConsent = 'no_consent',
+  OptedOut = 'opted_out',
+  Unavailable = 'unavailable'
+}
+
+export type ManualReminderResult = {
+  channels: NoticeChannel[];
+  dropped: { channel: NoticeChannel; reason: DropReason }[];
+};

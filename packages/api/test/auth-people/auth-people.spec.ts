@@ -140,6 +140,24 @@ describe('auth and contacts repositories on dedicated PostgreSQL', () => {
     equal(again.userId, joining);
   });
 
+  it('stores the owner-typed phone and consent, and lets the person own phone win', async () => {
+    const address = email('phone-consent');
+    const saved = await contactService.save(
+      owner,
+      normalizeContact({ name: 'Zé', email: address, phone: '11977776666', whatsappConsent: true })
+    );
+
+    equal(saved.phone, '+5511977776666');
+    equal(saved.phoneSource, 'owner');
+    ok(saved.whatsappConsentAt);
+
+    const again = await contactService.save(owner, normalizeContact({ name: 'Zé', email: address, whatsappConsent: false }), saved.id);
+
+    equal(again.phone, null);
+    equal(again.whatsappConsentAt, null);
+    deepEqual(await ContactRepository.reachability(db, owner, saved.userId), { phone: undefined, consentAt: undefined });
+  });
+
   it('keeps a contact without e-mail as a private placeholder until an address is typed', async () => {
     const saved = await contactService.save(contacts, normalizeContact({ name: 'Sem Endereço', nickname: 'Vizinho' }));
 

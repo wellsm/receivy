@@ -29,9 +29,15 @@ export declare class SplitBody {
   )[];
 }
 
+export declare class ChannelSetBody {
+  email: boolean;
+  whatsapp: boolean;
+}
+
 export declare class ReminderBody {
-  offsetDays: Integer.Range<-90, 90>;
+  offsetDays: Integer.Range<-14, 14>;
   enabled: boolean;
+  channels: ChannelSetBody;
 }
 
 export declare class BillingBody implements Http.JsonBody {
@@ -65,6 +71,8 @@ export declare class PatchBody implements Http.JsonBody {
   startDate?: String.Date;
   dueRule?: BillingDueRule;
   reminders?: ReminderBody[];
+  /** Drops the billing's own rules: it inherits the owner's default again. */
+  clearReminders?: boolean;
   state?: BillingState;
   pendingCharges?: PendingChargesAction;
   applyTo?: EditScope;

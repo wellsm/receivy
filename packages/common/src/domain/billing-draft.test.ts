@@ -22,7 +22,7 @@ const base: BillingDraft = {
   mode: SplitMode.Equal,
   values: EMPTY_SPLIT_VALUES(),
   category: BillingCategory.Other,
-  reminders: [{ offsetDays: '-3', enabled: true }]
+  reminders: [{ offsetDays: '-3', enabled: true, channels: { email: true, whatsapp: false } }]
 };
 
 describe('billing draft review', () => {
@@ -36,7 +36,7 @@ describe('billing draft review', () => {
       endDate: undefined,
       timezone: 'America/Sao_Paulo',
       paymentMethodId: undefined,
-      reminders: [{ offsetDays: -3, enabled: true }],
+      reminders: [{ offsetDays: -3, enabled: true, channels: { email: true, whatsapp: false } }],
       category: 'other',
       split: { mode: 'equal', parts: [{ kind: 'user', userId: 'p1' }, { kind: 'owner' }] }
     });
@@ -128,7 +128,9 @@ describe('billing draft review', () => {
 
   it('rejects empty selection, bad reminder text and non-integer occurrences', () => {
     expect(() => buildBillingInput({ ...base, selected: [] })).toThrow(/contato/i);
-    expect(() => buildBillingInput({ ...base, reminders: [{ offsetDays: '-', enabled: true }] })).toThrow(/dias inteiros/i);
+    expect(() =>
+      buildBillingInput({ ...base, reminders: [{ offsetDays: '-', enabled: true, channels: { email: true, whatsapp: false } }] })
+    ).toThrow(/dias inteiros/i);
     expect(() => buildBillingInput({ ...base, type: BillingRecurrence.Until, occurrences: '2,5' })).toThrow(/vezes/i);
   });
 
@@ -201,7 +203,7 @@ describe('EMPTY_BILLING_DRAFT', () => {
       mode: 'equal',
       values: { fixed: {}, percentage: {}, shares: {} },
       category: 'other',
-      reminders: [{ offsetDays: '0', enabled: true }]
+      reminders: null
     });
   });
 
@@ -215,6 +217,28 @@ describe('EMPTY_BILLING_DRAFT', () => {
 
     expect(second.selected).toEqual([]);
     expect(second.values.fixed).toEqual({});
+  });
+
+  it('starts a new draft inheriting reminders and only sends them once customised', () => {
+    const draft = EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-10-10');
+
+    expect(draft.reminders).toBeNull();
+
+    const inherited = buildBillingInput({ ...draft, selected: ['p1'], amount: '10,00', description: 'x' }, new Date('2026-10-01'));
+
+    expect(inherited.reminders).toBeUndefined();
+
+    const custom = {
+      ...draft,
+      selected: ['p1'],
+      amount: '10,00',
+      description: 'x',
+      reminders: [{ offsetDays: '3', enabled: true, channels: { email: true, whatsapp: false } }]
+    };
+
+    expect(buildBillingInput(custom, new Date('2026-10-01')).reminders).toEqual([
+      { offsetDays: 3, enabled: true, channels: { email: true, whatsapp: false } }
+    ]);
   });
 });
 

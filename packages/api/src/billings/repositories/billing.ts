@@ -41,6 +41,7 @@ export namespace BillingRepository {
     request_hash: string;
     created_at: string;
     updated_at: string;
+    owner: { reminder_config?: string };
   };
 
   export type Filters = {
@@ -108,7 +109,8 @@ export namespace BillingRepository {
         last_occurrence_date: true,
         request_hash: true,
         created_at: true,
-        updated_at: true
+        updated_at: true,
+        owner: { reminder_config: true }
       },
       where: { id, owner_id: ownerId },
       ...(lock ? { lock: true } : {})
@@ -140,7 +142,8 @@ export namespace BillingRepository {
         last_occurrence_date: true,
         request_hash: true,
         created_at: true,
-        updated_at: true
+        updated_at: true,
+        owner: { reminder_config: true }
       },
       where: { owner_id: ownerId, idempotency_key: key }
     });
@@ -219,7 +222,8 @@ export namespace BillingRepository {
         last_occurrence_date: true,
         request_hash: true,
         created_at: true,
-        updated_at: true
+        updated_at: true,
+        owner: { reminder_config: true }
       },
       where: {
         AND: [
@@ -304,7 +308,8 @@ export namespace BillingRepository {
         last_occurrence_date: true,
         request_hash: true,
         created_at: true,
-        updated_at: true
+        updated_at: true,
+        owner: { reminder_config: true }
       },
       data: {
         id: input.id,

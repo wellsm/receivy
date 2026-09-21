@@ -10,7 +10,14 @@ import { parseContactInput } from '../utils/parse';
 
 declare class CreateRequest implements Http.Request {
   identity: SessionIdentity;
-  body: { name: String.Max<120>; nickname?: String.Max<60>; email?: String.Max<254>; paymentMethod?: ContactPaymentMethodBody };
+  body: {
+    name: String.Max<120>;
+    nickname?: String.Max<60>;
+    email?: String.Max<254>;
+    phone?: String.Max<40>;
+    whatsappConsent?: boolean;
+    paymentMethod?: ContactPaymentMethodBody;
+  };
 }
 
 declare class CreateResponse implements Http.Response {

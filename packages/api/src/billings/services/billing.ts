@@ -57,6 +57,9 @@ import { resolveGuest } from './guests';
 import { chargeCounterpart, materializeDue } from './materialize';
 import { auditBilling, saveAllocations, setPendingChargesNotify, splitFor } from './split';
 
+// EZ4 0.52 optional-field typings omit SQL NULL; explicit null clears old values.
+const sqlNull = null as unknown as undefined;
+
 export type BillingClient = {
   create(ownerId: string, key: string, input: BillingInput): Promise<BillingDetail>;
   get(ownerId: string, id: string): Promise<BillingDetail>;
@@ -533,7 +536,7 @@ export async function patchBilling(
         totalCents,
         paymentMethodId: paymentMethodId ?? null,
         contactId: contactId ?? null,
-        ...(patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
+        ...(patch.clearReminders ? { reminders: sqlNull } : patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
         ...(patch.split !== undefined || (payable && contactPatched) ? { splitMode: stored.mode } : {}),
         ...(patch.state ? { state: patch.state } : {}),
         ...(resumed ? { lastOccurrenceDate: (row.last_occurrence_date ?? boundary) > boundary ? row.last_occurrence_date : boundary } : {}),
@@ -567,9 +570,9 @@ export async function patchBilling(
   return getBilling(db, ownerId, id, now, link);
 }
 
-export function createService({ db, email, chargeNotifyScheduler, variables }: Service.Context<BillingService>): BillingClient {
+export function createService({ db, email, variables }: Service.Context<BillingService>): BillingClient {
   const link = inviteLink({ variables });
-  const notice = noticeContext({ chargeNotifyScheduler, email, variables });
+  const notice = noticeContext({ email, variables });
 
   return {
     create: (ownerId, key, input) => createBilling(db, ownerId, key, input, new Date(), link, notice),

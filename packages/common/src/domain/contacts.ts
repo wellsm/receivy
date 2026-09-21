@@ -1,6 +1,13 @@
 import { normalizeEmail } from '../auth/auth';
 import type { UserAvatar } from './avatar';
 import type { PixMethodInput } from './contracts';
+import { normalizePhone } from './phone';
+
+/** Whose phone won: the person's own, filed once they signed in, or the owner's typed guess. */
+export const enum PhoneSource {
+  Person = 'person',
+  Owner = 'owner'
+}
 
 /** A person as one agenda knows them: the account is the identity, the nickname is the owner's. */
 export const enum UserStatus {
@@ -23,6 +30,10 @@ export type ContactInput = {
   name: string;
   nickname?: string;
   email?: string;
+  /** What the owner types for this person; the person's own phone, once filed, always wins. */
+  phone?: string;
+  /** Whether this person agreed to hear from the owner over WhatsApp. */
+  whatsappConsent?: boolean;
   /** Block 9.1: filed under this contact and made its default; the billing form only picks among them. */
   paymentMethod?: ContactPaymentMethodInput;
 };
@@ -39,8 +50,12 @@ export type Contact = {
   avatar?: UserAvatar | null;
   /** Empty when the person has no e-mail yet: the contact is reachable by shared link only. */
   email: string;
-  /** Filled by the person themself at onboarding; never by the owner. */
+  /** The effective phone: the person's own once filed, the owner's typed guess otherwise. */
   phone: string | null;
+  /** Which one `phone` is; `null` when neither is filed. */
+  phoneSource: PhoneSource | null;
+  /** When this person agreed to hear from the owner over WhatsApp; `null` when never given or withdrawn. */
+  whatsappConsentAt: string | null;
   /** `pending` until the person signs in; then name and e-mail stop being editable from any agenda. */
   status: UserStatus;
   archivedAt: string | null;
@@ -86,10 +101,18 @@ export function normalizeContact(input: ContactInput): ContactInput {
     throw new Error('Informe um e-mail válido.');
   }
 
+  const phone = normalizePhone(input.phone);
+
+  if (phone === false) {
+    throw new Error('Informe um telefone válido.');
+  }
+
   return {
     name,
     ...(nickname ? { nickname } : {}),
     ...(email ? { email } : {}),
+    ...(phone ? { phone } : {}),
+    ...(input.whatsappConsent !== undefined ? { whatsappConsent: Boolean(input.whatsappConsent) } : {}),
     ...(input.paymentMethod ? { paymentMethod: input.paymentMethod } : {})
   };
 }

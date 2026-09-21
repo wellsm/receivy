@@ -29,6 +29,8 @@ export * from './domain/handle';
 export * from './domain/money';
 export * from './domain/notifications';
 export * from './domain/payment-method-text';
+export * from './domain/phone';
 export * from './domain/pix-key';
 export * from './domain/plan';
+export * from './domain/reminders';
 export * from './domain/split';

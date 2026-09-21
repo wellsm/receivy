@@ -110,6 +110,8 @@ async function recentContacts(db: DbClient, ownerId: string, query: string, arch
       owner_id: true,
       user_id: true,
       nickname: true,
+      phone: true,
+      whatsapp_consent_at: true,
       archived_at: true,
       created_at: true,
       user: { id: true, name: true, email: true, phone: true, status: true, avatar_updated_at: true }
@@ -140,6 +142,8 @@ export namespace ContactRepository {
         owner_id: true,
         user_id: true,
         nickname: true,
+        phone: true,
+        whatsapp_consent_at: true,
         archived_at: true,
         created_at: true,
         user: { id: true, name: true, email: true, phone: true, status: true, avatar_updated_at: true }
@@ -160,14 +164,30 @@ export namespace ContactRepository {
     ownerId: string,
     id: string,
     lock = false
-  ): Promise<{ id: string; userId: string; nickname: string | null; archivedAt: string | null } | null> {
+  ): Promise<{
+    id: string;
+    userId: string;
+    nickname: string | null;
+    phone: string | null;
+    whatsappConsentAt: string | null;
+    archivedAt: string | null;
+  } | null> {
     const found = await db.contacts.findOne({
-      select: { id: true, user_id: true, nickname: true, archived_at: true },
+      select: { id: true, user_id: true, nickname: true, phone: true, whatsapp_consent_at: true, archived_at: true },
       where: { id, owner_id: ownerId },
       ...(lock ? { lock: true } : {})
     });
 
-    return found ? { id: found.id, userId: found.user_id, nickname: found.nickname ?? null, archivedAt: found.archived_at ?? null } : null;
+    return found
+      ? {
+          id: found.id,
+          userId: found.user_id,
+          nickname: found.nickname ?? null,
+          phone: found.phone ?? null,
+          whatsappConsentAt: found.whatsapp_consent_at ?? null,
+          archivedAt: found.archived_at ?? null
+        }
+      : null;
   }
 
   /** The owner's entry for a person, archived or not. */
@@ -223,6 +243,8 @@ export namespace ContactRepository {
         owner_id: true,
         user_id: true,
         nickname: true,
+        phone: true,
+        whatsapp_consent_at: true,
         archived_at: true,
         created_at: true,
         user: { id: true, name: true, email: true, phone: true, status: true, avatar_updated_at: true }
@@ -241,7 +263,10 @@ export namespace ContactRepository {
     return { contacts: await details(db, ownerId, page), nextCursor: records.length > PAGE_SIZE ? page.at(-1)!.id : null };
   }
 
-  export async function insert(db: DbClient, input: { ownerId: string; userId: string; nickname?: string; now: string }): Promise<string> {
+  export async function insert(
+    db: DbClient,
+    input: { ownerId: string; userId: string; nickname?: string; phone?: string; consentAt?: string; now: string }
+  ): Promise<string> {
     const created = await db.contacts.insertOne({
       select: { id: true },
       data: {
@@ -249,6 +274,8 @@ export namespace ContactRepository {
         owner: { id: input.ownerId },
         user: { id: input.userId },
         nickname: input.nickname ?? sqlNull,
+        phone: input.phone ?? sqlNull,
+        whatsapp_consent_at: input.consentAt ?? sqlNull,
         created_at: input.now,
         updated_at: input.now
       }
@@ -257,8 +284,17 @@ export namespace ContactRepository {
     return created.id;
   }
 
-  export async function setNickname(db: DbClient, ownerId: string, id: string, nickname: string | undefined, now: string): Promise<void> {
-    await db.contacts.updateOne({ where: { id, owner_id: ownerId }, data: { nickname: nickname ?? sqlNull, updated_at: now } });
+  export async function setDetails(
+    db: DbClient,
+    ownerId: string,
+    id: string,
+    input: { nickname?: string; phone?: string; consentAt?: string },
+    now: string
+  ): Promise<void> {
+    await db.contacts.updateOne({
+      where: { id, owner_id: ownerId },
+      data: { nickname: input.nickname ?? sqlNull, phone: input.phone ?? sqlNull, whatsapp_consent_at: input.consentAt ?? sqlNull, updated_at: now }
+    });
   }
 
   export async function restore(db: DbClient, id: string, now: string): Promise<void> {
@@ -281,6 +317,11 @@ export namespace ContactRepository {
   /** Every agenda that listed the person keeps an archived, unnamed entry so history still reads. */
   export async function archiveMentions(db: DbClient, userId: string, now: string): Promise<void> {
     await db.contacts.updateMany({ where: { user_id: userId }, data: { nickname: sqlNull, archived_at: now, updated_at: now } });
+  }
+
+  /** The erased person's phone and WhatsApp consent go from every agenda entry that mentions them. */
+  export async function clearReach(db: DbClient, userId: string, now: string): Promise<void> {
+    await db.contacts.updateMany({ where: { user_id: userId }, data: { phone: sqlNull, whatsapp_consent_at: sqlNull, updated_at: now } });
   }
 
   /** The entry now names another person; nickname and history stay. */
@@ -307,6 +348,17 @@ export namespace ContactRepository {
         avatar: avatarRef(entry.user.id, entry.user.avatar_updated_at)
       }))
       .sort((a, b) => (a.displayName === b.displayName ? (a.contactId < b.contactId ? -1 : 1) : a.displayName < b.displayName ? -1 : 1));
+  }
+
+  /** How the creditor can reach this person beyond the account: the phone and consent typed on their contact. */
+  export async function reachability(db: DbClient, creditorId: string, debtorId: string): Promise<{ phone?: string; consentAt?: string } | null> {
+    const row = await db.contacts.findOne({ select: { phone: true, whatsapp_consent_at: true }, where: { owner_id: creditorId, user_id: debtorId, archived_at: { isNull: true } } });
+
+    if (!row) {
+      return null;
+    }
+
+    return { phone: row.phone ?? undefined, consentAt: row.whatsapp_consent_at ?? undefined };
   }
 
   /** The viewer's nicknames for `userIds`, by person; people the agenda has no nickname for are left out. */

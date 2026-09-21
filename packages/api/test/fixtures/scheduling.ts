@@ -77,7 +77,8 @@ export const TEST_CONFIG: NotificationConfig = {
   secret: 'notification-test-secret-with-enough-entropy',
   credentialKeyB64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
   from: 'fixture@example.invalid',
-  pushAvailable: true
+  pushAvailable: true,
+  whatsappAvailable: false
 };
 
 /** A full producer context on fakes; every spec that creates charges can pass one and inspect the fakes. */
@@ -87,7 +88,6 @@ export function fakeNotice(config: Partial<NotificationConfig> = {}) {
   const context: NoticeContext = {
     config: { ...TEST_CONFIG, ...config },
     transport: sent.transport,
-    notify,
     links: {
       [PaymentProvider.InfinitePay]: fakeCheckout('https://receivy.example', PaymentProvider.InfinitePay),
       [PaymentProvider.PagSeguro]: fakeCheckout('https://receivy.example', PaymentProvider.PagSeguro)

@@ -14,6 +14,9 @@ import type { oauthProvidersHandler } from './endpoints/oauth-providers';
 import type { oauthStartHandler } from './endpoints/oauth-start';
 import type { profileHandler } from './endpoints/profile';
 import type { refreshHandler } from './endpoints/refresh';
+import type { deleteRemindersHandler } from './endpoints/reminders-delete';
+import type { getRemindersHandler } from './endpoints/reminders-get';
+import type { putRemindersHandler } from './endpoints/reminders-put';
 
 export type UserRoutes = [
   Http.UseRoute<{ name: 'nativeAppleStart'; path: 'POST /auth/apple/native/start'; handler: typeof nativeAppleStartHandler }>,
@@ -92,5 +95,23 @@ export type UserRoutes = [
     path: 'DELETE /account';
     authorizer: typeof sessionAuthorizer;
     handler: typeof deleteHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'getReminders';
+    path: 'GET /account/reminders';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof getRemindersHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'putReminders';
+    path: 'PUT /account/reminders';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof putRemindersHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'clearReminders';
+    path: 'DELETE /account/reminders';
+    authorizer: typeof sessionAuthorizer;
+    handler: typeof deleteRemindersHandler;
   }>
 ];

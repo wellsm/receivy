@@ -1,6 +1,7 @@
 import type { UserAvatar } from './avatar';
 import type { BillingCategory } from './billing-category';
 import type { ChargeDetail, Direction, Money, PixSnapshot, SplitMode } from './contracts';
+import type { ReminderRule } from './reminders';
 import type { BillingSplit } from './split';
 
 export const enum BillingRecurrence {
@@ -49,9 +50,8 @@ export const enum EditScope {
   NextMonth = 'next_month'
 }
 
-export type BillingReminder = { offsetDays: number; enabled: boolean };
-
-export const DEFAULT_BILLING_REMINDERS: BillingReminder[] = [{ offsetDays: 0, enabled: true }];
+/** @deprecated use ReminderRule; kept one release for the clients' imports. */
+export type BillingReminder = ReminderRule;
 
 export const MAX_FINITE_OCCURRENCES = 120;
 
@@ -66,7 +66,7 @@ export type BillingInput = {
   dueRule?: BillingDueRule;
   timezone: string;
   paymentMethodId?: string;
-  reminders?: BillingReminder[];
+  reminders?: ReminderRule[];
   /** Required for a conta a receber; a conta a pagar has no participants and may omit it. */
   split?: BillingSplit;
   category?: BillingCategory;
@@ -90,7 +90,9 @@ export type BillingPatch = {
   startDate?: string;
   /** Recorrente only, sent with startDate: a fixed day or the last day of each month. */
   dueRule?: BillingDueRule;
-  reminders?: BillingReminder[];
+  reminders?: ReminderRule[];
+  /** Back to the owner's default: the billing stops carrying its own rules. */
+  clearReminders?: boolean;
   state?: BillingState;
   /** Only with state paused/ended. Absent keeps the old behavior: pausing keeps, ending cancels. */
   pendingCharges?: PendingChargesAction;
@@ -190,7 +192,9 @@ export type BillingDetail = {
   updatedAt: string;
   timezone: string;
   paymentMethodId?: string;
-  reminders: BillingReminder[];
+  reminders: ReminderRule[] | null;
+  /** What actually fires: the billing's own rules or the owner's default. */
+  effectiveReminders: ReminderRule[];
   split: BillingSplit;
   allocations: BillingAllocation[];
   charges: ChargeDetail[];

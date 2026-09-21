@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BillingDueRule, BillingFrequency, type BillingInput, BillingKind, BillingRecurrence, DEFAULT_BILLING_REMINDERS, SplitPartKind } from './billing';
+import { BillingDueRule, BillingFrequency, type BillingInput, BillingKind, BillingRecurrence, SplitPartKind } from './billing';
 import {
   addCalendarDays,
   billingDates,
@@ -12,9 +12,11 @@ import {
   zonedInstant
 } from './billing-calendar';
 import { Direction, SplitMode } from './contracts';
+import { REMINDERS_INVALID_MESSAGE } from './reminders';
 import type { BillingSplit } from './split';
 
 const split = { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: 'ana' }] } satisfies BillingSplit;
+const EMAIL = { email: true, whatsapp: false };
 
 describe('billing calendar', () => {
   it('clamps monthly dates to the last day without drifting', () => {
@@ -111,20 +113,20 @@ describe('billing calendar', () => {
   it('materializes an occurrence on the first day of its month, or earlier for a reminder that crosses the month', () => {
     expect(
       materializationDate('2026-03-10', [
-        { offsetDays: -3, enabled: true },
-        { offsetDays: 2, enabled: true }
+        { offsetDays: -3, enabled: true, channels: EMAIL },
+        { offsetDays: 2, enabled: true, channels: EMAIL }
       ])
     ).toBe('2026-03-01');
-    expect(materializationDate('2026-03-03', [{ offsetDays: -5, enabled: true }])).toBe('2026-02-26');
-    expect(materializationDate('2026-03-10', [{ offsetDays: -3, enabled: false }])).toBe('2026-03-01');
+    expect(materializationDate('2026-03-03', [{ offsetDays: -5, enabled: true, channels: EMAIL }])).toBe('2026-02-26');
+    expect(materializationDate('2026-03-10', [{ offsetDays: -3, enabled: false, channels: EMAIL }])).toBe('2026-03-01');
     expect(addCalendarDays('2026-03-01', -1)).toBe('2026-02-28');
   });
 
   it('reaches the month end, or further when an early reminder needs next month charges', () => {
-    expect(materializationHorizon('2026-03-05', [{ offsetDays: 0, enabled: true }])).toBe('2026-03-31');
-    expect(materializationHorizon('2026-03-28', [{ offsetDays: -5, enabled: true }])).toBe('2026-04-02');
+    expect(materializationHorizon('2026-03-05', [{ offsetDays: 0, enabled: true, channels: EMAIL }])).toBe('2026-03-31');
+    expect(materializationHorizon('2026-03-28', [{ offsetDays: -5, enabled: true, channels: EMAIL }])).toBe('2026-04-02');
     expect(materializationHorizon('2026-03-05', [])).toBe('2026-03-31');
-    expect(materializationHorizon('2026-02-10', [{ offsetDays: 3, enabled: true }])).toBe('2026-02-28');
+    expect(materializationHorizon('2026-02-10', [{ offsetDays: 3, enabled: true, channels: EMAIL }])).toBe('2026-02-28');
   });
 
   it('normalizes input per type and rejects incompatible fields', () => {
@@ -149,14 +151,14 @@ describe('billing calendar', () => {
       timezone: 'America/Sao_Paulo',
       split,
       reminders: [
-        { offsetDays: 2, enabled: true },
-        { offsetDays: -3, enabled: false }
+        { offsetDays: 2, enabled: true, channels: EMAIL },
+        { offsetDays: -3, enabled: false, channels: EMAIL }
       ]
     });
 
     expect(until.reminders).toEqual([
-      { offsetDays: -3, enabled: false },
-      { offsetDays: 2, enabled: true }
+      { offsetDays: -3, enabled: false, channels: EMAIL },
+      { offsetDays: 2, enabled: true, channels: EMAIL }
     ]);
     expect(() =>
       normalizeBillingInput({ recurrence: BillingRecurrence.Until, totalCents: 100, startDate: '2026-01-31', timezone: 'UTC', split })
@@ -203,7 +205,7 @@ describe('billing calendar', () => {
         startDate: '2026-01-31',
         timezone: 'UTC',
         split,
-        reminders: [{ offsetDays: 91, enabled: true }]
+        reminders: [{ offsetDays: 91, enabled: true, channels: EMAIL }]
       })
     ).toThrow(/lembretes/i);
   });
@@ -254,7 +256,7 @@ describe('registros', () => {
     expect(() =>
       normalizeBillingInput({ ...registro, split: undefined, contactId: 'contact-1', paymentMethodId: 'method-1' }, now)
     ).toThrow(message);
-    expect(() => normalizeBillingInput({ ...registro, reminders: [{ offsetDays: 0, enabled: true }] }, now)).toThrow(message);
+    expect(() => normalizeBillingInput({ ...registro, reminders: [{ offsetDays: 0, enabled: true, channels: EMAIL }] }, now)).toThrow(message);
   });
 
   it('starts a recorrente registro today or later, checked only when a clock is given', () => {
@@ -292,9 +294,32 @@ describe('civilHour', () => {
   });
 });
 
-describe('DEFAULT_BILLING_REMINDERS', () => {
-  it('reminds only on the due date', () => {
-    expect(DEFAULT_BILLING_REMINDERS).toEqual([{ offsetDays: 0, enabled: true }]);
+describe('normalizeBillingInput reminders', () => {
+  const base = {
+    recurrence: BillingRecurrence.Once,
+    totalCents: 100,
+    startDate: '2026-10-10',
+    timezone: 'America/Sao_Paulo',
+    split
+  };
+
+  it('accepts up to five rules within ±14 days and keeps channels', () => {
+    const reminders = [
+      { offsetDays: 14, enabled: true, channels: { email: false, whatsapp: true } },
+      { offsetDays: -14, enabled: true, channels: { email: true, whatsapp: false } }
+    ];
+
+    expect(normalizeBillingInput({ ...base, reminders }).reminders).toEqual([reminders[1], reminders[0]]);
+  });
+
+  it('refuses a sixth rule or 15 days', () => {
+    expect(() =>
+      normalizeBillingInput({ ...base, reminders: [{ offsetDays: 15, enabled: true, channels: { email: true, whatsapp: false } }] })
+    ).toThrow(REMINDERS_INVALID_MESSAGE);
+  });
+
+  it('leaves reminders undefined when absent: the billing inherits', () => {
+    expect(normalizeBillingInput(base).reminders).toBeUndefined();
   });
 });
 

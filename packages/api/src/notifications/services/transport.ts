@@ -19,6 +19,8 @@ export interface EmailNotice {
   /** The HTML alternative, absent on a notice that has none. */
   html?: string;
   from: string;
+  /** Extra SMTP headers (List-Unsubscribe); transports without header support ignore them. */
+  headers?: Record<string, string>;
 }
 export interface NotificationTransport {
   email(input: EmailNotice): Promise<SendResult>;

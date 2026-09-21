@@ -4,6 +4,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 export const enum PublicTokenPurpose {
   Charge = 'charge',
   Invite = 'invite',
+  /** The footer link of a notice e-mail: it names the account that asked to stop hearing from us. */
+  OptOut = 'opt-out',
   /** The path segment InfinitePay posts to: names the charge, never trusted for the money (payment_check does). */
   ProviderWebhook = 'provider_webhook'
 }
@@ -31,6 +33,36 @@ export function issuePublicChargeToken(input: IssueInput): string {
 
 function invalid(): never {
   throw new Error('Invalid public capability');
+}
+
+/** No expiry: the footer of an old e-mail must still work. Signed over the user id and the e-mail it was sent to, so a later address change retires the old link. */
+function optOutSignature(userId: string, email: string, secret: string): Buffer {
+  return createHmac('sha256', assertPublicLinkSecretConfigured(secret)).update(`${PublicTokenPurpose.OptOut}.${userId}.${email}`).digest();
+}
+
+export function issueOptOutToken(input: { userId: string; email: string; secret: string }): string {
+  const mac = optOutSignature(input.userId, input.email, input.secret).toString('base64url');
+
+  return `${input.userId}.${mac}`;
+}
+
+/** The caller resolves `userId` and the account's current `email` from the token's own id part before calling this. */
+export function verifyOptOutToken(token: string, input: { userId: string; email: string; secret: string }): { userId: string } {
+  const parts = token.split('.');
+  const [userId, mac] = parts;
+
+  if (parts.length !== 2 || !userId || !mac || userId !== input.userId) {
+    invalid();
+  }
+
+  const expected = optOutSignature(input.userId, input.email, input.secret);
+  const given = Buffer.from(mac, 'base64url');
+
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
+    invalid();
+  }
+
+  return { userId };
 }
 
 export function verifyPublicChargeToken(token: string, input: VerifyInput): { publicId: string; expiresAtSeconds: number } {

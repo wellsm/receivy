@@ -108,8 +108,8 @@ describe('daily cron: materialization and reminder plan', () => {
         'cron-early',
         monthly('Antecipada', '2026-06-30', {
           reminders: [
-            { offsetDays: -5, enabled: true },
-            { offsetDays: 0, enabled: false }
+            { offsetDays: -5, enabled: true, channels: { email: true, whatsapp: false } },
+            { offsetDays: 0, enabled: false, channels: { email: true, whatsapp: false } }
           ]
         }),
         date('2026-01-01'),
@@ -301,7 +301,7 @@ describe('daily cron: materialization and reminder plan', () => {
 
     deepEqual(today.get(notifyIdentifier(march.id)), {
       date: reminderAt('2026-03-31'),
-      event: { chargeId: march.id, template: 'reminder', stage: 'first', offsetDays: 0 }
+      event: { chargeId: march.id, template: 'reminder', offsetDays: 0 }
     });
     equal(today.has(notifyIdentifier(january.id)), false, 'a reminder already behind is not replayed');
     equal(today.has(notifyIdentifier(february.id)), false);
@@ -336,7 +336,7 @@ describe('daily cron: materialization and reminder plan', () => {
 
     deepEqual((await plan(cronAt('2026-06-25'))).get(notifyIdentifier(june.id)), {
       date: reminderAt('2026-06-25'),
-      event: { chargeId: june.id, template: 'reminder', stage: 'first', offsetDays: -5 }
+      event: { chargeId: june.id, template: 'reminder', offsetDays: -5 }
     });
     equal((await plan(cronAt('2026-06-30'))).has(notifyIdentifier(june.id)), false, 'the disabled due-date offset never counts');
 

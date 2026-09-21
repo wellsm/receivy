@@ -1,4 +1,4 @@
-import { addCalendarDays, type BillingReminder } from '@receivy/common';
+import { addCalendarDays, type ReminderRule } from '@receivy/common';
 
 export interface NotificationConfig {
   publicOrigin: string;
@@ -9,6 +9,8 @@ export interface NotificationConfig {
   credentialKeyB64: string;
   from?: string;
   pushAvailable?: boolean;
+  /** Whether the WhatsApp transport can send at all; a rule that wants it is dropped as unavailable until it can. */
+  whatsappAvailable: boolean;
 }
 
 /** Only the fields the notice pipeline reads; the HTTP provider and every scheduler expose them. */
@@ -26,8 +28,8 @@ export interface NotificationVariables {
 /** Reminders reach the recipient at 06:00 of the billing timezone. */
 export const REMINDER_HOUR = 6;
 
-/** A push that got no answer (no proof, charge still open) is followed by an e-mail this much later. */
-export const EMAIL_FOLLOWUP_MS = 2 * 3600_000;
+/** Phase 3 reads a WHATSAPP_TRANSPORT variable; until then the channel exists but never sends. */
+export const WHATSAPP_AVAILABLE = false;
 
 /** How far ahead the daily run plans reminders: one run per day, one window per run. */
 export const PLAN_WINDOW_MS = 24 * 3600_000;
@@ -39,7 +41,8 @@ export function notificationConfigFrom(variables: NotificationVariables): Notifi
     secret: variables.PUBLIC_LINK_HMAC_SECRET,
     credentialKeyB64: variables.PAYMENT_CREDENTIAL_KEY_B64 ?? 'disabled',
     from: variables.RESEND_FROM_EMAIL,
-    pushAvailable: variables.NOTIFICATION_PUSH_TRANSPORT === 'expo'
+    pushAvailable: variables.NOTIFICATION_PUSH_TRANSPORT === 'expo',
+    whatsappAvailable: WHATSAPP_AVAILABLE
   };
 }
 
@@ -71,7 +74,7 @@ export function instantAt(date: string, hour: number, timezone: string): Date {
   return new Date(guess - (asUtc - guess));
 }
 
-export type InitialNoticeInput = { dueDate: string; now: number; timezone: string; reminders: BillingReminder[] };
+export type InitialNoticeInput = { dueDate: string; now: number; timezone: string; reminders: ReminderRule[] };
 
 /** A charge due today or earlier is announced at once; a later one waits for its first reminder, unless none is left to fire. */
 export function shouldSendInitialNotice({ dueDate, now, timezone, reminders }: InitialNoticeInput): boolean {

@@ -184,8 +184,8 @@ export namespace ChargeRepository {
 
   /** A charge with what a notice needs around it: the billing rules, the owner's timezone and whoever has to pay. */
   export type NoticeRow = Row & {
-    billing: { kind: BillingKind; reminders?: string; owner: { timezone: string } };
-    debtor?: { id: string; name?: string; email?: string; deleted_at?: string };
+    billing: { kind: BillingKind; reminders?: string; owner: { timezone: string; reminder_config?: string } };
+    debtor?: { id: string; name?: string; email?: string; phone?: string; deleted_at?: string; email_opt_out_at?: string; whatsapp_opt_out_at?: string };
   };
 
   export async function forNotice(db: DbClient, id: string): Promise<NoticeRow | null> {
@@ -213,8 +213,8 @@ export namespace ChargeRepository {
         notify: true,
         created_at: true,
         updated_at: true,
-        billing: { kind: true, reminders: true, owner: { timezone: true } },
-        debtor: { id: true, name: true, email: true, deleted_at: true }
+        billing: { kind: true, reminders: true, owner: { timezone: true, reminder_config: true } },
+        debtor: { id: true, name: true, email: true, phone: true, deleted_at: true, email_opt_out_at: true, whatsapp_opt_out_at: true }
       },
       where: { id }
     });
@@ -227,9 +227,17 @@ export namespace ChargeRepository {
     db: DbClient,
     from: string,
     to: string
-  ): Promise<{ id: string; billing_id: string; due_date: string; notify: boolean; billing: { kind: BillingKind; reminders?: string; owner: { timezone: string } } }[]> {
+  ): Promise<
+    {
+      id: string;
+      billing_id: string;
+      due_date: string;
+      notify: boolean;
+      billing: { kind: BillingKind; reminders?: string; owner: { timezone: string; reminder_config?: string } };
+    }[]
+  > {
     const { records } = await db.charges.findMany({
-      select: { id: true, billing_id: true, due_date: true, notify: true, billing: { kind: true, reminders: true, owner: { timezone: true } } },
+      select: { id: true, billing_id: true, due_date: true, notify: true, billing: { kind: true, reminders: true, owner: { timezone: true, reminder_config: true } } },
       where: { state: ChargeState.Pending, due_date: { gte: from, lte: to } }
     });
 

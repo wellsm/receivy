@@ -11,41 +11,57 @@ or `notice.skipped { template, reason }`.
   transaction that created the charges (billing creation, materialization, invite
   acceptance, guest added). A conta a pagar skips it: the owner just typed the bill.
   A conta a receber without a Pix key skips it too (`reason = pix_required`) and
-  sends it later, when the key is published through the first public link.
+  sends it later, when the key is published through the first public link. The initial
+  notice uses the first enabled rule in the effective config.
 - **Reminders** (`template = 'reminder'`): planned once a day by
   `ChargeNotificationCron` (05:30 UTC, `src/notifications/crons/arm-notify.ts`, after `BillingCron`
-  created the day's charges). `planReminders` arms
-  `charge:<id>:notify` for every enabled offset whose 06:00 (billing timezone)
-  falls in the next 24 hours; the handler (`src/notifications/schedulers/charge-notify.ts`)
-  sends and skips an offset already recorded in `events`.
+  created the day's charges). `planReminders` arms `charge:<id>:notify` for every
+  enabled offset whose 06:00 (billing timezone) falls in the next 24 hours; the handler
+  (`src/notifications/schedulers/charge-notify.ts`) sends and skips an offset already
+  recorded in `events`. Channels are resolved per rule by `resolveChannels` based on
+  the effective config.
 - **Manual reminder** (`template = 'manual'`): `POST /charges/{id}/reminders`. The
-  creditor pressed the button, so it goes out on every channel at once (push when
-  there is a device, e-mail when there is an address) and arms no follow-up. One
-  per charge per 24 hours, counted over `notice.sent` events; a `notice.skipped`
-  never blocks the next attempt. The response `queued: false` means nobody could
-  be reached.
+  creditor pressed the button; it goes out using the owner's `manual` channels (bypasses
+  the silence gate and keeps 1 per 24 hours). One per charge per 24 hours, counted
+  over `notice.sent` events; a `notice.skipped` never blocks the next attempt. The
+  response contains `{ channels, dropped }` listing outcomes per channel.
 
-## Channels and the follow-up rule
+## Channels
 
-`notifyCharge` pushes to every active `device_tokens` row of the recipient and
-falls back to e-mail right away only when there is no device. When a push went
-out, the same `charge:<id>:notify` schedule is re-armed two hours later
-(`stage = 'followup'`): `followUpCharge` then e-mails only if the charge is still
-pending with no proof under review, and never twice for the same template and
-offset. A `device_unregistered` answer deactivates the device. There is no
-receipt polling: what the provider accepted is what was sent.
+Channels are resolved per reminder rule through `resolveChannels`, which returns
+the channels available for that rule based on contact data and opt-out state.
+`notifyCharge` sends to each resolved channel: push to every active `device_tokens`
+row of the recipient, and e-mail when a non-opted-out address exists. A conta a
+pagar never sends over WhatsApp. Channels that cannot be reached (no phone, no consent,
+no e-mail, opted-out) are recorded as `dropped: [{ channel, reason }]` with reasons
+`no_email`, `no_phone`, `no_consent`, `opted_out`, or `unavailable`. A `device_unregistered`
+answer deactivates the device. There is no receipt polling: what the provider accepted
+is what was sent.
 
 The recipient is the debtor of a conta a receber, or the owner of a conta a pagar
-(self copy, no public link). The rendered copy lives in `render.ts` and carries
+(self copy, no public link, no opt-out link). The owner's own reminder follows the
+configured channels the same way a debtor's does: e-mail goes out whenever the rule
+that fired wants it, not push only. The rendered copy lives in `render.ts` and carries
 the signed `/pay/<token>` link built from the charge's own `public_id`,
 `link_version` and `link_expires_at` (`ensurePublicLink` mints them when missing).
+
+## Opt-out
+
+E-mails carry a `List-Unsubscribe` header pointing to `${PUBLIC_WEB_ORIGIN}/opt-out/<token>`
+and include a "Parar de receber" footer link to the same. The token is an HMAC over
+the user id and the e-mail it was sent to, with no expiry. `POST /public/notices/opt-out/{token}`
+records the opt-out in `users.email_opt_out_at`; that is the only column these routes write.
+`users.whatsapp_opt_out_at` is reserved for phase 3 — nothing writes it yet.
+`DELETE /public/notices/opt-out/{token}` clears the e-mail opt-out timestamp. The web
+UI plan adds the opt-out page (`/opt-out/<token>`) that calls these routes. `GET /charges/{id}/reminders/preview`
+shows what channels would receive the next reminder without sending anything.
 
 ## Charges under review
 
 A charge is under review while `proof_state = 'pending'`, whether the payer sent a file (`proof_kind = 'file'`)
 or declared the payment without one (`proof_kind = 'declaration'`). Nothing chases it meanwhile:
-`sendChargeNotice` records `notice.skipped { reason: 'in_review' }` for the initial notice, reminders, the
-follow-up and the manual reminder; `planReminders` does not arm it; `POST /charges/{id}/reminders` answers 409
+`sendChargeNotice` records `notice.skipped { reason: 'in_review' }` for the initial notice, reminders and the
+manual reminder; `planReminders` does not arm it; `POST /charges/{id}/reminders` answers 409
 `CHARGE_IN_REVIEW`. Reminders whose day passed during the review are not sent later.
 
 Payment notices are push only (`notifications/services/payment-notices.ts`), fired by the endpoints after the
@@ -132,8 +148,8 @@ The owner of a conta a receber can switch off the automatic notices of one parti
 
 - `sendChargeNotice` records `notice.skipped { template, offsetDays?, reason: 'silenced' }` and sends nothing for a
   silenced charge, unless the channel is `'both'`: the manual reminder ("Lembrar") still goes out.
-- `announceCharges` skips a silenced charge before the initial notice, `planReminders` does not arm it and
-  `followUpCharge` sends no e-mail when the charge was silenced after its push. None of the three records an event.
+- `announceCharges` skips a silenced charge before the initial notice, and `planReminders` does not arm it.
+  Neither records an event.
 - A `charge:<id>:notify` schedule armed before the charge was silenced still fires, goes through `sendChargeNotice`
   and hits the gate. Nothing is cancelled. Switching the notices back on resends nothing: the next planned reminder
   goes out, one whose day already passed is lost.
@@ -154,8 +170,7 @@ A registro is a conta the owner already received or paid (`billings.settled`), w
 
 - `sendChargeNotice` records `notice.skipped { template, offsetDays?, reason: 'settled' }` and sends nothing for a charge
   of a registro, on every channel, right after the `silenced` gate.
-- `announceCharges` and `planReminders` skip those charges before scheduling anything, and `followUpCharge` sends no
-  e-mail. None of the three records an event.
+- `announceCharges` and `planReminders` skip those charges before scheduling anything. Neither records an event.
 - `POST /charges/{id}/reminders` answers 409 `SETTLED_NO_REMINDERS` ("Registros não têm avisos.").
 - Settling is not a notice: each charge of a registro is paid on its due date (`charge.paid { via: 'registered' }`,
   `paid_at` at the start of that day in the billing timezone). `persistChargePlan` pays what is already due in the

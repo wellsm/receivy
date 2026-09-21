@@ -119,6 +119,20 @@ export namespace AccountRepository {
     });
   }
 
+  export async function reminderConfig(db: DbClient, id: string): Promise<{ reminder_config?: string } | null> {
+    const row = await db.users.findOne({ select: { reminder_config: true }, where: { id, deleted_at: { isNull: true } } });
+
+    return row ?? null;
+  }
+
+  export async function saveReminderConfig(db: DbClient, id: string, json: string | null, now: string): Promise<void> {
+    await db.users.updateOne({ where: { id }, data: { reminder_config: json ?? sqlNull, updated_at: now } });
+  }
+
+  export async function setEmailOptOut(db: DbClient, id: string, at: string | null, now: string): Promise<void> {
+    await db.users.updateOne({ where: { id }, data: { email_opt_out_at: at ?? sqlNull, updated_at: now } });
+  }
+
   /** The live account as its own session reads it. */
   export async function authUser(db: DbClient, id: string): Promise<AuthUser | null> {
     const row = await db.users.findOne({
@@ -196,6 +210,9 @@ export namespace AccountRepository {
         phone: sqlNull,
         avatar_url: sqlNull,
         avatar_updated_at: sqlNull,
+        reminder_config: sqlNull,
+        email_opt_out_at: sqlNull,
+        whatsapp_opt_out_at: sqlNull,
         status: UserStatus.Removed,
         timezone: 'UTC',
         deleted_at: now,

@@ -3,7 +3,6 @@ import {
   BillingFrequency,
   BillingKind,
   type BillingInput,
-  type BillingReminder,
   BillingRecurrence,
   MAX_FINITE_OCCURRENCES,
   type NormalizedBillingInput,
@@ -11,6 +10,7 @@ import {
 } from './billing';
 import { Direction, SplitMode } from './contracts';
 import { calendarDate } from './financial-form';
+import { type ReminderRule, validateReminderRules } from './reminders';
 import { type BillingSplit, resolveBillingSplit } from './split';
 
 export type BillingCalendarRule = { frequency: BillingFrequency; startDate: string; endDate?: string; dueRule?: BillingDueRule };
@@ -69,14 +69,14 @@ export function endOfMonth(value: string): string {
   return `${value.slice(0, 7)}-${String(day).padStart(2, '0')}`;
 }
 
-function earliestOffset(reminders: BillingReminder[]): number {
+function earliestOffset(reminders: ReminderRule[]): number {
   const offsets = reminders.filter((reminder) => reminder.enabled).map((reminder) => reminder.offsetDays);
 
   return offsets.length ? Math.min(...offsets) : 0;
 }
 
 /** The day an occurrence becomes a charge: the first day of its month, or earlier when a reminder fires before that. */
-export function materializationDate(dueDate: string, reminders: BillingReminder[]): string {
+export function materializationDate(dueDate: string, reminders: ReminderRule[]): string {
   const byReminder = addCalendarDays(dueDate, earliestOffset(reminders));
   const monthStart = `${dueDate.slice(0, 7)}-01`;
 
@@ -84,7 +84,7 @@ export function materializationDate(dueDate: string, reminders: BillingReminder[
 }
 
 /** The last due date that must already exist today: the month end, or later when an early reminder reaches next month. */
-export function materializationHorizon(today: string, reminders: BillingReminder[]): string {
+export function materializationHorizon(today: string, reminders: ReminderRule[]): string {
   const byReminder = addCalendarDays(today, -earliestOffset(reminders));
   const monthEnd = endOfMonth(today);
 
@@ -159,19 +159,8 @@ export function billingDueDates(input: Pick<BillingInput, 'recurrence' | 'freque
   return dates;
 }
 
-function validateReminders(reminders: BillingReminder[]): BillingReminder[] {
-  const invalid = reminders.some(
-    (reminder) => !Number.isInteger(reminder.offsetDays) || Math.abs(reminder.offsetDays) > 90 || typeof reminder.enabled !== 'boolean'
-  );
-  const unique = new Set(reminders.map((reminder) => reminder.offsetDays)).size === reminders.length;
-
-  if (reminders.length > 10 || invalid || !unique) {
-    throw new RangeError('Lembretes inválidos: use dias únicos entre -90 e 90.');
-  }
-
-  return [...reminders]
-    .map((reminder) => ({ offsetDays: reminder.offsetDays, enabled: reminder.enabled }))
-    .sort((a, b) => a.offsetDays - b.offsetDays);
+function validateReminders(reminders: ReminderRule[]): ReminderRule[] {
+  return validateReminderRules(reminders);
 }
 
 /** `now` turns on the rule only a creation obeys: a recorrente registro starts today or later. */

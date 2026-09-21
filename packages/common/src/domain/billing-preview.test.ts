@@ -24,7 +24,7 @@ const base: BillingDraft = {
   mode: SplitMode.Equal,
   values: EMPTY_SPLIT_VALUES(),
   category: BillingCategory.Other,
-  reminders: [{ offsetDays: '0', enabled: true }]
+  reminders: null
 };
 
 describe('draftTotalCents', () => {

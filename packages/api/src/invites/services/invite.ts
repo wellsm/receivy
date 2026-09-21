@@ -345,7 +345,7 @@ export async function acceptInvite(
   return result;
 }
 
-export function createService({ db, email, chargeNotifyScheduler, variables }: Service.Context<InviteService>): InviteClient {
+export function createService({ db, email, variables }: Service.Context<InviteService>): InviteClient {
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
   const origin = variables.PUBLIC_WEB_ORIGIN;
 
@@ -364,7 +364,7 @@ export function createService({ db, email, chargeNotifyScheduler, variables }: S
 
       await throttlePublicRead(db, invite.public_id, INVITE_ACCEPT);
 
-      const notice = noticeContext({ chargeNotifyScheduler, email, variables });
+      const notice = noticeContext({ email, variables });
       const { waiting, ...result } = await acceptInvite(db, userId, token, secret, new Date(), notice);
 
       // The owner learns right away that someone is waiting; the card on the billing detail is the fallback.

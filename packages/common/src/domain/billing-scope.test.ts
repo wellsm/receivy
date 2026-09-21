@@ -50,6 +50,7 @@ const recurring: BillingDetail = {
   timezone: 'America/Sao_Paulo',
   paymentMethodId: 'pix-1',
   reminders: [],
+  effectiveReminders: [],
   split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: 'u1' }] },
   allocations: [],
   charges: [charge({ id: 'c1' })],

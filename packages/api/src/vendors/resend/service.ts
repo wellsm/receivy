@@ -39,7 +39,8 @@ export function createService({ variables }: Service.Context<ResendEmailService>
             to: [message.to],
             subject: message.subject,
             text: message.text,
-            ...(message.html ? { html: message.html } : {})
+            ...(message.html ? { html: message.html } : {}),
+            ...(message.headers ? { headers: message.headers } : {})
           }),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
         });

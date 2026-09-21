@@ -1,10 +1,12 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
-import { HttpUnauthorizedError } from '@ez4/gateway';
-import type { AuthUser } from '@receivy/common';
+import { HttpBadRequestError, HttpUnauthorizedError } from '@ez4/gateway';
+import { type AuthUser, type ReminderConfig, type ReminderSettings, SYSTEM_REMINDER_CONFIG } from '@receivy/common';
+import { parseReminderConfig, serializeReminderConfig } from '../../billings/utils/reminders';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { Db, DbClient } from '../../database';
+import { WHATSAPP_AVAILABLE } from '../../notifications/services/planner';
 import { bucketProofStorage } from '../../proofs/services/bucket-storage';
 import type { AvatarFiles, ProofFiles } from '../../storage';
 import { AccountRepository } from '../repositories/account';
@@ -16,7 +18,57 @@ export type AccountClient = {
   me(userId: string): Promise<{ user: AuthUser }>;
   updateProfile(userId: string, input: ProfileInput): Promise<{ user: AuthUser }>;
   erase(userId: string, confirmation: string): Promise<{ deleted: boolean }>;
+  reminders(userId: string): Promise<ReminderSettings>;
+  saveReminders(userId: string, config: ReminderConfig): Promise<ReminderSettings>;
+  clearReminders(userId: string): Promise<ReminderSettings>;
 };
+
+/** What actually fires today, or the system default the account has not customised yet. */
+async function reminderSettings(db: DbClient, userId: string): Promise<ReminderSettings> {
+  const row = await AccountRepository.reminderConfig(db, userId);
+
+  if (!row) {
+    throw new HttpUnauthorizedError();
+  }
+
+  const config = parseReminderConfig(row.reminder_config);
+
+  return { config: config ?? SYSTEM_REMINDER_CONFIG, inherited: config === null, whatsappAvailable: WHATSAPP_AVAILABLE };
+}
+
+async function saveReminders(db: DbClient, userId: string, input: ReminderConfig): Promise<ReminderSettings> {
+  let json: string;
+
+  try {
+    json = serializeReminderConfig(input);
+  } catch (error) {
+    throw new HttpBadRequestError(error instanceof Error ? error.message : 'Lembretes inválidos.');
+  }
+
+  await db.transaction(async (tx) => {
+    await AccountRepository.lock(tx, userId);
+
+    const now = new Date().toISOString();
+
+    await AccountRepository.saveReminderConfig(tx, userId, json, now);
+    await EventRepository.record(tx, { type: 'account.reminders_updated', eventableType: EventableType.Account, eventableId: userId, actorId: userId, at: now });
+  });
+
+  return reminderSettings(db, userId);
+}
+
+async function clearReminders(db: DbClient, userId: string): Promise<ReminderSettings> {
+  await db.transaction(async (tx) => {
+    await AccountRepository.lock(tx, userId);
+
+    const now = new Date().toISOString();
+
+    await AccountRepository.saveReminderConfig(tx, userId, null, now);
+    await EventRepository.record(tx, { type: 'account.reminders_cleared', eventableType: EventableType.Account, eventableId: userId, actorId: userId, at: now });
+  });
+
+  return reminderSettings(db, userId);
+}
 
 export declare class AccountService extends Factory.Service<AccountClient> {
   handler: typeof createService;
@@ -67,6 +119,9 @@ export function createService({ db, avatarFiles, proofFiles }: Service.Context<A
       }
 
       return result;
-    }
+    },
+    reminders: (userId) => reminderSettings(db, userId),
+    saveReminders: (userId, config) => saveReminders(db, userId, config),
+    clearReminders: (userId) => clearReminders(db, userId)
   };
 }

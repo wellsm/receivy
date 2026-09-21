@@ -3,7 +3,6 @@ import {
   BillingFrequency,
   BillingKind,
   type BillingInput,
-  type BillingReminder,
   type NormalizedBillingInput,
   BillingRecurrence,
   MAX_FINITE_OCCURRENCES,
@@ -13,9 +12,10 @@ import { billingDates, normalizeBillingInput } from './billing-calendar';
 import { BillingCategory } from './billing-category';
 import { Direction, SplitMode } from './contracts';
 import { parseBRLCents, parsePercentageBasisPoints } from './financial-form';
+import type { ReminderRule } from './reminders';
 import type { SplitParty } from './split';
 
-export type ReminderDraft = Omit<BillingReminder, 'offsetDays'> & { offsetDays: string };
+export type ReminderDraft = Omit<ReminderRule, 'offsetDays'> & { offsetDays: string };
 
 /** Raw text split values, kept separate per mode so switching modes never loses what was typed. */
 export type SplitValues = {
@@ -61,7 +61,8 @@ export type BillingDraft = {
   /** Raw text split values, one bucket per mode; `equal` reads none of them. */
   values: SplitValues;
   category: BillingCategory;
-  reminders: ReminderDraft[];
+  /** `null` inherits the owner's default; an array is this billing's own rules. */
+  reminders: ReminderDraft[] | null;
   /** Automatic notices per participant user id. A participant without a key sends nothing, so the API keeps what it stores. */
   notify?: Record<string, boolean>;
   /** "Já recebi" / "Já paguei": the draft is a registro. Absent on drafts stored before registros existed. */
@@ -88,7 +89,7 @@ export function EMPTY_BILLING_DRAFT(timezone: string, today: string): BillingDra
     mode: SplitMode.Equal,
     values: EMPTY_SPLIT_VALUES(),
     category: BillingCategory.Other,
-    reminders: [{ offsetDays: '0', enabled: true }]
+    reminders: null
   };
 }
 
@@ -305,10 +306,15 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
 
   const base = {
     ...schedule,
-    reminders: draft.reminders.map((reminder) => ({
-      enabled: reminder.enabled,
-      offsetDays: integer(reminder.offsetDays, 'Informe dias inteiros, como -3, 0 ou 2.')
-    }))
+    ...(draft.reminders
+      ? {
+          reminders: draft.reminders.map((reminder) => ({
+            enabled: reminder.enabled,
+            channels: reminder.channels,
+            offsetDays: integer(reminder.offsetDays, 'Informe dias inteiros, como -3, 0 ou 2.')
+          }))
+        }
+      : {})
   };
 
   if (draft.direction === Direction.Payable) {

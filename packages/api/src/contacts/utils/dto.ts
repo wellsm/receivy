@@ -1,4 +1,4 @@
-import { type Contact, UserStatus } from '@receivy/common';
+import { type Contact, PhoneSource, UserStatus } from '@receivy/common';
 import { avatarRef } from '../../users/utils/avatar';
 import { type PersonRow, personName } from './person';
 
@@ -7,6 +7,8 @@ export type ContactRow = {
   owner_id: string;
   user_id: string;
   nickname?: string | null;
+  phone?: string | null;
+  whatsapp_consent_at?: string | null;
   archived_at?: string | null;
   created_at: string;
   user: PersonRow;
@@ -17,6 +19,7 @@ export function contactOf(row: ContactRow, lastBilledAt: string | null, activeCh
   const { user } = row;
   const name = personName(user);
   const removed = user.status === UserStatus.Removed;
+  const personPhone = user.phone ?? null;
 
   return {
     id: row.id,
@@ -26,7 +29,9 @@ export function contactOf(row: ContactRow, lastBilledAt: string | null, activeCh
     displayName: row.nickname || name,
     avatar: removed ? null : avatarRef(user.id, user.avatar_updated_at),
     email: removed ? '' : (user.email ?? ''),
-    phone: user.phone ?? null,
+    phone: personPhone ?? row.phone ?? null,
+    phoneSource: personPhone ? PhoneSource.Person : row.phone ? PhoneSource.Owner : null,
+    whatsappConsentAt: row.whatsapp_consent_at ?? null,
     status: user.status,
     archivedAt: row.archived_at ?? null,
     createdAt: row.created_at,

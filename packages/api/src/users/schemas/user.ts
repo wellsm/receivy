@@ -10,6 +10,12 @@ export interface UserSchema extends Database.Schema {
   name?: String.Max<120>;
   /** Filled by the person at onboarding, never by whoever added them as a contact. */
   phone?: String.Max<40>;
+  /** JSON `ReminderConfig`; absent means the system default. */
+  reminder_config?: String.Max<2000>;
+  /** The person asked, from an e-mail footer, to stop receiving charge notices. */
+  email_opt_out_at?: String.DateTime;
+  /** Reserved for the WhatsApp quick reply (phase 3); nothing writes it yet. */
+  whatsapp_opt_out_at?: String.DateTime;
   avatar_url?: String.Max<512>;
   /** When the photo at `avatars/<id>` was last replaced; absent means no photo. */
   avatar_updated_at?: String.DateTime;

@@ -1,8 +1,9 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import { ChargeState, type DeviceRegistration, Direction, type NotificationDevice } from '@receivy/common';
+import { ChargeState, type DeviceRegistration, Direction, type ManualReminderResult, type NotificationDevice, type ReminderConfig } from '@receivy/common';
 import { billingRegistered } from '../../billings/utils/columns';
+import { effectiveConfigOf } from '../../billings/utils/reminders';
 import { ChargeClosedError, ChargeInReviewError, SettledNoRemindersError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { StoredProofState } from '../../charges/schemas/charge';
@@ -11,6 +12,7 @@ import { ownerPays } from '../../charges/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { EmailService } from '../../common/services/email/service';
+import { ContactRepository } from '../../contacts/repositories/contact';
 import type { Db, DbClient } from '../../database';
 import { ProofRepository } from '../../proofs/repositories/proof';
 import { AccountRepository } from '../../users/repositories/account';
@@ -19,12 +21,14 @@ import { DeviceOwnedElsewhereError, DeviceRegisteredError, ReminderQuotaError } 
 import { DeviceRepository } from '../repositories/device';
 import type { ChargeNotifyScheduler } from '../schedulers/charge-notify';
 import { assertDeviceRegistration } from '../utils/device';
+import { NoticeChannel, resolveChannels } from './channels';
 import { noticeContext } from './context';
 import { type NoticeContext, NoticeTemplate, sendChargeNotice } from './send';
 
 export type NotificationClient = {
   registerDevice(userId: string, input: DeviceRegistration, familyId?: string): Promise<NotificationDevice>;
-  manualReminder(userId: string, chargeId: string): Promise<{ queued: boolean }>;
+  manualReminder(userId: string, chargeId: string): Promise<ManualReminderResult>;
+  reminderPreview(userId: string, chargeId: string): Promise<ManualReminderResult>;
 };
 
 export declare class NotificationService extends Factory.Service<NotificationClient> {
@@ -95,32 +99,65 @@ export async function registerDevice(db: DbClient, userId: string, input: Device
   });
 }
 
-/** The creditor presses the button: every channel at once, no follow-up, one a day per charge. */
-export async function manualReminder(db: DbClient, userId: string, chargeId: string, notice: NoticeContext, clock = Date.now): Promise<{ queued: boolean }> {
+/** The gates a manual reminder must clear, shared by the button that sends one and the preview that only looks. */
+async function manualTarget(db: DbClient, userId: string, chargeId: string, lock = false): Promise<{ row: ChargeRepository.Row; config: ReminderConfig }> {
+  const { row, direction } = await chargeForActor(db, userId, chargeId, lock);
+
+  // Reminders belong to the creditor of a conta a receber; a conta a pagar reminds its own owner on schedule.
+  if (direction !== Direction.Receivable || ownerPays(row)) {
+    throw new HttpForbiddenError();
+  }
+
+  if (row.state !== ChargeState.Pending) {
+    throw new ChargeClosedError();
+  }
+
+  const charge = await ChargeRepository.forNotice(db, chargeId);
+
+  // A registro has nobody to remind: the owner settled it on purpose.
+  if (charge && billingRegistered(charge.billing)) {
+    throw new SettledNoRemindersError();
+  }
+
+  if ((await ProofRepository.current(db, row.id))?.state === StoredProofState.Pending) {
+    throw new ChargeInReviewError();
+  }
+
+  if (!charge) {
+    throw new HttpNotFoundError();
+  }
+
+  return { row, config: effectiveConfigOf(charge.billing) };
+}
+
+/** The channels a manual reminder would reach right now, on the owner's manual configuration, without sending anything. */
+export async function reminderPreview(db: DbClient, userId: string, chargeId: string, notice: NoticeContext): Promise<ManualReminderResult> {
+  const { config } = await manualTarget(db, userId, chargeId);
+  const charge = (await ChargeRepository.forNotice(db, chargeId))!;
+  const target = charge.debtor && !charge.debtor.deleted_at ? charge.debtor : undefined;
+
+  if (!target) {
+    return { channels: [], dropped: [] };
+  }
+
+  const reach = charge.creditor_id ? await ContactRepository.reachability(db, charge.creditor_id, target.id) : null;
+  const resolved = resolveChannels({ wanted: config.manual, ownBill: ownerPays(charge), target, contact: reach, whatsappAvailable: notice.config.whatsappAvailable });
+  const devices = await DeviceRepository.active(db, target.id);
+  const channels: NoticeChannel[] = [
+    ...(devices.length && notice.config.pushAvailable !== false ? [NoticeChannel.Push] : []),
+    ...(resolved.email ? [NoticeChannel.Email] : []),
+    ...(resolved.whatsapp ? [NoticeChannel.WhatsApp] : [])
+  ];
+
+  return { channels, dropped: resolved.dropped };
+}
+
+/** The creditor presses the button: the channels their configuration keeps for manual reminders, one a day per charge. */
+export async function manualReminder(db: DbClient, userId: string, chargeId: string, notice: NoticeContext, clock = Date.now): Promise<ManualReminderResult> {
   const now = clock();
 
-  await db.transaction(async (tx) => {
-    const { row, direction } = await chargeForActor(tx, userId, chargeId, true);
-
-    // Reminders belong to the creditor of a conta a receber; a conta a pagar reminds its own owner on schedule.
-    if (direction !== Direction.Receivable || ownerPays(row)) {
-      throw new HttpForbiddenError();
-    }
-
-    if (row.state !== ChargeState.Pending) {
-      throw new ChargeClosedError();
-    }
-
-    const charge = await ChargeRepository.forNotice(tx, chargeId);
-
-    // A registro has nobody to remind: the owner settled it on purpose.
-    if (charge && billingRegistered(charge.billing)) {
-      throw new SettledNoRemindersError();
-    }
-
-    if ((await ProofRepository.current(tx, row.id))?.state === StoredProofState.Pending) {
-      throw new ChargeInReviewError();
-    }
+  const { config } = await db.transaction(async (tx) => {
+    const { config } = await manualTarget(tx, userId, chargeId, true);
 
     // Only a reminder that reached someone counts towards the daily quota.
     const recent = (await EventRepository.list(tx, chargeId, 'notice.sent')).filter(
@@ -132,17 +169,17 @@ export async function manualReminder(db: DbClient, userId: string, chargeId: str
     }
 
     await audit(tx, userId, chargeId, 'notifications.manual_reminder_requested');
+
+    return { config };
   });
 
-  // `queued` says whether any channel reached the debtor.
-  const { channels } = await sendChargeNotice(db, notice, chargeId, NoticeTemplate.Manual, now, { channel: 'both' });
-
-  return { queued: channels.length > 0 };
+  return sendChargeNotice(db, notice, chargeId, NoticeTemplate.Manual, now, { channels: config.manual });
 }
 
-export function createService({ db, email, chargeNotifyScheduler, variables }: Service.Context<NotificationService>): NotificationClient {
+export function createService({ db, email, variables }: Service.Context<NotificationService>): NotificationClient {
   return {
     registerDevice: (userId, input, familyId) => registerDevice(db, userId, input, familyId),
-    manualReminder: (userId, chargeId) => manualReminder(db, userId, chargeId, noticeContext({ variables, email, chargeNotifyScheduler }))
+    reminderPreview: (userId, chargeId) => reminderPreview(db, userId, chargeId, noticeContext({ variables, email })),
+    manualReminder: (userId, chargeId) => manualReminder(db, userId, chargeId, noticeContext({ variables, email }))
   };
 }

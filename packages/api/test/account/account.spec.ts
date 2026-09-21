@@ -1,9 +1,9 @@
 import { deepEqual, equal, notEqual, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Service } from '@ez4/common';
-import { HttpForbiddenError, HttpUnauthorizedError } from '@ez4/gateway';
+import { HttpBadRequestError, HttpForbiddenError, HttpUnauthorizedError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
-import { DevicePlatform, PaymentProvider, PixKeyType, ProofKind, ProofMime } from '@receivy/common';
+import { DevicePlatform, PaymentProvider, PixKeyType, ProofKind, ProofMime, SYSTEM_REMINDER_CONFIG } from '@receivy/common';
 import { StoredProofState } from '../../src/charges/schemas/charge';
 import type { SessionAuthorizerProvider } from '../../src/common/authorizers/session';
 import { sessionAuthorizer } from '../../src/common/authorizers/session';
@@ -15,6 +15,7 @@ import { deleteHandler } from '../../src/users/endpoints/delete-account';
 import type { UserProvider } from '../../src/users/provider';
 import { type AccountService, createService as createAccountService, updateProfile } from '../../src/users/services/account';
 import { authStore, revokeFamily } from '../../src/users/services/auth-store';
+import { AccountRepository } from '../../src/users/repositories/account';
 import { avatarKey, avatarStagingKey } from '../../src/users/utils/avatar';
 import { eraseAccount } from '../../src/users/services/deletion';
 import { issueAccessToken } from '../../src/users/services/session';
@@ -194,8 +195,30 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
 
     await rejects(() => updateProfile(db, owner, { name: ' ', locale: 'pt-BR', timezone: 'bad/zone', country: 'BR' }));
   });
+  it('stores, returns and clears the owner reminder config', async () => {
+    const config = {
+      reminders: [
+        { offsetDays: -3, enabled: true, channels: { email: true, whatsapp: true } },
+        { offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }
+      ],
+      manual: { email: false, whatsapp: true }
+    };
+
+    deepEqual(await accounts.reminders(owner), { config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false });
+    deepEqual(await accounts.saveReminders(owner, config), { config, inherited: false, whatsappAvailable: false });
+    await rejects(
+      () => accounts.saveReminders(owner, { ...config, reminders: [{ offsetDays: 15, enabled: true, channels: { email: true, whatsapp: false } }] }),
+      HttpBadRequestError
+    );
+    deepEqual(await accounts.clearReminders(owner), { config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false });
+  });
   it("atomically erases identity, preserves other account's payment fact and closes re-registration history access", async () => {
-    const person = await contacts.save(owner, { name: 'Account Debtor', email: 'account-debtor@example.com' });
+    const person = await contacts.save(owner, {
+      name: 'Account Debtor',
+      email: 'account-debtor@example.com',
+      phone: '+5511999990000',
+      whatsappConsent: true
+    });
     const { chargeId } = await createOnceCharge(db, owner, 'account-history', {
       userId: person.userId,
       amountCents: 1234,
@@ -207,6 +230,12 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
       dueDate: '2026-10-02'
     });
     const publicLink = await publishChargeLink(db, owner, chargeId, secret);
+
+    await accounts.saveReminders(debtor, {
+      reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }],
+      manual: { email: true, whatsapp: true }
+    });
+    await AccountRepository.setEmailOptOut(db, debtor, new Date().toISOString(), new Date().toISOString());
 
     await charges.pay(owner, chargeId);
 
@@ -231,6 +260,20 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     // Exactly one erasure performs the work; the loser observes an already-deleted row and reports no new files.
     equal(concurrent.filter((result) => result.objectKeys.length > 0).length, 1);
     deepEqual(await eraseAccount(db, debtor, 'EXCLUIR'), { deleted: true, objectKeys: [] });
+
+    const erasedRow = await db.users.findOne({
+      select: { reminder_config: true, email_opt_out_at: true, whatsapp_opt_out_at: true },
+      where: { id: debtor }
+    });
+
+    equal(erasedRow?.reminder_config ?? null, null, 'the reminder config goes with the account');
+    equal(erasedRow?.email_opt_out_at ?? null, null);
+    equal(erasedRow?.whatsapp_opt_out_at ?? null, null);
+
+    const mentionRow = await db.contacts.findOne({ select: { phone: true, whatsapp_consent_at: true }, where: { owner_id: owner, user_id: debtor } });
+
+    equal(mentionRow?.phone ?? null, null, 'the phone the erased person shared with the owner goes too');
+    equal(mentionRow?.whatsapp_consent_at ?? null, null);
 
     await rejects(() => authorize(current.access), HttpUnauthorizedError);
 

@@ -126,7 +126,7 @@ describe('registros on native PostgreSQL', () => {
     await refuse('registro-no-name', registro('Sem nome', { split: undefined }), 'Selecione ao menos um contato.');
     await refuse('registro-wallet', registro('Com chave', { paymentMethodId: pixId }), crowded);
     await refuse('registro-contact-key', registroPago('Com chave do contato', { paymentMethodId: imobiliariaKeyId }), crowded);
-    await refuse('registro-reminders', registro('Com lembrete', { reminders: [{ offsetDays: 0, enabled: true }] }), crowded);
+    await refuse('registro-reminders', registro('Com lembrete', { reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }] }), crowded);
     await refuse(
       'registro-monthly-past',
       registro('Salário atrasado', { recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, startDate: '2026-03-01' }),
@@ -222,7 +222,7 @@ describe('registros on native PostgreSQL', () => {
 
     await rejects(() => patchBilling(db, OWNER, once.id, { kind: BillingKind.Live }, date('2026-03-06')), SettledLockedError);
     await rejects(
-      () => patchBilling(db, OWNER, once.id, { reminders: [{ offsetDays: 0, enabled: true }] }, date('2026-03-06')),
+      () => patchBilling(db, OWNER, once.id, { reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }] }, date('2026-03-06')),
       SettledLockedError
     );
     await rejects(
@@ -433,7 +433,7 @@ describe('registros on native PostgreSQL', () => {
     await refuse('split', { split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: anaId }] } });
     await refuse('contactId', { contactId: imobiliariaId });
     await refuse('paymentMethodId', { paymentMethodId: pixId });
-    await refuse('reminders', { reminders: [{ offsetDays: 0, enabled: true }] });
+    await refuse('reminders', { reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }] });
     await refuse('clearPaymentMethod', { clearPaymentMethod: true });
   });
 

@@ -1,34 +1,29 @@
 import type { Client } from '@ez4/scheduler';
-import { addCalendarDays, ChargeState, PaymentLinkState } from '@receivy/common';
+import { addCalendarDays, type ChannelSet, channelsFor, ChargeState, PaymentLinkState, type ReminderTemplate } from '@receivy/common';
 import { billingRegistered } from '../../billings/utils/columns';
-import { effectiveReminders } from '../../billings/utils/reminders';
+import { effectiveConfigOf, effectiveReminders } from '../../billings/utils/reminders';
 import { ChargeRepository } from '../../charges/repositories/charge';
 import { StoredProofState } from '../../charges/schemas/charge';
 import { checkoutProviderOf, ensurePaymentLink } from '../../charges/services/payment-link';
 import { ownerPays, paymentOf } from '../../charges/utils/columns';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
+import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
 import { ProofRepository } from '../../proofs/repositories/proof';
+import { issueOptOutToken } from '../../public/services/capability';
 import { ensurePublicLink } from '../../public/services/links';
 import type { CheckoutClients } from '../../vendors/checkout/types';
 import { DeviceRepository } from '../repositories/device';
-import { EMAIL_FOLLOWUP_MS, instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
+import { type Dropped, NoticeChannel, resolveChannels } from './channels';
+import { instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
 import { NoticeTemplate, renderNotice } from './render';
 import type { NotificationTransport } from './transport';
 
-export { NoticeTemplate };
+export { NoticeChannel, NoticeTemplate };
 
-export const enum NoticeChannel {
-  Push = 'push',
-  Email = 'email'
-}
-
-/**
- * What `charge:<id>:notify` carries. `first` is the notice itself (push, or e-mail when there is no
- * device); `followup` is the e-mail two hours after a push that got no proof back.
- */
-export type ChargeNotifyEvent = { chargeId: string; template: NoticeTemplate; stage: 'first' | 'followup'; offsetDays?: number };
+/** What `charge:<id>:notify` carries: which notice is due for the charge, and under which rule. */
+export type ChargeNotifyEvent = { chargeId: string; template: NoticeTemplate; offsetDays?: number };
 
 export type NotifyScheduler = Pick<Client<ChargeNotifyEvent>, 'setEvent' | 'deleteEvent'>;
 
@@ -36,7 +31,6 @@ export type NotifyScheduler = Pick<Client<ChargeNotifyEvent>, 'setEvent' | 'dele
 export type NoticeContext = {
   config: NotificationConfig;
   transport: NotificationTransport;
-  notify: NotifyScheduler;
   links: CheckoutClients;
 };
 
@@ -44,10 +38,10 @@ export const notifyIdentifier = (chargeId: string) => `charge:${chargeId}:notify
 
 const PUSH_BODY = 'Confira os detalhes da cobrança no Receivy.';
 
-/** `auto`: push, e-mail only without a device. `email`: the follow-up. `both`: push and e-mail at once. */
-export type SendOptions = { offsetDays?: number; channel?: 'auto' | 'email' | 'both' };
+/** Which configurable channels this notice wants, already resolved from the rule that fired it. */
+export type SendOptions = { offsetDays?: number; channels: ChannelSet };
 
-export type SendResult = { channels: NoticeChannel[] };
+export type SendResult = { channels: NoticeChannel[]; dropped: Dropped[] };
 
 const enum SkipReason {
   InReview = 'in_review',
@@ -59,11 +53,24 @@ const enum SkipReason {
   NoChannel = 'no_channel'
 }
 
-const NOTHING: SendResult = { channels: [] };
+const NOTHING: SendResult = { channels: [], dropped: [] };
 
 /** What `ensurePaymentLink` needs, read off the notice config. */
 function linkConfig(config: NotificationConfig) {
   return { apiOrigin: config.apiOrigin, webOrigin: config.publicOrigin, secret: config.secret, credentialKeyB64: config.credentialKeyB64 };
+}
+
+/** The template as the shared rules name it: the domain speaks a string union, the API a const enum. */
+function templateRule(template: NoticeTemplate): ReminderTemplate {
+  if (template === NoticeTemplate.Manual) {
+    return 'manual';
+  }
+
+  if (template === NoticeTemplate.Initial) {
+    return 'initial';
+  }
+
+  return 'reminder';
 }
 
 function noticePayload(template: NoticeTemplate, offsetDays?: number): Record<string, unknown> {
@@ -79,18 +86,6 @@ async function skipped(db: DbClient, chargeId: string, payload: Record<string, u
 /** Whether a proof is under review for the charge: nothing chases anyone while the other side answers. */
 async function inReview(db: DbClient, chargeId: string): Promise<boolean> {
   return (await ProofRepository.current(db, chargeId))?.state === StoredProofState.Pending;
-}
-
-/** Whether an e-mail already went out for this template and offset, so a redelivery never mails twice. */
-async function emailAlreadySent(db: DbClient, event: ChargeNotifyEvent): Promise<boolean> {
-  const sent = await EventRepository.list(db, event.chargeId, 'notice.sent');
-
-  return sent.some(
-    (entry) =>
-      entry.payload['template'] === event.template &&
-      entry.payload['offsetDays'] === event.offsetDays &&
-      (entry.payload['channels'] as string[] | undefined)?.includes(NoticeChannel.Email)
-  );
 }
 
 /** Pushes to every active device of the target and counts the ones that took it; a device the provider forgot is switched off. */
@@ -113,11 +108,11 @@ async function pushToDevices(db: DbClient, transport: NotificationTransport, use
 }
 
 /**
- * Tells the person who has to pay (or, on a conta a pagar, the owner) about the charge. `auto` pushes to
- * every active device and falls back to e-mail only when there is none; `email` is the follow-up; `both`
- * is the manual reminder, which goes out on every channel at once and needs no follow-up. The
- * outcome is one `notice.sent` event, or `notice.skipped` when nobody could be reached. Nothing is
- * retried here: the follow-up, the next reminder or the button tries again.
+ * Tells the person who has to pay (or, on a conta a pagar, the owner) about the charge. The push goes to
+ * every active device and is implicit; the configurable channels come from the rule that fired, and each
+ * one nobody could take is reported with its reason. The outcome is one `notice.sent` event, or
+ * `notice.skipped` when nobody could be reached. Nothing is retried here: the next reminder or the
+ * button tries again.
  */
 export async function sendChargeNotice(
   db: DbClient,
@@ -125,7 +120,7 @@ export async function sendChargeNotice(
   chargeId: string,
   template: NoticeTemplate,
   now = Date.now(),
-  options: SendOptions = {}
+  options: SendOptions
 ): Promise<SendResult> {
   const charge = await ChargeRepository.forNotice(db, chargeId);
 
@@ -140,8 +135,8 @@ export async function sendChargeNotice(
     return skipped(db, chargeId, payload, SkipReason.InReview);
   }
 
-  // The creditor paused the automatic notices: only the manual reminder (channel 'both') still reaches the debtor.
-  if (!charge.notify && options.channel !== 'both') {
+  // The creditor paused the automatic notices: only the manual reminder still reaches the debtor.
+  if (!charge.notify && template !== NoticeTemplate.Manual) {
     return skipped(db, chargeId, payload, SkipReason.Silenced);
   }
 
@@ -188,26 +183,32 @@ export async function sendChargeNotice(
       origin: context.config.publicOrigin,
       from: context.config.from ?? 'disabled',
       self: ownBill,
-      provider: paymentOf(charge)?.provider
+      provider: paymentOf(charge)?.provider,
+      optOutUrl:
+        ownBill || !target.email
+          ? undefined
+          : `${context.config.publicOrigin}/opt-out/${issueOptOutToken({ userId: target.id, email: target.email, secret: context.config.secret })}`
     },
     template,
     context.config.secret
   );
-  const wantsPush = options.channel !== 'email' && context.config.pushAvailable !== false;
+  // Only a conta a receber has a creditor to have filed a phone for the debtor.
+  const reach = ownBill || !charge.creditor_id ? null : await ContactRepository.reachability(db, charge.creditor_id, target.id);
+  const resolved = resolveChannels({ wanted: options.channels, ownBill, target, contact: reach, whatsappAvailable: context.config.whatsappAvailable });
+  const wantsPush = context.config.pushAvailable !== false;
   // One entry per device that took the push: the event says how many screens the notice landed on.
   const pushed = wantsPush ? await pushToDevices(db, context.transport, target.id, { title: rendered.subject, url: rendered.url }, now) : 0;
   const channels: NoticeChannel[] = Array.from({ length: pushed }, () => NoticeChannel.Push);
 
-  const wantsEmail = options.channel === 'both' || !channels.length;
-
-  if (wantsEmail && !ownBill && target.email) {
+  if (resolved.email && target.email) {
     const result = await context.transport.email({
       to: target.email,
       key: `${chargeId}:${template}:${now}`,
       subject: rendered.subject,
       text: rendered.text,
       html: rendered.html,
-      from: context.config.from ?? 'disabled'
+      from: context.config.from ?? 'disabled',
+      headers: rendered.optOutUrl ? { 'List-Unsubscribe': `<${rendered.optOutUrl}>` } : undefined
     });
 
     if (result.status === 'accepted') {
@@ -215,21 +216,25 @@ export async function sendChargeNotice(
     }
   }
 
+  // Phase 3 sends here; today `resolved.whatsapp` is always false because the transport is unavailable.
+
   await EventRepository.record(db, {
     type: channels.length ? 'notice.sent' : 'notice.skipped',
     eventableType: EventableType.Charge,
     eventableId: chargeId,
-    payload: { ...payload, channels, ...(channels.length ? {} : { reason: SkipReason.NoChannel }) },
+    payload: {
+      ...payload,
+      channels,
+      ...(resolved.dropped.length ? { dropped: resolved.dropped } : {}),
+      ...(channels.length ? {} : { reason: SkipReason.NoChannel })
+    },
     at: new Date(now).toISOString()
   });
 
-  return { channels };
+  return { channels, dropped: resolved.dropped };
 }
 
-/**
- * The notice plus its rule: a push that went out gets the e-mail follow-up armed two hours later, on the
- * charge's single `charge:<id>:notify` schedule. An e-mail sent right away needs no follow-up.
- */
+/** The notice plus its rule: which channels this template and offset ask for, on this billing's configuration. */
 export async function notifyCharge(
   db: DbClient,
   context: NoticeContext,
@@ -238,49 +243,18 @@ export async function notifyCharge(
   now = Date.now(),
   offsetDays?: number
 ): Promise<SendResult> {
-  const result = await sendChargeNotice(db, context, chargeId, template, now, { offsetDays, channel: 'auto' });
+  const charge = await ChargeRepository.forNotice(db, chargeId);
 
-  if (result.channels.includes(NoticeChannel.Push)) {
-    await context.notify
-      .setEvent(notifyIdentifier(chargeId), {
-        date: new Date(now + EMAIL_FOLLOWUP_MS),
-        event: { chargeId, template, stage: 'followup', ...(offsetDays === undefined ? {} : { offsetDays }) }
-      })
-      .catch(() => undefined);
+  if (!charge) {
+    return NOTHING;
   }
 
-  return result;
+  const channels = channelsFor(effectiveConfigOf(charge.billing), templateRule(template), offsetDays);
+
+  return sendChargeNotice(db, context, chargeId, template, now, { offsetDays, channels });
 }
 
-/** The two-hour follow-up: e-mail only, and only while the charge is still open with nothing to review. */
-export async function followUpCharge(db: DbClient, context: NoticeContext, event: ChargeNotifyEvent, now = Date.now()): Promise<SendResult> {
-  const charge = await ChargeRepository.forNotice(db, event.chargeId);
-
-  if (!charge || charge.state !== ChargeState.Pending) {
-    return NOTHING;
-  }
-
-  if (await inReview(db, event.chargeId)) {
-    return NOTHING;
-  }
-
-  // Silenced between the push and this e-mail: the creditor's latest word wins.
-  if (!charge.notify) {
-    return NOTHING;
-  }
-
-  if (billingRegistered(charge.billing)) {
-    return NOTHING;
-  }
-
-  if (await emailAlreadySent(db, event)) {
-    return NOTHING;
-  }
-
-  return sendChargeNotice(db, context, event.chargeId, event.template, now, { offsetDays: event.offsetDays, channel: 'email' });
-}
-
-/** Fired at charge creation (after the transaction): the first notice, with its follow-up rule. */
+/** Fired at charge creation (after the transaction): the first notice of the charge. */
 export async function announceCharges(db: DbClient, context: NoticeContext, chargeIds: string[], now = Date.now()): Promise<void> {
   for (const chargeId of chargeIds) {
     // Created a moment ago, outside the transaction: the checkout link is asked for now, whether or not the notice is due yet.
@@ -327,7 +301,7 @@ export async function announceCharges(db: DbClient, context: NoticeContext, char
 /**
  * The daily plan: every pending charge whose reminder (due date + offset, 06:00 in the billing timezone)
  * falls inside the next 24 hours gets `charge:<id>:notify` pointed at that instant. One schedule per
- * charge; the handler re-arms it for the follow-up.
+ * charge, one hop per reminder.
  */
 export async function planReminders(db: DbClient, notify: NotifyScheduler, now = Date.now()): Promise<number> {
   const from = new Date(now - 100 * 86400_000).toISOString().slice(0, 10);
@@ -369,7 +343,7 @@ export async function planReminders(db: DbClient, notify: NotifyScheduler, now =
 
       await notify.setEvent(notifyIdentifier(charge.id), {
         date: at,
-        event: { chargeId: charge.id, template: NoticeTemplate.Reminder, stage: 'first', offsetDays: reminder.offsetDays }
+        event: { chargeId: charge.id, template: NoticeTemplate.Reminder, offsetDays: reminder.offsetDays }
       });
 
       planned++;

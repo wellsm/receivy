@@ -1,5 +1,5 @@
 import { chargeDateText, PaymentProvider } from '@receivy/common';
-import { buttonRow, chargeRow, emailDocument, noticeRow } from '../../common/services/email/layout';
+import { buttonRow, chargeRow, emailDocument, linkRow, noticeRow } from '../../common/services/email/layout';
 import { issuePublicChargeToken, PublicTokenPurpose } from '../../public/services/capability';
 
 /** Declared here, not in `send.ts`, so rendering never imports the sender back (a runtime cycle). */
@@ -38,6 +38,8 @@ export interface RenderInputs {
   self?: boolean;
   /** Changes the footnote: a checkout-provider charge (InfinitePay, PagBank) is paid through its checkout link, not Pix directly. */
   provider?: PaymentProvider;
+  /** Where the recipient stops receiving charge notices by e-mail; absent on the owner's own copy. */
+  optOutUrl?: string;
 }
 
 /**
@@ -67,16 +69,22 @@ export function renderNotice(input: RenderInputs, template: NoticeTemplate, secr
   const initial = template === NoticeTemplate.Initial;
   const subject = initial ? 'Uma nova cobrança no Receivy' : 'Lembrete de cobrança no Receivy';
   const opening = `${input.name}, ${initial ? 'você recebeu uma cobrança' : 'há uma cobrança pendente'} de R$ ${amount}, com vencimento em ${due}.`;
-  const text = `${opening}\n${input.description}\nConfira os detalhes: ${url}\n${CLOSING}`;
+  const optOut = input.optOutUrl ? `\nPara parar de receber avisos de cobrança do Receivy: ${input.optOutUrl}` : '';
+  const text = `${opening}\n${input.description}\nConfira os detalhes: ${url}\n${CLOSING}${optOut}`;
 
   const html = emailDocument({
     eyebrow: initial ? 'Nova cobrança' : 'Lembrete de pagamento',
     heading: opening,
     lead: initial ? 'Abra o link para ver os detalhes e pagar.' : 'Nada mudou desde o último aviso. O link de pagamento continua o mesmo.',
-    body: [chargeRow(input.description, `R$ ${amount}`, due), buttonRow(url, 'Confira os detalhes'), noticeRow(CLOSING)].join(''),
+    body: [
+      chargeRow(input.description, `R$ ${amount}`, due),
+      buttonRow(url, 'Confira os detalhes'),
+      noticeRow(CLOSING),
+      ...(input.optOutUrl ? [linkRow(input.optOutUrl, 'Parar de receber avisos de cobrança')] : [])
+    ].join(''),
     footnote: footnoteOf(input.provider),
     preheader: opening
   });
 
-  return { subject, text, html, url };
+  return { subject, text, html, url, optOutUrl: input.optOutUrl };
 }

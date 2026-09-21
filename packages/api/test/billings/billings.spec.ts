@@ -11,14 +11,14 @@ import {
   BillingRecurrence,
   billingDueLabel,
   ChargeState,
-  DEFAULT_BILLING_REMINDERS,
   PaymentProvider,
   PixKeyType,
   ProofKind,
   ProofMime,
   resolveBillingSplit,
   SplitMode,
-  SplitPartKind
+  SplitPartKind,
+  SYSTEM_REMINDER_CONFIG
 } from '@receivy/common';
 import { createBilling, patchBilling } from '../../src/billings/services/billing';
 import { getBilling, listBillings } from '../../src/billings/services/detail';
@@ -346,12 +346,12 @@ describe('billings on native PostgreSQL', () => {
       db,
       OWNER,
       valid.id,
-      { description: 'Editada', totalCents: 3_000, reminders: [{ offsetDays: -5, enabled: true }] },
+      { description: 'Editada', totalCents: 3_000, reminders: [{ offsetDays: -5, enabled: true, channels: { email: true, whatsapp: false } }] },
       date('2026-02-16')
     );
 
     equal(edited.description, 'Editada');
-    deepEqual(edited.reminders, [{ offsetDays: -5, enabled: true }]);
+    deepEqual(edited.reminders, [{ offsetDays: -5, enabled: true, channels: { email: true, whatsapp: false } }]);
     equal((await charges.get(OWNER, edited.charges[0]!.id)).amount.amountCents, 2_000, 'materialized charges stay snapshots');
 
     await patchBilling(db, OWNER, invalid.id, { state: BillingState.Ended });
@@ -750,7 +750,6 @@ describe('billings on native PostgreSQL', () => {
         recurrence: BillingRecurrence.Indefinite,
         frequency: BillingFrequency.Monthly,
         startDate: local,
-        reminders: [],
         split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: debtorId }, { kind: SplitPartKind.Owner }] }
       },
       now
@@ -854,7 +853,30 @@ describe('billings on native PostgreSQL', () => {
 
   it('falls back a billing without reminders to the due-date default', async () => {
     const created = await createBilling(db, OWNER, 'no-reminders-key', once({ description: 'Sem lembretes próprios' }));
+    const fetched = await getBilling(db, OWNER, created.id);
 
-    deepEqual((await getBilling(db, OWNER, created.id)).reminders, DEFAULT_BILLING_REMINDERS);
+    equal(fetched.reminders, null);
+    deepEqual(fetched.effectiveReminders, SYSTEM_REMINDER_CONFIG.reminders);
+  });
+
+  it('stores reminder channels, refuses a sixth rule and goes back to the owner default with clearReminders', async () => {
+    const rule = (offsetDays: number) => ({ offsetDays, enabled: true, channels: { email: true, whatsapp: false } });
+    const billing = await createBilling(db, OWNER, 'reminders-1', once({ description: 'Com lembretes', reminders: [rule(0), rule(3)] }), new Date());
+
+    deepEqual((await getBilling(db, OWNER, billing.id)).reminders, [rule(0), rule(3)]);
+
+    await rejects(
+      () => patchBilling(db, OWNER, billing.id, { reminders: [0, 1, 2, 3, 4, 5].map(rule) }, new Date()),
+      (error: Error) => error.message.includes('até 5 dias')
+    );
+
+    await patchBilling(db, OWNER, billing.id, { clearReminders: true }, new Date());
+
+    const cleared = await getBilling(db, OWNER, billing.id);
+
+    equal(cleared.reminders, null);
+    deepEqual(cleared.effectiveReminders, SYSTEM_REMINDER_CONFIG.reminders);
+
+    await patchBilling(db, OWNER, billing.id, { state: BillingState.Ended });
   });
 });

@@ -30,6 +30,7 @@ export function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPat
     patch.paymentMethodId !== undefined ||
     patch.contactId !== undefined ||
     patch.reminders !== undefined ||
+    patch.clearReminders !== undefined ||
     patch.clearPaymentMethod !== undefined;
 
   if (settled && crowded) {

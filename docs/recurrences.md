@@ -37,11 +37,11 @@ ativa, sem próxima ocorrência, até seu proprietário encerrá-la.
 
 ## Materialização e entrega
 
-Lembretes padrão: -3, 0 e +2 dias; cada um pode ser desabilitado. São aceitos até
-10 offsets únicos entre -90 e +90. A cobrança é materializada na data do primeiro
-lembrete habilitado (inclusive se ele for após o vencimento); sem lembretes
-habilitados, no vencimento. O canal `auto` reserva o roteamento push disponível,
-e-mail como alternativa e compartilhamento manual quando nenhum está disponível.
+Lembrete padrão: dia 0 por e-mail (push sempre que houver aparelho). Até 5 offsets
+únicos entre -14 e +14. Uma cobrança sem lembretes próprios herda o padrão do
+proprietário. A cobrança é materializada na data do primeiro lembrete habilitado
+(inclusive se ele for após o vencimento); sem lembretes habilitados, no vencimento.
+Canais por lembrete: push se houver aparelho, e-mail se houver endereço válido.
 
 `RecurrenceScheduler` usa EZ4 0.53.0, `cron(0 * * * ? *)`, timezone `UTC`, timeout
 300 s e 3 retries. A cadência UTC só dispara a avaliação; cada regra calcula seu

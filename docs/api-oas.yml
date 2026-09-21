@@ -248,6 +248,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/deleteHandler'
+  /account/reminders:
+    get:
+      operationId: getReminders
+      security:
+        - sessionAuthorizer: []
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/getRemindersHandler'
+    put:
+      operationId: putReminders
+      security:
+        - sessionAuthorizer: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/requestSchemes/putRemindersHandler'
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/putRemindersHandler'
+    delete:
+      operationId: clearReminders
+      security:
+        - sessionAuthorizer: []
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/deleteRemindersHandler'
   /contacts/{id}:
     get:
       operationId: getContact
@@ -865,6 +904,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/rotatePublicLinkHandler'
+  /charges/by-link/{token}:
+    get:
+      operationId: chargeByLink
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/chargeByLinkHandler'
   /public/charges/{token}:
     get:
       operationId: publicCharge
@@ -904,6 +962,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/providerReturnHandler'
+  /public/notices/opt-out/{token}:
+    post:
+      operationId: noticeOptOut
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/optOutHandler'
+    delete:
+      operationId: noticeOptIn
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/optInHandler'
   /billings/{id}/invite:
     post:
       operationId: createInvite
@@ -1237,6 +1328,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responseSchemes/manualReminderHandler'
+  /charges/{id}/reminders/preview:
+    get:
+      operationId: reminderPreview
+      security:
+        - sessionAuthorizer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: "Successful response."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responseSchemes/reminderPreviewHandler'
   /webhooks/infinitepay/{token}:
     post:
       operationId: infinitePayWebhook
@@ -1501,6 +1611,51 @@ components:
           maxLength: 20
       required:
         - confirmation
+    putRemindersHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        reminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: integer
+                minimum: -14
+                maximum: 14
+              enabled:
+                type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
+            required:
+              - offsetDays
+              - enabled
+              - channels
+        manual:
+          type: object
+          additionalProperties: false
+          properties:
+            email:
+              type: boolean
+            whatsapp:
+              type: boolean
+          required:
+            - email
+            - whatsapp
+      required:
+        - reminders
+        - manual
     createContactHandler:
       type: object
       additionalProperties: false
@@ -1514,6 +1669,11 @@ components:
         email:
           type: string
           maxLength: 254
+        phone:
+          type: string
+          maxLength: 40
+        whatsappConsent:
+          type: boolean
         paymentMethod:
           type: object
           additionalProperties: false
@@ -1555,6 +1715,11 @@ components:
         email:
           type: string
           maxLength: 254
+        phone:
+          type: string
+          maxLength: 40
+        whatsappConsent:
+          type: boolean
         paymentMethod:
           type: object
           additionalProperties: false
@@ -1695,13 +1860,25 @@ components:
             properties:
               offsetDays:
                 type: integer
-                minimum: -90
-                maximum: 90
+                minimum: -14
+                maximum: 14
               enabled:
                 type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
             required:
               - offsetDays
               - enabled
+              - channels
         split:
           type: object
           additionalProperties: false
@@ -1867,13 +2044,27 @@ components:
             properties:
               offsetDays:
                 type: integer
-                minimum: -90
-                maximum: 90
+                minimum: -14
+                maximum: 14
               enabled:
                 type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
             required:
               - offsetDays
               - enabled
+              - channels
+        clearReminders:
+          type: boolean
         state:
           enum: 
             - 'active'
@@ -2464,6 +2655,171 @@ components:
           type: boolean
       required:
         - deleted
+    getRemindersHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        config:
+          type: object
+          additionalProperties: false
+          properties:
+            reminders:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                properties:
+                  offsetDays:
+                    type: number
+                  enabled:
+                    type: boolean
+                  channels:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      email:
+                        type: boolean
+                      whatsapp:
+                        type: boolean
+                    required:
+                      - email
+                      - whatsapp
+                required:
+                  - offsetDays
+                  - enabled
+                  - channels
+            manual:
+              type: object
+              additionalProperties: false
+              properties:
+                email:
+                  type: boolean
+                whatsapp:
+                  type: boolean
+              required:
+                - email
+                - whatsapp
+          required:
+            - reminders
+            - manual
+        inherited:
+          type: boolean
+        whatsappAvailable:
+          type: boolean
+      required:
+        - config
+        - inherited
+        - whatsappAvailable
+    putRemindersHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        config:
+          type: object
+          additionalProperties: false
+          properties:
+            reminders:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                properties:
+                  offsetDays:
+                    type: number
+                  enabled:
+                    type: boolean
+                  channels:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      email:
+                        type: boolean
+                      whatsapp:
+                        type: boolean
+                    required:
+                      - email
+                      - whatsapp
+                required:
+                  - offsetDays
+                  - enabled
+                  - channels
+            manual:
+              type: object
+              additionalProperties: false
+              properties:
+                email:
+                  type: boolean
+                whatsapp:
+                  type: boolean
+              required:
+                - email
+                - whatsapp
+          required:
+            - reminders
+            - manual
+        inherited:
+          type: boolean
+        whatsappAvailable:
+          type: boolean
+      required:
+        - config
+        - inherited
+        - whatsappAvailable
+    deleteRemindersHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        config:
+          type: object
+          additionalProperties: false
+          properties:
+            reminders:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                properties:
+                  offsetDays:
+                    type: number
+                  enabled:
+                    type: boolean
+                  channels:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      email:
+                        type: boolean
+                      whatsapp:
+                        type: boolean
+                    required:
+                      - email
+                      - whatsapp
+                required:
+                  - offsetDays
+                  - enabled
+                  - channels
+            manual:
+              type: object
+              additionalProperties: false
+              properties:
+                email:
+                  type: boolean
+                whatsapp:
+                  type: boolean
+              required:
+                - email
+                - whatsapp
+          required:
+            - reminders
+            - manual
+        inherited:
+          type: boolean
+        whatsappAvailable:
+          type: boolean
+      required:
+        - config
+        - inherited
+        - whatsappAvailable
     getContactHandler:
       type: object
       additionalProperties: false
@@ -2492,6 +2848,12 @@ components:
         email:
           type: string
         phone:
+          type: string
+        phoneSource:
+          enum: 
+            - 'person'
+            - 'owner'
+        whatsappConsentAt:
           type: string
         status:
           enum: 
@@ -2550,6 +2912,12 @@ components:
                 type: string
               phone:
                 type: string
+              phoneSource:
+                enum: 
+                  - 'person'
+                  - 'owner'
+              whatsappConsentAt:
+                type: string
               status:
                 enum: 
                   - 'pending'
@@ -2605,6 +2973,12 @@ components:
           type: string
         phone:
           type: string
+        phoneSource:
+          enum: 
+            - 'person'
+            - 'owner'
+        whatsappConsentAt:
+          type: string
         status:
           enum: 
             - 'pending'
@@ -2655,6 +3029,12 @@ components:
         email:
           type: string
         phone:
+          type: string
+        phoneSource:
+          enum: 
+            - 'person'
+            - 'owner'
+        whatsappConsentAt:
           type: string
         status:
           enum: 
@@ -3070,9 +3450,46 @@ components:
                 type: number
               enabled:
                 type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
             required:
               - offsetDays
               - enabled
+              - channels
+        effectiveReminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
+            required:
+              - offsetDays
+              - enabled
+              - channels
         split:
           anyOf:
           - type: object
@@ -3598,7 +4015,7 @@ components:
         - createdAt
         - updatedAt
         - timezone
-        - reminders
+        - effectiveReminders
         - split
         - allocations
         - charges
@@ -3901,9 +4318,46 @@ components:
                 type: number
               enabled:
                 type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
             required:
               - offsetDays
               - enabled
+              - channels
+        effectiveReminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
+            required:
+              - offsetDays
+              - enabled
+              - channels
         split:
           anyOf:
           - type: object
@@ -4429,7 +4883,7 @@ components:
         - createdAt
         - updatedAt
         - timezone
-        - reminders
+        - effectiveReminders
         - split
         - allocations
         - charges
@@ -4578,9 +5032,46 @@ components:
                 type: number
               enabled:
                 type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
             required:
               - offsetDays
               - enabled
+              - channels
+        effectiveReminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
+            required:
+              - offsetDays
+              - enabled
+              - channels
         split:
           anyOf:
           - type: object
@@ -5106,7 +5597,7 @@ components:
         - createdAt
         - updatedAt
         - timezone
-        - reminders
+        - effectiveReminders
         - split
         - allocations
         - charges
@@ -5255,9 +5746,46 @@ components:
                 type: number
               enabled:
                 type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
             required:
               - offsetDays
               - enabled
+              - channels
+        effectiveReminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
+            required:
+              - offsetDays
+              - enabled
+              - channels
         split:
           anyOf:
           - type: object
@@ -5783,7 +6311,7 @@ components:
         - createdAt
         - updatedAt
         - timezone
-        - reminders
+        - effectiveReminders
         - split
         - allocations
         - charges
@@ -5932,9 +6460,46 @@ components:
                 type: number
               enabled:
                 type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
             required:
               - offsetDays
               - enabled
+              - channels
+        effectiveReminders:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              offsetDays:
+                type: number
+              enabled:
+                type: boolean
+              channels:
+                type: object
+                additionalProperties: false
+                properties:
+                  email:
+                    type: boolean
+                  whatsapp:
+                    type: boolean
+                required:
+                  - email
+                  - whatsapp
+            required:
+              - offsetDays
+              - enabled
+              - channels
         split:
           anyOf:
           - type: object
@@ -6460,7 +7025,7 @@ components:
         - createdAt
         - updatedAt
         - timezone
-        - reminders
+        - effectiveReminders
         - split
         - allocations
         - charges
@@ -7864,6 +8429,14 @@ components:
       required:
         - token
         - expiresAt
+    chargeByLinkHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+      required:
+        - id
     publicChargeHandler:
       type: object
       additionalProperties: false
@@ -8014,6 +8587,24 @@ components:
         - dueDate
         - state
         - uploadsEnabled
+    optOutHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        optedOut:
+          type: boolean
+          enum: [true]
+      required:
+        - optedOut
+    optInHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        optedOut:
+          type: boolean
+          enum: [false]
+      required:
+        - optedOut
     createInviteHandler:
       type: object
       additionalProperties: false
@@ -8136,6 +8727,12 @@ components:
             email:
               type: string
             phone:
+              type: string
+            phoneSource:
+              enum: 
+                - 'person'
+                - 'owner'
+            whatsappConsentAt:
               type: string
             status:
               enum: 
@@ -9188,10 +9785,72 @@ components:
       type: object
       additionalProperties: false
       properties:
-        queued:
-          type: boolean
+        channels:
+          type: array
+          items:
+            enum: 
+              - 'push'
+              - 'email'
+              - 'whatsapp'
+        dropped:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              channel:
+                enum: 
+                  - 'push'
+                  - 'email'
+                  - 'whatsapp'
+              reason:
+                enum: 
+                  - 'no_email'
+                  - 'no_phone'
+                  - 'no_consent'
+                  - 'opted_out'
+                  - 'unavailable'
+            required:
+              - channel
+              - reason
       required:
-        - queued
+        - channels
+        - dropped
+    reminderPreviewHandler:
+      type: object
+      additionalProperties: false
+      properties:
+        channels:
+          type: array
+          items:
+            enum: 
+              - 'push'
+              - 'email'
+              - 'whatsapp'
+        dropped:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              channel:
+                enum: 
+                  - 'push'
+                  - 'email'
+                  - 'whatsapp'
+              reason:
+                enum: 
+                  - 'no_email'
+                  - 'no_phone'
+                  - 'no_consent'
+                  - 'opted_out'
+                  - 'unavailable'
+            required:
+              - channel
+              - reason
+      required:
+        - channels
+        - dropped
     infinitePayWebhookHandler:
       type: object
       additionalProperties: false

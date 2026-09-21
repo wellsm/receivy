@@ -22,7 +22,7 @@ import { AccountRepository } from '../../users/repositories/account';
 import { PixRequiredError, PixSnapshotLockedError } from '../errors';
 import { LinkRepository, type LinkRow } from '../repositories/link';
 import { LinkableType } from '../schemas/link';
-import { assertPublicLinkSecretConfigured, PublicTokenPurpose, verifyPublicChargeToken } from './capability';
+import { assertPublicLinkSecretConfigured, PublicTokenPurpose, verifyOptOutToken, verifyPublicChargeToken } from './capability';
 import { ensurePublicLink, linkToken } from './links';
 
 export type PublicLinkClient = {
@@ -35,6 +35,12 @@ export type PublicLinkClient = {
   rotate(creditorId: string, chargeId: string): Promise<PublicLink>;
   /** The charge behind a public token, as the page shows it; 404 for anything forged, rotated, revoked or expired. */
   view(token: string): Promise<{ charge: ChargeRepository.Row; view: PublicChargeView }>;
+  /** The charge id behind a public token, for a signed-in participant; 404 for anyone else. */
+  chargeId(actorId: string, token: string): Promise<string>;
+  /** Stops e-mail notices for the account named in the footer token. */
+  optOut(token: string): Promise<{ optedOut: boolean }>;
+  /** Resumes e-mail notices for the account named in the footer token. */
+  optIn(token: string): Promise<{ optedOut: boolean }>;
 };
 
 export declare class PublicLinkService extends Factory.Service<PublicLinkClient> {
@@ -236,14 +242,78 @@ export async function publicChargeByToken(db: DbClient, token: string, secret: s
   return publicChargeView(db, await resolvePublicCharge(db, token, secret, nowSeconds));
 }
 
-export function createService({ db, email, chargeNotifyScheduler, variables }: Service.Context<PublicLinkService>): PublicLinkClient {
+/**
+ * The charge id behind a public token, for a signed-in participant (owner, creditor or debtor): the web
+ * sends a payer back to their own charge screen after the checkout. Anyone else gets the same 404 a forged
+ * token gets, so the answer never tells a stranger whether the link is live.
+ */
+export async function chargeIdByToken(db: DbClient, actorId: string, token: string, secret: string, nowSeconds = Math.floor(Date.now() / 1000)): Promise<string> {
+  const charge = await resolvePublicCharge(db, token, secret, nowSeconds);
+
+  try {
+    await chargeForActor(db, actorId, charge.id);
+  } catch {
+    throw new HttpNotFoundError();
+  }
+
+  return charge.id;
+}
+
+async function setOptOut(db: DbClient, secret: string, token: string, optedOut: boolean): Promise<{ optedOut: boolean }> {
+  const [candidateId] = token.split('.');
+
+  if (!candidateId) {
+    throw new HttpNotFoundError();
+  }
+
+  const account = await AccountRepository.get(db, candidateId);
+
+  if (!account?.email) {
+    throw new HttpNotFoundError();
+  }
+
+  let userId: string;
+
+  try {
+    userId = verifyOptOutToken(token, { userId: candidateId, email: account.email, secret }).userId;
+  } catch {
+    throw new HttpNotFoundError();
+  }
+
+  await db.transaction(async (tx) => {
+    await AccountRepository.lock(tx, userId);
+
+    const now = new Date().toISOString();
+
+    await AccountRepository.setEmailOptOut(tx, userId, optedOut ? now : null, now);
+    await EventRepository.record(tx, {
+      type: optedOut ? 'account.email_opted_out' : 'account.email_opted_in',
+      eventableType: EventableType.Account,
+      eventableId: userId,
+      actorId: userId,
+      at: now
+    });
+  });
+
+  return { optedOut };
+}
+
+export function optOutByToken(db: DbClient, secret: string, token: string): Promise<{ optedOut: boolean }> {
+  return setOptOut(db, secret, token, true);
+}
+
+export function optInByToken(db: DbClient, secret: string, token: string): Promise<{ optedOut: boolean }> {
+  return setOptOut(db, secret, token, false);
+}
+
+export function createService({ db, email, variables }: Service.Context<PublicLinkService>): PublicLinkClient {
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
   const links = checkoutClients(variables);
   const linkConfig = paymentLinkConfigFrom(variables);
 
   return {
     publish: (creditorId, chargeId, paymentMethodId) =>
-      publishChargeLink(db, creditorId, chargeId, secret, false, undefined, paymentMethodId, noticeContext({ chargeNotifyScheduler, email, variables })),
+      publishChargeLink(db, creditorId, chargeId, secret, false, undefined, paymentMethodId, noticeContext({ email, variables })),
     rotate: (creditorId, chargeId) => publishChargeLink(db, creditorId, chargeId, secret, true),
     view: async (token) => {
       const charge = await resolvePublicCharge(db, token, secret);
@@ -258,6 +328,9 @@ export function createService({ db, email, chargeNotifyScheduler, variables }: S
       }
 
       return { charge, view: await publicChargeView(db, charge) };
-    }
+    },
+    chargeId: (actorId, token) => chargeIdByToken(db, actorId, token, secret),
+    optOut: (token) => optOutByToken(db, secret, token),
+    optIn: (token) => optInByToken(db, secret, token)
   };
 }

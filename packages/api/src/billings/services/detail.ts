@@ -165,7 +165,6 @@ export async function waitingGuests(db: DbClient, billingId: string): Promise<Bi
 }
 
 export async function billingDetail(db: DbClient, row: BillingRow, now: Date, link?: InviteLinkContext): Promise<BillingDetail> {
-  const reminders = effectiveReminders(row);
   const { split, allocations } = await splitFor(db, row);
   const charges = await ChargeRepository.byBilling(db, row.id);
   const previews = await previewsFor(db, row, now);
@@ -198,7 +197,8 @@ export async function billingDetail(db: DbClient, row: BillingRow, now: Date, li
     updatedAt: row.updated_at,
     timezone: row.timezone,
     paymentMethodId: row.payment_method_id,
-    reminders: parseReminders(row) ?? reminders,
+    reminders: parseReminders(row) ?? null,
+    effectiveReminders: effectiveReminders(row),
     split,
     allocations,
     charges: await ChargeRepository.dtos(db, charges, row.owner_id),

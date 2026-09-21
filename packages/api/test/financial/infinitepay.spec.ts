@@ -1,12 +1,12 @@
 import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { HttpBadRequestError } from '@ez4/gateway';
+import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import { ChargeState, PaymentLinkState, PaymentProvider, PixKeyType } from '@receivy/common';
 import { settleByProvider } from '../../src/charges/services/settle';
 import { EventRepository } from '../../src/common/repositories/events';
 import { NoticeTemplate, sendChargeNotice } from '../../src/notifications/services/send';
 import { PaymentMethodTakenError } from '../../src/payment-methods/errors';
-import { publicChargeByToken, publishChargeLink } from '../../src/public/services/public-link';
+import { chargeIdByToken, publicChargeByToken, publishChargeLink } from '../../src/public/services/public-link';
 import { fakeCheckout, fakeLinkCount } from '../../src/vendors/checkout/fake';
 import type { CheckoutClient, CheckoutClients } from '../../src/vendors/checkout/types';
 import { charges, cleanupUsers, contacts, createOnceCharge, createUser, db, grantBasicPlan, paymentMethods } from '../fixtures/financial';
@@ -54,6 +54,20 @@ describe('InfinitePay charges', () => {
 
     equal(view.payment?.provider, PaymentProvider.InfinitePay);
     equal(view.paymentLink?.state, PaymentLinkState.Ready);
+  });
+
+  it('resolves the public token to the charge id for a participant and refuses a stranger', async () => {
+    const STRANGER = '99999999-9999-4999-8999-999999999993';
+
+    await createUser(db, { id: STRANGER, email: 'ip-stranger@example.com', name: 'Zé Ninguém' });
+
+    const link = await publishChargeLink(db, OWNER, chargeId, SECRET);
+
+    equal(await chargeIdByToken(db, OWNER, link.token, SECRET), chargeId);
+    equal(await chargeIdByToken(db, PAYER, link.token, SECRET), chargeId);
+    await rejects(() => chargeIdByToken(db, STRANGER, link.token, SECRET), HttpNotFoundError);
+    await rejects(() => chargeIdByToken(db, OWNER, 'forged.token', SECRET), HttpNotFoundError);
+    await cleanupUsers(db, [STRANGER]);
   });
 
   it('settles through payment_check once and replays after', async () => {
@@ -130,9 +144,9 @@ describe('InfinitePay charges', () => {
       context
     );
 
-    const result = await sendChargeNotice(db, context, pendingId, NoticeTemplate.Initial);
+    const result = await sendChargeNotice(db, context, pendingId, NoticeTemplate.Initial, Date.now(), { channels: { email: true, whatsapp: false } });
 
-    deepEqual(result, { channels: [] });
+    deepEqual(result, { channels: [], dropped: [] });
     equal(notice.sent.pushes.length, 0);
     equal(notice.sent.emails.length, 0);
 

@@ -3,7 +3,8 @@ import { shouldSendInitialNotice } from './planner';
 
 const TZ = 'America/Sao_Paulo';
 const at = (iso: string) => Date.parse(iso);
-const onDueDay = [{ offsetDays: 0, enabled: true }];
+const CH = { email: true, whatsapp: false };
+const onDueDay = [{ offsetDays: 0, enabled: true, channels: CH }];
 
 describe('shouldSendInitialNotice', () => {
   it('announces a charge due today or already late', () => {
@@ -26,7 +27,7 @@ describe('shouldSendInitialNotice', () => {
         dueDate: '2026-03-11',
         now: at('2026-03-10T15:00:00Z'),
         timezone: TZ,
-        reminders: [{ offsetDays: -1, enabled: true }]
+        reminders: [{ offsetDays: -1, enabled: true, channels: CH }]
       })
     ).toBe(true);
     expect(
@@ -34,7 +35,7 @@ describe('shouldSendInitialNotice', () => {
         dueDate: '2026-03-20',
         now: at('2026-03-10T15:00:00Z'),
         timezone: TZ,
-        reminders: [{ offsetDays: 0, enabled: false }]
+        reminders: [{ offsetDays: 0, enabled: false, channels: CH }]
       })
     ).toBe(true);
   });
@@ -56,7 +57,7 @@ describe('shouldSendInitialNotice', () => {
         dueDate: '2026-03-20',
         now: at('2026-03-10T15:00:00Z'),
         timezone: TZ,
-        reminders: [{ offsetDays: 2, enabled: true }]
+        reminders: [{ offsetDays: 2, enabled: true, channels: CH }]
       })
     ).toBe(false);
   });

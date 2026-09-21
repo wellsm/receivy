@@ -161,12 +161,13 @@ async function save(db: DbClient, ownerId: string, input: ContactInput, id?: str
     }
 
     const userId = await resolvePerson(tx, ownerId, input, existing?.userId, now);
+    const consentAt = input.whatsappConsent ? (existing?.whatsappConsentAt ?? now) : undefined;
     const contactId = existing
       ? existing.id
-      : await ContactRepository.insert(tx, { ownerId, userId, nickname: input.nickname, now });
+      : await ContactRepository.insert(tx, { ownerId, userId, nickname: input.nickname, phone: input.phone, consentAt, now });
 
     if (existing) {
-      await ContactRepository.setNickname(tx, ownerId, contactId, input.nickname, now);
+      await ContactRepository.setDetails(tx, ownerId, contactId, { nickname: input.nickname, phone: input.phone, consentAt }, now);
     }
 
     if (input.paymentMethod) {

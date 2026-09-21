@@ -32,7 +32,7 @@ describe('billing request fingerprint', () => {
 
   it('changes when money, dates or reminders change', () => {
     expect(billingRequestFingerprint({ ...input, totalCents: 1001 })).not.toBe(billingRequestFingerprint(input));
-    expect(billingRequestFingerprint({ ...input, reminders: [{ offsetDays: 0, enabled: true }] })).not.toBe(
+    expect(billingRequestFingerprint({ ...input, reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }] })).not.toBe(
       billingRequestFingerprint(input)
     );
   });

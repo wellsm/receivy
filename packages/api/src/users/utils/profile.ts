@@ -1,29 +1,9 @@
 import { HttpBadRequestError } from '@ez4/gateway';
+import { normalizePhone } from '@receivy/common';
 
 export type ProfileInput = { name: string; phone?: string | null; locale: 'pt-BR'; timezone: string; country: 'BR' };
 
 export type Profile = { name: string; phone?: string; locale: 'pt-BR'; timezone: string; country: 'BR' };
-
-/** Optional at onboarding; an invalid value refuses the whole profile instead of being silently dropped. */
-export function normalizePhone(value: string | null | undefined): string | undefined | false {
-  const raw = (value ?? '').trim();
-
-  if (!raw) {
-    return undefined;
-  }
-
-  if (!/^[+\d\s().-]+$/.test(raw) || raw.length > 40) {
-    return false;
-  }
-
-  const digits = raw.replace(/\D/g, '');
-
-  if (raw.startsWith('+')) {
-    return /^\+[1-9]\d{7,14}$/.test(`+${digits}`) ? `+${digits}` : false;
-  }
-
-  return /^[1-9]\d{9,10}$/.test(digits) ? `+55${digits}` : false;
-}
 
 /** The profile as it is stored: trimmed name, E.164 phone, and a timezone Intl knows. */
 export function normalizeProfile(input: ProfileInput): Profile {

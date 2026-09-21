@@ -12,6 +12,7 @@ export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["PATCH", /^account\/profile$/], ["DELETE", /^account$/],
   ["POST", /^account\/avatar(?:\/complete)?$/],
   ["GET", /^account\/reminders$/], ["PUT", /^account\/reminders$/], ["DELETE", /^account\/reminders$/],
+  ["GET", new RegExp(`^charges/${ID}/reminders/preview$`)],
   ["POST", new RegExp(`^charges/${ID}/reminders$`)],
   ["GET", /^billings(?:\?.*)?$/], ["POST", /^billings$/], ["GET", new RegExp(`^billings/${ID}$`)],
   ["PATCH", new RegExp(`^billings/${ID}$`)],

@@ -1,4 +1,4 @@
-import { EMPTY_BILLING_DRAFT, PaymentProvider, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
+import { EMPTY_BILLING_DRAFT, PaymentProvider, PhoneSource, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
@@ -25,6 +25,8 @@ const ana: Contact = {
   displayName: "Aninha",
   email: "ana@example.com",
   phone: "+5511987654321",
+  phoneSource: null,
+  whatsappConsentAt: null,
   status: UserStatus.Pending,
   archivedAt: null,
   createdAt: "2026-01-01",
@@ -90,7 +92,7 @@ it("creates a contact with a nickname and an e-mail", async () => {
   const posted = sent.find(entry => entry.init.method === "POST");
 
   expect(posted?.path).toBe("/api/contacts");
-  expect(JSON.parse(String(posted?.init.body))).toEqual({ name: "Ana Souza", nickname: "Aninha", email: "ana@example.com" });
+  expect(JSON.parse(String(posted?.init.body))).toEqual({ name: "Ana Souza", nickname: "Aninha", email: "ana@example.com", whatsappConsent: false });
 });
 
 it("shows the placeholders and the field hints from the design, without a phone field", async () => {
@@ -119,7 +121,7 @@ it("saves a contact without an e-mail and leaves the key out of the body", async
 
   const posted = sent.find(entry => entry.init.method === "POST");
 
-  expect(JSON.parse(String(posted?.init.body))).toEqual({ name: "Ana Souza" });
+  expect(JSON.parse(String(posted?.init.body))).toEqual({ name: "Ana Souza", whatsappConsent: false });
 });
 
 it("loads a contact for editing and returns to its ledger", async () => {
@@ -189,6 +191,7 @@ it("files the typed Pix key under the new contact", async () => {
 
   expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toEqual({
     name: "Ana Souza",
+    whatsappConsent: false,
     paymentMethod: { provider: "pix", kind: "phone", value: "+5511987654321", label: "Nubank" },
   });
 });
@@ -208,6 +211,7 @@ it("leaves the label out when only the key was typed", async () => {
 
   expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toEqual({
     name: "Ana Souza",
+    whatsappConsent: false,
     paymentMethod: { provider: "pix", kind: "email", value: "ana@example.com" },
   });
 });
@@ -328,4 +332,33 @@ it("keeps the typed data when the server rejects the contact", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Esse e-mail já está em uso");
   expect(screen.getByLabelText("Nome completo")).toHaveValue("Ana Souza");
   expect(routerMock.push).not.toHaveBeenCalled();
+});
+
+it("sends the phone and the consent flag, and locks the phone the person typed", async () => {
+  const sent = api({ ...ana, phone: null, phoneSource: null, whatsappConsentAt: null });
+
+  render(<ContactFormScreen contactId="c1" />);
+
+  const user = userEvent.setup();
+
+  await vi.waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveValue("Ana Souza"));
+
+  await user.type(screen.getByLabelText("WhatsApp"), "11988887777");
+  await user.click(screen.getByLabelText("Essa pessoa concordou em receber cobranças por WhatsApp"));
+  await user.click(screen.getByRole("button", { name: "Salvar contato" }));
+
+  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts/c1"));
+
+  const patched = sent.find(entry => entry.init.method === "PATCH");
+  const body = JSON.parse(String(patched?.init.body));
+
+  expect(body.phone).toBe("+5511988887777");
+  expect(body.whatsappConsent).toBe(true);
+
+  cleanup();
+  api({ ...ana, phone: "+5511977776666", phoneSource: PhoneSource.Person, whatsappConsentAt: null });
+  render(<ContactFormScreen contactId="c1" />);
+
+  expect(await screen.findByText("Número informado pela própria pessoa")).toBeInTheDocument();
+  expect(screen.getByLabelText("WhatsApp")).toBeDisabled();
 });

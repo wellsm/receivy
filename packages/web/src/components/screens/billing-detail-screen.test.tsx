@@ -89,6 +89,7 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
     timezone: "America/Sao_Paulo",
     paymentMethodId: "pix-1",
     reminders: [],
+    effectiveReminders: [],
     split: { mode: SplitMode.Equal, parts: [{ kind: SplitPartKind.User, userId: "u1" }] },
     allocations: [],
     charges: [...firstCycle, ...secondCycle],

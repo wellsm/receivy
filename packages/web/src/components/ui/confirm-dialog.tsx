@@ -10,10 +10,14 @@ type ConfirmDialogProps = {
   /** Optional boxed detail between the header and the explanation. */
   detail?: ReactNode;
   explanation?: string;
+  /** Extra lines under the explanation, e.g. why a channel was dropped from a reminder. */
+  details?: string[];
   confirmLabel: string;
   /** "danger" for irreversible actions (default); "primary" for confirmations that only move the flow forward. */
   tone?: "danger" | "primary";
   busy?: boolean;
+  /** Disables the confirm button beyond `busy`, e.g. while a preview is still loading or reaches nobody. */
+  disabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -32,7 +36,7 @@ const TONE_STYLES = {
 } as const;
 
 /** The confirmation used by "Encerrar", "Excluir chave", "Remover contato" and, in the primary tone, "Marcar paga". */
-export function ConfirmDialog({ title, subtitle, icon: Icon, detail, explanation, confirmLabel, tone = "danger", busy = false, onConfirm, onCancel }: ConfirmDialogProps) {
+export function ConfirmDialog({ title, subtitle, icon: Icon, detail, explanation, details, confirmLabel, tone = "danger", busy = false, disabled = false, onConfirm, onCancel }: ConfirmDialogProps) {
   const cancel = useRef<HTMLButtonElement>(null);
   const styles = TONE_STYLES[tone];
 
@@ -65,11 +69,20 @@ export function ConfirmDialog({ title, subtitle, icon: Icon, detail, explanation
         </div>
         {detail && <div className="flex flex-col gap-1 rounded-xl border border-outline/30 bg-surface-muted/70 p-3">{detail}</div>}
         {explanation && <p className="m-0 text-xs leading-5 text-muted">{explanation}</p>}
+        {details && details.length > 0 && (
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {details.map((line) => (
+              <li key={line} className="text-xs text-muted">
+                {line}
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="flex gap-2.5 pt-1">
           <button ref={cancel} type="button" disabled={busy} onClick={onCancel} className="h-11 flex-1 rounded-xl border border-outline/50 bg-surface text-sm font-semibold text-ink disabled:opacity-50">
             Cancelar
           </button>
-          <button type="button" disabled={busy} onClick={onConfirm} className={`h-11 flex-1 rounded-xl text-sm font-semibold transition disabled:opacity-50 ${styles.confirm} ${styles.confirmText}`}>
+          <button type="button" disabled={busy || disabled} onClick={onConfirm} className={`h-11 flex-1 rounded-xl text-sm font-semibold transition disabled:opacity-50 ${styles.confirm} ${styles.confirmText}`}>
             {confirmLabel}
           </button>
         </div>

@@ -19,6 +19,8 @@ import {
   chargeTypeLabel,
   counterpartRoleLabel,
   formatMoney,
+  type ManualReminderResult,
+  NOBODY_REACHABLE,
   ownerPays,
   PaymentLinkState,
   PaymentProvider,
@@ -27,7 +29,7 @@ import {
   type PublicLink,
   REMINDER_QUOTA_MESSAGE,
 } from "@receivy/common";
-import { Bell, BellOff, CalendarDays, Check, CircleStop, CloudUpload, Copy, Eye, Link2, Loader2, RefreshCw, RotateCcw, Share2 } from "lucide-react";
+import { Bell, BellOff, CalendarDays, Check, CircleStop, CloudUpload, Copy, CreditCard, Eye, Link2, Loader2, RefreshCw, RotateCcw, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
@@ -35,6 +37,7 @@ import { responseMessage } from "@/lib/financial-response";
 import { uploadProofFile } from "@/lib/proof-upload";
 import { FirstSharePix } from "@/components/app/first-share-pix";
 import { ProofCard } from "@/components/app/proof-card";
+import { RemindDialog } from "@/components/app/remind-dialog";
 import { Toast } from "@/components/app/toast";
 import { ActionTile } from "@/components/ui/action-tile";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -43,6 +46,10 @@ import { ScreenFooter } from "@/components/ui/screen-footer";
 import { StatusTag } from "@/components/ui/status-tag";
 
 const LOAD_ERROR = "Não foi possível carregar a cobrança.";
+const CONFIRMING_NOTICE = "Pagamento em confirmação: se você pagou, isto atualiza em instantes.";
+// Back from a checkout still pending: how often, and for how long, the screen asks again before giving up.
+const CONFIRMATION_INTERVAL_MS = 5_000;
+const CONFIRMATION_TICKS = 12;
 
 const STATUS_COLOR = {
   success: "text-primary",
@@ -97,7 +104,8 @@ function payableGuidance(charge: ChargeDetail): string | null {
   return charge.payment || charge.ownedByViewer ? null : "O meio de pagamento ainda não está disponível. Combine o pagamento com o credor.";
 }
 
-export function ChargeDetailScreen({ id }: { id: string }) {
+/** `returned`: the visitor just came back from the checkout, so a pending charge is shown as confirming and refetched for a while. */
+export function ChargeDetailScreen({ id, returned = false }: { id: string; returned?: boolean }) {
   const router = useRouter();
   const [charge, setCharge] = useState<ChargeDetail | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -111,6 +119,8 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmReopen, setConfirmReopen] = useState(false);
   const [confirmRemind, setConfirmRemind] = useState(false);
+  const [remindPreview, setRemindPreview] = useState<ManualReminderResult | null>(null);
+  const [remindPreviewLoading, setRemindPreviewLoading] = useState(false);
   // How the payment lands: accepting the file under review or by hand; `null` keeps the dialog closed.
   const [confirmPaid, setConfirmPaid] = useState<"review" | "pay" | null>(null);
   const [confirmDeclare, setConfirmDeclare] = useState(false);
@@ -140,6 +150,32 @@ export function ChargeDetailScreen({ id }: { id: string }) {
   }, [base]);
 
   useEffect(() => load(), [load]);
+
+  // The provider's webhook may land any second after the return: ask again for a while, then stop.
+  const awaiting = returned && charge?.state === "pending" && charge.payment !== null && charge.payment?.provider !== PaymentProvider.Pix;
+
+  useEffect(() => {
+    if (!awaiting) {
+      return;
+    }
+
+    let ticks = 0;
+    const timer = setInterval(() => {
+      ticks += 1;
+
+      if (ticks > CONFIRMATION_TICKS) {
+        clearInterval(timer);
+
+        return;
+      }
+
+      request<ChargeDetail>(base)
+        .then(setCharge)
+        .catch(() => undefined);
+    }, CONFIRMATION_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [awaiting, base]);
 
   async function run<T>(action: () => Promise<T>, fallback: string): Promise<T | undefined> {
     setBusy(true);
@@ -256,9 +292,17 @@ export function ChargeDetailScreen({ id }: { id: string }) {
     }, "Não foi possível compartilhar o link.");
   }
 
-  async function remind(detail: ChargeDetail) {
-    setConfirmRemind(false);
+  function openRemind() {
+    setConfirmRemind(true);
+    setRemindPreview(null);
+    setRemindPreviewLoading(true);
 
+    request<ManualReminderResult>(`${base}/reminders/preview`, {}, "Não foi possível conferir os avisos.")
+      .then(setRemindPreview)
+      .finally(() => setRemindPreviewLoading(false));
+  }
+
+  async function remind(detail: ChargeDetail) {
     const result = await run(async () => {
       const response = await browserFetch(`${base}/reminders`, { method: "POST" });
 
@@ -270,11 +314,12 @@ export function ChargeDetailScreen({ id }: { id: string }) {
         throw new Error(await responseMessage(response, "Não foi possível enviar o lembrete."));
       }
 
-      return (await response.json()) as { queued: boolean };
+      return (await response.json()) as ManualReminderResult;
     }, "Não foi possível enviar o lembrete.");
 
     if (result) {
-      setNotice(result.queued ? `Lembrete enviado para ${detail.recipient.name}.` : `${detail.recipient.name} ainda não recebe lembretes.`);
+      setConfirmRemind(false);
+      setNotice(result.channels.length ? `Lembrete enviado para ${detail.recipient.name}.` : NOBODY_REACHABLE);
     }
   }
 
@@ -387,6 +432,11 @@ export function ChargeDetailScreen({ id }: { id: string }) {
         </p>
       )}
       {notice && <Toast message={notice} onDismiss={() => setNotice("")} />}
+      {awaiting && (
+        <p role="status" className="m-0 rounded-xl bg-info-soft p-3 text-sm text-info">
+          {CONFIRMING_NOTICE}
+        </p>
+      )}
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] md:items-start">
         <div className="flex min-w-0 flex-col gap-4">
@@ -447,7 +497,10 @@ export function ChargeDetailScreen({ id }: { id: string }) {
                 {!receivable && charge.payment?.provider === PaymentProvider.Pix && (
                   <ActionTile label="Copiar Chave Pix" icon={Copy} hint="Copia a chave Pix do credor" disabled={busy} onClick={() => void copyValue(charge.payment!.value, "Chave Pix copiada.")} />
                 )}
-                {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Ready && (
+                {!receivable && hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Ready && (
+                  <ActionTile label="Pagar pelo link" icon={CreditCard} tone="primary" hint={`Abre o checkout ${providerNameOf(charge.payment!.provider).da} e volta para cá`} disabled={busy} href={charge.paymentLink!.url!} />
+                )}
+                {receivable && hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Ready && (
                   <ActionTile label="Copiar link de pagamento" icon={Link2} hint={`Copia o link ${providerNameOf(charge.payment!.provider).da}`} disabled={busy} onClick={() => void copyValue(charge.paymentLink!.url!, "Link copiado.")} />
                 )}
                 {hasCheckoutLink && charge.paymentLink?.state === PaymentLinkState.Failed && (
@@ -462,7 +515,7 @@ export function ChargeDetailScreen({ id }: { id: string }) {
                 {reopenable && <ActionTile label="Reabrir" icon={RotateCcw} hint="Desfaz o pagamento e volta a cobrança para pendente" disabled={busy} onClick={() => setConfirmReopen(true)} />}
                 {record && markable && <ActionTile label="Marcar como pago" icon={Check} tone="primary" disabled={busy} onClick={() => setConfirmPaid("pay")} />}
                 {shareable && <ActionTile label="Compartilhar" icon={Share2} hint="Envia o link público de pagamento" disabled={busy} onClick={() => void shareLink()} />}
-                {remindable && <ActionTile label="Lembrar" icon={Bell} hint="Envia um lembrete de pagamento" disabled={busy} onClick={() => setConfirmRemind(true)} />}
+                {remindable && <ActionTile label="Lembrar" icon={Bell} hint="Envia um lembrete de pagamento" disabled={busy} onClick={openRemind} />}
                 {cancellable && <ActionTile label="Cancelar" icon={CircleStop} tone="danger" hint="Encerra a cobrança sem pagamento" disabled={busy} onClick={() => setConfirmCancel(true)} />}
               </div>
               {(shareable || silenceable) && (
@@ -593,12 +646,10 @@ export function ChargeDetailScreen({ id }: { id: string }) {
       )}
 
       {confirmRemind && (
-        <ConfirmDialog
-          title="Enviar lembrete?"
-          icon={Bell}
-          tone="primary"
-          explanation={`Avisa ${charge.recipient.name} por notificação no app ou por e-mail, com o link de pagamento. Só um lembrete a cada 24 horas.`}
-          confirmLabel="Enviar lembrete"
+        <RemindDialog
+          recipientName={charge.recipient.name}
+          preview={remindPreview}
+          loading={remindPreviewLoading}
           busy={busy}
           onConfirm={() => void remind(charge)}
           onCancel={() => setConfirmRemind(false)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { normalizeContact, paymentMethodText, pixKeyField, PaymentProvider, PixKeyType, type Contact, type ContactPaymentMethodInput, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
+import { normalizeContact, onlyDigits, paymentMethodText, PhoneSource, pixKeyField, PaymentProvider, PixKeyType, type Contact, type ContactPaymentMethodInput, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -17,6 +17,7 @@ type ContactFormScreenProps = { contactId?: string; returnTo?: string };
 const INTRO = "Adicione pessoas para dividir despesas e lembrar pagamentos sem constrangimento.";
 const LINKED_NOTE = "Contato vinculado a uma conta: só o apelido pode mudar.";
 const EMAIL_NOTE = "Sem e-mail, a pessoa só recebe pelo link compartilhado. Quando ela entrar por um convite, você confirma quem é.";
+const PHONE_LOCKED_NOTE = "Número informado pela própria pessoa";
 const PIX_NOTE = "A chave que você usa para pagar esta pessoa. Ela entra como a chave padrão do contato.";
 const LOAD_ERROR = "Não foi possível carregar o contato.";
 const SAVE_ERROR = "Não foi possível salvar o contato.";
@@ -58,6 +59,9 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [phoneSource, setPhoneSource] = useState<PhoneSource | null>(null);
+  const [whatsappConsent, setWhatsappConsent] = useState(false);
   const [linked, setLinked] = useState(false);
   const [pixType, setPixType] = useState<PixKeyType>(PixKeyType.Email);
   // The key as the person sees it: masked for the current type, canonicalized only on submit.
@@ -115,6 +119,9 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
         setName(contact.name);
         setNickname(contact.nickname ?? "");
         setEmail(contact.email);
+        setPhone(contact.phone ?? "");
+        setPhoneSource(contact.phoneSource);
+        setWhatsappConsent(Boolean(contact.whatsappConsentAt));
         setLinked(contact.status === "active");
       })
       .catch((reason) => {
@@ -187,9 +194,10 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     setError("");
 
     let input;
+    const phoneEditable = phoneSource !== PhoneSource.Person;
 
     try {
-      input = normalizeContact({ name, nickname, email, ...paymentMethodInput() });
+      input = normalizeContact({ name, nickname, email, ...(phoneEditable ? { phone } : {}), whatsappConsent, ...paymentMethodInput() });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Confira os dados do contato.");
 
@@ -281,7 +289,27 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
               className={linked ? FROZEN_CLASS : FIELD_CLASS}
             />
           </Field>
+
+          <Field id="contact-phone" label="WhatsApp" hint={phoneSource === PhoneSource.Person ? PHONE_LOCKED_NOTE : undefined}>
+            <input
+              id="contact-phone"
+              type="tel"
+              aria-label="WhatsApp"
+              inputMode="numeric"
+              maxLength={11}
+              placeholder="11988887777"
+              disabled={phoneSource === PhoneSource.Person}
+              value={phone}
+              onChange={(event) => setPhone(onlyDigits(event.target.value))}
+              className={phoneSource === PhoneSource.Person ? FROZEN_CLASS : FIELD_CLASS}
+            />
+          </Field>
         </div>
+
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input type="checkbox" checked={whatsappConsent} onChange={(event) => setWhatsappConsent(event.target.checked)} />
+          Essa pessoa concordou em receber cobranças por WhatsApp
+        </label>
       </fieldset>
 
       <fieldset className="m-0 flex min-w-0 flex-col gap-4 rounded-3xl border border-outline/40 bg-surface p-5">

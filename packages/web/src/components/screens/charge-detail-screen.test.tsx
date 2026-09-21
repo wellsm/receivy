@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -7,6 +7,8 @@ import {
   ChargeState,
   chargeShareText,
   Direction,
+  DropReason,
+  NoticeChannel,
   PaymentLinkState,
   PaymentProvider,
   PixKeyType,
@@ -306,17 +308,23 @@ describe("ChargeDetailScreen", () => {
   it("marks a charge without proof as paid directly and reminds the debtor", async () => {
     const paid = charge({ direction: Direction.Receivable, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z" });
     const pay = vi.fn(() => Response.json(paid));
-    const remind = vi.fn(() => Response.json({ queued: true }));
+    const remind = vi.fn(() => Response.json({ channels: [NoticeChannel.Push], dropped: [] }));
 
-    serve(charge({ direction: Direction.Receivable }), { "POST /api/financial/charges/charge/pay": pay, "POST /api/financial/charges/charge/reminders": remind });
+    serve(charge({ direction: Direction.Receivable }), {
+      "GET /api/financial/charges/charge/reminders/preview": () => Response.json({ channels: [NoticeChannel.Push], dropped: [] }),
+      "POST /api/financial/charges/charge/pay": pay,
+      "POST /api/financial/charges/charge/reminders": remind,
+    });
 
     render(<ChargeDetailScreen id="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
 
-    const remindDialog = await screen.findByRole("dialog", { name: "Enviar lembrete?" });
+    const remindDialog = await screen.findByRole("dialog", { name: "Lembrar Ana?" });
 
     expect(remind).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(within(remindDialog).getByRole("button", { name: "Enviar lembrete" })).toBeEnabled());
 
     fireEvent.click(within(remindDialog).getByRole("button", { name: "Enviar lembrete" }));
     expect(await screen.findByText("Lembrete enviado para Ana.")).toBeInTheDocument();
@@ -331,6 +339,39 @@ describe("ChargeDetailScreen", () => {
     expect(await screen.findByText("Pagamento integral registrado.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Marcar como pago" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("previews the reminder channels before sending and reports what went out", async () => {
+    serve(charge({ direction: Direction.Receivable }), {
+      "GET /api/financial/charges/charge/reminders/preview": () =>
+        Response.json({ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }),
+      "POST /api/financial/charges/charge/reminders": () =>
+        Response.json({ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }),
+    });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
+
+    expect(await screen.findByText("Vai por: notificação no app, e-mail. Só um lembrete a cada 24 horas.")).toBeInTheDocument();
+    expect(screen.getByText("WhatsApp: sem número no contato")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Enviar lembrete" }));
+
+    expect(await screen.findByText(/Lembrete enviado/)).toBeInTheDocument();
+  });
+
+  it("disables sending when nobody is reachable", async () => {
+    serve(charge({ direction: Direction.Receivable }), {
+      "GET /api/financial/charges/charge/reminders/preview": () => Response.json({ channels: [], dropped: [{ channel: NoticeChannel.Email, reason: DropReason.NoEmail }] }),
+    });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
+
+    expect(await screen.findByText("Ninguém alcançável. Compartilhe o link direto.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviar lembrete" })).toHaveProperty("disabled", true);
   });
 
   it("reopens a paid receivable charge after confirmation", async () => {
@@ -560,14 +601,33 @@ describe("ChargeDetailScreen", () => {
     expect(screen.queryByText("Comprovante")).not.toBeInTheDocument();
   });
 
-  it("copies the InfinitePay link for the payer", async () => {
+  it("opens the InfinitePay checkout in the same tab for the payer", async () => {
+    serve(
+      charge({
+        direction: Direction.Payable,
+        payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" },
+        paymentLink: { url: "https://checkout/abc", state: PaymentLinkState.Ready },
+      }),
+    );
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    const pay = await screen.findByRole("link", { name: "Pagar pelo link" });
+
+    expect(pay).toHaveAttribute("href", "https://checkout/abc");
+    expect(pay).not.toHaveAttribute("target");
+    expect(screen.queryByRole("button", { name: "Copiar link de pagamento" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the copy tile for the creditor, who shares the link instead of paying it", async () => {
     const user = userEvent.setup();
     const write = vi.fn().mockResolvedValue(undefined);
 
     Object.defineProperty(navigator, "clipboard", { value: { writeText: write }, configurable: true });
     serve(
       charge({
-        direction: Direction.Payable,
+        direction: Direction.Receivable,
+        ownedByViewer: true,
         payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" },
         paymentLink: { url: "https://checkout/abc", state: PaymentLinkState.Ready },
       }),
@@ -579,9 +639,10 @@ describe("ChargeDetailScreen", () => {
 
     expect(write).toHaveBeenCalledWith("https://checkout/abc");
     expect(await screen.findByRole("status")).toHaveTextContent("Link copiado.");
+    expect(screen.queryByRole("link", { name: "Pagar pelo link" })).not.toBeInTheDocument();
   });
 
-  it("shows the payment-link tile for a PagBank charge, but not for a Pix charge", async () => {
+  it("shows the pay tile for a PagBank charge, but not for a Pix charge", async () => {
     serve(
       charge({
         direction: Direction.Payable,
@@ -592,7 +653,7 @@ describe("ChargeDetailScreen", () => {
 
     render(<ChargeDetailScreen id="charge" />);
 
-    expect(await screen.findByRole("button", { name: "Copiar link de pagamento" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Pagar pelo link" })).toHaveAttribute("href", "https://checkout/pagbank");
 
     cleanup();
     serve(charge({ direction: Direction.Payable, paymentLink: { url: "https://checkout/pix", state: PaymentLinkState.Ready } }));
@@ -600,7 +661,62 @@ describe("ChargeDetailScreen", () => {
     render(<ChargeDetailScreen id="charge" />);
     await screen.findByText("Aluguel");
 
-    expect(screen.queryByRole("button", { name: "Copiar link de pagamento" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Pagar pelo link" })).not.toBeInTheDocument();
+  });
+
+  it("back from the checkout still pending: says the payment is being confirmed and asks again until it is paid", async () => {
+    vi.useFakeTimers();
+
+    const pending = charge({
+      direction: Direction.Payable,
+      payment: { provider: PaymentProvider.PagSeguro, kind: null, value: "Loja PagBank", label: "PagBank" },
+      paymentLink: { url: "https://checkout/pagbank", state: PaymentLinkState.Ready },
+    });
+    const answers = [pending, pending, { ...pending, state: ChargeState.Paid, paidAt: "2026-09-19" }];
+    const calls: string[] = [];
+
+    vi.mocked(browserFetch).mockImplementation(async (path) => {
+      calls.push(String(path));
+
+      return Response.json(answers[Math.min(calls.length - 1, answers.length - 1)]);
+    });
+
+    render(<ChargeDetailScreen id="charge" returned />);
+
+    // `findBy` polls with real timers; under fake ones the first load is flushed by hand.
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    expect(screen.getByText("Pagamento em confirmação: se você pagou, isto atualiza em instantes.")).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+
+    expect(calls).toHaveLength(2);
+
+    await act(() => vi.advanceTimersByTimeAsync(5_000));
+
+    expect(calls).toHaveLength(3);
+    expect(screen.queryByText("Pagamento em confirmação: se você pagou, isto atualiza em instantes.")).not.toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+
+    expect(calls).toHaveLength(3);
+  });
+
+  it("back from the checkout already paid: shows nothing about confirmation", async () => {
+    serve(
+      charge({
+        direction: Direction.Payable,
+        state: ChargeState.Paid,
+        paidAt: "2026-09-19",
+        payment: { provider: PaymentProvider.InfinitePay, kind: null, value: "loja", label: "InfinitePay" },
+        paymentLink: { url: "https://checkout/abc", state: PaymentLinkState.Ready },
+      }),
+    );
+
+    render(<ChargeDetailScreen id="charge" returned />);
+    await screen.findByText("Aluguel");
+
+    expect(screen.queryByText(/Pagamento em confirmação/)).not.toBeInTheDocument();
   });
 
   it("asks for a new link when the last one failed", async () => {

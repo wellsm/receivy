@@ -25,57 +25,51 @@ function arrange(settings = { config: SYSTEM_REMINDER_CONFIG, inherited: true, w
 }
 
 describe("RemindersScreen", () => {
-  it("reads the default rule as a sentence, with the disclaimer and the preview", async () => {
+  it("puts the default rule on the ruler and lists it with its channels", async () => {
     arrange();
     render(<RemindersScreen />);
 
-    expect(await screen.findByRole("button", { name: "Quando avisar no lembrete 1" })).toHaveTextContent("no dia");
-    expect(screen.getByRole("button", { name: "Canais do lembrete 1" })).toHaveTextContent("e-mail");
-    expect(screen.getByText("Notificação no app vai sempre que a pessoa permitir no celular dela.")).toBeTruthy();
-    expect(screen.getByText(/Push sempre que houver app\./)).toBeTruthy();
+    expect(await screen.findByRole("slider", { name: "Lembrete 1" })).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByText("O AVISO")).toBeTruthy();
+    expect(screen.getByText("e-mail · push")).toBeTruthy();
+    expect(screen.getByText(/Sempre às 6h no fuso da conta/)).toBeTruthy();
+  });
+
+  it("creates a rule from a free dot and moves a pin with the arrow keys", async () => {
+    arrange(undefined, "basic");
+    render(<RemindersScreen />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Criar lembrete 3 dias antes" }));
+
+    expect(screen.getByText("OS 2 AVISOS")).toBeTruthy();
+    expect(screen.getByRole("slider", { name: "Lembrete 2" })).toHaveAttribute("aria-valuenow", "-3");
+
+    const pin = screen.getByRole("slider", { name: "Lembrete 1" });
+
+    pin.focus();
+    await userEvent.keyboard("{ArrowRight}{ArrowRight}");
+
+    expect(screen.getByRole("slider", { name: "Lembrete 1" })).toHaveAttribute("aria-valuenow", "2");
+  });
+
+  it("pauses a rule from its row", async () => {
+    arrange(undefined, "basic");
+    render(<RemindersScreen />);
+
+    await userEvent.click(await screen.findByRole("switch", { name: "Lembrete 1 ativo" }));
+
+    expect(screen.getByText("pausado")).toBeTruthy();
   });
 
   it("locks the WhatsApp options behind the plan on the free plan", async () => {
     arrange();
     render(<RemindersScreen />);
 
-    await userEvent.click(await screen.findByRole("button", { name: "Canais do lembrete 1" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Editar lembrete 1" }));
 
     expect(screen.getByRole("radio", { name: "WhatsApp no lembrete 1" })).toHaveProperty("disabled", true);
     expect(screen.getByRole("radio", { name: "e-mail e WhatsApp no lembrete 1" })).toHaveProperty("disabled", true);
     expect(screen.getAllByText("Plano Básico").length).toBeGreaterThan(0);
-  });
-
-  it("adds up to five rules and refuses the sixth", async () => {
-    arrange(undefined, "basic");
-    render(<RemindersScreen />);
-
-    const add = await screen.findByRole("button", { name: "E também avisar…" });
-
-    for (let i = 0; i < 4; i++) { await userEvent.click(add); }
-
-    expect(screen.queryByRole("button", { name: "E também avisar…" })).toBeNull();
-    expect(screen.getByText("5 de 5")).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: /^Quando avisar no lembrete/ })).toHaveLength(5);
-  });
-
-  it("builds the offset with the segmented control and the stepper, capped at 14 days", async () => {
-    arrange(undefined, "basic");
-    render(<RemindersScreen />);
-
-    const pill = await screen.findByRole("button", { name: "Quando avisar no lembrete 1" });
-
-    await userEvent.click(pill);
-    await userEvent.click(screen.getByRole("radio", { name: "antes no lembrete 1" }));
-
-    expect(pill).toHaveTextContent("1 dia antes");
-
-    const more = screen.getByRole("button", { name: "Mais um dia no lembrete 1" });
-
-    for (let i = 0; i < 13; i++) { await userEvent.click(more); }
-
-    expect(pill).toHaveTextContent("14 dias antes");
-    expect(more).toHaveProperty("disabled", true);
   });
 
   it("saves the picked channels and clears the config back to the default", async () => {
@@ -83,7 +77,7 @@ describe("RemindersScreen", () => {
     arrange({ config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: true }, "basic");
     render(<RemindersScreen />);
 
-    await userEvent.click(await screen.findByRole("button", { name: "Canais do lembrete 1" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Editar lembrete 1" }));
     await userEvent.click(screen.getByRole("radio", { name: "e-mail e WhatsApp no lembrete 1" }));
     await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
 
@@ -103,7 +97,8 @@ describe("RemindersScreen", () => {
     arrange(undefined, "basic");
     render(<RemindersScreen />);
 
-    await userEvent.click(await screen.findByRole("button", { name: "Remover lembrete 1" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Editar lembrete 1" }));
+    await userEvent.click(screen.getByRole("button", { name: "Remover lembrete 1" }));
     await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Lembretes inválidos");

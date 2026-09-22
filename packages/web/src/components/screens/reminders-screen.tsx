@@ -13,7 +13,8 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
-import { ManualChannels, ReminderEditor, ReminderPreview } from "@/components/app/reminder-editor";
+import { ManualChannels } from "@/components/app/reminder-editor";
+import { ReminderRuler, RulerPreview } from "@/components/app/reminder-ruler";
 
 const LOAD_ERROR = "Não foi possível carregar seus lembretes.";
 const ACTION_ERROR = "Não foi possível salvar seus lembretes.";
@@ -140,8 +141,8 @@ export function RemindersScreen() {
 
       <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">
         <h2 className="m-0 text-sm font-bold text-ink">Lembretes automáticos</h2>
-        <ReminderEditor rules={rules} onChange={setRules} whatsapp={whatsapp} disabled={busy} />
-        <ReminderPreview rules={rules} dueDate={example} />
+        <ReminderRuler rules={rules} onChange={setRules} whatsapp={whatsapp} disabled={busy} />
+        <RulerPreview rules={rules} dueDate={example} />
       </section>
 
       <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">

@@ -12,7 +12,8 @@ import {
 import { accountClient, type AccountClient } from "@/account/client";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
-import { ManualChannels, ReminderEditor, ReminderPreview } from "@/components/app/reminder-editor";
+import { ManualChannels } from "@/components/app/reminder-editor";
+import { ReminderRuler, RulerPreview } from "@/components/app/reminder-ruler";
 
 type Client = Pick<AccountClient, "reminders" | "saveReminders" | "clearReminders">;
 type Plans = Pick<FinancialClient, "plan">;
@@ -131,8 +132,8 @@ export function RemindersScreen({ client = accountClient, plans = financialClien
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <View className="flex-1 gap-4 px-5 pt-4">
         <Section title="LEMBRETES AUTOMÁTICOS">
-          <ReminderEditor rules={rules} onChange={setRules} whatsapp={whatsapp} disabled={busy} />
-          <ReminderPreview rules={rules} dueDate={example} />
+          <ReminderRuler rules={rules} onChange={setRules} whatsapp={whatsapp} disabled={busy} />
+          <RulerPreview rules={rules} dueDate={example} />
         </Section>
 
         <Section title="LEMBRETE MANUAL">

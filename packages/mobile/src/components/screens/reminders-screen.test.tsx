@@ -24,34 +24,45 @@ function base() {
 const plans = { plan: jest.fn().mockResolvedValue({ plan: "basic", usage: { indefinite: { used: 0, limit: 30 } } }) };
 
 describe("RemindersScreen", () => {
-  it("loads the default rule as a sentence, with the disclaimer and the preview, and caps the list at five", async () => {
+  it("puts the default rule on the ruler and lists it with its channels", async () => {
     await render(<RemindersScreen client={client()} plans={plans} />);
 
-    expect(await screen.findByText("no dia")).toBeTruthy();
-    expect(screen.getByText("Notificação no app vai sempre que a pessoa permitir no celular dela.")).toBeTruthy();
-    expect(screen.getByText(/Push sempre que houver app\./)).toBeTruthy();
-
-    for (let i = 0; i < 4; i++) {
-      await fireEvent.press(screen.getByLabelText("E também avisar"));
-    }
-
-    expect(screen.queryByLabelText("E também avisar")).toBeNull();
-    expect(screen.getByText("5 de 5")).toBeTruthy();
+    expect((await screen.findByLabelText("Lembrete 1")).props.accessibilityValue.now).toBe(0);
+    expect(screen.getByText("O AVISO")).toBeTruthy();
+    expect(screen.getByText("e-mail · push")).toBeTruthy();
+    expect(screen.getByText(/Sempre às 6h no fuso da conta/)).toBeTruthy();
   });
 
-  it("builds the offset with the segmented control and the stepper, capped at 14 days", async () => {
+  it("creates a rule from a free dot and fills the ruler up to five", async () => {
     await render(<RemindersScreen client={client()} plans={plans} />);
-    await fireEvent.press(await screen.findByLabelText("Quando avisar no lembrete 1"));
-    await fireEvent.press(screen.getByLabelText("antes no lembrete 1"));
+    await fireEvent.press(await screen.findByLabelText("Criar lembrete 3 dias antes"));
 
-    expect(screen.getByText("1 dia antes")).toBeTruthy();
+    expect(screen.getByText("OS 2 AVISOS")).toBeTruthy();
+    expect(screen.getByLabelText("Lembrete 2").props.accessibilityValue.now).toBe(-3);
 
-    for (let i = 0; i < 13; i++) {
-      await fireEvent.press(screen.getByLabelText("Mais um dia no lembrete 1"));
+    for (const label of ["Criar lembrete 14 dias antes", "Criar lembrete 7 dias antes", "Criar lembrete 1 dia antes"]) {
+      await fireEvent.press(screen.getByLabelText(label));
     }
 
-    expect(screen.getByText("14 dias antes")).toBeTruthy();
-    expect(screen.getByLabelText("Mais um dia no lembrete 1").props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByText("5 de 5")).toBeTruthy();
+    expect(screen.getByLabelText("Criar lembrete 2 dias depois").props.accessibilityState.disabled).toBe(true);
+  });
+
+  it("moves a pin a day at a time through its adjustable actions", async () => {
+    await render(<RemindersScreen client={client()} plans={plans} />);
+
+    const pin = await screen.findByLabelText("Lembrete 1");
+
+    await fireEvent(pin, "accessibilityAction", { nativeEvent: { actionName: "decrement" } });
+
+    expect(screen.getByLabelText("Lembrete 1").props.accessibilityValue.now).toBe(-1);
+  });
+
+  it("pauses a rule from its row", async () => {
+    await render(<RemindersScreen client={client()} plans={plans} />);
+    await fireEvent(await screen.findByLabelText("Lembrete 1 ativo"), "valueChange", false);
+
+    expect(screen.getByText("pausado")).toBeTruthy();
   });
 
   it("saves channels and clears back to the default", async () => {
@@ -59,7 +70,7 @@ describe("RemindersScreen", () => {
     const api = client({ reminders: jest.fn().mockResolvedValue({ config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: true }) });
 
     await render(<RemindersScreen client={api} plans={plans} />);
-    await fireEvent.press(await screen.findByLabelText("Canais do lembrete 1"));
+    await fireEvent.press(await screen.findByLabelText("Editar lembrete 1"));
     await fireEvent.press(screen.getByLabelText("e-mail e WhatsApp no lembrete 1"));
     await fireEvent.press(screen.getByLabelText("Salvar"));
 
@@ -73,7 +84,7 @@ describe("RemindersScreen", () => {
   it("locks WhatsApp on the free plan", async () => {
     await render(<RemindersScreen client={client()} plans={{ plan: jest.fn().mockResolvedValue({ plan: "free", usage: { indefinite: { used: 0, limit: 5 } } }) }} />);
 
-    await fireEvent.press(await screen.findByLabelText("Canais do lembrete 1"));
+    await fireEvent.press(await screen.findByLabelText("Editar lembrete 1"));
 
     expect(screen.getAllByText("Plano Básico").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("WhatsApp no lembrete 1").props.accessibilityState.disabled).toBe(true);
@@ -84,7 +95,8 @@ describe("RemindersScreen", () => {
     const api = client();
 
     await render(<RemindersScreen client={api} plans={plans} />);
-    await fireEvent.press(await screen.findByLabelText("Remover lembrete 1"));
+    await fireEvent.press(await screen.findByLabelText("Editar lembrete 1"));
+    await fireEvent.press(screen.getByLabelText("Remover lembrete 1"));
     await fireEvent.press(screen.getByLabelText("Salvar"));
 
     expect(await screen.findByText(/Lembretes inválidos/)).toBeTruthy();

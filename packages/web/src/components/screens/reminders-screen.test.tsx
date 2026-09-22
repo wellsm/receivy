@@ -31,7 +31,7 @@ describe("RemindersScreen", () => {
 
     expect(await screen.findByRole("slider", { name: "Lembrete 1" })).toHaveAttribute("aria-valuenow", "0");
     expect(screen.getByText("O AVISO")).toBeTruthy();
-    expect(screen.getByText("e-mail · push")).toBeTruthy();
+    expect(screen.getByText("email · push")).toBeTruthy();
     expect(screen.getByText(/Sempre às 6h no fuso da conta/)).toBeTruthy();
   });
 
@@ -67,8 +67,8 @@ describe("RemindersScreen", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Editar lembrete 1" }));
 
-    expect(screen.getByRole("radio", { name: "WhatsApp no lembrete 1" })).toHaveProperty("disabled", true);
-    expect(screen.getByRole("radio", { name: "e-mail e WhatsApp no lembrete 1" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("radio", { name: "whatsapp no lembrete 1" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("radio", { name: "email no lembrete 1" })).toHaveProperty("disabled", false);
     expect(screen.getAllByText("Plano Básico").length).toBeGreaterThan(0);
   });
 
@@ -78,14 +78,14 @@ describe("RemindersScreen", () => {
     render(<RemindersScreen />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Editar lembrete 1" }));
-    await userEvent.click(screen.getByRole("radio", { name: "e-mail e WhatsApp no lembrete 1" }));
+    await userEvent.click(screen.getByRole("radio", { name: "whatsapp no lembrete 1" }));
     await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
 
     await waitFor(() => {
       const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
 
       expect(put).toBeTruthy();
-      expect(JSON.parse(String(put![1]!.body)).reminders[0].channels).toEqual({ email: true, whatsapp: true });
+      expect(JSON.parse(String(put![1]!.body)).reminders[0].channels).toEqual({ email: false, whatsapp: true });
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Voltar ao padrão" }));

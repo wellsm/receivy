@@ -1,17 +1,16 @@
 "use client";
 
 import {
-  CHANNEL_SET_OPTIONS,
-  channelSetLabel,
   REMINDER_MAX_OFFSET,
   REMINDER_MAX_RULES,
+  type ChannelSet,
   type ReminderDraft,
   reminderOffsetLabel,
   shiftDays,
   shortDayMonth,
   whatsappLockLabel,
 } from "@receivy/common";
-import { Bell, Mail, MessageCircle } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 
 type WhatsappGate = { available: boolean; planAllows: boolean };
@@ -27,6 +26,38 @@ type ReminderRulerProps = {
 const SUGGESTED = [-14, -7, -3, -1, 1, 2, 3, 7, 14];
 
 const MIN_OFFSET = -REMINDER_MAX_OFFSET;
+
+/** One configurable channel per rule: e-mail or WhatsApp, never both. The stored shape stays a ChannelSet. */
+const SINGLE_CHANNELS: ChannelSet[] = [
+  { email: true, whatsapp: false },
+  { email: false, whatsapp: true },
+  { email: false, whatsapp: false }
+];
+
+/** Collapses a stored set that carries both channels, so exactly one option reads as picked. */
+function single(channels: ChannelSet): ChannelSet {
+  if (channels.email) {
+    return { email: true, whatsapp: false };
+  }
+
+  if (channels.whatsapp) {
+    return { email: false, whatsapp: true };
+  }
+
+  return { email: false, whatsapp: false };
+}
+
+function singleChannelLabel(channels: ChannelSet): string {
+  if (channels.email) {
+    return "email";
+  }
+
+  if (channels.whatsapp) {
+    return "whatsapp";
+  }
+
+  return "só push";
+}
 
 const HINT = "Toque num ponto cinza para criar, arraste para mover, toque no índigo para editar.";
 
@@ -53,7 +84,8 @@ function rowSubtitle(rule: ReminderDraft): string {
     return "pausado";
   }
 
-  const names = [...(rule.channels.email ? ["e-mail"] : []), ...(rule.channels.whatsapp ? ["WhatsApp"] : []), "push"];
+  const picked = single(rule.channels);
+  const names = [...(picked.email ? ["email"] : []), "push", ...(picked.whatsapp ? ["whatsapp"] : [])];
 
   return names.join(" · ");
 }
@@ -188,17 +220,6 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
           {ordered.map(({ rule, index, offset }, position) => (
             <div key={index} className={position === 0 ? "" : "border-t border-outline/50"}>
               <div className="flex items-center gap-[11px] px-4 py-3">
-                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-primary-soft font-display text-[11px] font-bold text-primary-strong">{position + 1}</span>
-
-                <button type="button" aria-label={`Editar lembrete ${index + 1}`} aria-expanded={editing === index} className="min-w-0 flex-1 text-left" disabled={disabled} onClick={() => setEditing(editing === index ? null : index)}>
-                  <span className="block truncate text-[13.5px] font-semibold text-ink">{reminderOffsetLabel(offset)}</span>
-                  <span className="block truncate text-[11px] text-muted">{rowSubtitle(rule)}</span>
-                </button>
-
-                {rule.channels.email ? <Mail aria-hidden="true" size={15} className="shrink-0 text-muted" /> : null}
-                {rule.channels.whatsapp ? <MessageCircle aria-hidden="true" size={15} className="shrink-0 text-muted" /> : null}
-                <Bell aria-hidden="true" size={15} className="shrink-0 text-muted" />
-
                 <input
                   type="checkbox"
                   role="switch"
@@ -208,15 +229,41 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
                   disabled={disabled}
                   onChange={event => patch(index, { enabled: event.target.checked })}
                 />
+
+                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-primary-soft font-display text-[11px] font-bold text-primary-strong">{position + 1}</span>
+
+                <button type="button" aria-label={`Editar lembrete ${index + 1}`} aria-expanded={editing === index} className="flex min-w-0 flex-1 items-center gap-2 text-left" disabled={disabled} onClick={() => setEditing(editing === index ? null : index)}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] font-semibold text-ink">{reminderOffsetLabel(offset)}</span>
+                    <span className="block truncate text-[11px] text-muted">{rowSubtitle(rule)}</span>
+                  </span>
+                  <ChevronDown aria-hidden="true" size={16} className={`shrink-0 text-muted transition-transform ${editing === index ? "rotate-180" : ""}`} />
+                </button>
+
+                {editing === index ? (
+                  <button
+                    type="button"
+                    aria-label={`Remover lembrete ${index + 1}`}
+                    className="shrink-0 text-danger"
+                    disabled={disabled}
+                    onClick={() => {
+                      setEditing(null);
+                      onChange(rules.filter((_, i) => i !== index));
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" size={16} />
+                  </button>
+                ) : null}
               </div>
 
               {editing === index ? (
                 <div className="flex flex-col gap-1.5 px-4 pb-3.5">
                   <div role="radiogroup" aria-label={`Canais do lembrete ${index + 1}`} className="flex flex-col gap-1.5">
-                    {CHANNEL_SET_OPTIONS.map(option => {
-                      const label = channelSetLabel(option);
+                    {SINGLE_CHANNELS.map(option => {
+                      const label = singleChannelLabel(option);
                       const locked = option.whatsapp ? lock : null;
-                      const active = option.email === rule.channels.email && option.whatsapp === rule.channels.whatsapp;
+                      const picked = single(rule.channels);
+                      const active = option.email === picked.email && option.whatsapp === picked.whatsapp;
 
                       return (
                         <button
@@ -235,19 +282,6 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
                       );
                     })}
                   </div>
-
-                  <button
-                    type="button"
-                    aria-label={`Remover lembrete ${index + 1}`}
-                    className="self-start text-[13px] font-semibold text-danger"
-                    disabled={disabled}
-                    onClick={() => {
-                      setEditing(null);
-                      onChange(rules.filter((_, i) => i !== index));
-                    }}
-                  >
-                    Remover
-                  </button>
                 </div>
               ) : null}
             </div>
@@ -288,6 +322,38 @@ export function RulerPreview({ rules, dueDate }: { rules: ReminderDraft[]; dueDa
       )}
 
       <span className="text-[11px] text-muted">{PREVIEW_NOTE}</span>
+    </div>
+  );
+}
+
+/** The manual reminder follows the same one-channel rule as the automatic ones. */
+export function ManualRulerChannels({ value, onChange, whatsapp, disabled }: { value: ChannelSet; onChange: (value: ChannelSet) => void; whatsapp: WhatsappGate; disabled?: boolean }) {
+  const lock = whatsappLockLabel(whatsapp);
+
+  return (
+    <div role="radiogroup" aria-label="Canais do lembrete manual" className="flex flex-col gap-1.5">
+      {SINGLE_CHANNELS.map(option => {
+        const label = singleChannelLabel(option);
+        const locked = option.whatsapp ? lock : null;
+        const picked = single(value);
+        const active = option.email === picked.email && option.whatsapp === picked.whatsapp;
+
+        return (
+          <button
+            key={label}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={`${label} no lembrete manual`}
+            className={`flex h-10 items-center gap-2 rounded-xl border px-3 text-[13px] font-semibold ${active ? "border-primary bg-primary-soft text-primary-strong" : "border-outline text-ink"} ${locked ? "opacity-60" : ""}`}
+            disabled={disabled || locked !== null}
+            onClick={() => onChange({ ...option })}
+          >
+            {label}
+            {locked ? <span className="rounded-md bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted">{locked}</span> : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

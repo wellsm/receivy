@@ -29,7 +29,7 @@ describe("RemindersScreen", () => {
 
     expect((await screen.findByLabelText("Lembrete 1")).props.accessibilityValue.now).toBe(0);
     expect(screen.getByText("O AVISO")).toBeTruthy();
-    expect(screen.getByText("e-mail · push")).toBeTruthy();
+    expect(screen.getByText("email · push")).toBeTruthy();
     expect(screen.getByText(/Sempre às 6h no fuso da conta/)).toBeTruthy();
   });
 
@@ -71,10 +71,10 @@ describe("RemindersScreen", () => {
 
     await render(<RemindersScreen client={api} plans={plans} />);
     await fireEvent.press(await screen.findByLabelText("Editar lembrete 1"));
-    await fireEvent.press(screen.getByLabelText("e-mail e WhatsApp no lembrete 1"));
+    await fireEvent.press(screen.getByLabelText("whatsapp no lembrete 1"));
     await fireEvent.press(screen.getByLabelText("Salvar"));
 
-    expect(api.saveReminders).toHaveBeenCalledWith(expect.objectContaining({ reminders: [expect.objectContaining({ channels: { email: true, whatsapp: true } })] }));
+    expect(api.saveReminders).toHaveBeenCalledWith(expect.objectContaining({ reminders: [expect.objectContaining({ channels: { email: false, whatsapp: true } })] }));
 
     await fireEvent.press(await screen.findByLabelText("Voltar ao padrão"));
 
@@ -87,8 +87,8 @@ describe("RemindersScreen", () => {
     await fireEvent.press(await screen.findByLabelText("Editar lembrete 1"));
 
     expect(screen.getAllByText("Plano Básico").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("WhatsApp no lembrete 1").props.accessibilityState.disabled).toBe(true);
-    expect(screen.getByLabelText("e-mail e WhatsApp no lembrete 1").props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByLabelText("whatsapp no lembrete 1").props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByLabelText("email no lembrete 1").props.accessibilityState.disabled).toBe(false);
   });
 
   it("refuses saving with zero rules inline", async () => {

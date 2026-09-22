@@ -13,8 +13,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
-import { ManualChannels } from "@/components/app/reminder-editor";
-import { ReminderRuler, RulerPreview } from "@/components/app/reminder-ruler";
+import { ManualRulerChannels, ReminderRuler, RulerPreview } from "@/components/app/reminder-ruler";
 
 const LOAD_ERROR = "Não foi possível carregar seus lembretes.";
 const ACTION_ERROR = "Não foi possível salvar seus lembretes.";
@@ -147,7 +146,7 @@ export function RemindersScreen() {
 
       <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">
         <h2 className="m-0 text-sm font-bold text-ink">Lembrete manual</h2>
-        <ManualChannels value={manual} onChange={setManual} whatsapp={whatsapp} disabled={busy} />
+        <ManualRulerChannels value={manual} onChange={setManual} whatsapp={whatsapp} disabled={busy} />
       </section>
 
       {error ? (

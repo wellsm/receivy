@@ -2,10 +2,9 @@ import { Image } from "expo-image";
 import { useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, Switch, Text, View, type LayoutChangeEvent } from "react-native";
 import {
-  CHANNEL_SET_OPTIONS,
-  channelSetLabel,
   REMINDER_MAX_OFFSET,
   REMINDER_MAX_RULES,
+  type ChannelSet,
   type ReminderDraft,
   reminderOffsetLabel,
   shiftDays,
@@ -14,8 +13,8 @@ import {
 } from "@receivy/common";
 import { useThemeColors } from "@/theme/colors";
 
-const mailMark = require("../../../assets/images/auth/mail.svg");
-const bellMark = require("../../../assets/images/auth/bell.svg");
+const trashMark = require("../../../assets/images/auth/trash.svg");
+const chevronMark = require("../../../assets/images/auth/chevron.svg");
 
 type WhatsappGate = { available: boolean; planAllows: boolean };
 
@@ -32,6 +31,38 @@ const SUGGESTED = [-14, -7, -3, -1, 1, 2, 3, 7, 14];
 const HINT = "Toque num ponto cinza para criar, arraste para mover, toque no índigo para editar.";
 
 const PREVIEW_NOTE = "Sempre às 6h no fuso da conta. Push sai junto sempre que a pessoa tiver o app.";
+
+/** One configurable channel per rule: e-mail or WhatsApp, never both. The stored shape stays a ChannelSet. */
+const SINGLE_CHANNELS: ChannelSet[] = [
+  { email: true, whatsapp: false },
+  { email: false, whatsapp: true },
+  { email: false, whatsapp: false }
+];
+
+/** Collapses a stored set that carries both channels, so exactly one option reads as picked. */
+function single(channels: ChannelSet): ChannelSet {
+  if (channels.email) {
+    return { email: true, whatsapp: false };
+  }
+
+  if (channels.whatsapp) {
+    return { email: false, whatsapp: true };
+  }
+
+  return { email: false, whatsapp: false };
+}
+
+function singleChannelLabel(channels: ChannelSet): string {
+  if (channels.email) {
+    return "email";
+  }
+
+  if (channels.whatsapp) {
+    return "whatsapp";
+  }
+
+  return "só push";
+}
 
 function offsetOf(rule: ReminderDraft): number {
   const parsed = Number(rule.offsetDays);
@@ -56,7 +87,8 @@ function rowSubtitle(rule: ReminderDraft): string {
     return "pausado";
   }
 
-  const names = [...(rule.channels.email ? ["e-mail"] : []), ...(rule.channels.whatsapp ? ["WhatsApp"] : []), "push"];
+  const picked = single(rule.channels);
+  const names = [...(picked.email ? ["email"] : []), "push", ...(picked.whatsapp ? ["whatsapp"] : [])];
 
   return names.join(" · ");
 }
@@ -155,6 +187,14 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
           {ordered.map(({ rule, index, offset }, position) => (
             <View key={index} className={position === 0 ? "" : "border-t border-outline/50"}>
               <View className="flex-row items-center gap-[11px] px-4 py-3">
+                <Switch
+                  accessibilityLabel={`Lembrete ${index + 1} ativo`}
+                  disabled={disabled}
+                  value={rule.enabled}
+                  onValueChange={(value) => patch(index, { enabled: value })}
+                  trackColor={{ true: colors.primary }}
+                />
+
                 <View className="h-[26px] w-[26px] items-center justify-center rounded-full bg-primary-soft">
                   <Text className="font-display text-[11px] font-bold text-primary-strong">{position + 1}</Text>
                 </View>
@@ -165,34 +205,42 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
                   accessibilityState={{ expanded: editing === index, disabled }}
                   disabled={disabled}
                   onPress={() => setEditing(editing === index ? null : index)}
-                  className="min-w-0 flex-1"
+                  className="min-w-0 flex-1 flex-row items-center gap-2"
                 >
-                  <Text className="font-sans text-[13.5px] font-semibold text-ink" numberOfLines={1}>
-                    {reminderOffsetLabel(offset)}
-                  </Text>
-                  <Text className="font-sans text-[11px] text-muted" numberOfLines={1}>
-                    {rowSubtitle(rule)}
-                  </Text>
+                  <View className="min-w-0 flex-1">
+                    <Text className="font-sans text-[13.5px] font-semibold text-ink" numberOfLines={1}>
+                      {reminderOffsetLabel(offset)}
+                    </Text>
+                    <Text className="font-sans text-[11px] text-muted" numberOfLines={1}>
+                      {rowSubtitle(rule)}
+                    </Text>
+                  </View>
+                  <Image source={chevronMark} tintColor={colors.muted} style={{ width: 13, height: 13, transform: [{ rotate: editing === index ? "-90deg" : "90deg" }] }} />
                 </Pressable>
 
-                {rule.channels.email ? <Image source={mailMark} tintColor={colors.muted} style={{ width: 15, height: 15 }} /> : null}
-                <Image source={bellMark} tintColor={colors.muted} style={{ width: 15, height: 15 }} />
-
-                <Switch
-                  accessibilityLabel={`Lembrete ${index + 1} ativo`}
-                  disabled={disabled}
-                  value={rule.enabled}
-                  onValueChange={(value) => patch(index, { enabled: value })}
-                  trackColor={{ true: colors.primary }}
-                />
+                {editing === index ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remover lembrete ${index + 1}`}
+                    accessibilityState={{ disabled }}
+                    disabled={disabled}
+                    onPress={() => {
+                      setEditing(null);
+                      onChange(rules.filter((_, i) => i !== index));
+                    }}
+                  >
+                    <Image source={trashMark} tintColor={colors.danger} style={{ width: 16, height: 16 }} />
+                  </Pressable>
+                ) : null}
               </View>
 
               {editing === index ? (
                 <View className="gap-1.5 px-4 pb-3.5">
-                  {CHANNEL_SET_OPTIONS.map((option) => {
-                    const label = channelSetLabel(option);
+                  {SINGLE_CHANNELS.map((option) => {
+                    const label = singleChannelLabel(option);
                     const locked = option.whatsapp ? lock : null;
-                    const active = option.email === rule.channels.email && option.whatsapp === rule.channels.whatsapp;
+                    const picked = single(rule.channels);
+                    const active = option.email === picked.email && option.whatsapp === picked.whatsapp;
                     const off = disabled || locked !== null;
 
                     return (
@@ -211,19 +259,6 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
                     );
                   })}
 
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remover lembrete ${index + 1}`}
-                    accessibilityState={{ disabled }}
-                    disabled={disabled}
-                    onPress={() => {
-                      setEditing(null);
-                      onChange(rules.filter((_, i) => i !== index));
-                    }}
-                    className="self-start py-1"
-                  >
-                    <Text className="font-sans text-[13px] font-semibold text-danger">Remover</Text>
-                  </Pressable>
                 </View>
               ) : null}
             </View>
@@ -325,6 +360,48 @@ export function RulerPreview({ rules, dueDate }: { rules: ReminderDraft[]; dueDa
       )}
 
       <Text className="font-sans text-[11px] text-muted">{PREVIEW_NOTE}</Text>
+    </View>
+  );
+}
+
+/** The manual reminder follows the same one-channel rule as the automatic ones. */
+export function ManualRulerChannels({
+  value,
+  onChange,
+  whatsapp,
+  disabled,
+}: {
+  value: ChannelSet;
+  onChange: (value: ChannelSet) => void;
+  whatsapp: WhatsappGate;
+  disabled?: boolean;
+}) {
+  const lock = whatsappLockLabel(whatsapp);
+  const picked = single(value);
+
+  return (
+    <View className="gap-1.5">
+      {SINGLE_CHANNELS.map((option) => {
+        const label = singleChannelLabel(option);
+        const locked = option.whatsapp ? lock : null;
+        const active = option.email === picked.email && option.whatsapp === picked.whatsapp;
+        const off = disabled || locked !== null;
+
+        return (
+          <Pressable
+            key={label}
+            accessibilityRole="radio"
+            accessibilityLabel={`${label} no lembrete manual`}
+            accessibilityState={{ checked: active, disabled: off }}
+            disabled={off}
+            onPress={() => onChange({ ...option })}
+            className={`h-10 flex-row items-center gap-2 rounded-xl border px-3 ${active ? "border-primary bg-primary-soft" : "border-outline"} ${off ? "opacity-60" : ""}`}
+          >
+            <Text className={`font-sans text-[13px] font-semibold ${active ? "text-primary-strong" : "text-ink"}`}>{label}</Text>
+            {locked ? <Text className="rounded-md bg-surface-muted px-1.5 py-0.5 font-sans text-[10px] font-semibold text-muted">{locked}</Text> : null}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

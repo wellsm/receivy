@@ -20,6 +20,17 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# `next build` inlines every NEXT_PUBLIC_* into the client bundle, so they have to exist here.
+# A host's environment tab only reaches the running container: a value set there alone never
+# leaves the server side, and the browser gets an empty string (Stripe reads as unconfigured).
+ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=""
+ARG NEXT_PUBLIC_PLAN_BASIC_PRICE_CENTS=""
+ARG NEXT_PUBLIC_OPERATOR_CONTACT=""
+
+ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY"
+ENV NEXT_PUBLIC_PLAN_BASIC_PRICE_CENTS="$NEXT_PUBLIC_PLAN_BASIC_PRICE_CENTS"
+ENV NEXT_PUBLIC_OPERATOR_CONTACT="$NEXT_PUBLIC_OPERATOR_CONTACT"
+
 RUN pnpm --filter @receivy/web build
 
 FROM node:24-slim AS runner

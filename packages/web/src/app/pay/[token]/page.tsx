@@ -2,7 +2,9 @@ import { ChargeState, formatMoney, PaymentLinkState, PaymentProvider, type Publi
 import { ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { authApiFetch } from "@/lib/auth/api";
+import { ownChargeIdByToken } from "@/lib/auth/own-charge";
 import { PublicPixCopy } from "@/components/app/public-pix-copy";
 import { ProofPanel } from "@/components/app/proof-panel";
 
@@ -72,6 +74,14 @@ export default async function PublicChargePage({ params, searchParams }: { param
     }
   } catch {
     // A missing or unreachable charge falls through to the truthful unavailable state below.
+  }
+
+  // Back from the checkout with a session: a participant lands on their own charge screen, not the public one.
+  // Any other visit (a creditor previewing the link, a payer without account) stays here.
+  const ownChargeId = charge && (returned || query.returned === "1") ? await ownChargeIdByToken(token) : null;
+
+  if (ownChargeId) {
+    redirect(`/charges/${encodeURIComponent(ownChargeId)}?returned=1`);
   }
 
   if (!charge) {

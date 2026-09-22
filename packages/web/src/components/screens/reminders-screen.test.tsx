@@ -52,7 +52,7 @@ describe("RemindersScreen", () => {
     arrange({ config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: true }, "basic");
     render(<RemindersScreen />);
 
-    await userEvent.click(await screen.findByRole("checkbox", { name: "WhatsApp no lembrete no dia" }));
+    await userEvent.click(await screen.findByRole("checkbox", { name: "WhatsApp no lembrete 1" }));
     await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
 
     await waitFor(() => {
@@ -75,6 +75,17 @@ describe("RemindersScreen", () => {
 
     await userEvent.clear(days);
     await userEvent.type(days, "20");
+    await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Lembretes inválidos");
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  });
+
+  it("refuses saving with zero rules inline", async () => {
+    arrange(undefined, "basic");
+    render(<RemindersScreen />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Remover lembrete 1" }));
     await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Lembretes inválidos");

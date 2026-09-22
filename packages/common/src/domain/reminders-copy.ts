@@ -59,6 +59,9 @@ export const PUSH_DISCLAIMER = 'Notificação no app vai sempre que a pessoa per
 
 export const NOBODY_REACHABLE = 'Ninguém alcançável. Compartilhe o link direto.';
 
+/** Preview request failed or is unavailable: the send button stays enabled, just without a channel preview. */
+export const PREVIEW_UNAVAILABLE = 'Não foi possível conferir os avisos. Você ainda pode enviar.';
+
 /** The plan lock wins over the transport lock: a free user sees the upsell, a paid one sees "Em breve". */
 export function whatsappLockLabel(gate: { available: boolean; planAllows: boolean }): string | null {
   if (!gate.planAllows) {

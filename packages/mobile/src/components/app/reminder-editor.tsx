@@ -103,8 +103,8 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Remover lembrete ${index + 1}`}
-                accessibilityState={{ disabled: disabled || rules.length === 1 }}
-                disabled={disabled || rules.length === 1}
+                accessibilityState={{ disabled }}
+                disabled={disabled}
                 onPress={() => onChange(rules.filter((_, i) => i !== index))}
               >
                 <Image source={trashMark} tintColor={colors.muted} style={{ width: 16, height: 16 }} />
@@ -114,7 +114,7 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
             <View className="flex-row flex-wrap gap-2">
               <ChannelChip
                 label="E-mail"
-                name={`E-mail no lembrete ${human || index + 1}`}
+                name={`E-mail no lembrete ${index + 1}`}
                 checked={rule.channels.email}
                 locked={null}
                 disabled={disabled}
@@ -122,7 +122,7 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
               />
               <ChannelChip
                 label="WhatsApp"
-                name={`WhatsApp no lembrete ${human || index + 1}`}
+                name={`WhatsApp no lembrete ${index + 1}`}
                 checked={rule.channels.whatsapp}
                 locked={lock}
                 disabled={disabled}

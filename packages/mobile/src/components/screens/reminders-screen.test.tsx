@@ -42,7 +42,7 @@ describe("RemindersScreen", () => {
     const api = client({ reminders: jest.fn().mockResolvedValue({ config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: true }) });
 
     await render(<RemindersScreen client={api} plans={plans} />);
-    await fireEvent.press(await screen.findByLabelText("WhatsApp no lembrete no dia"));
+    await fireEvent.press(await screen.findByLabelText("WhatsApp no lembrete 1"));
     await fireEvent.press(screen.getByLabelText("Salvar"));
 
     expect(api.saveReminders).toHaveBeenCalledWith(expect.objectContaining({ reminders: [expect.objectContaining({ channels: { email: true, whatsapp: true } })] }));
@@ -56,6 +56,17 @@ describe("RemindersScreen", () => {
     await render(<RemindersScreen client={client()} plans={{ plan: jest.fn().mockResolvedValue({ plan: "free", usage: { indefinite: { used: 0, limit: 5 } } }) }} />);
 
     expect(await screen.findByText("Plano Básico")).toBeTruthy();
-    expect(screen.getByLabelText("WhatsApp no lembrete no dia").props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByLabelText("WhatsApp no lembrete 1").props.accessibilityState.disabled).toBe(true);
+  });
+
+  it("refuses saving with zero rules inline", async () => {
+    const api = client();
+
+    await render(<RemindersScreen client={api} plans={plans} />);
+    await fireEvent.press(await screen.findByLabelText("Remover lembrete 1"));
+    await fireEvent.press(screen.getByLabelText("Salvar"));
+
+    expect(await screen.findByText(/Lembretes inválidos/)).toBeTruthy();
+    expect(api.saveReminders).not.toHaveBeenCalled();
   });
 });

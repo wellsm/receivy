@@ -374,6 +374,27 @@ describe("ChargeDetailScreen", () => {
     expect(screen.getByRole("button", { name: "Enviar lembrete" })).toHaveProperty("disabled", true);
   });
 
+  it("keeps sending enabled when the preview fails, without claiming nobody is reachable", async () => {
+    const remind = vi.fn(() => Response.json({ channels: [NoticeChannel.Push], dropped: [] }));
+
+    serve(charge({ direction: Direction.Receivable }), {
+      "GET /api/financial/charges/charge/reminders/preview": () => Response.json({ message: "boom" }, { status: 500 }),
+      "POST /api/financial/charges/charge/reminders": remind,
+    });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
+
+    expect(await screen.findByText("Não foi possível conferir os avisos. Você ainda pode enviar.")).toBeInTheDocument();
+    expect(screen.queryByText("Ninguém alcançável. Compartilhe o link direto.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviar lembrete" })).toHaveProperty("disabled", false);
+
+    await userEvent.click(screen.getByRole("button", { name: "Enviar lembrete" }));
+
+    expect(remind).toHaveBeenCalled();
+  });
+
   it("keeps the newest preview when a stale request resolves after the dialog reopens", async () => {
     const previews: ((result: { channels: NoticeChannel[]; dropped: { channel: NoticeChannel; reason: DropReason }[] }) => void)[] = [];
 

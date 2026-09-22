@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { Modal, Pressable, Text, View } from "react-native";
-import { type ChargeSummary, feedDayLabel, formatMoney, type ManualReminderResult, NOBODY_REACHABLE, remindLines } from "@receivy/common";
+import { type ChargeSummary, feedDayLabel, formatMoney, type ManualReminderResult, NOBODY_REACHABLE, PREVIEW_UNAVAILABLE, remindLines } from "@receivy/common";
 import { useThemeColors } from "@/theme/colors";
 
 const copyMark = require("../../../assets/images/auth/copy.svg");
@@ -32,6 +32,7 @@ export function RemindSheet({ charge, today, preview, loading, onSend, onClose }
   const amount = formatMoney(charge.amount);
   const due = dueText(charge, today);
   const nobody = preview !== null && preview.channels.length === 0;
+  const unavailable = !loading && preview === null;
   const { going, dropped } = preview ? remindLines(preview) : { going: "", dropped: [] };
   const disabled = loading || nobody;
 
@@ -51,6 +52,8 @@ export function RemindSheet({ charge, today, preview, loading, onSend, onClose }
           </Text>
           {loading ? (
             <Text className="font-sans text-[13px] leading-5 text-muted">{LOADING_COPY}</Text>
+          ) : unavailable ? (
+            <Text className="font-sans text-[13px] leading-5 text-muted">{PREVIEW_UNAVAILABLE}</Text>
           ) : nobody ? (
             <Text className="font-sans text-[13px] leading-5 text-muted">{NOBODY_REACHABLE}</Text>
           ) : (

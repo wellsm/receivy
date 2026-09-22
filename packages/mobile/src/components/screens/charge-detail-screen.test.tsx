@@ -442,6 +442,38 @@ describe("ChargeDetailScreen", () => {
     expect(screen.queryByRole("button", { name: "Marcar como pago" })).toBeNull();
   });
 
+  it("keeps sending enabled when the preview fails, without claiming nobody is reachable", async () => {
+    jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Marcar paga")?.onPress?.());
+
+    const client = {
+      charge: jest.fn().mockResolvedValue(charge({ direction: Direction.Receivable })),
+      cancel: jest.fn(),
+      pay: jest.fn(),
+      publicLink: jest.fn(),
+      publicChargeUrl: jest.fn(),
+      startProofUpload: jest.fn(),
+      reviewProof: jest.fn(),
+      downloadProof: jest.fn(),
+    };
+
+    const failingNotifications = {
+      remind: jest.fn().mockResolvedValue({ channels: [NoticeChannel.Push], dropped: [] }),
+      remindPreview: jest.fn().mockRejectedValue(new Error("boom")),
+    };
+
+    await render(<ChargeDetailScreen id="charge" client={client} notifications={failingNotifications} />);
+
+    await fireEvent.press(await screen.findByRole("button", { name: "Lembrar" }));
+
+    expect(await screen.findByText("Não foi possível conferir os avisos. Você ainda pode enviar.")).toBeOnTheScreen();
+    expect(screen.queryByText("Ninguém alcançável. Compartilhe o link direto.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Enviar lembrete" }).props.accessibilityState.disabled).toBe(false);
+
+    await fireEvent.press(screen.getByRole("button", { name: "Enviar lembrete" }));
+
+    await waitFor(() => expect(failingNotifications.remind).toHaveBeenCalledWith("charge"));
+  });
+
   it("reopens a paid charge after confirmation", async () => {
     jest.spyOn(Alert, "alert").mockImplementation((_title, _message, buttons) => buttons?.find((button) => button.text === "Reabrir")?.onPress?.());
 

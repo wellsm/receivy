@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
@@ -131,6 +131,8 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   const [remindOpen, setRemindOpen] = useState(false);
   const [remindPreview, setRemindPreview] = useState<ManualReminderResult | null>(null);
   const [remindLoading, setRemindLoading] = useState(false);
+  // Bumped on every open and close, so a preview response only lands when it still answers the latest ask.
+  const remindToken = useRef(0);
 
   const load = useCallback(() => {
     let live = true;
@@ -319,6 +321,8 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
   }
 
   function openRemind() {
+    const token = ++remindToken.current;
+
     setRemindOpen(true);
     setRemindPreview(null);
 
@@ -330,13 +334,26 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
 
     notifications
       .remindPreview(id)
-      .then(setRemindPreview)
-      .catch(() => setRemindPreview({ channels: [], dropped: [] }))
-      .finally(() => setRemindLoading(false));
+      .then((result) => {
+        if (remindToken.current === token) {
+          setRemindPreview(result);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (remindToken.current === token) {
+          setRemindLoading(false);
+        }
+      });
+  }
+
+  function closeRemind() {
+    remindToken.current += 1;
+    setRemindOpen(false);
   }
 
   async function remind(detail: ChargeDetail) {
-    setRemindOpen(false);
+    closeRemind();
 
     const result = await run(() => notifications.remind(detail.id), "Não foi possível enviar o lembrete.");
 
@@ -673,7 +690,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
           today={today}
           preview={remindPreview}
           loading={remindLoading}
-          onClose={() => setRemindOpen(false)}
+          onClose={closeRemind}
           onSend={() => void remind(charge)}
         />
       )}

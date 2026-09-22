@@ -168,6 +168,43 @@ describe("FeedScreen", () => {
     expect(await screen.findByText("Lembrete enviado")).toBeOnTheScreen();
   });
 
+  it("keeps the newest preview when a second reminder opens before the first resolves", async () => {
+    const charges = jest.fn().mockResolvedValue([
+      charge({ id: "c1", description: "Aluguel", debtor: { name: "Ana" }, dueDate: "2020-01-01" }),
+      charge({ id: "c2", description: "Internet", debtor: { name: "Beto" }, dueDate: "2020-01-01" }),
+    ]);
+    const remind = jest.fn().mockResolvedValue({ channels: [NoticeChannel.Push], dropped: [] });
+    const previews: ((result: { channels: NoticeChannel[]; dropped: [] }) => void)[] = [];
+    const remindPreview = jest.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          previews.push(resolve);
+        }),
+    );
+
+    await renderFeed(<FeedScreen client={{ charges }} notifications={{ remind, remindPreview }} onOpenCharge={jest.fn()} />);
+
+    await fireEvent.press((await screen.findAllByRole("button", { name: "Lembrar" }))[0]!);
+
+    expect(screen.getByText("Lembrar Ana")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Fechar lembrete" }));
+    await fireEvent.press((await screen.findAllByRole("button", { name: "Lembrar" }))[1]!);
+
+    expect(screen.getByText("Lembrar Beto")).toBeOnTheScreen();
+    expect(previews).toHaveLength(2);
+
+    // A (stale, first open) resolves last; B (current) must win regardless of arrival order.
+    await act(async () => previews[1]!({ channels: [NoticeChannel.Push], dropped: [] }));
+
+    expect(await screen.findByText("Vai por: notificação no app")).toBeOnTheScreen();
+
+    await act(async () => previews[0]!({ channels: [], dropped: [] }));
+
+    expect(screen.getByText("Lembrar Beto")).toBeOnTheScreen();
+    expect(screen.getByText("Vai por: notificação no app")).toBeOnTheScreen();
+  });
+
   it("marks the owner's own bill without Pix as paid after confirming and reloads quietly", async () => {
     const bill = own({ id: "own", description: "Aluguel" });
     const charges = jest

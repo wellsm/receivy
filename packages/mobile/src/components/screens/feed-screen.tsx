@@ -280,6 +280,8 @@ export function FeedScreen({
   const monthRef = useRef(month);
   const [reminded, setReminded] = useState<Record<string, string>>({});
   const generation = useRef(0);
+  // Bumped on every open and close, so a preview response only lands when it still answers the latest ask.
+  const remindToken = useRef(0);
   const today = calendarDate();
 
   const load = useCallback(
@@ -342,6 +344,8 @@ export function FeedScreen({
 
   // The preview loads as soon as the sheet opens, so it always answers before the person taps Enviar.
   function openRemind(target: ChargeSummary) {
+    const token = ++remindToken.current;
+
     setRemindTarget(target);
     setRemindPreview(null);
 
@@ -353,9 +357,22 @@ export function FeedScreen({
 
     notifications
       .remindPreview(target.id)
-      .then(setRemindPreview)
-      .catch(() => setRemindPreview({ channels: [], dropped: [] }))
-      .finally(() => setRemindLoading(false));
+      .then((result) => {
+        if (remindToken.current === token) {
+          setRemindPreview(result);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (remindToken.current === token) {
+          setRemindLoading(false);
+        }
+      });
+  }
+
+  function closeRemind() {
+    remindToken.current += 1;
+    setRemindTarget(null);
   }
 
   async function remind(chargeId: string) {
@@ -519,9 +536,9 @@ export function FeedScreen({
           today={today}
           preview={remindPreview}
           loading={remindLoading}
-          onClose={() => setRemindTarget(null)}
+          onClose={closeRemind}
           onSend={() => {
-            setRemindTarget(null);
+            closeRemind();
             void remind(remindTarget.id);
           }}
         />

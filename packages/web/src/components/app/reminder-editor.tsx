@@ -65,14 +65,14 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
               />
               <span className="min-w-0 flex-1 truncate text-sm text-ink">{human}</span>
               <input type="checkbox" role="switch" aria-label={`Lembrete ${index + 1} ativo`} className="h-5 w-5 accent-primary" checked={rule.enabled} disabled={disabled} onChange={event => patch(index, { enabled: event.target.checked })} />
-              <button type="button" aria-label={`Remover lembrete ${index + 1}`} className="text-muted" disabled={disabled || rules.length === 1} onClick={() => onChange(rules.filter((_, i) => i !== index))}>
+              <button type="button" aria-label={`Remover lembrete ${index + 1}`} className="text-muted" disabled={disabled} onClick={() => onChange(rules.filter((_, i) => i !== index))}>
                 <Trash2 aria-hidden="true" size={16} />
               </button>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <ChannelChip label="E-mail" name={`E-mail no lembrete ${human || index + 1}`} checked={rule.channels.email} locked={null} disabled={disabled} onChange={value => patch(index, { channels: { ...rule.channels, email: value } })} />
-              <ChannelChip label="WhatsApp" name={`WhatsApp no lembrete ${human || index + 1}`} checked={rule.channels.whatsapp} locked={lock} disabled={disabled} onChange={value => patch(index, { channels: { ...rule.channels, whatsapp: value } })} />
+              <ChannelChip label="E-mail" name={`E-mail no lembrete ${index + 1}`} checked={rule.channels.email} locked={null} disabled={disabled} onChange={value => patch(index, { channels: { ...rule.channels, email: value } })} />
+              <ChannelChip label="WhatsApp" name={`WhatsApp no lembrete ${index + 1}`} checked={rule.channels.whatsapp} locked={lock} disabled={disabled} onChange={value => patch(index, { channels: { ...rule.channels, whatsapp: value } })} />
             </div>
           </div>
         );

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DropReason, NoticeChannel } from './notifications';
-import { channelLabel, dropReasonText, NOBODY_REACHABLE, reminderOffsetLabel, reminderSummary, remindLines, whatsappLockLabel } from './reminders-copy';
+import { channelLabel, dropReasonText, NOBODY_REACHABLE, PREVIEW_UNAVAILABLE, reminderOffsetLabel, reminderSummary, remindLines, whatsappLockLabel } from './reminders-copy';
 
 describe('reminder copy', () => {
   it('labels offsets in Portuguese', () => {
@@ -31,6 +31,10 @@ describe('reminder copy', () => {
       dropped: ['WhatsApp: sem número no contato']
     });
     expect(NOBODY_REACHABLE).toBe('Ninguém alcançável. Compartilhe o link direto.');
+  });
+
+  it('names the preview-unavailable copy', () => {
+    expect(PREVIEW_UNAVAILABLE).toBe('Não foi possível conferir os avisos. Você ainda pode enviar.');
   });
 
   it('summarises enabled rules with their channels, skipping disabled ones', () => {

@@ -35,33 +35,20 @@ const PREVIEW_NOTE = "Sempre às 6h no fuso da conta. Push sai junto sempre que 
 /** One configurable channel per rule: e-mail or WhatsApp, never both. The stored shape stays a ChannelSet. */
 const SINGLE_CHANNELS: ChannelSet[] = [
   { email: true, whatsapp: false },
-  { email: false, whatsapp: true },
-  { email: false, whatsapp: false }
+  { email: false, whatsapp: true }
 ];
 
-/** Collapses a stored set that carries both channels, so exactly one option reads as picked. */
+/** Collapses a stored set that carries both channels, or none, so exactly one option reads as picked. */
 function single(channels: ChannelSet): ChannelSet {
-  if (channels.email) {
-    return { email: true, whatsapp: false };
-  }
-
-  if (channels.whatsapp) {
+  if (channels.whatsapp && !channels.email) {
     return { email: false, whatsapp: true };
   }
 
-  return { email: false, whatsapp: false };
+  return { email: true, whatsapp: false };
 }
 
 function singleChannelLabel(channels: ChannelSet): string {
-  if (channels.email) {
-    return "email";
-  }
-
-  if (channels.whatsapp) {
-    return "whatsapp";
-  }
-
-  return "só push";
+  return channels.whatsapp ? "whatsapp" : "email";
 }
 
 function offsetOf(rule: ReminderDraft): number {
@@ -87,10 +74,7 @@ function rowSubtitle(rule: ReminderDraft): string {
     return "pausado";
   }
 
-  const picked = single(rule.channels);
-  const names = [...(picked.email ? ["email"] : []), "push", ...(picked.whatsapp ? ["whatsapp"] : [])];
-
-  return names.join(" · ");
+  return `${singleChannelLabel(single(rule.channels))} · push`;
 }
 
 export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderRulerProps) {

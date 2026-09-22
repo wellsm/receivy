@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  calendarDate,
   PlanTier,
   type ChannelSet,
   type PlanSummary,
@@ -12,7 +13,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
-import { ManualChannels, ReminderEditor } from "@/components/app/reminder-editor";
+import { ManualChannels, ReminderEditor, ReminderPreview } from "@/components/app/reminder-editor";
 
 const LOAD_ERROR = "Não foi possível carregar seus lembretes.";
 const ACTION_ERROR = "Não foi possível salvar seus lembretes.";
@@ -130,6 +131,9 @@ export function RemindersScreen() {
 
   const whatsapp = { available: whatsappAvailable, planAllows: plan === PlanTier.Basic };
 
+  // The settings screen has no charge: the preview dates the rules against today.
+  const example = calendarDate();
+
   return (
     <div className="flex flex-col gap-4 p-4">
       <h1 className="m-0 font-display text-lg font-bold text-ink">Lembretes</h1>
@@ -137,6 +141,7 @@ export function RemindersScreen() {
       <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">
         <h2 className="m-0 text-sm font-bold text-ink">Lembretes automáticos</h2>
         <ReminderEditor rules={rules} onChange={setRules} whatsapp={whatsapp} disabled={busy} />
+        <ReminderPreview rules={rules} dueDate={example} />
       </section>
 
       <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">

@@ -54,7 +54,7 @@ import { Image } from "expo-image";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Switch, Text, TextInput, useColorScheme, View } from "react-native";
 import { MonthSelect } from "@/components/app/month-select";
-import { ReminderEditor } from "@/components/app/reminder-editor";
+import { ReminderEditor, ReminderPreview } from "@/components/app/reminder-editor";
 import { ScopeModal } from "@/components/app/scope-modal";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
 import { accountClient, type AccountClient } from "@/account/client";
@@ -1292,6 +1292,7 @@ export function BillingFormScreen({
             ) : (
               <>
                 <ReminderEditor rules={draft.reminders} onChange={(reminders) => update({ reminders })} whatsapp={whatsappGate} disabled={locked} />
+                <ReminderPreview rules={draft.reminders} dueDate={draft.start || today} />
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Voltar ao padrão"

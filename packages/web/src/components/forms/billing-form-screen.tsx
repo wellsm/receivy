@@ -61,7 +61,7 @@ import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 import { loadPlanSummary } from "@/lib/plan-summary";
-import { ReminderEditor } from "@/components/app/reminder-editor";
+import { ReminderEditor, ReminderPreview } from "@/components/app/reminder-editor";
 import { PlanPaywall } from "@/components/app/plan-paywall";
 import { ScopeDialog } from "@/components/app/scope-dialog";
 import { CategorySelect } from "@/components/app/category-select";
@@ -1093,6 +1093,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           ) : (
             <>
               <ReminderEditor rules={draft.reminders} onChange={reminders => update({ reminders })} whatsapp={whatsappGate} disabled={locked} />
+              <ReminderPreview rules={draft.reminders} dueDate={draft.start || today} />
               <button type="button" className="self-start text-sm font-semibold text-muted" disabled={locked} onClick={() => update({ reminders: null })}>
                 Voltar ao padrão
               </button>

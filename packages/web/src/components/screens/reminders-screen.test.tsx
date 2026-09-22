@@ -25,13 +25,24 @@ function arrange(settings = { config: SYSTEM_REMINDER_CONFIG, inherited: true, w
 }
 
 describe("RemindersScreen", () => {
-  it("shows the default rule, the disclaimer and a locked WhatsApp chip on the free plan", async () => {
+  it("reads the default rule as a sentence, with the disclaimer and the preview", async () => {
     arrange();
     render(<RemindersScreen />);
 
-    expect(await screen.findByText("no dia")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Quando avisar no lembrete 1" })).toHaveTextContent("no dia");
+    expect(screen.getByRole("button", { name: "Canais do lembrete 1" })).toHaveTextContent("e-mail");
     expect(screen.getByText("Notificação no app vai sempre que a pessoa permitir no celular dela.")).toBeTruthy();
-    expect(screen.getAllByRole("checkbox", { name: /WhatsApp/ })[0]).toHaveProperty("disabled", true);
+    expect(screen.getByText(/Push sempre que houver app\./)).toBeTruthy();
+  });
+
+  it("locks the WhatsApp options behind the plan on the free plan", async () => {
+    arrange();
+    render(<RemindersScreen />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Canais do lembrete 1" }));
+
+    expect(screen.getByRole("radio", { name: "WhatsApp no lembrete 1" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("radio", { name: "e-mail e WhatsApp no lembrete 1" })).toHaveProperty("disabled", true);
     expect(screen.getAllByText("Plano Básico").length).toBeGreaterThan(0);
   });
 
@@ -39,20 +50,41 @@ describe("RemindersScreen", () => {
     arrange(undefined, "basic");
     render(<RemindersScreen />);
 
-    const add = await screen.findByRole("button", { name: "Adicionar lembrete" });
+    const add = await screen.findByRole("button", { name: "E também avisar…" });
 
     for (let i = 0; i < 4; i++) { await userEvent.click(add); }
 
-    expect(screen.queryByRole("button", { name: "Adicionar lembrete" })).toBeNull();
-    expect(screen.getAllByRole("spinbutton", { name: /Dias/ })).toHaveLength(5);
+    expect(screen.queryByRole("button", { name: "E também avisar…" })).toBeNull();
+    expect(screen.getByText("5 de 5")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Quando avisar no lembrete/ })).toHaveLength(5);
   });
 
-  it("saves the config with channels and clears it back to the default", async () => {
-    // WhatsApp must be both plan-allowed and transport-available to exercise the toggle itself.
+  it("builds the offset with the segmented control and the stepper, capped at 14 days", async () => {
+    arrange(undefined, "basic");
+    render(<RemindersScreen />);
+
+    const pill = await screen.findByRole("button", { name: "Quando avisar no lembrete 1" });
+
+    await userEvent.click(pill);
+    await userEvent.click(screen.getByRole("radio", { name: "antes no lembrete 1" }));
+
+    expect(pill).toHaveTextContent("1 dia antes");
+
+    const more = screen.getByRole("button", { name: "Mais um dia no lembrete 1" });
+
+    for (let i = 0; i < 13; i++) { await userEvent.click(more); }
+
+    expect(pill).toHaveTextContent("14 dias antes");
+    expect(more).toHaveProperty("disabled", true);
+  });
+
+  it("saves the picked channels and clears the config back to the default", async () => {
+    // WhatsApp must be both plan-allowed and transport-available to exercise the option itself.
     arrange({ config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: true }, "basic");
     render(<RemindersScreen />);
 
-    await userEvent.click(await screen.findByRole("checkbox", { name: "WhatsApp no lembrete 1" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Canais do lembrete 1" }));
+    await userEvent.click(screen.getByRole("radio", { name: "e-mail e WhatsApp no lembrete 1" }));
     await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
 
     await waitFor(() => {
@@ -65,20 +97,6 @@ describe("RemindersScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "Voltar ao padrão" }));
 
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true));
-  });
-
-  it("refuses an offset beyond 14 days inline", async () => {
-    arrange(undefined, "basic");
-    render(<RemindersScreen />);
-
-    const days = await screen.findByRole("spinbutton", { name: "Dias do lembrete 1" });
-
-    await userEvent.clear(days);
-    await userEvent.type(days, "20");
-    await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("Lembretes inválidos");
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
   });
 
   it("refuses saving with zero rules inline", async () => {

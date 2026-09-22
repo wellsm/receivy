@@ -12,6 +12,13 @@ export function dayDiff(from: string, to: string): number {
   return Math.round(ms / 86_400_000);
 }
 
+/** The calendar date `days` away from `iso` (`YYYY-MM-DD`), read in UTC so the day never shifts. */
+export function shiftDays(iso: string, days: number): string {
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+
+  return new Date(Date.UTC(year!, month! - 1, day! + days)).toISOString().slice(0, 10);
+}
+
 /** Short hint under a contact: how long since the last billing that involved them. */
 export function lastBilledHint(lastBilledAt: string | null, today: string): string {
   if (!lastBilledAt) {

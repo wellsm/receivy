@@ -1130,7 +1130,7 @@ it("customises, sends the rules, and clears back to the default", async () => {
   });
   const { user } = renderForm(billing);
 
-  expect(await screen.findByRole("spinbutton", { name: "Dias do lembrete 1" })).toHaveProperty("value", "3");
+  expect(await screen.findByRole("button", { name: "Quando avisar no lembrete 1" })).toHaveTextContent("3 dias depois");
 
   await user.click(screen.getByRole("button", { name: "Voltar ao padrão" }));
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));

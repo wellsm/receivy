@@ -240,20 +240,6 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
                   <ChevronDown aria-hidden="true" size={16} className={`shrink-0 text-muted transition-transform ${editing === index ? "rotate-180" : ""}`} />
                 </button>
 
-                {editing === index ? (
-                  <button
-                    type="button"
-                    aria-label={`Remover lembrete ${index + 1}`}
-                    className="shrink-0 text-danger"
-                    disabled={disabled}
-                    onClick={() => {
-                      setEditing(null);
-                      onChange(rules.filter((_, i) => i !== index));
-                    }}
-                  >
-                    <Trash2 aria-hidden="true" size={16} />
-                  </button>
-                ) : null}
               </div>
 
               {editing === index ? (
@@ -282,6 +268,20 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
                       );
                     })}
                   </div>
+
+                  <button
+                    type="button"
+                    aria-label={`Remover lembrete ${index + 1}`}
+                    className="mt-1 flex h-10 items-center justify-center gap-2 rounded-xl border border-danger/40 text-[13px] font-semibold text-danger"
+                    disabled={disabled}
+                    onClick={() => {
+                      setEditing(null);
+                      onChange(rules.filter((_, i) => i !== index));
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" size={15} />
+                    Remover este lembrete
+                  </button>
                 </div>
               ) : null}
             </div>

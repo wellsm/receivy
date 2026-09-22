@@ -217,21 +217,6 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
                   </View>
                   <Image source={chevronMark} tintColor={colors.muted} style={{ width: 13, height: 13, transform: [{ rotate: editing === index ? "-90deg" : "90deg" }] }} />
                 </Pressable>
-
-                {editing === index ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remover lembrete ${index + 1}`}
-                    accessibilityState={{ disabled }}
-                    disabled={disabled}
-                    onPress={() => {
-                      setEditing(null);
-                      onChange(rules.filter((_, i) => i !== index));
-                    }}
-                  >
-                    <Image source={trashMark} tintColor={colors.danger} style={{ width: 16, height: 16 }} />
-                  </Pressable>
-                ) : null}
               </View>
 
               {editing === index ? (
@@ -259,6 +244,20 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
                     );
                   })}
 
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remover lembrete ${index + 1}`}
+                    accessibilityState={{ disabled }}
+                    disabled={disabled}
+                    onPress={() => {
+                      setEditing(null);
+                      onChange(rules.filter((_, i) => i !== index));
+                    }}
+                    className="mt-1 h-10 flex-row items-center justify-center gap-2 rounded-xl border border-danger/40"
+                  >
+                    <Image source={trashMark} tintColor={colors.danger} style={{ width: 15, height: 15 }} />
+                    <Text className="font-sans text-[13px] font-semibold text-danger">Remover este lembrete</Text>
+                  </Pressable>
                 </View>
               ) : null}
             </View>

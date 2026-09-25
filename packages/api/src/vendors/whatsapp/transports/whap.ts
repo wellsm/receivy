@@ -1,7 +1,13 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
-import type { WhatsappProvider } from '../client';
+import type { WhatsappInputs, WhatsappProvider, WhatsappTemplatePayload, WhatsappTextParameter } from '../client';
+import { postMetaMessage } from './meta';
 
+/**
+ * whap (github.com/fdarian/whap) fakes the Cloud API on localhost and posts status webhooks back.
+ * This version takes a single body component with named parameters, and does not interpolate
+ * dynamic button URLs: the fixtures under `whap/templates/` carry the link inside the body.
+ */
 export declare class WhapWhatsappService extends Factory.Service<WhatsappProvider> {
   handler: typeof createService;
 
@@ -17,6 +23,37 @@ export declare class WhapWhatsappService extends Factory.Service<WhatsappProvide
   };
 }
 
-export function createService(_context: Service.Context<WhapWhatsappService>, _request: typeof fetch = globalThis.fetch): WhatsappProvider {
-  return { send: async () => ({ status: 'permanent' }) };
+/** Flattens every component into one named body: `1`, `2`… for positional text, `button_<index>` for the URL suffix. */
+function flatten(template: WhatsappTemplatePayload): WhatsappTemplatePayload {
+  const parameters: WhatsappTextParameter[] = template.components.flatMap((component) =>
+    component.parameters.map((parameter, index) => ({
+      ...parameter,
+      parameter_name: component.type === 'button' ? `button_${component.index}` : (parameter.parameter_name ?? String(index + 1))
+    }))
+  );
+
+  return { ...template, components: [{ type: 'body', parameters }] };
+}
+
+export function createService({ variables }: Service.Context<WhapWhatsappService>, request: typeof fetch = globalThis.fetch): WhatsappProvider {
+  const { APP_STAGE, WHAP_API_URL, WHAP_PHONE_NUMBER_ID, WHATSAPP_API_VERSION } = variables;
+
+  return {
+    send: async (message: WhatsappInputs.Message) => {
+      if (APP_STAGE === 'prd') {
+        throw new Error(`WhatsApp transport 'whap' is forbidden when APP_STAGE=prd.`);
+      }
+
+      return postMetaMessage(
+        {
+          baseUrl: WHAP_API_URL ?? 'http://127.0.0.1:3011',
+          phoneNumberId: WHAP_PHONE_NUMBER_ID ?? '000000000000000',
+          apiVersion: WHATSAPP_API_VERSION ?? 'v21.0',
+          accessToken: 'whap-local'
+        },
+        { ...message, template: flatten(message.template) },
+        request
+      );
+    }
+  };
 }

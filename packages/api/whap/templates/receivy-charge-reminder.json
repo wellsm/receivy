@@ -1,0 +1,28 @@
+{
+  "name": "receivy_charge_reminder",
+  "language": "pt_BR",
+  "category": "UTILITY",
+  "components": [
+    { "type": "HEADER", "format": "TEXT", "text": "Lembrete de cobrança" },
+    {
+      "type": "BODY",
+      "text": "{{1}}, há uma cobrança pendente de R$ {{2}}, com vencimento em {{3}}.\n\n{{4}}\nNada mudou desde o último aviso: o link de pagamento é o mesmo.\nAbrir cobrança: http://localhost:3000/pay/{{button_0}}"
+    },
+    { "type": "FOOTER", "text": "Se já pagou, envie o comprovante." },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        { "type": "URL", "text": "Abrir cobrança", "url": "http://localhost:3000/pay/{{button_0}}" },
+        { "type": "QUICK_REPLY", "text": "Já paguei" },
+        { "type": "QUICK_REPLY", "text": "Não me avise" }
+      ]
+    }
+  ],
+  "variables": {
+    "1": { "description": "Primeiro nome do destinatário", "example": "Marina" },
+    "2": { "description": "Valor sem R$", "example": "620,00" },
+    "3": { "description": "Vencimento humano", "example": "15/09" },
+    "4": { "description": "Descrição da cobrança", "example": "Aluguel de outubro" },
+    "button_0": { "description": "Token público da cobrança", "example": "abc1234" }
+  }
+}

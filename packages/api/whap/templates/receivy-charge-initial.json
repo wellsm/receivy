@@ -1,0 +1,22 @@
+{
+  "name": "receivy_charge_initial",
+  "language": "pt_BR",
+  "category": "UTILITY",
+  "components": [
+    { "type": "HEADER", "format": "TEXT", "text": "Nova cobrança no Receivy" },
+    {
+      "type": "BODY",
+      "text": "{{1}}, você recebeu uma cobrança de R$ {{2}}, com vencimento em {{3}}.\n\n{{4}}\nCobrado por {{5}}.\n\nSe já pagou, envie o comprovante para revisão. O Receivy não movimenta dinheiro.\nVer cobrança: http://localhost:3000/pay/{{button_0}}"
+    },
+    { "type": "FOOTER", "text": "O pagamento acontece direto entre vocês." },
+    { "type": "BUTTONS", "buttons": [{ "type": "URL", "text": "Ver cobrança", "url": "http://localhost:3000/pay/{{button_0}}" }] }
+  ],
+  "variables": {
+    "1": { "description": "Primeiro nome do destinatário", "example": "Marina" },
+    "2": { "description": "Valor sem R$", "example": "620,00" },
+    "3": { "description": "Vencimento humano", "example": "15/09" },
+    "4": { "description": "Descrição da cobrança", "example": "Aluguel de outubro" },
+    "5": { "description": "Nome de quem cobra", "example": "Wellington" },
+    "button_0": { "description": "Token público da cobrança", "example": "abc1234" }
+  }
+}

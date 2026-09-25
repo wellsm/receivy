@@ -1,0 +1,28 @@
+{
+  "name": "receivy_charge_manual",
+  "language": "pt_BR",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "{{1}}, o {{2}} reforçou a cobrança de R$ {{3}} — {{4}}, vence {{5}}.\nVer cobrança: http://localhost:3000/pay/{{button_0}}"
+    },
+    { "type": "FOOTER", "text": "O Receivy não movimenta dinheiro." },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        { "type": "URL", "text": "Ver cobrança", "url": "http://localhost:3000/pay/{{button_0}}" },
+        { "type": "QUICK_REPLY", "text": "Já paguei" },
+        { "type": "QUICK_REPLY", "text": "Não me avise" }
+      ]
+    }
+  ],
+  "variables": {
+    "1": { "description": "Nome do destinatário", "example": "Marina" },
+    "2": { "description": "Nome de quem cobra", "example": "Wellington" },
+    "3": { "description": "Valor sem R$", "example": "620,00" },
+    "4": { "description": "Descrição da cobrança", "example": "Aluguel de outubro" },
+    "5": { "description": "Vencimento humano", "example": "hoje" },
+    "button_0": { "description": "Token público da cobrança", "example": "abc1234" }
+  }
+}

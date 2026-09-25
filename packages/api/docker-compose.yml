@@ -41,6 +41,22 @@ services:
       timeout: 5s
       retries: 5
 
+  whap:
+    image: receivy-whap:latest
+    pull_policy: never
+    build:
+      context: https://github.com/fdarian/whap.git#068442323d9f53a529fcf01dbc6b70c597c17352
+    container_name: receivy-whap
+    restart: unless-stopped
+    environment:
+      WEBHOOK_URL: http://host.docker.internal:3735/local-receivy-api/webhooks/whatsapp/meta
+      WEBHOOK_SECRET: whatsapp_app_secret_local
+    ports:
+      # 3011 on the host so this can run next to another project's whap on 3010.
+      - "127.0.0.1:3011:3010"
+    volumes:
+      - ./whap/templates:/app/templates:ro
+
 volumes:
   receivy_pg_data:
   receivy_mailpit_data:

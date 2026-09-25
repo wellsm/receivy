@@ -339,7 +339,7 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnNumberCardPr
           <Text className="font-sans text-xs text-muted">Gerando código…</Text>
         )}
 
-        <Text className="font-sans text-xs text-muted">Aguardando…</Text>
+        <Text className="font-sans text-xs text-muted">Aguardando leitura…</Text>
 
         <Pressable accessibilityRole="button" accessibilityLabel="Abrir o WhatsApp" onPress={() => void openWhatsapp()}>
           <Text className="font-sans text-sm font-semibold text-primary">Abrir o WhatsApp</Text>

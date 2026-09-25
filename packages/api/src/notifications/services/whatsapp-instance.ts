@@ -112,9 +112,20 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
   const webhookSecret = randomBytes(24).toString('hex');
   const origin = (deps.variables.PUBLIC_API_ORIGIN ?? 'http://127.0.0.1:3735/local-receivy-api').replace(/\/+$/, '');
 
-  // A previous attempt may have created the instance on Evolution and then failed before the row was
-  // saved (a timeout, a dead database); retrying with the same name would otherwise get "name in use"
-  // forever. Clearing a possible orphan first costs nothing: a 404 means there was none.
+  const created = new Date().toISOString();
+  // The row and the sender go first, in one transaction: the unique `owner_id` index makes a second
+  // concurrent create fail here, before it could delete and recreate the instance the first one made.
+  const row = await deps.db.transaction(async (tx) => {
+    const inserted = await WhatsappInstanceRepository.insert(tx, { ownerId, name, token, webhookSecret, now: created });
+
+    await AccountRepository.setWhatsappSender(tx, ownerId, WhatsappSender.Own, created);
+
+    return inserted;
+  });
+
+  // A previous attempt may have created the instance on Evolution and then lost its row (a timeout, a dead
+  // database); creating with the same name would otherwise get "name in use" forever. Clearing a possible
+  // orphan first costs nothing: a 404 means there was none.
   await call(api, request, 'DELETE', `/instance/delete/${encodeURIComponent(name)}`).catch(() => null);
 
   const response = await call(api, request, 'POST', '/instance/create', {
@@ -126,21 +137,28 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
   }).catch(() => null);
 
   if (!response?.ok) {
+    const failed = new Date().toISOString();
+
+    // Nothing to pair: the row and the sender go back to how they were, so a retry starts clean.
+    await deps.db.transaction(async (tx) => {
+      await WhatsappInstanceRepository.remove(tx, row.id);
+      await AccountRepository.setWhatsappSender(tx, ownerId, WhatsappSender.Receivy, failed);
+    });
+
     throw new WhatsappInstanceUnavailableError();
   }
 
   const body = await response.json().catch(() => ({}));
+  const qr = qrOf(body);
   const now = new Date().toISOString();
-  const row = await deps.db.transaction(async (tx) => {
-    const inserted = await WhatsappInstanceRepository.insert(tx, { ownerId, name, token, webhookSecret, qr: qrOf(body), now });
 
-    await AccountRepository.setWhatsappSender(tx, ownerId, WhatsappSender.Own, now);
-    await EventRepository.record(tx, { type: 'whatsapp_instance.created', eventableType: EventableType.Account, eventableId: ownerId, actorId: ownerId, at: now });
+  if (qr) {
+    await WhatsappInstanceRepository.setState(deps.db, row.id, { qr }, now);
+  }
 
-    return inserted;
-  });
+  await EventRepository.record(deps.db, { type: 'whatsapp_instance.created', eventableType: EventableType.Account, eventableId: ownerId, actorId: ownerId, at: now });
 
-  return view(row);
+  return view({ ...row, ...(qr ? { qr } : {}) });
 }
 
 async function get(deps: InstanceDeps, request: typeof fetch, ownerId: string): Promise<WhatsappInstanceView | null> {

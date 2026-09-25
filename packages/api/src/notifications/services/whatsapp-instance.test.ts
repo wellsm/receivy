@@ -108,6 +108,17 @@ describe('WhatsApp instance service', () => {
     expect(state.events).toEqual(['whatsapp_instance.created']);
   });
 
+  it('rolls the row and the sender back and answers 503 when Evolution refuses the create', async () => {
+    const { db, state } = fakeDb();
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(new Response(null, { status: 500 }));
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    await expect(client.create(OWNER)).rejects.toMatchObject({ status: 503 });
+    expect(state.instance).toBeNull();
+    expect(state.sender).toBe(WhatsappSender.Receivy);
+    expect(state.events).toEqual([]);
+  });
+
   it('opens and closes on connection updates, clearing the qr and warning the owner once on close', async () => {
     const { db, state } = fakeDb();
     const pushes: string[] = [];

@@ -1,4 +1,4 @@
-import { deepEqual, equal, ok } from 'node:assert/strict';
+import { deepEqual, equal, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Service } from '@ez4/common';
 import { BucketTester } from '@ez4/local-storage/test';
@@ -8,12 +8,49 @@ import { WhatsappInstanceRepository } from '../../src/notifications/repositories
 import { WhatsappMessageRepository } from '../../src/notifications/repositories/whatsapp-message';
 import { reminderPreview } from '../../src/notifications/services/notification';
 import { NoticeChannel, NoticeTemplate, notifyCharge } from '../../src/notifications/services/send';
+import { createInstanceClient, type InstanceVariables } from '../../src/notifications/services/whatsapp-instance';
 import { cycleOf, whatsappReach } from '../../src/notifications/services/whatsapp-quota';
 import { SubscriptionRepository } from '../../src/plans/repositories/subscription';
 import { AccountRepository } from '../../src/users/repositories/account';
 import { type AccountService, createService as createAccountService } from '../../src/users/services/account';
-import { cleanupUsers, contacts, createUser, db, grantBasicPlan, paymentMethods } from '../fixtures/financial';
+import { cleanupUsers, contacts, createUser, db, grantBasicPlan, paymentMethods, plans } from '../fixtures/financial';
 import { fakeNotice } from '../fixtures/scheduling';
+
+const EVOLUTION_TEST_VARIABLES: InstanceVariables = {
+  EVOLUTION_API_URL: 'http://evo',
+  EVOLUTION_API_KEY: 'k',
+  PUBLIC_API_ORIGIN: 'https://api.receivy.example',
+  PUBLIC_WEB_ORIGIN: 'https://receivy.example',
+  EMAIL_TRANSPORT: 'disabled'
+};
+
+/** A fetch fake for the Evolution API: the first DELETE (pre-create orphan cleanup) is a 404, the create
+ *  call answers with a QR, connect answers with a fresh QR, and every later DELETE (logout, delete on
+ *  remove) succeeds. */
+function evolutionFake(): typeof fetch {
+  let deletes = 0;
+
+  return (async (url: RequestInfo | URL, init?: RequestInit) => {
+    const method = init?.method ?? 'GET';
+    const target = String(url);
+
+    if (method === 'DELETE') {
+      deletes++;
+
+      return deletes === 1 ? new Response(null, { status: 404 }) : Response.json({});
+    }
+
+    if (method === 'POST' && target.endsWith('/instance/create')) {
+      return Response.json({ instance: { instanceName: 'ignored' }, hash: 'ignored', qrcode: { base64: 'data:image/png;base64,QR' } }, { status: 201 });
+    }
+
+    if (method === 'GET' && target.includes('/instance/connect/')) {
+      return Response.json({ base64: 'QR' });
+    }
+
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+}
 
 const OWNER = 'c1111111-1111-4111-8111-111111111111';
 const FREE = 'c2222222-2222-4222-8222-222222222222';
@@ -180,6 +217,30 @@ describe('WhatsApp notices', () => {
     } finally {
       await AccountRepository.setWhatsappSender(db, OWNER, WhatsappSender.Receivy, now);
       await WhatsappInstanceRepository.remove(db, instance.id);
+    }
+  });
+
+  it('switches the sender to own only with an instance, and a closed one drops the reminder as sender_offline', async () => {
+    const now = new Date(clock).toISOString();
+    const instances = createInstanceClient({ db, plans, variables: EVOLUTION_TEST_VARIABLES, request: evolutionFake() });
+
+    await rejects(instances.setSender(OWNER, WhatsappSender.Own), (error: { status?: number }) => error.status === 409);
+    await instances.create(OWNER, { riskAccepted: true });
+    await instances.setSender(OWNER, WhatsappSender.Receivy);
+    equal((await accounts.reminders(OWNER)).whatsapp.sender, WhatsappSender.Receivy);
+    ok((await accounts.reminders(OWNER)).whatsapp.instance, 'the pairing survives switching back');
+
+    const row = await WhatsappInstanceRepository.byOwner(db, OWNER);
+
+    await WhatsappInstanceRepository.setState(db, row!.id, { state: WhatsappInstanceState.Closed, disconnectedAt: now }, now);
+    equal(await instances.setSender(OWNER, WhatsappSender.Own), WhatsappSender.Own);
+
+    try {
+      const { id } = await charge(OWNER);
+
+      deepEqual((await notifyCharge(db, context, id, NoticeTemplate.Reminder, clock, 0)).dropped, [{ channel: 'whatsapp', reason: 'sender_offline' }]);
+    } finally {
+      await instances.remove(OWNER);
     }
   });
 

@@ -6,6 +6,7 @@ import type { NotificationProvider } from '../provider';
 
 declare class InstanceRequest implements Http.Request {
   identity: SessionIdentity;
+  query: { refresh?: boolean };
 }
 
 declare class InstanceResponse implements Http.Response {
@@ -13,6 +14,6 @@ declare class InstanceResponse implements Http.Response {
   body: { instance: WhatsappInstanceView | null };
 }
 
-export async function getWhatsappInstanceHandler({ identity }: InstanceRequest, { whatsappInstances }: Service.Context<NotificationProvider>): Promise<InstanceResponse> {
-  return { status: 200, body: { instance: await whatsappInstances.get(identity.userId) } };
+export async function getWhatsappInstanceHandler({ identity, query }: InstanceRequest, { whatsappInstances }: Service.Context<NotificationProvider>): Promise<InstanceResponse> {
+  return { status: 200, body: { instance: await whatsappInstances.get(identity.userId, query.refresh === true) } };
 }

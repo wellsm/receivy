@@ -19,7 +19,7 @@ import {
   whatsappLockLabel,
 } from "@receivy/common";
 import { useThemeColors } from "@/theme/colors";
-import { whatsappEnabled } from "@/whatsapp-flag";
+import { visibleChannels, whatsappEnabled } from "@/whatsapp-flag";
 
 const trashMark = require("../../../assets/images/auth/trash.svg");
 const plusMark = require("../../../assets/images/auth/plus.svg");
@@ -279,7 +279,7 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
 
 /** The preview block under the cards: the dates the rules land on, against a real or example due date. */
 export function ReminderPreview({ rules, dueDate }: { rules: ReminderDraft[]; dueDate: string }) {
-  const parsed = rules.map((rule) => ({ ...rule, offsetDays: offsetOf(rule) }));
+  const parsed = rules.map((rule) => ({ ...rule, offsetDays: offsetOf(rule), channels: visibleChannels(rule.channels) }));
 
   return (
     <View className="gap-1.5 rounded-2xl border border-outline bg-surface-muted px-4 py-3">

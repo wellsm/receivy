@@ -397,6 +397,8 @@ describe("ContactFormScreen", () => {
     await render(<ContactFormScreen client={client} />);
 
     expect(screen.queryByLabelText("Essa pessoa concordou em receber cobranças por WhatsApp")).toBeNull();
+    expect(screen.getByLabelText("Telefone")).toBeTruthy();
+    expect(screen.queryByText(/WhatsApp/)).toBeNull();
 
     await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
     await fireEvent.press(screen.getByLabelText("Salvar contato"));

@@ -67,7 +67,7 @@ import { CategorySelect } from "@/components/app/category-select";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
 import { SplitEditor, type SplitRow } from "@/components/app/split-editor";
 import { useThemeColors } from "@/theme/colors";
-import { whatsappEnabled } from "@/whatsapp-flag";
+import { visibleChannels, whatsappEnabled } from "@/whatsapp-flag";
 
 const closeMark = require("../../../assets/images/auth/plus.svg");
 const keyMark = require("../../../assets/images/auth/key.svg");
@@ -1281,7 +1281,7 @@ export function BillingFormScreen({
 
             {draft.reminders === null ? (
               <View className="flex-row items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-2.5">
-                <Text className="flex-1 font-sans text-sm text-ink">Usando seu padrão: {reminderSummary(effective)}</Text>
+                <Text className="flex-1 font-sans text-sm text-ink">Usando seu padrão: {reminderSummary(effective.map((rule) => ({ ...rule, channels: visibleChannels(rule.channels) })))}</Text>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Personalizar"

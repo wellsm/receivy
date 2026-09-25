@@ -281,6 +281,21 @@ describe("BillingFormScreen", () => {
     expect(await screen.findByText("Usando seu padrão: 3 dias depois (e-mail)")).toBeOnTheScreen();
   });
 
+  it("shows the inherited default as e-mail, never WhatsApp, when the kill switch is off", async () => {
+    const account = {
+      reminders: jest.fn().mockResolvedValue({
+        config: { reminders: [{ offsetDays: 3, enabled: true, channels: { email: false, whatsapp: true } }], manual: { email: true, whatsapp: true } },
+        inherited: true,
+        whatsappAvailable: false,
+      }),
+    };
+
+    await quickForm(undefined, undefined, { account });
+
+    expect(await screen.findByText("Usando seu padrão: 3 dias depois (e-mail)")).toBeOnTheScreen();
+    expect(screen.queryByText(/WhatsApp/)).toBeNull();
+  });
+
   it("creates a billing straight from the quick form, with category and no review step", async () => {
     const { client, onSaved } = await quickForm();
 
@@ -1053,6 +1068,8 @@ describe("BillingFormScreen", () => {
     await screen.findByLabelText("Quando avisar no lembrete 1");
 
     expect(screen.queryByLabelText("Canais do lembrete 1")).toBeNull();
+    expect(screen.getByText(/por e-mail/)).toBeOnTheScreen();
+    expect(screen.queryByText(/WhatsApp/)).toBeNull();
 
     await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
     await waitFor(() => expect(patchBilling).toHaveBeenCalled());

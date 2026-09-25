@@ -260,6 +260,8 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
     }
   }
 
+  const phoneLabel = whatsappEnabled() ? "WhatsApp" : "Telefone";
+
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-4 px-5 pb-8 pt-3" showsVerticalScrollIndicator={false}>
@@ -312,9 +314,9 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
             />
           </Field>
 
-          <Field label="WhatsApp" hint={phoneSource === PhoneSource.Person ? PHONE_LOCKED_NOTE : undefined}>
+          <Field label={phoneLabel} hint={phoneSource === PhoneSource.Person ? PHONE_LOCKED_NOTE : undefined}>
             <TextInput
-              accessibilityLabel="WhatsApp"
+              accessibilityLabel={phoneLabel}
               accessibilityState={{ disabled: phoneSource === PhoneSource.Person }}
               placeholder="(11) 98765-4321"
               placeholderTextColor={colors.muted}

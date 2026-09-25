@@ -34,6 +34,10 @@ describe('parseMetaStatuses', () => {
     ]);
     expect(parseMetaStatuses(null)).toEqual([]);
     expect(parseMetaStatuses({ entry: 'nope' })).toEqual([]);
+
+    const whapPayload = { entry: [{ changes: [{ field: 'messages', value: { template_statuses: [{ id: 'wamid.7', status: 'delivered' }] } }] }] };
+
+    expect(parseMetaStatuses(whapPayload)).toEqual([{ providerMessageId: 'wamid.7', status: WhatsappMessageStatus.Delivered }]);
   });
 });
 

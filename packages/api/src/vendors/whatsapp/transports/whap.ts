@@ -3,6 +3,9 @@ import type { Factory } from '@ez4/factory';
 import type { WhatsappInputs, WhatsappProvider, WhatsappTemplatePayload, WhatsappTextParameter } from '../client';
 import { postMetaMessage } from './meta';
 
+// The pinned whap build serves only v22.0/v23.0, whatever the Meta transport is configured with.
+const WHAP_API_VERSION = 'v22.0';
+
 /**
  * whap (github.com/fdarian/whap) fakes the Cloud API on localhost and posts status webhooks back.
  * This version takes a single body component with named parameters, and does not interpolate
@@ -15,7 +18,6 @@ export declare class WhapWhatsappService extends Factory.Service<WhatsappProvide
     APP_STAGE: Environment.Variable<'APP_STAGE'>;
     WHAP_API_URL: Environment.VariableOrValue<'WHAP_API_URL', 'http://127.0.0.1:3011'>;
     WHAP_PHONE_NUMBER_ID: Environment.VariableOrValue<'WHAP_PHONE_NUMBER_ID', '000000000000000'>;
-    WHATSAPP_API_VERSION: Environment.VariableOrValue<'WHATSAPP_API_VERSION', 'v21.0'>;
   };
 
   services: {
@@ -36,7 +38,7 @@ function flatten(template: WhatsappTemplatePayload): WhatsappTemplatePayload {
 }
 
 export function createService({ variables }: Service.Context<WhapWhatsappService>, request: typeof fetch = globalThis.fetch): WhatsappProvider {
-  const { APP_STAGE, WHAP_API_URL, WHAP_PHONE_NUMBER_ID, WHATSAPP_API_VERSION } = variables;
+  const { APP_STAGE, WHAP_API_URL, WHAP_PHONE_NUMBER_ID } = variables;
 
   return {
     send: async (message: WhatsappInputs.Message) => {
@@ -48,7 +50,7 @@ export function createService({ variables }: Service.Context<WhapWhatsappService
         {
           baseUrl: WHAP_API_URL ?? 'http://127.0.0.1:3011',
           phoneNumberId: WHAP_PHONE_NUMBER_ID ?? '000000000000000',
-          apiVersion: WHATSAPP_API_VERSION ?? 'v21.0',
+          apiVersion: WHAP_API_VERSION,
           accessToken: 'whap-local'
         },
         { ...message, template: flatten(message.template) },

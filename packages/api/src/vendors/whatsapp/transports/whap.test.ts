@@ -19,7 +19,7 @@ describe('whap transport', () => {
       const before = structuredClone(payload);
       const fixture = JSON.parse(await readFile(new URL(`../../../../whap/templates/${file}.json`, import.meta.url), 'utf8'));
       const request = vi.fn<typeof fetch>(async (url, init) => {
-        expect(String(url)).toBe('http://127.0.0.1:3011/v21.0/000000000000000/messages');
+        expect(String(url)).toBe('http://127.0.0.1:3011/v22.0/000000000000000/messages');
 
         const body = JSON.parse(String(init?.body));
 

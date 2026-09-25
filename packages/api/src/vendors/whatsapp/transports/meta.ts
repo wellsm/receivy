@@ -87,8 +87,8 @@ export declare class MetaWhatsappService extends Factory.Service<WhatsappProvide
   handler: typeof createService;
 
   variables: {
-    WHATSAPP_ACCESS_TOKEN: Environment.Variable<'WHATSAPP_ACCESS_TOKEN'>;
-    WHATSAPP_PHONE_NUMBER_ID: Environment.Variable<'WHATSAPP_PHONE_NUMBER_ID'>;
+    WHATSAPP_ACCESS_TOKEN: Environment.VariableOrValue<'WHATSAPP_ACCESS_TOKEN', 'disabled'>;
+    WHATSAPP_PHONE_NUMBER_ID: Environment.VariableOrValue<'WHATSAPP_PHONE_NUMBER_ID', '000000000000000'>;
     WHATSAPP_API_VERSION: Environment.VariableOrValue<'WHATSAPP_API_VERSION', 'v21.0'>;
   };
 

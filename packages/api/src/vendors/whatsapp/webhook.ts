@@ -12,7 +12,8 @@ const META_STATUSES: Record<string, WhatsappMessageStatus> = {
 const FAILED_WITHOUT_ERROR = 'Meta reported the message as failed without an error.';
 
 type MetaStatus = { id?: unknown; status?: unknown; errors?: unknown };
-type MetaChange = { field?: unknown; value?: { statuses?: unknown } | null };
+// `template_statuses` is what the whap fake sends in place of the real Cloud API's `statuses`.
+type MetaChange = { field?: unknown; value?: { statuses?: unknown; template_statuses?: unknown } | null };
 
 /** The list, or an empty one: the body is signed, but the Graph API shape drifts between versions and must not 500. */
 const listOf = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
@@ -54,7 +55,7 @@ export function parseMetaStatuses(payload: unknown): MetaStatusUpdate[] {
         continue;
       }
 
-      for (const raw of listOf(change.value?.statuses)) {
+      for (const raw of [...listOf(change.value?.statuses), ...listOf(change.value?.template_statuses)]) {
         const update = toMetaUpdate(raw);
 
         if (update) {

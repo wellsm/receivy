@@ -28,7 +28,9 @@ const DROP_TEXTS: Record<DropReason, string> = {
   [DropReason.NoPhone]: 'sem número no contato',
   [DropReason.NoConsent]: 'sem consentimento no contato',
   [DropReason.OptedOut]: 'a pessoa pediu para não receber',
-  [DropReason.Unavailable]: 'em breve'
+  [DropReason.Unavailable]: 'em breve',
+  [DropReason.SenderOffline]: 'seu número não está conectado',
+  [DropReason.Quota]: 'você atingiu o limite do seu plano'
 };
 
 export function dropReasonText(reason: DropReason): string {

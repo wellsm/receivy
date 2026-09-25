@@ -180,8 +180,9 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
   }
 
   const body = await response.json().catch(() => ({}));
-  // Without a phone the QR comes straight from `create`; with one, `connect?number=` hands back both the QR and the pairing code.
-  const pairing = phone ? await connect(api, request, name, phone) : pairingOf(body);
+  // Without a phone the QR comes straight from `create`; with one, `connect?number=` hands back both the QR and the pairing
+  // code — its fields win when present, but a failed `connect` never discards the QR the `create` body already gave us.
+  const pairing = phone ? { ...pairingOf(body), ...(await connect(api, request, name, phone)) } : pairingOf(body);
   const now = new Date().toISOString();
 
   await WhatsappInstanceRepository.setState(deps.db, row.id, { qr: pairing.qr ?? null, pairingCode: pairing.pairingCode ?? null }, now);
@@ -215,7 +216,8 @@ async function get(deps: InstanceDeps, request: typeof fetch, ownerId: string, r
     if (pairing.qr !== undefined || pairing.pairingCode !== undefined) {
       await WhatsappInstanceRepository.setState(deps.db, row.id, { qr: pairing.qr ?? null, pairingCode: pairing.pairingCode ?? null }, new Date().toISOString());
 
-      return view({ ...row, ...(pairing.qr ? { qr: pairing.qr } : {}), ...(pairing.pairingCode ? { pairing_code: pairing.pairingCode } : {}) });
+      // Mirrors what was just saved: a code-only refresh clears the (now expired) qr, and vice versa.
+      return view({ ...row, qr: pairing.qr, pairing_code: pairing.pairingCode });
     }
   }
 

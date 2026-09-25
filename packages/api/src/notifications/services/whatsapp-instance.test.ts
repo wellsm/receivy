@@ -209,8 +209,24 @@ describe('WhatsApp instance service', () => {
     expect(typeof state.lastEventPayload?.['riskAcceptedAt']).toBe('string');
   });
 
+  it('keeps the create body QR when a phone is given but the connect call fails', async () => {
+    const { db, state } = fakeDb();
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(new Response(null, { status: 500 }));
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    const view = await client.create(OWNER, { riskAccepted: true, phone: '(11) 98888-7777' });
+
+    expect(view).toMatchObject({ qr: 'data:image/png;base64,QR', pairingCode: null });
+    expect(state.instance?.['qr']).toBe('data:image/png;base64,QR');
+    expect(state.instance?.['pairing_code']).toBeFalsy();
+  });
+
   it('refreshes the qr and the code on demand while pending, and keeps them otherwise', async () => {
-    const { db } = fakeDb();
+    const { db, state } = fakeDb();
     const request = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
@@ -224,6 +240,25 @@ describe('WhatsApp instance service', () => {
     expect(request).toHaveBeenCalledTimes(2);
     expect((await client.get(OWNER, true))?.qr).toBe('data:image/png;base64,QR9');
     expect(request).toHaveBeenCalledTimes(3);
+    expect(state.instance?.['qr']).toBe('data:image/png;base64,QR9');
+    expect(state.instance?.['pairing_code']).toBeFalsy();
+  });
+
+  it('mirrors the stored pairing on refresh: a code-only refresh clears the now-expired qr', async () => {
+    const { db } = fakeDb();
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(Response.json({ pairingCode: 'NEW-CODE' }));
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    await client.create(OWNER, { riskAccepted: true });
+
+    const view = await client.get(OWNER, true);
+
+    expect(view?.qr).toBeNull();
+    expect(view?.pairingCode).toBe('NEW-CODE');
   });
 
   it('switches the sender freely and refuses own without an instance', async () => {

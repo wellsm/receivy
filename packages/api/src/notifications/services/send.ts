@@ -1,5 +1,5 @@
 import type { Client } from '@ez4/scheduler';
-import { addCalendarDays, type ChannelSet, channelsFor, ChargeState, PaymentLinkState, type ReminderTemplate } from '@receivy/common';
+import { addCalendarDays, type ChannelSet, channelsFor, ChargeState, PaymentLinkState, type ReminderTemplate, WhatsappSender } from '@receivy/common';
 import { billingRegistered } from '../../billings/utils/columns';
 import { effectiveConfigOf, effectiveReminders } from '../../billings/utils/reminders';
 import { ChargeRepository } from '../../charges/repositories/charge';
@@ -14,11 +14,15 @@ import { ProofRepository } from '../../proofs/repositories/proof';
 import { issueOptOutToken } from '../../public/services/capability';
 import { ensurePublicLink } from '../../public/services/links';
 import type { CheckoutClients } from '../../vendors/checkout/types';
+import { toWhatsappNumber } from '../../vendors/whatsapp/phone';
+import { buildChargeTemplate } from '../../vendors/whatsapp/templates';
 import { DeviceRepository } from '../repositories/device';
-import { type Dropped, NoticeChannel, resolveChannels } from './channels';
+import { WhatsappMessageRepository } from '../repositories/whatsapp-message';
+import { type Dropped, DropReason, NoticeChannel, resolveChannels } from './channels';
 import { instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
 import { NoticeTemplate, renderNotice } from './render';
 import type { NotificationTransport } from './transport';
+import { whatsappReach } from './whatsapp-quota';
 
 export { NoticeChannel, NoticeTemplate };
 
@@ -194,11 +198,60 @@ export async function sendChargeNotice(
   );
   // Only a conta a receber has a creditor to have filed a phone for the debtor.
   const reach = ownBill || !charge.creditor_id ? null : await ContactRepository.reachability(db, charge.creditor_id, target.id);
-  const resolved = resolveChannels({ wanted: options.channels, ownBill, target, contact: reach, whatsappAvailable: context.config.whatsappAvailable });
+  // The sender and the quota are a real read: only asked when the rule wants WhatsApp and the person is reachable.
+  const wantsWhatsapp = options.channels.whatsapp && !ownBill && Boolean(target.phone ?? reach?.phone);
+  const sender = wantsWhatsapp ? await whatsappReach(db, charge.owner_id, new Date(now)) : { sender: WhatsappSender.Receivy, instanceOpen: false, instance: null, quotaLeft: 0, quotaLimit: 0 };
+  const resolved = resolveChannels({
+    wanted: options.channels,
+    ownBill,
+    target,
+    contact: reach,
+    whatsappAvailable: context.config.whatsappAvailable,
+    sender: sender.sender,
+    instanceOpen: sender.instanceOpen,
+    quotaLeft: sender.quotaLeft
+  });
   const wantsPush = context.config.pushAvailable !== false;
   // One entry per device that took the push: the event says how many screens the notice landed on.
   const pushed = wantsPush ? await pushToDevices(db, context.transport, target.id, { title: rendered.subject, url: rendered.url }, now) : 0;
   const channels: NoticeChannel[] = Array.from({ length: pushed }, () => NoticeChannel.Push);
+
+  const to = resolved.phone ? toWhatsappNumber(resolved.phone) : null;
+
+  // The WhatsApp row exists before the call: a status webhook may arrive before the transport returns.
+  if (resolved.whatsapp && to) {
+    const stamp = new Date(now).toISOString();
+    const row = await WhatsappMessageRepository.insert(db, { ownerId: charge.owner_id, chargeId, to, sender: sender.sender, template, now: stamp });
+    const result = await context.transport.whatsapp({
+      to,
+      key: `${chargeId}:${template}:${options.offsetDays ?? 'manual'}:${now}`,
+      text: rendered.text,
+      template: buildChargeTemplate(
+        {
+          template,
+          name: target.name?.trim() || 'Olá',
+          creditor: charge.creditor?.name?.trim() || 'Receivy',
+          cents: charge.amount_cents,
+          dueDate: charge.due_date,
+          description: charge.description,
+          token: rendered.url.slice(rendered.url.lastIndexOf('/') + 1)
+        },
+        context.config.templates
+      ),
+      sender: sender.sender,
+      ...(sender.instance ? { instance: sender.instance } : {})
+    });
+
+    if (result.status === 'accepted') {
+      await WhatsappMessageRepository.markSent(db, row.id, result.id, stamp);
+      channels.push(NoticeChannel.WhatsApp);
+    } else {
+      await WhatsappMessageRepository.markFailed(db, row.id, result.status, stamp);
+    }
+  } else if (resolved.whatsapp) {
+    // Reachable on paper, but the number does not normalise: reported like any other drop.
+    resolved.dropped.push({ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone });
+  }
 
   if (resolved.email && target.email) {
     const result = await context.transport.email({
@@ -215,8 +268,6 @@ export async function sendChargeNotice(
       channels.push(NoticeChannel.Email);
     }
   }
-
-  // Phase 3 sends here; today `resolved.whatsapp` is always false because the transport is unavailable.
 
   await EventRepository.record(db, {
     type: channels.length ? 'notice.sent' : 'notice.skipped',

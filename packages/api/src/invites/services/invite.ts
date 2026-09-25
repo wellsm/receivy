@@ -34,6 +34,7 @@ import { announceCharges, type NoticeContext } from '../../notifications/service
 import { ProofRepository } from '../../proofs/repositories/proof';
 import { LinkRepository } from '../../public/repositories/link';
 import { AccountRepository } from '../../users/repositories/account';
+import type { WhatsappService } from '../../vendors/whatsapp/service';
 import { InviteOwnerError, SplitClosedError, SplitInProgressError } from '../errors';
 import { createInvite, publicInviteView, resolveInvite, revokeInvite } from './links';
 
@@ -58,11 +59,16 @@ export declare class InviteService extends Factory.Service<InviteClient> {
     PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
     NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
     EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
+    WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+    WHATSAPP_TEMPLATE_INITIAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_INITIAL', 'receivy_charge_initial'>;
+    WHATSAPP_TEMPLATE_REMINDER: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_REMINDER', 'receivy_charge_reminder'>;
+    WHATSAPP_TEMPLATE_MANUAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_MANUAL', 'receivy_charge_manual'>;
   };
 
   services: {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
+    whatsapp: Environment.Service<WhatsappService>;
     chargeNotifyScheduler: Environment.Service<ChargeNotifyScheduler>;
     variables: Environment.ServiceVariables;
   };
@@ -345,7 +351,7 @@ export async function acceptInvite(
   return result;
 }
 
-export function createService({ db, email, variables }: Service.Context<InviteService>): InviteClient {
+export function createService({ db, email, whatsapp, variables }: Service.Context<InviteService>): InviteClient {
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
   const origin = variables.PUBLIC_WEB_ORIGIN;
 
@@ -364,7 +370,7 @@ export function createService({ db, email, variables }: Service.Context<InviteSe
 
       await throttlePublicRead(db, invite.public_id, INVITE_ACCEPT);
 
-      const notice = noticeContext({ email, variables });
+      const notice = noticeContext({ email, whatsapp, variables });
       const { waiting, ...result } = await acceptInvite(db, userId, token, secret, new Date(), notice);
 
       // The owner learns right away that someone is waiting; the card on the billing detail is the fallback.

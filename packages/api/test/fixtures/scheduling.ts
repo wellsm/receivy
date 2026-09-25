@@ -1,9 +1,11 @@
 import type { Client, Cron } from '@ez4/scheduler';
+import type { WhatsappSender } from '@receivy/common';
 import { PaymentProvider } from '@receivy/common';
 import type { NotificationConfig } from '../../src/notifications/services/planner';
 import type { ChargeNotifyEvent, NoticeContext } from '../../src/notifications/services/send';
 import type { NotificationTransport } from '../../src/notifications/services/transport';
 import { fakeCheckout } from '../../src/vendors/checkout/fake';
+import { DEFAULT_TEMPLATE_NAMES } from '../../src/vendors/whatsapp/templates';
 
 export type ScheduledEvent<T> = { date: Date; event: T };
 
@@ -35,14 +37,17 @@ export function fakeScheduler<T extends Cron.Event>() {
 
 export type SentPush = { token: string; title: string; body: string; url: string };
 export type SentEmail = { to: string; key: string; subject: string; text: string; from: string };
+export type SentWhatsapp = { to: string; key: string; text: string; sender: WhatsappSender; template: string; instance?: string };
 
-/** Records every send; `pushStatus`/`emailStatus` let a test simulate a dead device or a disabled channel. */
+/** Records every send; `pushStatus`/`emailStatus`/`whatsappStatus` let a test simulate a dead device or a disabled channel. */
 export function fakeTransport() {
   const pushes: SentPush[] = [];
   const emails: SentEmail[] = [];
+  const whatsapps: SentWhatsapp[] = [];
   const state = {
     pushStatus: 'accepted' as 'accepted' | 'device_unregistered' | 'disabled',
-    emailStatus: 'accepted' as 'accepted' | 'disabled'
+    emailStatus: 'accepted' as 'accepted' | 'disabled',
+    whatsappStatus: 'accepted' as 'accepted' | 'permanent' | 'transient' | 'disabled'
   };
 
   const transport: NotificationTransport = {
@@ -56,6 +61,11 @@ export function fakeTransport() {
 
       return state.emailStatus === 'accepted' ? { status: 'accepted', id: `email-${emails.length}` } : { status: state.emailStatus };
     },
+    whatsapp: async (input) => {
+      whatsapps.push({ to: input.to, key: input.key, text: input.text, sender: input.sender, template: input.template.name, instance: input.instance?.name });
+
+      return state.whatsappStatus === 'accepted' ? { status: 'accepted', id: `wamid-${whatsapps.length}` } : { status: state.whatsappStatus };
+    },
     receipt: async () => ({ status: 'delivered' })
   };
 
@@ -63,10 +73,12 @@ export function fakeTransport() {
     transport,
     pushes,
     emails,
+    whatsapps,
     state,
     reset: () => {
       pushes.length = 0;
       emails.length = 0;
+      whatsapps.length = 0;
     }
   };
 }
@@ -78,7 +90,8 @@ export const TEST_CONFIG: NotificationConfig = {
   credentialKeyB64: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
   from: 'fixture@example.invalid',
   pushAvailable: true,
-  whatsappAvailable: false
+  whatsappAvailable: false,
+  templates: DEFAULT_TEMPLATE_NAMES
 };
 
 /** A full producer context on fakes; every spec that creates charges can pass one and inspect the fakes. */

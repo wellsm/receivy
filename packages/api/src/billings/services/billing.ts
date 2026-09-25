@@ -43,6 +43,7 @@ import { assertCanCreateIndefinite } from '../../plans/services/limits';
 import { ProofRepository } from '../../proofs/repositories/proof';
 import { StoredProofState } from '../../charges/schemas/charge';
 import { AccountRepository } from '../../users/repositories/account';
+import type { WhatsappService } from '../../vendors/whatsapp/service';
 import { IdempotencyMismatchError } from '../errors';
 import { AllocationRepository } from '../repositories/allocation';
 import { BillingRepository } from '../repositories/billing';
@@ -83,11 +84,16 @@ export declare class BillingService extends Factory.Service<BillingClient> {
     PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
     NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
     EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
+    WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+    WHATSAPP_TEMPLATE_INITIAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_INITIAL', 'receivy_charge_initial'>;
+    WHATSAPP_TEMPLATE_REMINDER: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_REMINDER', 'receivy_charge_reminder'>;
+    WHATSAPP_TEMPLATE_MANUAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_MANUAL', 'receivy_charge_manual'>;
   };
 
   services: {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
+    whatsapp: Environment.Service<WhatsappService>;
     chargeNotifyScheduler: Environment.Service<ChargeNotifyScheduler>;
     variables: Environment.ServiceVariables;
   };
@@ -570,9 +576,9 @@ export async function patchBilling(
   return getBilling(db, ownerId, id, now, link);
 }
 
-export function createService({ db, email, variables }: Service.Context<BillingService>): BillingClient {
+export function createService({ db, email, whatsapp, variables }: Service.Context<BillingService>): BillingClient {
   const link = inviteLink({ variables });
-  const notice = noticeContext({ email, variables });
+  const notice = noticeContext({ email, whatsapp, variables });
 
   return {
     create: (ownerId, key, input) => createBilling(db, ownerId, key, input, new Date(), link, notice),

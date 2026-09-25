@@ -19,6 +19,7 @@ import { announceCharges, type NoticeContext, NoticeTemplate } from '../../notif
 import { PaymentMethodRepository } from '../../payment-methods/repositories/payment-method';
 import { ProofRepository } from '../../proofs/repositories/proof';
 import { AccountRepository } from '../../users/repositories/account';
+import type { WhatsappService } from '../../vendors/whatsapp/service';
 import { PixRequiredError, PixSnapshotLockedError } from '../errors';
 import { LinkRepository, type LinkRow } from '../repositories/link';
 import { LinkableType } from '../schemas/link';
@@ -57,11 +58,16 @@ export declare class PublicLinkService extends Factory.Service<PublicLinkClient>
     PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
     NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
     EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
+    WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+    WHATSAPP_TEMPLATE_INITIAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_INITIAL', 'receivy_charge_initial'>;
+    WHATSAPP_TEMPLATE_REMINDER: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_REMINDER', 'receivy_charge_reminder'>;
+    WHATSAPP_TEMPLATE_MANUAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_MANUAL', 'receivy_charge_manual'>;
   };
 
   services: {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
+    whatsapp: Environment.Service<WhatsappService>;
     chargeNotifyScheduler: Environment.Service<ChargeNotifyScheduler>;
     variables: Environment.ServiceVariables;
   };
@@ -306,14 +312,14 @@ export function optInByToken(db: DbClient, secret: string, token: string): Promi
   return setOptOut(db, secret, token, false);
 }
 
-export function createService({ db, email, variables }: Service.Context<PublicLinkService>): PublicLinkClient {
+export function createService({ db, email, whatsapp, variables }: Service.Context<PublicLinkService>): PublicLinkClient {
   const secret = variables.PUBLIC_LINK_HMAC_SECRET;
   const links = checkoutClients(variables);
   const linkConfig = paymentLinkConfigFrom(variables);
 
   return {
     publish: (creditorId, chargeId, paymentMethodId) =>
-      publishChargeLink(db, creditorId, chargeId, secret, false, undefined, paymentMethodId, noticeContext({ email, variables })),
+      publishChargeLink(db, creditorId, chargeId, secret, false, undefined, paymentMethodId, noticeContext({ email, whatsapp, variables })),
     rotate: (creditorId, chargeId) => publishChargeLink(db, creditorId, chargeId, secret, true),
     view: async (token) => {
       const charge = await resolvePublicCharge(db, token, secret);

@@ -32,5 +32,6 @@ export declare class UserProvider implements Http.Provider {
     APPLE_TEAM_ID: Environment.Variable<'APPLE_TEAM_ID'>;
     APPLE_KEY_ID: Environment.Variable<'APPLE_KEY_ID'>;
     APPLE_PRIVATE_KEY_B64: Environment.Variable<'APPLE_PRIVATE_KEY_B64'>;
+    WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
   };
 }

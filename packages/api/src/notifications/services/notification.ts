@@ -1,7 +1,7 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import { ChargeState, type DeviceRegistration, Direction, type ManualReminderResult, type NotificationDevice, type ReminderConfig } from '@receivy/common';
+import { ChargeState, type DeviceRegistration, Direction, type ManualReminderResult, type NotificationDevice, type ReminderConfig, WhatsappSender } from '@receivy/common';
 import { billingRegistered } from '../../billings/utils/columns';
 import { effectiveConfigOf } from '../../billings/utils/reminders';
 import { ChargeClosedError, ChargeInReviewError, SettledNoRemindersError } from '../../charges/errors';
@@ -25,6 +25,7 @@ import { assertDeviceRegistration } from '../utils/device';
 import { NoticeChannel, resolveChannels } from './channels';
 import { noticeContext } from './context';
 import { type NoticeContext, NoticeTemplate, sendChargeNotice } from './send';
+import { whatsappReach } from './whatsapp-quota';
 
 export type NotificationClient = {
   registerDevice(userId: string, input: DeviceRegistration, familyId?: string): Promise<NotificationDevice>;
@@ -147,7 +148,19 @@ export async function reminderPreview(db: DbClient, userId: string, chargeId: st
   }
 
   const reach = charge.creditor_id ? await ContactRepository.reachability(db, charge.creditor_id, target.id) : null;
-  const resolved = resolveChannels({ wanted: config.manual, ownBill: ownerPays(charge), target, contact: reach, whatsappAvailable: notice.config.whatsappAvailable });
+  const ownBill = ownerPays(charge);
+  const wantsWhatsapp = config.manual.whatsapp && !ownBill && Boolean(target.phone ?? reach?.phone);
+  const sender = wantsWhatsapp ? await whatsappReach(db, charge.owner_id, new Date()) : { sender: WhatsappSender.Receivy, instanceOpen: false, instance: null, quotaLeft: 0, quotaLimit: 0 };
+  const resolved = resolveChannels({
+    wanted: config.manual,
+    ownBill,
+    target,
+    contact: reach,
+    whatsappAvailable: notice.config.whatsappAvailable,
+    sender: sender.sender,
+    instanceOpen: sender.instanceOpen,
+    quotaLeft: sender.quotaLeft
+  });
   const devices = await DeviceRepository.active(db, target.id);
   const channels: NoticeChannel[] = [
     ...(devices.length && notice.config.pushAvailable !== false ? [NoticeChannel.Push] : []),

@@ -7,9 +7,7 @@ import { notificationTransport } from './transport';
 
 type ProducerContext = {
   email: EmailClient;
-  // Optional: producers that do not send WhatsApp yet (billing, invites, public links) fall
-  // back to notificationTransport's own default, built straight from `variables`.
-  whatsapp?: WhatsappClient;
+  whatsapp: WhatsappClient;
   variables: NotificationVariables & Record<string, string | undefined>;
 };
 

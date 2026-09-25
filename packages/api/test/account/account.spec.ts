@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Service } from '@ez4/common';
 import { HttpBadRequestError, HttpForbiddenError, HttpUnauthorizedError } from '@ez4/gateway';
 import { BucketTester } from '@ez4/local-storage/test';
-import { DevicePlatform, PaymentProvider, PixKeyType, ProofKind, ProofMime, SYSTEM_REMINDER_CONFIG } from '@receivy/common';
+import { DevicePlatform, PaymentProvider, PixKeyType, ProofKind, ProofMime, SYSTEM_REMINDER_CONFIG, WhatsappSender } from '@receivy/common';
 import { StoredProofState } from '../../src/charges/schemas/charge';
 import type { SessionAuthorizerProvider } from '../../src/common/authorizers/session';
 import { sessionAuthorizer } from '../../src/common/authorizers/session';
@@ -204,13 +204,15 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
       manual: { email: false, whatsapp: true }
     };
 
-    deepEqual(await accounts.reminders(owner), { config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false });
-    deepEqual(await accounts.saveReminders(owner, config), { config, inherited: false, whatsappAvailable: false });
+    const whatsapp = { available: false, sender: WhatsappSender.Receivy, instance: null };
+
+    deepEqual(await accounts.reminders(owner), { config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false, whatsapp });
+    deepEqual(await accounts.saveReminders(owner, config), { config, inherited: false, whatsappAvailable: false, whatsapp });
     await rejects(
       () => accounts.saveReminders(owner, { ...config, reminders: [{ offsetDays: 15, enabled: true, channels: { email: true, whatsapp: false } }] }),
       HttpBadRequestError
     );
-    deepEqual(await accounts.clearReminders(owner), { config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false });
+    deepEqual(await accounts.clearReminders(owner), { config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false, whatsapp });
   });
   it("atomically erases identity, preserves other account's payment fact and closes re-registration history access", async () => {
     const person = await contacts.save(owner, {

@@ -1,11 +1,13 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
 import { HttpBadRequestError, HttpUnauthorizedError } from '@ez4/gateway';
-import { type AuthUser, type ReminderConfig, type ReminderSettings, SYSTEM_REMINDER_CONFIG } from '@receivy/common';
+import { type AuthUser, type ReminderConfig, type ReminderSettings, SYSTEM_REMINDER_CONFIG, WhatsappSender, type WhatsappSettings } from '@receivy/common';
 import { parseReminderConfig, serializeReminderConfig } from '../../billings/utils/reminders';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { Db, DbClient } from '../../database';
+import { WhatsappInstanceRepository } from '../../notifications/repositories/whatsapp-instance';
+import { whatsappAvailableFrom } from '../../notifications/services/planner';
 import { bucketProofStorage } from '../../proofs/services/bucket-storage';
 import type { AvatarFiles, ProofFiles } from '../../storage';
 import { AccountRepository } from '../repositories/account';
@@ -22,8 +24,20 @@ export type AccountClient = {
   clearReminders(userId: string): Promise<ReminderSettings>;
 };
 
+/** The owner's WhatsApp as the settings screen shows it: which number, and how the own one is doing. */
+async function whatsappSettings(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string }): Promise<WhatsappSettings> {
+  const sender = await AccountRepository.whatsappSender(db, userId);
+  const row = sender === WhatsappSender.Own ? await WhatsappInstanceRepository.byOwner(db, userId) : null;
+
+  return {
+    available: whatsappAvailableFrom(variables),
+    sender,
+    instance: row ? { state: row.state, phone: row.phone ?? null, qr: row.qr ?? null, connectedAt: row.connected_at ?? null } : null
+  };
+}
+
 /** What actually fires today, or the system default the account has not customised yet. */
-async function reminderSettings(db: DbClient, userId: string): Promise<ReminderSettings> {
+async function reminderSettings(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string }): Promise<ReminderSettings> {
   const row = await AccountRepository.reminderConfig(db, userId);
 
   if (!row) {
@@ -31,11 +45,12 @@ async function reminderSettings(db: DbClient, userId: string): Promise<ReminderS
   }
 
   const config = parseReminderConfig(row.reminder_config);
+  const whatsapp = await whatsappSettings(db, userId, variables);
 
-  return { config: config ?? SYSTEM_REMINDER_CONFIG, inherited: config === null, whatsappAvailable: false };
+  return { config: config ?? SYSTEM_REMINDER_CONFIG, inherited: config === null, whatsappAvailable: whatsapp.available, whatsapp };
 }
 
-async function saveReminders(db: DbClient, userId: string, input: ReminderConfig): Promise<ReminderSettings> {
+async function saveReminders(db: DbClient, userId: string, input: ReminderConfig, variables: { WHATSAPP_TRANSPORT?: string }): Promise<ReminderSettings> {
   let json: string;
 
   try {
@@ -53,10 +68,10 @@ async function saveReminders(db: DbClient, userId: string, input: ReminderConfig
     await EventRepository.record(tx, { type: 'account.reminders_updated', eventableType: EventableType.Account, eventableId: userId, actorId: userId, at: now });
   });
 
-  return reminderSettings(db, userId);
+  return reminderSettings(db, userId, variables);
 }
 
-async function clearReminders(db: DbClient, userId: string): Promise<ReminderSettings> {
+async function clearReminders(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string }): Promise<ReminderSettings> {
   await db.transaction(async (tx) => {
     await AccountRepository.lock(tx, userId);
 
@@ -66,17 +81,22 @@ async function clearReminders(db: DbClient, userId: string): Promise<ReminderSet
     await EventRepository.record(tx, { type: 'account.reminders_cleared', eventableType: EventableType.Account, eventableId: userId, actorId: userId, at: now });
   });
 
-  return reminderSettings(db, userId);
+  return reminderSettings(db, userId, variables);
 }
 
 export declare class AccountService extends Factory.Service<AccountClient> {
   handler: typeof createService;
+
+  variables: {
+    WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+  };
 
   services: {
     db: Environment.Service<Db>;
     avatarFiles: Environment.Service<AvatarFiles>;
     // Erasing an account still deletes the proof files the person sent.
     proofFiles: Environment.Service<ProofFiles>;
+    variables: Environment.ServiceVariables;
   };
 }
 
@@ -96,7 +116,7 @@ export async function updateProfile(db: DbClient, userId: string, input: Profile
   });
 }
 
-export function createService({ db, avatarFiles, proofFiles }: Service.Context<AccountService>): AccountClient {
+export function createService({ db, avatarFiles, proofFiles, variables }: Service.Context<AccountService>): AccountClient {
   return {
     me: async (userId) => {
       const user = await AccountRepository.authUser(db, userId);
@@ -119,8 +139,8 @@ export function createService({ db, avatarFiles, proofFiles }: Service.Context<A
 
       return result;
     },
-    reminders: (userId) => reminderSettings(db, userId),
-    saveReminders: (userId, config) => saveReminders(db, userId, config),
-    clearReminders: (userId) => clearReminders(db, userId)
+    reminders: (userId) => reminderSettings(db, userId, variables ?? {}),
+    saveReminders: (userId, config) => saveReminders(db, userId, config, variables ?? {}),
+    clearReminders: (userId) => clearReminders(db, userId, variables ?? {})
   };
 }

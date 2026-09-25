@@ -186,6 +186,7 @@ export namespace ChargeRepository {
   export type NoticeRow = Row & {
     billing: { kind: BillingKind; reminders?: string; owner: { timezone: string; reminder_config?: string } };
     debtor?: { id: string; name?: string; email?: string; phone?: string; deleted_at?: string; email_opt_out_at?: string; whatsapp_opt_out_at?: string };
+    creditor?: { name?: string };
   };
 
   export async function forNotice(db: DbClient, id: string): Promise<NoticeRow | null> {
@@ -214,7 +215,8 @@ export namespace ChargeRepository {
         created_at: true,
         updated_at: true,
         billing: { kind: true, reminders: true, owner: { timezone: true, reminder_config: true } },
-        debtor: { id: true, name: true, email: true, phone: true, deleted_at: true, email_opt_out_at: true, whatsapp_opt_out_at: true }
+        debtor: { id: true, name: true, email: true, phone: true, deleted_at: true, email_opt_out_at: true, whatsapp_opt_out_at: true },
+        creditor: { name: true }
       },
       where: { id }
     });

@@ -1,10 +1,12 @@
+import type { WhatsappSettings } from './whatsapp';
+
 export type ChannelSet = { email: boolean; whatsapp: boolean };
 
 export type ReminderRule = { offsetDays: number; enabled: boolean; channels: ChannelSet };
 
 export type ReminderConfig = { reminders: ReminderRule[]; manual: ChannelSet };
 
-export type ReminderSettings = { config: ReminderConfig; inherited: boolean; whatsappAvailable: boolean };
+export type ReminderSettings = { config: ReminderConfig; inherited: boolean; whatsappAvailable: boolean; whatsapp: WhatsappSettings };
 
 export type ReminderTemplate = 'initial' | 'reminder' | 'manual';
 

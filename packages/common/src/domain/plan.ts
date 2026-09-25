@@ -15,11 +15,11 @@ export const enum SubscriptionStatus {
   Canceled = 'canceled'
 }
 
-export type PlanLimits = { indefinite: number; checkoutLinks: boolean };
+export type PlanLimits = { indefinite: number; checkoutLinks: boolean; whatsappMessages: number };
 
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
-  [PlanTier.Free]: { indefinite: 5, checkoutLinks: false },
-  [PlanTier.Basic]: { indefinite: 30, checkoutLinks: true }
+  [PlanTier.Free]: { indefinite: 5, checkoutLinks: false, whatsappMessages: 0 },
+  [PlanTier.Basic]: { indefinite: 30, checkoutLinks: true, whatsappMessages: 150 }
 };
 
 export type SubscriptionSnapshot = { status: SubscriptionStatus; currentPeriodEnd: string | null };

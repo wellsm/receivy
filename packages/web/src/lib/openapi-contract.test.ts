@@ -64,6 +64,9 @@ const WEB_EXCLUSIONS: Record<string, string> = {
   "POST webhooks/infinitepay/{p}": "InfinitePay posts here server-to-server; the browser never calls it",
   "POST webhooks/pagseguro/{p}": "PagBank posts here server-to-server; the browser never calls it",
   "POST webhooks/stripe": "Stripe posts here server-to-server; the browser never calls it",
+  "GET webhooks/whatsapp/meta": "Meta's webhook verification handshake; server-to-server only",
+  "POST webhooks/whatsapp/meta": "Meta posts here server-to-server; the browser never calls it",
+  "POST webhooks/whatsapp/evolution": "Evolution posts here server-to-server; the browser never calls it",
 };
 // Authenticated paths the native app deliberately does not call yet.
 const NATIVE_DEFERRED: Record<string, string> = {
@@ -79,6 +82,11 @@ const NATIVE_DEFERRED: Record<string, string> = {
   "plan/payment-method/confirm": "managed on the web only",
   "charges/by-link/{p}": "the checkout returns to the web pay page; the app reloads the charge when the in-app browser closes",
   "public/notices/opt-out/{p}": "the e-mail footer always opens in the browser",
+  "whatsapp": "the WhatsApp settings screen ships on the web first; the mobile screen is a later task",
+  "whatsapp/sender": "the WhatsApp settings screen ships on the web first; the mobile screen is a later task",
+  "whatsapp/instance": "the WhatsApp settings screen ships on the web first; the mobile screen is a later task",
+  "webhooks/whatsapp/meta": "Meta posts here server-to-server; no client ever calls it",
+  "webhooks/whatsapp/evolution": "Evolution posts here server-to-server; no client ever calls it",
 };
 
 describe("OpenAPI × BFF", () => {

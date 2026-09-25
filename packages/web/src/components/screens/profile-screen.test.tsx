@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED } from "@receivy/common";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, PlanTier, WhatsappSender } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ProfileScreen } from "@/components/screens/profile-screen";
 
@@ -18,6 +18,7 @@ afterEach(() => {
   cleanup();
   vi.resetAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 const account = {
@@ -141,6 +142,35 @@ describe("ProfileScreen", () => {
     expect(screen.queryByText(/Receivy v/)).not.toBeInTheDocument();
     expect(screen.getByText("Meus Contatos")).toBeInTheDocument();
     expect(screen.getByText("Meios de pagamento")).toBeInTheDocument();
+  });
+
+  it("lists the WhatsApp row with the sender state when the switch is on, and hides it when off", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true");
+
+    vi.mocked(browserFetch).mockImplementation(async (path) => {
+      if (path === "/api/auth/me") {
+        return Response.json({ user: account });
+      }
+
+      if (String(path).endsWith("/whatsapp")) {
+        return Response.json({ available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } });
+      }
+
+      if (String(path).endsWith("/plan")) {
+        return Response.json({ plan: PlanTier.Basic, usage: { indefinite: { used: 0, limit: 30 } } });
+      }
+
+      throw new Error(`unexpected ${String(path)}`);
+    });
+
+    render(<ProfileScreen />);
+
+    expect(await screen.findByRole("link", { name: /WhatsApp/ })).toHaveAttribute("href", "/settings/whatsapp");
+    expect(screen.getByText("Pelo número do Receivy · 37 de 150 neste ciclo")).toBeInTheDocument();
+
+    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    render(<ProfileScreen />);
+    expect(screen.queryAllByRole("link", { name: /WhatsApp/ })).toHaveLength(1);
   });
 
   it("logs out only after confirmation", async () => {

@@ -1,13 +1,15 @@
 "use client";
 
-import { Bell, Check, ChevronRight, Crown, KeyRound, Loader2, LogOut, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
+import { Bell, Check, ChevronRight, Crown, KeyRound, Loader2, LogOut, MessageCircle, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, PlanTier, THEME_PREFERENCE_OPTIONS, planName, type AuthUser } from "@receivy/common";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, PlanTier, THEME_PREFERENCE_OPTIONS, planName, type AuthUser, type WhatsappSettings } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { squareJpeg, uploadAvatar } from "@/lib/avatar-upload";
 import { useThemePreference } from "@/lib/theme";
+import { whatsappClient, whatsappSubtitle } from "@/lib/whatsapp-client";
+import { whatsappEnabled } from "@/lib/whatsapp-flag";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 type Dialog = "logout" | "delete" | null;
@@ -102,6 +104,8 @@ export function ProfileScreen() {
   const [logoutRetry, setLogoutRetry] = useState<boolean | null>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const [themePreference, chooseTheme] = useThemePreference();
+  const [whatsapp, setWhatsapp] = useState<WhatsappSettings | null>(null);
+  const [plan, setPlan] = useState<PlanTier | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -122,6 +126,36 @@ export function ProfileScreen() {
         }
 
         setNotice("Não foi possível carregar sua conta.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!whatsappEnabled()) {
+      return;
+    }
+
+    let active = true;
+
+    void Promise.all([whatsappClient.settings(), browserFetch("/api/financial/plan").then((response) => (response.ok ? (response.json() as Promise<{ plan: PlanTier }>) : Promise.reject(new Error())))])
+      .then(([settings, summary]) => {
+        if (!active) {
+          return;
+        }
+
+        setWhatsapp(settings);
+        setPlan(summary.plan);
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+
+        setWhatsapp(null);
+        setPlan(null);
       });
 
     return () => {
@@ -440,6 +474,12 @@ export function ProfileScreen() {
               <div className="mx-4 h-px bg-outline/60 md:mx-0" />
               <Row icon={Bell} tone="primary" label="Configurar lembretes" title="Lembretes" subtitle="Quando e por onde avisar quem te deve" href="/settings/reminders" />
               <div className="mx-4 h-px bg-outline/60 md:mx-0" />
+              {whatsappEnabled() ? (
+                <>
+                  <Row icon={MessageCircle} tone="primary" label="Configurar WhatsApp" title="WhatsApp" subtitle={whatsappSubtitle(whatsapp, plan)} href="/settings/whatsapp" />
+                  <div className="mx-4 h-px bg-outline/60 md:mx-0" />
+                </>
+              ) : null}
               <Row icon={Crown} tone="primary" label="Gerenciar plano" title="Plano" subtitle={`${planName(PlanTier.Free)} ou ${planName(PlanTier.Basic)}, limites e cobrança`} href="/settings/plan" />
             </section>
 

@@ -27,6 +27,8 @@ export const ALLOWED_ROUTES: [string, RegExp][] = [
   ["GET", new RegExp(`^contacts/${ID}/ledger$`)],
   ["POST", new RegExp(`^charges/${ID}/proof(?:/review|/complete|/declaration)?$`)], ["DELETE", new RegExp(`^charges/${ID}/proof$`)],
   ["GET", new RegExp(`^charges/${ID}/proof/download$`)],
+  ["GET", /^whatsapp$/], ["PATCH", /^whatsapp\/sender$/],
+  ["GET", /^whatsapp\/instance$/], ["POST", /^whatsapp\/instance$/], ["DELETE", /^whatsapp\/instance$/],
 ];
 
 export function isAllowedFinancialRoute(method: string, path: string): boolean {

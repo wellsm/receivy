@@ -186,8 +186,21 @@ describe('WhatsApp notices', () => {
   it('exposes the sender and the instance on the reminder settings', async () => {
     const settings = await accounts.reminders(OWNER);
 
-    deepEqual(settings.whatsapp, { available: false, sender: WhatsappSender.Receivy, instance: null });
+    equal(settings.whatsapp.available, false);
+    equal(settings.whatsapp.sender, WhatsappSender.Receivy);
+    equal(settings.whatsapp.instance, null);
     equal(settings.whatsappAvailable, false);
+  });
+
+  it('exposes the cycle quota on the settings: null on free, used/limit on basic', async () => {
+    const basic = await accounts.reminders(OWNER);
+    const free = await accounts.reminders(FREE);
+
+    equal(free.whatsapp.quota, null);
+    ok(basic.whatsapp.quota);
+    equal(basic.whatsapp.quota!.limit, 150);
+    ok(basic.whatsapp.quota!.used >= 0);
+    equal(basic.whatsapp.instance, null);
   });
 
   it('advances a message status from the webhook and never regresses it', async () => {

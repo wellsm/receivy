@@ -56,7 +56,7 @@ export function instanceNameOf(ownerId: string): string {
 }
 
 function view(row: WhatsappInstanceRepository.Row): WhatsappInstanceView {
-  return { state: row.state, phone: row.phone ?? null, qr: row.qr ?? null, connectedAt: row.connected_at ?? null };
+  return { state: row.state, phone: row.phone ?? null, qr: row.qr ?? null, pairingCode: null, connectedAt: row.connected_at ?? null };
 }
 
 type EvolutionApi = { url: string; key: string };

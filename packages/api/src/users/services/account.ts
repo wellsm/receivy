@@ -9,6 +9,8 @@ import type { Db, DbClient } from '../../database';
 import { WhatsappInstanceRepository } from '../../notifications/repositories/whatsapp-instance';
 import { whatsappAvailableFrom } from '../../notifications/services/planner';
 import type { WhatsappInstanceService } from '../../notifications/services/whatsapp-instance';
+import { cycleOf, whatsappReach } from '../../notifications/services/whatsapp-quota';
+import { SubscriptionRepository } from '../../plans/repositories/subscription';
 import { bucketProofStorage } from '../../proofs/services/bucket-storage';
 import type { AvatarFiles, ProofFiles } from '../../storage';
 import { AccountRepository } from '../repositories/account';
@@ -25,15 +27,19 @@ export type AccountClient = {
   clearReminders(userId: string): Promise<ReminderSettings>;
 };
 
-/** The owner's WhatsApp as the settings screen shows it: which number, and how the own one is doing. */
-async function whatsappSettings(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string }): Promise<WhatsappSettings> {
+/** The owner's WhatsApp as the settings screen shows it: which number, how the own one is doing, and the cycle quota. */
+export async function whatsappSettings(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string }): Promise<WhatsappSettings> {
+  const now = new Date();
   const sender = await AccountRepository.whatsappSender(db, userId);
-  const row = sender === WhatsappSender.Own ? await WhatsappInstanceRepository.byOwner(db, userId) : null;
+  const row = await WhatsappInstanceRepository.byOwner(db, userId);
+  const reach = await whatsappReach(db, userId, now, WhatsappSender.Receivy);
+  const subscription = reach.quotaLimit > 0 ? await SubscriptionRepository.get(db, userId) : null;
 
   return {
     available: whatsappAvailableFrom(variables),
     sender,
-    instance: row ? { state: row.state, phone: row.phone ?? null, qr: row.qr ?? null, connectedAt: row.connected_at ?? null } : null
+    instance: row ? { state: row.state, phone: row.phone ?? null, qr: row.qr ?? null, pairingCode: null, connectedAt: row.connected_at ?? null } : null,
+    quota: reach.quotaLimit > 0 ? { used: reach.quotaLimit - reach.quotaLeft, limit: reach.quotaLimit, cycleEnd: subscription?.current_period_end ? cycleOf(subscription.current_period_end, now).to : null } : null
   };
 }
 

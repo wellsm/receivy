@@ -46,8 +46,8 @@ export type WhatsappReach = {
  * it is up, and how many Receivy-number messages the plan cycle still allows. The count is a
  * real query, so callers only ask once the channel is wanted and the recipient is reachable.
  */
-export async function whatsappReach(db: DbClient, ownerId: string, now: Date): Promise<WhatsappReach> {
-  const sender = await AccountRepository.whatsappSender(db, ownerId);
+export async function whatsappReach(db: DbClient, ownerId: string, now: Date, senderOverride?: WhatsappSender): Promise<WhatsappReach> {
+  const sender = senderOverride ?? (await AccountRepository.whatsappSender(db, ownerId));
 
   if (sender === WhatsappSender.Own) {
     const row = await WhatsappInstanceRepository.byOwner(db, ownerId);

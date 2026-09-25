@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
+import { whatsappEnabled } from "@/lib/whatsapp-flag";
 import { ManualRulerChannels, ReminderRuler, RulerPreview } from "@/components/app/reminder-ruler";
 
 const LOAD_ERROR = "Não foi possível carregar seus lembretes.";
@@ -84,8 +85,12 @@ export function RemindersScreen() {
 
     try {
       config = validateReminderConfig({
-        reminders: rules.map(rule => ({ ...rule, offsetDays: Number(rule.offsetDays) })),
-        manual,
+        reminders: rules.map(rule => ({
+          ...rule,
+          offsetDays: Number(rule.offsetDays),
+          channels: whatsappEnabled() ? rule.channels : { email: true, whatsapp: false },
+        })),
+        manual: whatsappEnabled() ? manual : { email: true, whatsapp: false },
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : ACTION_ERROR);
@@ -144,10 +149,12 @@ export function RemindersScreen() {
         <RulerPreview rules={rules} dueDate={example} />
       </section>
 
-      <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">
-        <h2 className="m-0 text-sm font-bold text-ink">Lembrete manual</h2>
-        <ManualRulerChannels value={manual} onChange={setManual} whatsapp={whatsapp} disabled={busy} />
-      </section>
+      {whatsappEnabled() ? (
+        <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">
+          <h2 className="m-0 text-sm font-bold text-ink">Lembrete manual</h2>
+          <ManualRulerChannels value={manual} onChange={setManual} whatsapp={whatsapp} disabled={busy} />
+        </section>
+      ) : null}
 
       {error ? (
         <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm text-danger">

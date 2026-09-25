@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { patchDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
+import { whatsappEnabled } from "@/lib/whatsapp-flag";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ProviderIcon } from "@/components/ui/provider-icon";
@@ -197,7 +198,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     const phoneEditable = phoneSource !== PhoneSource.Person;
 
     try {
-      input = normalizeContact({ name, nickname, email, ...(phoneEditable ? { phone } : {}), whatsappConsent, ...paymentMethodInput() });
+      input = normalizeContact({ name, nickname, email, ...(phoneEditable ? { phone } : {}), ...(whatsappEnabled() ? { whatsappConsent } : {}), ...paymentMethodInput() });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Confira os dados do contato.");
 
@@ -306,10 +307,12 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
           </Field>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-ink">
-          <input type="checkbox" checked={whatsappConsent} onChange={(event) => setWhatsappConsent(event.target.checked)} />
-          Essa pessoa concordou em receber cobranças por WhatsApp
-        </label>
+        {whatsappEnabled() ? (
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input type="checkbox" checked={whatsappConsent} onChange={(event) => setWhatsappConsent(event.target.checked)} />
+            Essa pessoa concordou em receber cobranças por WhatsApp
+          </label>
+        ) : null}
       </fieldset>
 
       <fieldset className="m-0 flex min-w-0 flex-col gap-4 rounded-3xl border border-outline/40 bg-surface p-5">

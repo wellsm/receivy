@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BillingKind,
   BillingRecurrence,
@@ -26,7 +26,10 @@ const routerMock = { push: vi.fn(), replace: vi.fn() };
 
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
-afterEach(() => { cleanup(); vi.resetAllMocks(); vi.useRealTimers(); });
+
+// Every existing test assumes WhatsApp shows in the reminder preview; the kill-switch test flips the flag off itself.
+beforeEach(() => { vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true"); });
+afterEach(() => { cleanup(); vi.resetAllMocks(); vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
   return {
@@ -359,6 +362,21 @@ describe("ChargeDetailScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "Enviar lembrete" }));
 
     expect(await screen.findByText(/Lembrete enviado/)).toBeInTheDocument();
+  });
+
+  it("drops WhatsApp from the reminder preview when the kill switch is off", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    serve(charge({ direction: Direction.Receivable }), {
+      "GET /api/financial/charges/charge/reminders/preview": () =>
+        Response.json({ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }),
+    });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
+
+    expect(await screen.findByText("Vai por: notificação no app, e-mail. Só um lembrete a cada 24 horas.")).toBeInTheDocument();
+    expect(screen.queryByText(/WhatsApp/)).not.toBeInTheDocument();
   });
 
   it("disables sending when nobody is reachable", async () => {

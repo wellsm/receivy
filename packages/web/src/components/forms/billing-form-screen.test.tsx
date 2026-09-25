@@ -1138,6 +1138,22 @@ it("customises, sends the rules, and clears back to the default", async () => {
   expect(lastPatchBody().clearReminders).toBe(true);
 });
 
+it("hides the reminder channel picker and sends a stored whatsapp rule as e-mail, when the kill switch is off", async () => {
+  const billing = arrangeBilling({
+    reminders: [{ offsetDays: 3, enabled: true, channels: { email: false, whatsapp: true } }],
+    effectiveReminders: [{ offsetDays: 3, enabled: true, channels: { email: false, whatsapp: true } }],
+  });
+  const { user } = renderForm(billing);
+
+  await screen.findByRole("button", { name: "Quando avisar no lembrete 1" });
+
+  expect(screen.queryByRole("button", { name: "Canais do lembrete 1" })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  expect(lastPatchBody().reminders).toEqual([{ offsetDays: 3, enabled: true, channels: { email: true, whatsapp: false } }]);
+});
+
 const untilBilling: BillingDetail = { ...onceBilling, id: "b5", recurrence: BillingRecurrence.Until, endDate: "2026-12-31", installmentCount: 3, total: { amountCents: 3_334, currency: "BRL" } };
 
 it("seeds the amount of a parcelado billing as its total, per-installment × installments", async () => {

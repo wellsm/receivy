@@ -19,6 +19,7 @@ import {
 } from "@receivy/common";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
+import { whatsappEnabled } from "@/lib/whatsapp-flag";
 
 type WhatsappGate = { available: boolean; planAllows: boolean };
 
@@ -100,18 +101,22 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
                 {reminderOffsetLabel(offset)}
               </button>
 
-              <span className={WORD}>por</span>
+              {whatsappEnabled() ? (
+                <>
+                  <span className={WORD}>por</span>
 
-              <button
-                type="button"
-                aria-label={`Canais do lembrete ${position}`}
-                aria-expanded={opened === "channels"}
-                className={opened === "channels" ? PILL_ON : PILL_MUTED}
-                disabled={disabled}
-                onClick={() => toggle(index, "channels")}
-              >
-                {channelSetLabel(rule.channels)}
-              </button>
+                  <button
+                    type="button"
+                    aria-label={`Canais do lembrete ${position}`}
+                    aria-expanded={opened === "channels"}
+                    className={opened === "channels" ? PILL_ON : PILL_MUTED}
+                    disabled={disabled}
+                    onClick={() => toggle(index, "channels")}
+                  >
+                    {channelSetLabel(rule.channels)}
+                  </button>
+                </>
+              ) : null}
 
               <span className="ml-auto flex items-center gap-3">
                 <input
@@ -190,7 +195,7 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
               </div>
             ) : null}
 
-            {opened === "channels" ? (
+            {opened === "channels" && whatsappEnabled() ? (
               <div role="radiogroup" aria-label={`Canais do lembrete ${position}`} className="mt-3.5 flex flex-col gap-1.5 border-t border-outline/50 pt-3.5">
                 {CHANNEL_SET_OPTIONS.map(option => {
                   const label = channelSetLabel(option);

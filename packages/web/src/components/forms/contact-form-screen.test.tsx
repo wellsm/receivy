@@ -1,7 +1,7 @@
 import { EMPTY_BILLING_DRAFT, PaymentProvider, PhoneSource, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft } from "@/lib/billing-draft";
 import { ContactFormScreen } from "@/components/forms/contact-form-screen";
@@ -11,9 +11,15 @@ const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
 vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
 
+// Every existing test assumes the WhatsApp consent checkbox exists; the kill-switch tests flip it off themselves.
+beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true");
+});
+
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+  vi.unstubAllEnvs();
   window.sessionStorage.clear();
 });
 
@@ -122,6 +128,30 @@ it("saves a contact without an e-mail and leaves the key out of the body", async
   const posted = sent.find(entry => entry.init.method === "POST");
 
   expect(JSON.parse(String(posted?.init.body))).toEqual({ name: "Ana Souza", whatsappConsent: false });
+});
+
+it("hides the WhatsApp consent checkbox and omits the field when the kill switch is off", async () => {
+  vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+
+  const sent = api();
+
+  render(<ContactFormScreen />);
+
+  const user = userEvent.setup();
+
+  expect(screen.queryByLabelText("Essa pessoa concordou em receber cobranças por WhatsApp")).not.toBeInTheDocument();
+  expect(screen.queryByText("Essa pessoa concordou em receber cobranças por WhatsApp")).not.toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
+  await user.click(screen.getByRole("button", { name: "Salvar contato" }));
+
+  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts"));
+
+  const posted = sent.find(entry => entry.init.method === "POST");
+  const body = JSON.parse(String(posted?.init.body)) as Record<string, unknown>;
+
+  expect(body).not.toHaveProperty("whatsappConsent");
+  expect(body).toEqual({ name: "Ana Souza" });
 });
 
 it("loads a contact for editing and returns to its ledger", async () => {

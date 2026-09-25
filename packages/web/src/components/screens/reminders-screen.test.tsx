@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SYSTEM_REMINDER_CONFIG } from "@receivy/common";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { RemindersScreen } from "./reminders-screen";
 
@@ -11,7 +11,12 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: 
 const fetchMock = vi.mocked(browserFetch);
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 
-afterEach(() => { cleanup(); vi.resetAllMocks(); });
+// Every existing test assumes the channel chips exist; the kill-switch tests flip the flag off themselves.
+beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true");
+});
+
+afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllEnvs(); });
 
 function arrange(settings = { config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false }, plan = "free") {
   fetchMock.mockImplementation((path: string, init?: RequestInit) => {
@@ -103,5 +108,42 @@ describe("RemindersScreen", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Lembretes inválidos");
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+  });
+
+  it("hides the channel chips and the manual section, and saves whatsapp rules back as e-mail, when the kill switch is off", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    arrange(
+      {
+        config: {
+          reminders: [{ offsetDays: 0, enabled: true, channels: { email: false, whatsapp: true } }],
+          manual: { email: true, whatsapp: true },
+        },
+        inherited: true,
+        whatsappAvailable: true,
+      },
+      "basic",
+    );
+    render(<RemindersScreen />);
+
+    expect(await screen.findByText("email · push")).toBeTruthy();
+    expect(screen.queryByText("Lembrete manual")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Editar lembrete 1" }));
+
+    expect(screen.queryByRole("radiogroup", { name: "Canais do lembrete 1" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "whatsapp no lembrete 1" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
+
+      expect(put).toBeTruthy();
+
+      const body = JSON.parse(String(put![1]!.body));
+
+      expect(body.reminders[0].channels).toEqual({ email: true, whatsapp: false });
+      expect(body.manual).toEqual({ email: true, whatsapp: false });
+    });
   });
 });

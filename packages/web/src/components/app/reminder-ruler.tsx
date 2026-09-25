@@ -12,6 +12,7 @@ import {
 } from "@receivy/common";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { whatsappEnabled } from "@/lib/whatsapp-flag";
 
 type WhatsappGate = { available: boolean; planAllows: boolean };
 
@@ -65,13 +66,18 @@ function offsetAt(ratio: number): number {
   return Math.min(REMINDER_MAX_OFFSET, Math.max(-REMINDER_MAX_OFFSET, raw));
 }
 
+/** The kill switch off reads every rule as e-mail, whatever the stored channels say; it never rewrites them. */
+function displayChannels(channels: ChannelSet): ChannelSet {
+  return whatsappEnabled() ? single(channels) : { email: true, whatsapp: false };
+}
+
 /** What a row says under its title: the configured channels plus the implicit push, or that it is paused. */
 function rowSubtitle(rule: ReminderDraft): string {
   if (!rule.enabled) {
     return "pausado";
   }
 
-  return `${singleChannelLabel(single(rule.channels))} · push`;
+  return `${singleChannelLabel(displayChannels(rule.channels))} · push`;
 }
 
 export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderRulerProps) {
@@ -228,30 +234,32 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
 
               {editing === index ? (
                 <div className="flex flex-col gap-1.5 px-4 pb-3.5">
-                  <div role="radiogroup" aria-label={`Canais do lembrete ${index + 1}`} className="flex flex-col gap-1.5">
-                    {SINGLE_CHANNELS.map(option => {
-                      const label = singleChannelLabel(option);
-                      const locked = option.whatsapp ? lock : null;
-                      const picked = single(rule.channels);
-                      const active = option.email === picked.email && option.whatsapp === picked.whatsapp;
+                  {whatsappEnabled() ? (
+                    <div role="radiogroup" aria-label={`Canais do lembrete ${index + 1}`} className="flex flex-col gap-1.5">
+                      {SINGLE_CHANNELS.map(option => {
+                        const label = singleChannelLabel(option);
+                        const locked = option.whatsapp ? lock : null;
+                        const picked = single(rule.channels);
+                        const active = option.email === picked.email && option.whatsapp === picked.whatsapp;
 
-                      return (
-                        <button
-                          key={label}
-                          type="button"
-                          role="radio"
-                          aria-checked={active}
-                          aria-label={`${label} no lembrete ${index + 1}`}
-                          className={`flex h-10 items-center gap-2 rounded-xl border px-3 text-[13px] font-semibold ${active ? "border-primary bg-primary-soft text-primary-strong" : "border-outline text-ink"} ${locked ? "opacity-60" : ""}`}
-                          disabled={disabled || locked !== null}
-                          onClick={() => patch(index, { channels: { ...option } })}
-                        >
-                          {label}
-                          {locked ? <span className="rounded-md bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted">{locked}</span> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
+                        return (
+                          <button
+                            key={label}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            aria-label={`${label} no lembrete ${index + 1}`}
+                            className={`flex h-10 items-center gap-2 rounded-xl border px-3 text-[13px] font-semibold ${active ? "border-primary bg-primary-soft text-primary-strong" : "border-outline text-ink"} ${locked ? "opacity-60" : ""}`}
+                            disabled={disabled || locked !== null}
+                            onClick={() => patch(index, { channels: { ...option } })}
+                          >
+                            {label}
+                            {locked ? <span className="rounded-md bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted">{locked}</span> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
 
                   <button
                     type="button"

@@ -61,6 +61,7 @@ import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 import { loadPlanSummary } from "@/lib/plan-summary";
+import { whatsappEnabled } from "@/lib/whatsapp-flag";
 import { ReminderEditor, ReminderPreview } from "@/components/app/reminder-editor";
 import { PlanPaywall } from "@/components/app/plan-paywall";
 import { ScopeDialog } from "@/components/app/scope-dialog";
@@ -622,8 +623,10 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       // Never send "Não notificar" for a participant the agenda no longer shows as reachable: the
       // switch does not render for them, so a stale value seeded from editing must not travel either.
       const notify = draft.notify && Object.fromEntries(Object.entries(draft.notify).filter(([userId]) => notifiableIds.has(userId)));
+      // The kill switch off never lets a whatsapp channel out, whatever the picker showed before it flipped.
+      const reminders = whatsappEnabled() || !draft.reminders ? draft.reminders : draft.reminders.map(rule => ({ ...rule, channels: { email: true, whatsapp: false } }));
       // Only a creation checks that a recorrente registro starts today or later.
-      const next: Attempt = { input: buildBillingInput({ ...draft, notify }, billing ? undefined : new Date()), key: crypto.randomUUID(), uncertain: false };
+      const next: Attempt = { input: buildBillingInput({ ...draft, notify, reminders }, billing ? undefined : new Date()), key: crypto.randomUUID(), uncertain: false };
 
       // Only a recorrente edit that changes what its charges carry, with charges of this month still ahead, needs the answer.
       if (billing && shouldAskEditScope(billing, patchBody(next.input), todayIn(billing.timezone))) {

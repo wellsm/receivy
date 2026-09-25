@@ -39,7 +39,7 @@ const notice = fakeNotice();
 const { context, sent, notify } = notice;
 
 const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
-const accounts = createAccountService({ db, avatarFiles: bucket, proofFiles: bucket } as unknown as Service.Context<AccountService>);
+const accounts = createAccountService({ db, avatarFiles: bucket, proofFiles: bucket, whatsappInstances: { get: async () => null, remove: async () => undefined } } as unknown as Service.Context<AccountService>);
 
 const publicLinks = {
   optOut: (token: string) => optOutByToken(db, TEST_CONFIG.secret, token),

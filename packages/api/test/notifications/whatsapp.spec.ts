@@ -27,7 +27,7 @@ const WHATSAPP_ONLY = { reminders: [{ offsetDays: 0, enabled: true, channels: { 
 const notice = fakeNotice({ whatsappAvailable: true });
 const { context, sent } = notice;
 const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
-const accounts = createAccountService({ db, avatarFiles: bucket, proofFiles: bucket } as unknown as Service.Context<AccountService>);
+const accounts = createAccountService({ db, avatarFiles: bucket, proofFiles: bucket, whatsappInstances: { get: async () => null, remove: async () => undefined } } as unknown as Service.Context<AccountService>);
 
 let count = 0;
 

@@ -28,7 +28,18 @@ const context = { db, variables: { AUTH_JWT_SECRET: secret } } as Service.Contex
 const repository = authStore(db);
 const ids = [owner, debtor];
 const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
-const accounts = createAccountService({ db, avatarFiles: bucket, proofFiles: bucket } as unknown as Service.Context<AccountService>);
+// Owners with an own WhatsApp instance, and the removals the erasure asked for; Evolution is down on purpose.
+const withInstance = new Set<string>();
+const removedInstances: string[] = [];
+const whatsappInstances = {
+  get: async (userId: string) => (withInstance.has(userId) ? { state: 'open' } : null),
+  remove: async (userId: string) => {
+    removedInstances.push(userId);
+
+    throw new Error('Evolution is down');
+  }
+};
+const accounts = createAccountService({ db, avatarFiles: bucket, proofFiles: bucket, whatsappInstances } as unknown as Service.Context<AccountService>);
 const deleteContext = { accounts } as unknown as Service.Context<UserProvider>;
 
 async function session(userId: string) {
@@ -335,6 +346,8 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
 
     await createUser(db, { id, email: 'queued-account@example.com', name: 'Queued fixture' });
 
+    withInstance.add(id);
+
     const person = await contacts.save(owner, { name: 'Queued fixture', email: 'queued-account@example.com' });
     const { chargeId } = await createOnceCharge(db, owner, 'account-queued', {
       userId: person.userId,
@@ -349,7 +362,8 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
     const request = { identity: { userId: id }, body: { confirmation: 'EXCLUIR' } } as Parameters<typeof deleteHandler>[0];
     const response = await deleteHandler(request, deleteContext);
 
-    deepEqual(response.body, { deleted: true });
+    deepEqual(response.body, { deleted: true }, 'a failing Evolution never blocks the erasure');
+    deepEqual(removedInstances, [id], 'the own WhatsApp instance is removed before the rows go');
     equal(await bucket.exists(objectKey), false);
     deepEqual(await proofColumns(chargeId), { state: null, key: null, sender: null });
   });

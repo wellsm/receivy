@@ -8,6 +8,7 @@ import { EventableType } from '../../common/schemas/event';
 import type { Db, DbClient } from '../../database';
 import { WhatsappInstanceRepository } from '../../notifications/repositories/whatsapp-instance';
 import { whatsappAvailableFrom } from '../../notifications/services/planner';
+import type { WhatsappInstanceService } from '../../notifications/services/whatsapp-instance';
 import { bucketProofStorage } from '../../proofs/services/bucket-storage';
 import type { AvatarFiles, ProofFiles } from '../../storage';
 import { AccountRepository } from '../repositories/account';
@@ -96,6 +97,8 @@ export declare class AccountService extends Factory.Service<AccountClient> {
     avatarFiles: Environment.Service<AvatarFiles>;
     // Erasing an account still deletes the proof files the person sent.
     proofFiles: Environment.Service<ProofFiles>;
+    // Erasing an account also removes the owner's own WhatsApp instance from Evolution.
+    whatsappInstances: Environment.Service<WhatsappInstanceService>;
     variables: Environment.ServiceVariables;
   };
 }
@@ -116,7 +119,7 @@ export async function updateProfile(db: DbClient, userId: string, input: Profile
   });
 }
 
-export function createService({ db, avatarFiles, proofFiles, variables }: Service.Context<AccountService>): AccountClient {
+export function createService({ db, avatarFiles, proofFiles, whatsappInstances, variables }: Service.Context<AccountService>): AccountClient {
   return {
     me: async (userId) => {
       const user = await AccountRepository.authUser(db, userId);
@@ -129,6 +132,11 @@ export function createService({ db, avatarFiles, proofFiles, variables }: Servic
     },
     updateProfile: async (userId, input) => AvatarRepository.sign(avatarFiles, { user: await updateProfile(db, userId, input) }),
     erase: async (userId, confirmation) => {
+      // Best effort before the rows go: a failing Evolution never blocks the erasure.
+      if (await whatsappInstances.get(userId)) {
+        await whatsappInstances.remove(userId).catch(() => console.error('WhatsApp instance removal failed'));
+      }
+
       const { objectKeys, ...result } = await eraseAccount(db, userId, confirmation);
       // The erasure is already committed; the files follow best-effort, nothing references them any more.
       const storage = bucketProofStorage(proofFiles);

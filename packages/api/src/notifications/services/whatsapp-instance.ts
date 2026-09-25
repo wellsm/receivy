@@ -25,6 +25,12 @@ export type InstanceVariables = {
   PUBLIC_WEB_ORIGIN?: string;
   NOTIFICATION_PUSH_TRANSPORT?: string;
   EXPO_ACCESS_TOKEN?: string;
+  APP_STAGE?: string;
+  EMAIL_TRANSPORT?: string;
+  RESEND_API_KEY?: string;
+  RESEND_FROM_EMAIL?: string;
+  MAILPIT_API_URL?: string;
+  EMAIL_FILE_DIRECTORY?: string;
 };
 
 export type WhatsappInstanceClient = {
@@ -221,6 +227,21 @@ async function applyConnection(deps: InstanceDeps, transport: NotificationTransp
     body: 'Os lembretes pelo seu número ficam parados até você conectar de novo.',
     url: `${origin}/settings/reminders`
   });
+
+  const owner = await AccountRepository.get(deps.db, row.owner_id);
+  const to = owner?.verified_email ?? owner?.email;
+
+  if (!to) {
+    return;
+  }
+
+  await transport.email({
+    to,
+    key: `whatsapp-instance:${row.id}:closed:${stamp}`,
+    subject: 'Seu WhatsApp desconectou',
+    text: `Os lembretes pelo seu número ficam parados até você conectar de novo no Receivy.\n${origin}/settings/reminders`,
+    from: deps.variables.RESEND_FROM_EMAIL ?? 'disabled'
+  });
 }
 
 async function applyQr(deps: InstanceDeps, name: string, qr: string, now: Date): Promise<void> {
@@ -257,6 +278,12 @@ export declare class WhatsappInstanceService extends Factory.Service<WhatsappIns
     PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
     NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
     EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
+    APP_STAGE: Environment.Variable<'APP_STAGE'>;
+    EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
+    RESEND_API_KEY: Environment.Variable<'RESEND_API_KEY'>;
+    RESEND_FROM_EMAIL: Environment.VariableOrValue<'RESEND_FROM_EMAIL', 'disabled'>;
+    MAILPIT_API_URL: Environment.VariableOrValue<'MAILPIT_API_URL', 'http://127.0.0.1:8025'>;
+    EMAIL_FILE_DIRECTORY: Environment.VariableOrValue<'EMAIL_FILE_DIRECTORY', '.ez4/emails'>;
   };
 
   services: {

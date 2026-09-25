@@ -34,7 +34,7 @@ function fakeDb() {
       }
     },
     users: {
-      findOne: async () => ({ whatsapp_sender: state.sender }),
+      findOne: async () => ({ whatsapp_sender: state.sender, email: 'owner@example.com' }),
       updateOne: async ({ data }: { data: { whatsapp_sender: WhatsappSender } }) => {
         state.sender = data.whatsapp_sender;
       }
@@ -111,12 +111,18 @@ describe('WhatsApp instance service', () => {
   it('opens and closes on connection updates, clearing the qr and warning the owner once on close', async () => {
     const { db, state } = fakeDb();
     const pushes: string[] = [];
+    const emails: { to: string; subject: string }[] = [];
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(created());
     const transport = {
       push: async (input: { title: string }) => {
         pushes.push(input.title);
 
         return { status: 'accepted' as const, id: 't' };
+      },
+      email: async (input: { to: string; subject: string }) => {
+        emails.push({ to: input.to, subject: input.subject });
+
+        return { status: 'accepted' as const, id: 'e' };
       }
     } as never;
     const client = createInstanceClient({ db, plans: basic, variables, request, transport });
@@ -134,6 +140,7 @@ describe('WhatsApp instance service', () => {
     expect(state.instance).toMatchObject({ state: WhatsappInstanceState.Closed });
     expect(state.events).toEqual(['whatsapp_instance.created', 'whatsapp_instance.opened', 'whatsapp_instance.closed']);
     expect(pushes).toEqual(['Seu WhatsApp desconectou']);
+    expect(emails).toEqual([{ to: 'owner@example.com', subject: 'Seu WhatsApp desconectou' }]);
   });
 
   it('removes the instance on Evolution, tolerating a 404, and puts the sender back', async () => {

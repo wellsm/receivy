@@ -45,7 +45,8 @@ function fakeDb() {
       }
     },
     // One active device, so the disconnect warning has somewhere to land.
-    device_tokens: { findMany: async () => ({ records: [{ id: 'device-1', token: 'ExpoPushToken[fixture]' }] }) }
+    device_tokens: { findMany: async () => ({ records: [{ id: 'device-1', token: 'ExpoPushToken[fixture]' }] }) },
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db)
   };
 
   return { db: db as never, state };
@@ -59,14 +60,17 @@ const created = () => Response.json({ instance: { instanceName: `rcv_${OWNER}` }
 describe('WhatsApp instance service', () => {
   it('creates the instance on Evolution with a per-owner token and webhook, and switches the sender', async () => {
     const { db, state } = fakeDb();
-    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(created());
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(created());
     const client = createInstanceClient({ db, plans: basic, variables, request });
 
     expect(await client.create(OWNER)).toEqual({ state: WhatsappInstanceState.Pending, phone: null, qr: 'data:image/png;base64,QR', connectedAt: null });
     expect(state.sender).toBe(WhatsappSender.Own);
     expect(state.events).toEqual(['whatsapp_instance.created']);
 
-    const [url, init] = request.mock.calls[0]!;
+    expect(String(request.mock.calls[0]![0])).toBe(`http://evo/instance/delete/rcv_${OWNER}`);
+    expect(request.mock.calls[0]![1]?.method).toBe('DELETE');
+
+    const [url, init] = request.mock.calls[1]!;
     const body = JSON.parse(String(init?.body));
 
     expect(String(url)).toBe('http://evo/instance/create');
@@ -92,14 +96,14 @@ describe('WhatsApp instance service', () => {
 
   it('returns the existing row on a second create, and never the token or the secret', async () => {
     const { db, state } = fakeDb();
-    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(created());
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(created());
     const client = createInstanceClient({ db, plans: basic, variables, request });
 
     await client.create(OWNER);
 
     const again = await client.create(OWNER);
 
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledTimes(2);
     expect(Object.keys(again).sort()).toEqual(['connectedAt', 'phone', 'qr', 'state']);
     expect(state.events).toEqual(['whatsapp_instance.created']);
   });
@@ -107,7 +111,7 @@ describe('WhatsApp instance service', () => {
   it('opens and closes on connection updates, clearing the qr and warning the owner once on close', async () => {
     const { db, state } = fakeDb();
     const pushes: string[] = [];
-    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(created());
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(created());
     const transport = {
       push: async (input: { title: string }) => {
         pushes.push(input.title);
@@ -134,7 +138,12 @@ describe('WhatsApp instance service', () => {
 
   it('removes the instance on Evolution, tolerating a 404, and puts the sender back', async () => {
     const { db, state } = fakeDb();
-    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(created()).mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(Response.json({ status: 'SUCCESS' }));
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 404 })) // pre-create cleanup: no orphan to remove
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(new Response(null, { status: 404 })) // logout tolerates a 404
+      .mockResolvedValueOnce(Response.json({ status: 'SUCCESS' }));
     const client = createInstanceClient({ db, plans: basic, variables, request });
 
     await client.create(OWNER);
@@ -142,8 +151,8 @@ describe('WhatsApp instance service', () => {
 
     expect(state.instance).toBeNull();
     expect(state.sender).toBe(WhatsappSender.Receivy);
-    expect(String(request.mock.calls[1]![0])).toBe(`http://evo/instance/logout/rcv_${OWNER}`);
-    expect(String(request.mock.calls[2]![0])).toBe(`http://evo/instance/delete/rcv_${OWNER}`);
+    expect(String(request.mock.calls[2]![0])).toBe(`http://evo/instance/logout/rcv_${OWNER}`);
+    expect(String(request.mock.calls[3]![0])).toBe(`http://evo/instance/delete/rcv_${OWNER}`);
     expect(await client.get(OWNER)).toBeNull();
   });
 });

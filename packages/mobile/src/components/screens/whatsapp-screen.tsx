@@ -406,18 +406,7 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnNumberCardPr
     );
   }
 
-  // A `Pressable` (not a plain `View`) so it claims its own responder and a no-op `onPress`: a bare
-  // press on the pairing code, the risk bullets, "Aguardando…" or the closed-state warning is then
-  // handled right here instead of bubbling up to `RadioCard`'s own press, which would fire
-  // `select(Own)` while a pending/closed instance still sits underneath. Inner `Pressable`s (Conectar,
-  // Cancelar, Desconectar…) sit closer to the touch and still claim it for themselves first, so they
-  // keep working as usual. `accessible={false}` keeps this wrapper out of the accessibility tree —
-  // it does nothing on its own, only the controls inside it are meant to be reachable.
-  return (
-    <Pressable accessible={false} onPress={() => {}} className="gap-3">
-      {body}
-    </Pressable>
-  );
+  return <View className="gap-3">{body}</View>;
 }
 
 type RadioCardProps = {
@@ -429,21 +418,27 @@ type RadioCardProps = {
   children: ReactNode;
 };
 
+/** The radio is the header only; the body is its sibling, so its controls stay reachable and a tap on it never selects. */
 function RadioCard({ value, selected, disabled, title, onSelect, children }: RadioCardProps) {
   const checked = value === selected;
 
   return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityLabel={title}
-      accessibilityState={{ checked, disabled }}
-      disabled={disabled}
-      onPress={() => onSelect(value)}
-      className={`gap-2 rounded-2xl border p-4 ${checked ? "border-primary" : "border-outline"} ${disabled ? "opacity-60" : ""}`}
-    >
-      <Text className="font-sans text-[14.5px] font-semibold text-ink">{title}</Text>
+    <View className={`gap-2 rounded-2xl border p-4 ${checked ? "border-primary" : "border-outline"} ${disabled ? "opacity-60" : ""}`}>
+      <Pressable
+        accessibilityRole="radio"
+        accessibilityLabel={title}
+        accessibilityState={{ checked, disabled }}
+        disabled={disabled}
+        onPress={() => onSelect(value)}
+        className="flex-row items-center gap-3"
+      >
+        <View className={`h-4 w-4 items-center justify-center rounded-full border ${checked ? "border-primary" : "border-outline"}`}>
+          {checked ? <View className="h-2 w-2 rounded-full bg-primary" /> : null}
+        </View>
+        <Text className="font-sans text-[14.5px] font-semibold text-ink">{title}</Text>
+      </Pressable>
       {children}
-    </Pressable>
+    </View>
   );
 }
 

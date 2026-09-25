@@ -78,6 +78,26 @@ describe("WhatsappScreen", () => {
     expect(screen.getByText(/Conectado ao/)).toBeInTheDocument();
   });
 
+  it("keeps the radio on the card header: clicking a card body never selects it", async () => {
+    const calls = arrange({ ...receivy, instance: null });
+
+    render(<WhatsappScreen />);
+
+    fireEvent.click(await screen.findByText(/A Meta pode bloquear o seu número/));
+    expect(screen.getByRole("radio", { name: /Meu número/ })).not.toContainElement(screen.getByText(/A Meta pode bloquear o seu número/));
+    expect(calls.some((call) => call.method === "PATCH")).toBe(false);
+  });
+
+  it("does not PATCH when the Receivy card body is clicked while the own number is selected", async () => {
+    const calls = arrange({ ...receivy, sender: WhatsappSender.Own, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null } });
+
+    render(<WhatsappScreen />);
+
+    fireEvent.click(await screen.findByText("37 de 150 mensagens neste ciclo"));
+    await screen.findByText(/Conectado ao/);
+    expect(calls.some((call) => call.method === "PATCH")).toBe(false);
+  });
+
   it("renders nothing with the kill switch off", () => {
     vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
     arrange();

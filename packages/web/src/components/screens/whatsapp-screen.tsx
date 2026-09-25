@@ -44,7 +44,7 @@ type SenderCardProps = {
   children: ReactNode;
 };
 
-/** A div, not a `<label>`: Task 5 nests a checkbox (also a label) inside the own-number card. */
+/** The radio is the header only; the body is its sibling, so its buttons and checkbox stay reachable on their own. */
 function SenderCard({ value, selected, disabled, title, tabIndex, cardRef, onSelect, onArrow, children }: SenderCardProps) {
   const active = value === selected;
 
@@ -78,21 +78,24 @@ function SenderCard({ value, selected, disabled, title, tabIndex, cardRef, onSel
   }
 
   return (
-    <div
-      ref={cardRef}
-      role="radio"
-      aria-checked={active}
-      aria-disabled={disabled}
-      aria-label={title}
-      tabIndex={tabIndex}
-      onClick={select}
-      onKeyDown={onKeyDown}
-      className={`flex cursor-pointer gap-3 rounded-2xl border p-4 ${active ? "border-primary" : "border-outline"} ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
-    >
-      <div className="flex flex-1 flex-col gap-2">
+    <div className={`flex flex-col gap-2 rounded-2xl border p-4 ${active ? "border-primary" : "border-outline"} ${disabled ? "opacity-60" : ""}`}>
+      <div
+        ref={cardRef}
+        role="radio"
+        aria-checked={active}
+        aria-disabled={disabled}
+        aria-label={title}
+        tabIndex={tabIndex}
+        onClick={select}
+        onKeyDown={onKeyDown}
+        className={`flex items-center gap-3 rounded-lg ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <span aria-hidden className={`flex size-4 shrink-0 items-center justify-center rounded-full border ${active ? "border-primary" : "border-outline"}`}>
+          {active ? <span className="size-2 rounded-full bg-primary" /> : null}
+        </span>
         <p className="m-0 font-semibold text-ink">{title}</p>
-        {children}
       </div>
+      {children}
     </div>
   );
 }
@@ -347,9 +350,8 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnProps) {
     );
   }
 
-  // Every control here is interactive; a bare click must never bubble up as a card selection (Task 4 review).
   return (
-    <div className="flex flex-col gap-3" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+    <div className="flex flex-col gap-3">
       {body}
     </div>
   );

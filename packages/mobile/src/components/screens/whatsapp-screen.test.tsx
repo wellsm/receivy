@@ -137,7 +137,7 @@ describe("WhatsappScreen", () => {
     expect(screen.getByLabelText("Conectar").props.accessibilityState?.disabled).toBe(false);
   });
 
-  it("swallows a tap inside the pending body instead of bubbling it up as a card selection", async () => {
+  it("a tap inside the body does not select the card", async () => {
     const api = client({ ...receivy, instance: pending });
 
     await render(<WhatsappScreen client={api as never} plans={plans()} />);

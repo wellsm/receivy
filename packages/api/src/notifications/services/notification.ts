@@ -17,6 +17,7 @@ import type { Db, DbClient } from '../../database';
 import { ProofRepository } from '../../proofs/repositories/proof';
 import { AccountRepository } from '../../users/repositories/account';
 import { SessionRepository } from '../../users/repositories/sessions';
+import type { WhatsappService } from '../../vendors/whatsapp/service';
 import { DeviceOwnedElsewhereError, DeviceRegisteredError, ReminderQuotaError } from '../errors';
 import { DeviceRepository } from '../repositories/device';
 import type { ChargeNotifyScheduler } from '../schedulers/charge-notify';
@@ -45,11 +46,16 @@ export declare class NotificationService extends Factory.Service<NotificationCli
     PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
     NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
     EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
+    WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+    WHATSAPP_TEMPLATE_INITIAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_INITIAL', 'receivy_charge_initial'>;
+    WHATSAPP_TEMPLATE_REMINDER: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_REMINDER', 'receivy_charge_reminder'>;
+    WHATSAPP_TEMPLATE_MANUAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_MANUAL', 'receivy_charge_manual'>;
   };
 
   services: {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
+    whatsapp: Environment.Service<WhatsappService>;
     chargeNotifyScheduler: Environment.Service<ChargeNotifyScheduler>;
     variables: Environment.ServiceVariables;
   };
@@ -176,10 +182,10 @@ export async function manualReminder(db: DbClient, userId: string, chargeId: str
   return sendChargeNotice(db, notice, chargeId, NoticeTemplate.Manual, now, { channels: config.manual });
 }
 
-export function createService({ db, email, variables }: Service.Context<NotificationService>): NotificationClient {
+export function createService({ db, email, whatsapp, variables }: Service.Context<NotificationService>): NotificationClient {
   return {
     registerDevice: (userId, input, familyId) => registerDevice(db, userId, input, familyId),
-    reminderPreview: (userId, chargeId) => reminderPreview(db, userId, chargeId, noticeContext({ variables, email })),
-    manualReminder: (userId, chargeId) => manualReminder(db, userId, chargeId, noticeContext({ variables, email }))
+    reminderPreview: (userId, chargeId) => reminderPreview(db, userId, chargeId, noticeContext({ variables, email, whatsapp })),
+    manualReminder: (userId, chargeId) => manualReminder(db, userId, chargeId, noticeContext({ variables, email, whatsapp }))
   };
 }

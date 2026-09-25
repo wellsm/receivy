@@ -104,6 +104,20 @@ export default {
     PLAN_BILLING: process.env.PLAN_BILLING ?? 'disabled',
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? 'disabled',
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? 'disabled',
-    STRIPE_PRICE_BASIC: process.env.STRIPE_PRICE_BASIC ?? 'disabled'
+    STRIPE_PRICE_BASIC: process.env.STRIPE_PRICE_BASIC ?? 'disabled',
+    WHATSAPP_TRANSPORT: process.env.WHATSAPP_TRANSPORT ?? 'disabled',
+    WHATSAPP_ACCESS_TOKEN: process.env.WHATSAPP_ACCESS_TOKEN ?? 'disabled',
+    WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID ?? '000000000000000',
+    WHATSAPP_API_VERSION: process.env.WHATSAPP_API_VERSION ?? 'v21.0',
+    WHATSAPP_APP_SECRET: process.env.WHATSAPP_APP_SECRET ?? 'disabled',
+    WHATSAPP_VERIFY_TOKEN: process.env.WHATSAPP_VERIFY_TOKEN ?? 'disabled',
+    WHATSAPP_TEMPLATE_INITIAL: process.env.WHATSAPP_TEMPLATE_INITIAL ?? 'receivy_charge_initial',
+    WHATSAPP_TEMPLATE_REMINDER: process.env.WHATSAPP_TEMPLATE_REMINDER ?? 'receivy_charge_reminder',
+    WHATSAPP_TEMPLATE_MANUAL: process.env.WHATSAPP_TEMPLATE_MANUAL ?? 'receivy_charge_manual',
+    WHATSAPP_FILE_DIRECTORY: process.env.WHATSAPP_FILE_DIRECTORY ?? '.ez4/whatsapp',
+    WHAP_API_URL: process.env.WHAP_API_URL ?? 'http://127.0.0.1:3011',
+    WHAP_PHONE_NUMBER_ID: process.env.WHAP_PHONE_NUMBER_ID ?? '000000000000000',
+    EVOLUTION_API_URL: process.env.EVOLUTION_API_URL ?? 'http://127.0.0.1:8080',
+    EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY ?? 'disabled'
   }
 };

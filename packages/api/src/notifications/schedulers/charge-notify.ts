@@ -4,6 +4,7 @@ import type { String } from '@ez4/schema';
 import { EventRepository } from '../../common/repositories/events';
 import type { EmailService } from '../../common/services/email/service';
 import type { Db } from '../../database';
+import type { WhatsappService } from '../../vendors/whatsapp/service';
 import { noticeContext } from '../services/context';
 import type { NoticeTemplate } from '../services/render';
 import { notifyCharge } from '../services/send';
@@ -33,6 +34,7 @@ export declare class ChargeNotifyScheduler extends Cron.Service<ChargeNotifySche
   services: {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
+    whatsapp: Environment.Service<WhatsappService>;
     chargeNotifyScheduler: Environment.Service<ChargeNotifyScheduler>;
     variables: Environment.ServiceVariables;
   };
@@ -49,16 +51,20 @@ export declare class ChargeNotifyScheduler extends Cron.Service<ChargeNotifySche
     PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
     PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
+    WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+    WHATSAPP_TEMPLATE_INITIAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_INITIAL', 'receivy_charge_initial'>;
+    WHATSAPP_TEMPLATE_REMINDER: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_REMINDER', 'receivy_charge_reminder'>;
+    WHATSAPP_TEMPLATE_MANUAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_MANUAL', 'receivy_charge_manual'>;
   };
 }
 
 export async function handler(
   request: Cron.Incoming<ChargeNotifySchedule>,
-  { db, variables, email }: Service.Context<ChargeNotifyScheduler>
+  { db, variables, email, whatsapp }: Service.Context<ChargeNotifyScheduler>
 ): Promise<void> {
   const event = request.event;
   const now = Date.now();
-  const notice = noticeContext({ variables, email });
+  const notice = noticeContext({ variables, email, whatsapp });
 
   // A redelivery must not send the same reminder twice.
   const already = (await EventRepository.list(db, event.chargeId, 'notice.sent')).some(

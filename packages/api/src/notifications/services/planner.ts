@@ -1,4 +1,7 @@
 import { addCalendarDays, type ReminderRule } from '@receivy/common';
+import { isWhatsappTransport, WhatsappTransport } from '../../vendors/whatsapp/client';
+import type { TemplateNames } from '../../vendors/whatsapp/templates';
+import { templateNamesFrom } from '../../vendors/whatsapp/templates';
 
 export interface NotificationConfig {
   publicOrigin: string;
@@ -11,6 +14,8 @@ export interface NotificationConfig {
   pushAvailable?: boolean;
   /** Whether the WhatsApp transport can send at all; a rule that wants it is dropped as unavailable until it can. */
   whatsappAvailable: boolean;
+  /** The WABA template names in force, as `buildChargeTemplate` needs them. */
+  templates: TemplateNames;
 }
 
 /** Only the fields the notice pipeline reads; the HTTP provider and every scheduler expose them. */
@@ -23,16 +28,23 @@ export interface NotificationVariables {
   APP_STAGE?: string;
   PAYMENT_METHOD_LINK?: string;
   PAYMENT_CREDENTIAL_KEY_B64?: string;
+  WHATSAPP_TRANSPORT?: string;
+  EVOLUTION_API_URL?: string;
+  WHATSAPP_TEMPLATE_INITIAL?: string;
+  WHATSAPP_TEMPLATE_REMINDER?: string;
+  WHATSAPP_TEMPLATE_MANUAL?: string;
 }
 
 /** Reminders reach the recipient at 06:00 of the billing timezone. */
 export const REMINDER_HOUR = 6;
 
-/** Phase 3 reads a WHATSAPP_TRANSPORT variable; until then the channel exists but never sends. */
-export const WHATSAPP_AVAILABLE = false;
-
 /** How far ahead the daily run plans reminders: one run per day, one window per run. */
 export const PLAN_WINDOW_MS = 24 * 3600_000;
+
+/** Whether any WhatsApp transport is on: `disabled` (the default) and a typo both read as off. */
+export function whatsappAvailableFrom(variables: { WHATSAPP_TRANSPORT?: string }): boolean {
+  return isWhatsappTransport(variables.WHATSAPP_TRANSPORT) && variables.WHATSAPP_TRANSPORT !== WhatsappTransport.Disabled;
+}
 
 export function notificationConfigFrom(variables: NotificationVariables): NotificationConfig {
   return {
@@ -42,7 +54,8 @@ export function notificationConfigFrom(variables: NotificationVariables): Notifi
     credentialKeyB64: variables.PAYMENT_CREDENTIAL_KEY_B64 ?? 'disabled',
     from: variables.RESEND_FROM_EMAIL,
     pushAvailable: variables.NOTIFICATION_PUSH_TRANSPORT === 'expo',
-    whatsappAvailable: WHATSAPP_AVAILABLE
+    whatsappAvailable: whatsappAvailableFrom(variables),
+    templates: templateNamesFrom(variables)
   };
 }
 

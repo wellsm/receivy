@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { WhatsappSender } from '@receivy/common';
+import { createWhatsappClient } from '../../vendors/whatsapp/compose';
 import { notificationTransport } from './transport';
 
 const email = {
@@ -95,5 +97,37 @@ describe('notification provider boundaries', () => {
     });
     request.mockRejectedValueOnce(new Error('lost'));
     expect(await sender.push(push)).toEqual({ status: 'uncertain' });
+  });
+});
+
+const whatsapp = {
+  to: '5511999999999',
+  key: 'charge:reminder:0',
+  text: 'Olá',
+  template: { name: 'receivy_charge_reminder', language: { code: 'pt_BR' as const }, components: [] }
+};
+
+describe('notification transport: whatsapp', () => {
+  it('is disabled without WHATSAPP_TRANSPORT and routes the Receivy sender through it', async () => {
+    const request = vi.fn<typeof fetch>();
+
+    expect(await notificationTransport({}, request).whatsapp({ ...whatsapp, sender: WhatsappSender.Receivy })).toEqual({ status: 'disabled' });
+    expect(request).not.toHaveBeenCalled();
+
+    const env = { WHATSAPP_TRANSPORT: 'meta', WHATSAPP_ACCESS_TOKEN: 'token', WHATSAPP_PHONE_NUMBER_ID: '123' };
+    const sender = notificationTransport(env, request, undefined, createWhatsappClient(env, request));
+
+    request.mockResolvedValueOnce(Response.json({ messages: [{ id: 'wamid.9' }] }));
+    expect(await sender.whatsapp({ ...whatsapp, sender: WhatsappSender.Receivy })).toEqual({ status: 'accepted', id: 'wamid.9' });
+    expect(String(request.mock.calls[0]?.[0])).toBe('https://graph.facebook.com/v21.0/123/messages');
+  });
+
+  it('always routes the own sender through evolution, whatever WHATSAPP_TRANSPORT says', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json({ key: { id: 'BAE1' } }, { status: 201 }));
+    const env = { WHATSAPP_TRANSPORT: 'meta', WHATSAPP_ACCESS_TOKEN: 'token', WHATSAPP_PHONE_NUMBER_ID: '123', EVOLUTION_API_URL: 'http://evo' };
+    const sender = notificationTransport(env, request, undefined, createWhatsappClient(env, request));
+
+    expect(await sender.whatsapp({ ...whatsapp, sender: WhatsappSender.Own, instance: { name: 'rcv_a', token: 't' } })).toEqual({ status: 'accepted', id: 'BAE1' });
+    expect(String(request.mock.calls[0]?.[0])).toBe('http://evo/message/sendText/rcv_a');
   });
 });

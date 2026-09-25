@@ -1,7 +1,11 @@
+import { WhatsappSender } from '@receivy/common';
 import type { EmailClient } from '../../common/services/email/client';
 import { EmailTransport, isEmailTransport } from '../../common/services/email/client';
 import { createEmailClient } from '../../common/services/email/compose';
 import { createExpoPushClient } from '../../vendors/expo/client';
+import type { WhatsappClient, WhatsappInputs } from '../../vendors/whatsapp/client';
+import { isWhatsappTransport, WhatsappTransport } from '../../vendors/whatsapp/client';
+import { createWhatsappClient } from '../../vendors/whatsapp/compose';
 
 export type SendResult =
   | { status: 'accepted'; id: string }
@@ -22,8 +26,11 @@ export interface EmailNotice {
   /** Extra SMTP headers (List-Unsubscribe); transports without header support ignore them. */
   headers?: Record<string, string>;
 }
+export type WhatsappNotice = WhatsappInputs.Message & { sender: WhatsappSender };
+
 export interface NotificationTransport {
   email(input: EmailNotice): Promise<SendResult>;
+  whatsapp(input: WhatsappNotice): Promise<SendResult>;
   push(input: { token: string; title: string; body: string; url: string }): Promise<SendResult>;
   receipt(ticket: string): Promise<ReceiptResult>;
 }
@@ -31,9 +38,11 @@ export interface NotificationTransport {
 export function notificationTransport(
   env: Record<string, string | undefined>,
   request: typeof fetch = globalThis.fetch,
-  email: EmailClient = createEmailClient(env, request)
+  email: EmailClient = createEmailClient(env, request),
+  whatsapp: WhatsappClient = createWhatsappClient(env, request)
 ): NotificationTransport {
   const emailTransport = env.EMAIL_TRANSPORT;
+  const whatsappTransport = env.WHATSAPP_TRANSPORT;
   const expo = createExpoPushClient(env, request);
 
   return {
@@ -47,6 +56,18 @@ export function notificationTransport(
       }
 
       return email.send(emailTransport, input);
+    },
+    async whatsapp(input) {
+      // The owner's own number never depends on the Receivy transport being on.
+      if (input.sender === WhatsappSender.Own) {
+        return whatsapp.send(WhatsappTransport.Evolution, input);
+      }
+
+      if (!isWhatsappTransport(whatsappTransport) || whatsappTransport === WhatsappTransport.Disabled) {
+        return { status: 'disabled' };
+      }
+
+      return whatsapp.send(whatsappTransport, input);
     },
     async push(input) {
       if (env.NOTIFICATION_PUSH_TRANSPORT !== 'expo') {

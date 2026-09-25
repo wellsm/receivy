@@ -24,5 +24,7 @@ export declare class WebhookProvider implements Http.Provider {
     RESEND_API_KEY: Environment.Variable<'RESEND_API_KEY'>;
     RESEND_FROM_EMAIL: Environment.Variable<'RESEND_FROM_EMAIL'>;
     MAILPIT_API_URL: Environment.VariableOrValue<'MAILPIT_API_URL', 'http://127.0.0.1:8025'>;
+    WHATSAPP_APP_SECRET: Environment.VariableOrValue<'WHATSAPP_APP_SECRET', 'disabled'>;
+    WHATSAPP_VERIFY_TOKEN: Environment.VariableOrValue<'WHATSAPP_VERIFY_TOKEN', 'disabled'>;
   };
 }

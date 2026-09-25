@@ -6,7 +6,6 @@ import { parseReminderConfig, serializeReminderConfig } from '../../billings/uti
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { Db, DbClient } from '../../database';
-import { WHATSAPP_AVAILABLE } from '../../notifications/services/planner';
 import { bucketProofStorage } from '../../proofs/services/bucket-storage';
 import type { AvatarFiles, ProofFiles } from '../../storage';
 import { AccountRepository } from '../repositories/account';
@@ -33,7 +32,7 @@ async function reminderSettings(db: DbClient, userId: string): Promise<ReminderS
 
   const config = parseReminderConfig(row.reminder_config);
 
-  return { config: config ?? SYSTEM_REMINDER_CONFIG, inherited: config === null, whatsappAvailable: WHATSAPP_AVAILABLE };
+  return { config: config ?? SYSTEM_REMINDER_CONFIG, inherited: config === null, whatsappAvailable: false };
 }
 
 async function saveReminders(db: DbClient, userId: string, input: ReminderConfig): Promise<ReminderSettings> {

@@ -1123,6 +1123,15 @@ it("shows the inherited default and only sends reminders after customising", asy
   expect(patch.clearReminders).toBeUndefined();
 });
 
+it("shows the inherited default as e-mail, never WhatsApp, when the kill switch is off", async () => {
+  const billing = arrangeBilling({ reminders: null, effectiveReminders: [{ offsetDays: 0, enabled: true, channels: { email: false, whatsapp: true } }] });
+
+  renderForm(billing);
+
+  expect(await screen.findByText("Usando seu padrão: no dia (e-mail)")).toBeInTheDocument();
+  expect(screen.queryByText(/WhatsApp/)).not.toBeInTheDocument();
+});
+
 it("customises, sends the rules, and clears back to the default", async () => {
   const billing = arrangeBilling({
     reminders: [{ offsetDays: 3, enabled: true, channels: { email: true, whatsapp: false } }],
@@ -1148,6 +1157,8 @@ it("hides the reminder channel picker and sends a stored whatsapp rule as e-mail
   await screen.findByRole("button", { name: "Quando avisar no lembrete 1" });
 
   expect(screen.queryByRole("button", { name: "Canais do lembrete 1" })).not.toBeInTheDocument();
+  expect(screen.getByText(/por e-mail/)).toBeInTheDocument();
+  expect(screen.queryByText(/WhatsApp/)).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 

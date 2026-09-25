@@ -243,6 +243,8 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     }
   }
 
+  const phoneLabel = whatsappEnabled() ? "WhatsApp" : "Telefone";
+
   return (
     <form className="mx-auto flex w-full max-w-md flex-col gap-4 pb-4 md:max-w-2xl" onSubmit={submit}>
       <p className="m-0 leading-6 text-muted">{INTRO}</p>
@@ -291,11 +293,11 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
             />
           </Field>
 
-          <Field id="contact-phone" label="WhatsApp" hint={phoneSource === PhoneSource.Person ? PHONE_LOCKED_NOTE : undefined}>
+          <Field id="contact-phone" label={phoneLabel} hint={phoneSource === PhoneSource.Person ? PHONE_LOCKED_NOTE : undefined}>
             <input
               id="contact-phone"
               type="tel"
-              aria-label="WhatsApp"
+              aria-label={phoneLabel}
               inputMode="numeric"
               maxLength={11}
               placeholder="11988887777"

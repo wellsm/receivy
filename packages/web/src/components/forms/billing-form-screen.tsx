@@ -61,7 +61,7 @@ import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
 import { loadPlanSummary } from "@/lib/plan-summary";
-import { whatsappEnabled } from "@/lib/whatsapp-flag";
+import { visibleChannels, whatsappEnabled } from "@/lib/whatsapp-flag";
 import { ReminderEditor, ReminderPreview } from "@/components/app/reminder-editor";
 import { PlanPaywall } from "@/components/app/plan-paywall";
 import { ScopeDialog } from "@/components/app/scope-dialog";
@@ -1083,7 +1083,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
           <h3 className="m-0 text-xs font-semibold tracking-[0.06em] text-muted">LEMBRETES</h3>
           {draft.reminders === null ? (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-2.5">
-              <span className="text-sm text-ink">Usando seu padrão: {reminderSummary(effective)}</span>
+              <span className="text-sm text-ink">Usando seu padrão: {reminderSummary(effective.map(rule => ({ ...rule, channels: visibleChannels(rule.channels) })))}</span>
               <button
                 type="button"
                 className="text-sm font-semibold text-primary"

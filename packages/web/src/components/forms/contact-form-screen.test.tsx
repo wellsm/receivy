@@ -141,6 +141,8 @@ it("hides the WhatsApp consent checkbox and omits the field when the kill switch
 
   expect(screen.queryByLabelText("Essa pessoa concordou em receber cobranças por WhatsApp")).not.toBeInTheDocument();
   expect(screen.queryByText("Essa pessoa concordou em receber cobranças por WhatsApp")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Telefone")).toBeInTheDocument();
+  expect(screen.queryByText(/WhatsApp/)).not.toBeInTheDocument();
 
   await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));

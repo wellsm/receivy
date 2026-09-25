@@ -12,7 +12,7 @@ import {
 } from "@receivy/common";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
-import { whatsappEnabled } from "@/lib/whatsapp-flag";
+import { visibleChannels, whatsappEnabled } from "@/lib/whatsapp-flag";
 
 type WhatsappGate = { available: boolean; planAllows: boolean };
 
@@ -66,18 +66,13 @@ function offsetAt(ratio: number): number {
   return Math.min(REMINDER_MAX_OFFSET, Math.max(-REMINDER_MAX_OFFSET, raw));
 }
 
-/** The kill switch off reads every rule as e-mail, whatever the stored channels say; it never rewrites them. */
-function displayChannels(channels: ChannelSet): ChannelSet {
-  return whatsappEnabled() ? single(channels) : { email: true, whatsapp: false };
-}
-
 /** What a row says under its title: the configured channels plus the implicit push, or that it is paused. */
 function rowSubtitle(rule: ReminderDraft): string {
   if (!rule.enabled) {
     return "pausado";
   }
 
-  return `${singleChannelLabel(displayChannels(rule.channels))} · push`;
+  return `${singleChannelLabel(visibleChannels(single(rule.channels)))} · push`;
 }
 
 export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderRulerProps) {

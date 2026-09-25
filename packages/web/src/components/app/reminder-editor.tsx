@@ -19,7 +19,7 @@ import {
 } from "@receivy/common";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
-import { whatsappEnabled } from "@/lib/whatsapp-flag";
+import { visibleChannels, whatsappEnabled } from "@/lib/whatsapp-flag";
 
 type WhatsappGate = { available: boolean; planAllows: boolean };
 
@@ -248,7 +248,7 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
 
 /** The preview block under the cards: the dates the rules land on, against a real or example due date. */
 export function ReminderPreview({ rules, dueDate }: { rules: ReminderDraft[]; dueDate: string }) {
-  const parsed = rules.map(rule => ({ ...rule, offsetDays: offsetOf(rule) }));
+  const parsed = rules.map(rule => ({ ...rule, offsetDays: offsetOf(rule), channels: visibleChannels(rule.channels) }));
 
   return (
     <div className="flex flex-col gap-1.5 rounded-2xl border border-outline bg-surface-muted px-4 py-3">

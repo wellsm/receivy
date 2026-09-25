@@ -45,6 +45,10 @@ describe('meta transport', () => {
     expect(await client.send('meta', message)).toEqual({ status: 'transient' });
     request.mockRejectedValueOnce(new Error('provider secret body must not escape'));
     expect(await client.send('meta', message)).toEqual({ status: 'transient' });
+    request.mockResolvedValueOnce(new Response('<html>Bad Gateway</html>', { status: 403, headers: { 'Content-Type': 'text/html' } }));
+    expect(await client.send('meta', message)).toEqual({ status: 'transient' });
+    request.mockResolvedValueOnce(Response.json({ error: { code: 100, message: 'Invalid parameter' } }, { status: 400 }));
+    expect(await client.send('meta', message)).toEqual({ status: 'permanent' });
   });
 
   it('knows the whole template error range as permanent', () => {

@@ -50,7 +50,13 @@ export async function postMetaMessage(config: MetaConfig, message: WhatsappInput
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
 
-    const body = (await response.json().catch(() => ({}))) as MetaResponseBody;
+    let body: MetaResponseBody;
+
+    try {
+      body = (await response.json()) as MetaResponseBody;
+    } catch {
+      return { status: 'transient' };
+    }
 
     if (response.ok) {
       const id = body.messages?.[0]?.id;

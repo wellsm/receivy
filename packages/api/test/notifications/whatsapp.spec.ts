@@ -8,6 +8,8 @@ import { WhatsappInstanceRepository } from '../../src/notifications/repositories
 import { WhatsappMessageRepository } from '../../src/notifications/repositories/whatsapp-message';
 import { reminderPreview } from '../../src/notifications/services/notification';
 import { NoticeChannel, NoticeTemplate, notifyCharge } from '../../src/notifications/services/send';
+import { cycleOf, whatsappReach } from '../../src/notifications/services/whatsapp-quota';
+import { SubscriptionRepository } from '../../src/plans/repositories/subscription';
 import { AccountRepository } from '../../src/users/repositories/account';
 import { type AccountService, createService as createAccountService } from '../../src/users/services/account';
 import { cleanupUsers, contacts, createUser, db, grantBasicPlan, paymentMethods } from '../fixtures/financial';
@@ -15,6 +17,8 @@ import { fakeNotice } from '../fixtures/scheduling';
 
 const OWNER = 'c1111111-1111-4111-8111-111111111111';
 const FREE = 'c2222222-2222-4222-8222-222222222222';
+const COUNTED = 'c3333333-3333-4333-8333-333333333333';
+const EXHAUSTED = 'c4444444-4444-4444-8444-444444444444';
 const DUE_DATE = '2029-01-04';
 const TZ = 'America/Sao_Paulo';
 const clock = Date.parse('2029-01-04T11:00:00Z');
@@ -56,20 +60,31 @@ async function messages(chargeId: string) {
   return records;
 }
 
+/** A message row written straight through the repository, as the send path would leave it. */
+async function ledger(owner: string, chargeId: string, sender: WhatsappSender, noticeKey: string, now: string) {
+  return WhatsappMessageRepository.insert(db, { ownerId: owner, chargeId, to: '5511999990000', sender, template: NoticeTemplate.Reminder, noticeKey, now });
+}
+
 describe('WhatsApp notices', () => {
   before(async () => {
     await createUser(db, { id: OWNER, email: 'wa-owner@example.com', name: 'Wellington Owner' });
     await createUser(db, { id: FREE, email: 'wa-free@example.com', name: 'Free Owner' });
+    await createUser(db, { id: COUNTED, email: 'wa-counted@example.com', name: 'Counted Owner' });
+    await createUser(db, { id: EXHAUSTED, email: 'wa-exhausted@example.com', name: 'Exhausted Owner' });
     await grantBasicPlan(db, OWNER);
+    await grantBasicPlan(db, COUNTED);
+    await grantBasicPlan(db, EXHAUSTED);
     // A charge with no Pix key on file has nothing to publish yet: every fixture charge needs one to clear sendChargeNotice's PixRequired gate.
     await paymentMethods.save(OWNER, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'wa-owner@example.com' });
     await paymentMethods.save(FREE, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'wa-free@example.com' });
+    await paymentMethods.save(EXHAUSTED, { provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: 'wa-exhausted@example.com' });
     await accounts.saveReminders(OWNER, WHATSAPP_ONLY);
     await accounts.saveReminders(FREE, WHATSAPP_ONLY);
+    await accounts.saveReminders(EXHAUSTED, WHATSAPP_ONLY);
   });
 
   after(async () => {
-    await cleanupUsers(db, [OWNER, FREE]);
+    await cleanupUsers(db, [OWNER, FREE, COUNTED, EXHAUSTED]);
   });
 
   it('sends the template through the Receivy number next to the e-mail and records the row', async () => {
@@ -194,5 +209,50 @@ describe('WhatsApp notices', () => {
     equal((await messages(id))[0]!.status, WhatsappMessageStatus.Read);
     equal(await WhatsappMessageRepository.applyStatus(db, row!.provider_message_id!, WhatsappMessageStatus.Failed, '131026: gone', now), true);
     equal((await messages(id))[0]!.status, WhatsappMessageStatus.Failed);
+  });
+
+  it('counts only live Receivy-number rows inside the cycle against the quota', async () => {
+    const mid = new Date('2029-01-15T12:00:00Z');
+    const now = mid.toISOString();
+    const before = '2028-11-15T12:00:00.000Z';
+    const subscription = await SubscriptionRepository.get(db, COUNTED);
+    const cycle = cycleOf(subscription?.current_period_end ?? null, mid);
+
+    deepEqual(cycle, { from: '2029-01-01T00:00:00.000Z', to: '2029-02-01T00:00:00.000Z' });
+
+    const { id } = await charge(COUNTED);
+    const counted = await ledger(COUNTED, id, WhatsappSender.Receivy, 'quota:sent', now);
+    const failed = await ledger(COUNTED, id, WhatsappSender.Receivy, 'quota:failed', now);
+    const own = await ledger(COUNTED, id, WhatsappSender.Own, 'quota:own', now);
+    const earlier = await ledger(COUNTED, id, WhatsappSender.Receivy, 'quota:earlier', before);
+
+    await WhatsappMessageRepository.markSent(db, counted.id, 'wamid-quota-sent', now);
+    await WhatsappMessageRepository.markFailed(db, failed.id, 'permanent', now);
+    await WhatsappMessageRepository.markSent(db, own.id, 'wamid-quota-own', now);
+    await WhatsappMessageRepository.markSent(db, earlier.id, 'wamid-quota-earlier', before);
+
+    const reach = await whatsappReach(db, COUNTED, mid);
+
+    equal(reach.quotaLimit, 150);
+    equal(reach.quotaLeft, 150 - 1, 'failed, own-number and last-cycle rows cost nothing');
+  });
+
+  it('drops WhatsApp with quota once the cycle spent every Receivy-number message', async () => {
+    const now = new Date(clock).toISOString();
+    const filler = await charge(EXHAUSTED);
+
+    for (let index = 0; index < 150; index++) {
+      const row = await ledger(EXHAUSTED, filler.id, WhatsappSender.Receivy, `exhausted:${index}`, now);
+
+      await WhatsappMessageRepository.markSent(db, row.id, `wamid-exhausted-${index}`, now);
+    }
+
+    sent.reset();
+
+    const fresh = await charge(EXHAUSTED);
+
+    deepEqual((await notifyCharge(db, context, fresh.id, NoticeTemplate.Reminder, clock, 0)).dropped, [{ channel: 'whatsapp', reason: 'quota' }]);
+    equal(sent.whatsapps.length, 0);
+    equal((await messages(fresh.id)).length, 0, 'a dropped channel writes no row');
   });
 });

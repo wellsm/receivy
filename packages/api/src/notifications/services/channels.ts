@@ -1,4 +1,4 @@
-import { type ChannelSet, DropReason, NoticeChannel } from '@receivy/common';
+import { type ChannelSet, DropReason, NoticeChannel, WhatsappSender } from '@receivy/common';
 
 export { DropReason, NoticeChannel };
 
@@ -8,10 +8,21 @@ export type ReachTarget = { email?: string; phone?: string; email_opt_out_at?: s
 
 export type ReachContact = { phone?: string; consentAt?: string } | null;
 
-export type ResolveInput = { wanted: ChannelSet; ownBill: boolean; target: ReachTarget; contact: ReachContact; whatsappAvailable: boolean };
+export type ResolveInput = {
+  wanted: ChannelSet;
+  ownBill: boolean;
+  target: ReachTarget;
+  contact: ReachContact;
+  whatsappAvailable: boolean;
+  /** Whose number the owner sends from, and its state, as `whatsappReach` reads them. */
+  sender: WhatsappSender;
+  instanceOpen: boolean;
+  quotaLeft: number;
+};
 
-export type Resolved = { email: boolean; whatsapp: boolean; dropped: Dropped[] };
+export type Resolved = { email: boolean; whatsapp: boolean; phone?: string; dropped: Dropped[] };
 
+/** The order is the spec's: the recipient first, then the environment, then the owner's sender. */
 function whatsappDrop(input: ResolveInput): DropReason | null {
   const own = Boolean(input.target.phone);
   const phone = input.target.phone ?? input.contact?.phone;
@@ -32,6 +43,14 @@ function whatsappDrop(input: ResolveInput): DropReason | null {
     return DropReason.Unavailable;
   }
 
+  if (input.sender === WhatsappSender.Own) {
+    return input.instanceOpen ? null : DropReason.SenderOffline;
+  }
+
+  if (input.quotaLeft <= 0) {
+    return DropReason.Quota;
+  }
+
   return null;
 }
 
@@ -41,6 +60,7 @@ export function resolveChannels(input: ResolveInput): Resolved {
 
   let email = false;
   let whatsapp = false;
+  let phone: string | undefined;
 
   if (input.wanted.email) {
     if (!input.target.email) {
@@ -60,8 +80,9 @@ export function resolveChannels(input: ResolveInput): Resolved {
       dropped.push({ channel: NoticeChannel.WhatsApp, reason });
     } else {
       whatsapp = true;
+      phone = input.target.phone ?? input.contact?.phone;
     }
   }
 
-  return { email, whatsapp, dropped };
+  return { email, whatsapp, ...(phone ? { phone } : {}), dropped };
 }

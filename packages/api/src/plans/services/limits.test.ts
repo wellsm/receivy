@@ -11,7 +11,7 @@ function dbWith(subscription: Record<string, unknown> | null, used: number) {
 
 describe('plan limits', () => {
   it('reads free limits without a subscription', async () => {
-    expect(await limitsOf(dbWith(null, 2), 'o1', NOW)).toEqual({ plan: PlanTier.Free, limits: { indefinite: 5, checkoutLinks: false }, used: 2 });
+    expect(await limitsOf(dbWith(null, 2), 'o1', NOW)).toEqual({ plan: PlanTier.Free, limits: { indefinite: 5, checkoutLinks: false, whatsappMessages: 0 }, used: 2 });
   });
 
   it('lets the fifth indefinite through and refuses the sixth on free', async () => {

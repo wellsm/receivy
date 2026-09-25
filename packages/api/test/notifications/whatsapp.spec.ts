@@ -7,7 +7,7 @@ import { createBilling } from '../../src/billings/services/billing';
 import { WhatsappInstanceRepository } from '../../src/notifications/repositories/whatsapp-instance';
 import { WhatsappMessageRepository } from '../../src/notifications/repositories/whatsapp-message';
 import { reminderPreview } from '../../src/notifications/services/notification';
-import { NoticeTemplate, notifyCharge } from '../../src/notifications/services/send';
+import { NoticeChannel, NoticeTemplate, notifyCharge } from '../../src/notifications/services/send';
 import { AccountRepository } from '../../src/users/repositories/account';
 import { type AccountService, createService as createAccountService } from '../../src/users/services/account';
 import { cleanupUsers, contacts, createUser, db, grantBasicPlan, paymentMethods } from '../fixtures/financial';
@@ -51,7 +51,7 @@ async function charge(owner: string, consent = true) {
 }
 
 async function messages(chargeId: string) {
-  const { records } = await db.whatsapp_messages.findMany({ select: { sender: true, status: true, to: true, provider_message_id: true }, where: { charge_id: chargeId } });
+  const { records } = await db.whatsapp_messages.findMany({ select: { sender: true, status: true, to: true, provider_message_id: true, notice_key: true }, where: { charge_id: chargeId } });
 
   return records;
 }
@@ -90,6 +90,25 @@ describe('WhatsApp notices', () => {
     equal(rows.length, 1);
     equal(rows[0]!.status, WhatsappMessageStatus.Sent);
     equal(rows[0]!.provider_message_id, 'wamid-1');
+  });
+
+  it('sends a retried reminder once and still counts WhatsApp as reached', async () => {
+    sent.reset();
+
+    const { id } = await charge(OWNER);
+    const first = await notifyCharge(db, context, id, NoticeTemplate.Reminder, clock, 0);
+    // The scheduler retries the same event after something threw past the accepted send.
+    const second = await notifyCharge(db, context, id, NoticeTemplate.Reminder, clock, 0);
+
+    ok(first.channels.includes(NoticeChannel.WhatsApp));
+    ok(second.channels.includes(NoticeChannel.WhatsApp), 'the message did leave on the first try');
+    equal(sent.whatsapps.length, 1, 'the retry never calls the provider again');
+    equal(sent.whatsapps[0]!.key, `${id}:reminder:0`);
+
+    const rows = await messages(id);
+
+    equal(rows.length, 1);
+    equal(rows[0]!.notice_key, `${id}:reminder:0`);
   });
 
   it('keeps a failed row and reports only the e-mail when the provider refuses', async () => {

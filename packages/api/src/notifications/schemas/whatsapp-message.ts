@@ -16,6 +16,8 @@ export interface WhatsappMessageSchema extends Database.Schema {
   to: String.Max<32>;
   sender: WhatsappSender;
   template: NoticeTemplate;
+  /** `<chargeId>:<template>:<offset or manual day>`: a retried notice finds the message that already left. */
+  notice_key: String.Max<160>;
   status: WhatsappMessageStatus;
   /** The Meta `wamid` or the Evolution `key.id`; absent until the provider accepted the message. */
   provider_message_id?: String.Max<128>;

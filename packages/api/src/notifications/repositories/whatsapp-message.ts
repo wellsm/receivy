@@ -12,7 +12,7 @@ const RANK: Record<WhatsappMessageStatus, number> = {
 };
 
 export namespace WhatsappMessageRepository {
-  export type Input = { ownerId: string; chargeId: string; to: string; sender: WhatsappSender; template: NoticeTemplate; now: string };
+  export type Input = { ownerId: string; chargeId: string; to: string; sender: WhatsappSender; template: NoticeTemplate; noticeKey: string; now: string };
 
   export async function insert(db: DbClient, input: Input): Promise<{ id: string }> {
     const id = crypto.randomUUID();
@@ -25,6 +25,7 @@ export namespace WhatsappMessageRepository {
         to: input.to,
         sender: input.sender,
         template: input.template,
+        notice_key: input.noticeKey,
         status: WhatsappMessageStatus.Queued,
         created_at: input.now,
         updated_at: input.now
@@ -32,6 +33,17 @@ export namespace WhatsappMessageRepository {
     });
 
     return { id };
+  }
+
+  /** The message this notice already sent or is sending: any row with the key that did not fail. */
+  export async function live(db: DbClient, noticeKey: string): Promise<{ id: string; status: WhatsappMessageStatus } | null> {
+    const { records } = await db.whatsapp_messages.findMany({
+      select: { id: true, status: true },
+      where: { notice_key: noticeKey, status: { not: WhatsappMessageStatus.Failed } },
+      take: 1
+    });
+
+    return records[0] ?? null;
   }
 
   export async function markSent(db: DbClient, id: string, providerMessageId: string, now: string): Promise<void> {

@@ -48,6 +48,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
         owner_id: Index.Secondary;
         charge_id: Index.Secondary;
         provider_message_id: Index.Secondary;
+        notice_key: Index.Secondary;
       };
     }>,
     Database.UseTable<{

@@ -19,9 +19,9 @@ import { buildChargeTemplate } from '../../vendors/whatsapp/templates';
 import { DeviceRepository } from '../repositories/device';
 import { WhatsappMessageRepository } from '../repositories/whatsapp-message';
 import { type Dropped, DropReason, NoticeChannel, resolveChannels } from './channels';
-import { instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
+import { civilDate, instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
 import { NoticeTemplate, renderNotice } from './render';
-import type { NotificationTransport } from './transport';
+import type { NotificationTransport, SendResult as TransportResult } from './transport';
 import { whatsappReach } from './whatsapp-quota';
 
 export { NoticeChannel, NoticeTemplate };
@@ -218,35 +218,56 @@ export async function sendChargeNotice(
 
   const to = resolved.phone ? toWhatsappNumber(resolved.phone) : null;
 
+  // The key is stable across retries of the same notice: one per charge, template and rule (or manual day).
+  const noticeKey = `${chargeId}:${template}:${options.offsetDays ?? `manual:${civilDate(now, charge.billing.owner.timezone)}`}`;
+
   // The WhatsApp row exists before the call: a status webhook may arrive before the transport returns.
   if (resolved.whatsapp && to) {
-    const stamp = new Date(now).toISOString();
-    const row = await WhatsappMessageRepository.insert(db, { ownerId: charge.owner_id, chargeId, to, sender: sender.sender, template, now: stamp });
-    const result = await context.transport.whatsapp({
-      to,
-      key: `${chargeId}:${template}:${options.offsetDays ?? 'manual'}:${now}`,
-      text: rendered.text,
-      template: buildChargeTemplate(
-        {
-          template,
-          name: target.name?.trim() || 'Olá',
-          creditor: charge.creditor?.name?.trim() || 'Receivy',
-          cents: charge.amount_cents,
-          dueDate: charge.due_date,
-          description: charge.description,
-          token: rendered.url.slice(rendered.url.lastIndexOf('/') + 1)
-        },
-        context.config.templates
-      ),
-      sender: sender.sender,
-      ...(sender.instance ? { instance: sender.instance } : {})
-    });
+    // A scheduler retry after the provider accepted (the event or the e-mail threw) must not send and bill
+    // the template again: the message already left, so it counts as reached.
+    const already = await WhatsappMessageRepository.live(db, noticeKey);
 
-    if (result.status === 'accepted') {
-      await WhatsappMessageRepository.markSent(db, row.id, result.id, stamp);
+    if (already) {
       channels.push(NoticeChannel.WhatsApp);
     } else {
-      await WhatsappMessageRepository.markFailed(db, row.id, result.status, stamp);
+      const stamp = new Date(now).toISOString();
+      const row = await WhatsappMessageRepository.insert(db, { ownerId: charge.owner_id, chargeId, to, sender: sender.sender, template, noticeKey, now: stamp });
+
+      let result: TransportResult | null = null;
+
+      try {
+        result = await context.transport.whatsapp({
+          to,
+          key: noticeKey,
+          text: rendered.text,
+          template: buildChargeTemplate(
+            {
+              template,
+              name: target.name?.trim() || 'Olá',
+              creditor: charge.creditor?.name?.trim() || 'Receivy',
+              cents: charge.amount_cents,
+              dueDate: charge.due_date,
+              description: charge.description,
+              token: rendered.url.slice(rendered.url.lastIndexOf('/') + 1)
+            },
+            context.config.templates
+          ),
+          sender: sender.sender,
+          ...(sender.instance ? { instance: sender.instance } : {})
+        });
+      } catch (error) {
+        console.error('WhatsApp transport threw', { chargeId, error: error instanceof Error ? error.message : 'unknown' });
+      }
+
+      // A queued row must never outlive the request: a thrown transport is a failed attempt.
+      if (!result) {
+        await WhatsappMessageRepository.markFailed(db, row.id, 'threw', stamp);
+      } else if (result.status === 'accepted') {
+        await WhatsappMessageRepository.markSent(db, row.id, result.id, stamp);
+        channels.push(NoticeChannel.WhatsApp);
+      } else {
+        await WhatsappMessageRepository.markFailed(db, row.id, result.status, stamp);
+      }
     }
   } else if (resolved.whatsapp) {
     // Reachable on paper, but the number does not normalise: reported like any other drop.

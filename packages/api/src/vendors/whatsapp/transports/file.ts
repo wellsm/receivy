@@ -1,12 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { type Environment, Runtime, type Service } from '@ez4/common';
+import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
 import type { WhatsappInputs, WhatsappProvider } from '../client';
 
 export const DEFAULT_WHATSAPP_FILE_DIRECTORY = '.ez4/whatsapp';
 
-/** Local development only: writes each message as a JSON file instead of sending it. */
+/** Development and tests: writes each message as a JSON file instead of sending it; refused in production. */
 export declare class FileWhatsappService extends Factory.Service<WhatsappProvider> {
   handler: typeof createService;
 
@@ -23,8 +23,8 @@ export declare class FileWhatsappService extends Factory.Service<WhatsappProvide
 export function createService({ variables }: Service.Context<FileWhatsappService>): WhatsappProvider {
   const { APP_STAGE, WHATSAPP_FILE_DIRECTORY } = variables;
 
-  if (APP_STAGE !== 'dev' && Runtime.isLocal()) {
-    throw new Error(`WhatsApp transport 'file' is only allowed when APP_STAGE=dev and local.`);
+  if (APP_STAGE === 'prd') {
+    throw new Error(`WhatsApp transport 'file' is forbidden when APP_STAGE=prd.`);
   }
 
   const directory = resolve(process.cwd(), WHATSAPP_FILE_DIRECTORY ?? DEFAULT_WHATSAPP_FILE_DIRECTORY);

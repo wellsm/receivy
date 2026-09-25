@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { PlanTier, WhatsappInstanceState, WhatsappSender } from "@receivy/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { browserFetch } from "@/lib/auth/browser-fetch";
@@ -125,6 +125,8 @@ describe("WhatsappScreen", () => {
     expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
     expect(calls.find((call) => call.method === "POST")?.body).toEqual({ riskAccepted: true });
     expect(screen.getByText(/Dispositivos conectados/)).toBeInTheDocument();
+    // The API sets the sender to own on POST /whatsapp/instance (create), before the pairing even opens.
+    expect(screen.getByRole("radio", { name: /Meu número/ })).toHaveAttribute("aria-checked", "true");
   });
 
   it("polls the instance every 5 s while pending, stops when it opens, and stops on unmount", async () => {
@@ -170,7 +172,7 @@ describe("WhatsappScreen", () => {
     expect(polls).toBe(2);
   });
 
-  it("asks for a fresh code with refresh=true, and offers code pairing with a phone", async () => {
+  it("asks for a fresh code with refresh=true", async () => {
     const calls = arrange({ ...receivy, instance: { ...pending, phone: "5511988887777", pairingCode: "ABCD-1234" } });
 
     render(<WhatsappScreen />);
@@ -180,7 +182,134 @@ describe("WhatsappScreen", () => {
     await waitFor(() => expect(calls.some((call) => call.path.endsWith("/whatsapp/instance?refresh=true"))).toBe(true));
   });
 
-  it("disconnects after confirming, and reconnect after a drop keeps the acceptance ticked", async () => {
+  it("offers code pairing with a phone, posting it in the connect body", async () => {
+    const calls = arrange({ ...receivy, instance: null });
+
+    fetchMock.mockImplementation(async (path, init) => {
+      const method = init?.method ?? "GET";
+
+      calls.push({ path: String(path), method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+
+      if (String(path).endsWith("/plan")) {
+        return json({ plan: PlanTier.Basic, usage: { indefinite: { used: 0, limit: 30 } } });
+      }
+
+      if (String(path).endsWith("/whatsapp") && method === "GET") {
+        return json({ ...receivy, instance: null });
+      }
+
+      if (String(path).endsWith("/whatsapp/instance") && method === "POST") {
+        return json({ ...pending, qr: null, pairingCode: "ABCD-1234" }, 201);
+      }
+
+      return json({ instance: pending });
+    });
+    render(<WhatsappScreen />);
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Entendo que este canal não é oficial/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Prefiro conectar com código" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Telefone" }), { target: { value: "(11) 98888-7777" } });
+    fireEvent.click(screen.getByRole("button", { name: "Conectar" }));
+
+    await waitFor(() => expect(calls.some((call) => call.method === "POST")).toBe(true));
+    expect(calls.find((call) => call.method === "POST")?.body).toEqual({ riskAccepted: true, phone: "(11) 98888-7777" });
+  });
+
+  it("cancels the pending pairing", async () => {
+    const calls = arrange({ ...receivy, instance: pending });
+
+    render(<WhatsappScreen />);
+
+    await screen.findByRole("img", { name: "QR code para conectar" });
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() => expect(calls.some((call) => call.method === "DELETE")).toBe(true));
+    expect(await screen.findByRole("checkbox", { name: /Entendo que este canal não é oficial/ })).toBeInTheDocument();
+  });
+
+  it("disconnects the open instance after confirming, back to the initial state", async () => {
+    const calls = arrange({
+      ...receivy,
+      sender: WhatsappSender.Own,
+      instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" },
+    });
+
+    render(<WhatsappScreen />);
+
+    await screen.findByText(/Conectado ao/);
+    fireEvent.click(screen.getByRole("button", { name: "Desconectar" }));
+
+    const dialog = await screen.findByRole("dialog");
+
+    expect(dialog).toHaveTextContent("Os lembretes voltam a sair pelo número do Receivy.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Desconectar" }));
+
+    await waitFor(() => expect(calls.some((call) => call.method === "DELETE")).toBe(true));
+    expect(await screen.findByRole("checkbox", { name: /Entendo que este canal não é oficial/ })).toBeInTheDocument();
+    // The API sets the sender back to receivy on DELETE.
+    expect(screen.getByRole("radio", { name: /Número do Receivy/ })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("ignores a poll answered after the user already cancelled the pairing", async () => {
+    vi.useFakeTimers();
+
+    const calls = arrange({ ...receivy, instance: pending });
+    let resolvePoll: (() => void) | undefined;
+    let pollRequests = 0;
+
+    fetchMock.mockImplementation(async (path, init) => {
+      const method = init?.method ?? "GET";
+
+      calls.push({ path: String(path), method });
+
+      if (String(path).endsWith("/plan")) {
+        return json({ plan: PlanTier.Basic, usage: { indefinite: { used: 0, limit: 30 } } });
+      }
+
+      if (String(path).endsWith("/whatsapp") && method === "GET") {
+        return json({ ...receivy, instance: pending });
+      }
+
+      if (String(path).endsWith("/whatsapp/instance") && method === "DELETE") {
+        return json({});
+      }
+
+      // The polling GET /whatsapp/instance — held open until the test resolves it by hand.
+      pollRequests += 1;
+
+      return new Promise((resolve) => {
+        resolvePoll = () => resolve(json({ instance: pending }));
+      });
+    });
+
+    render(<WhatsappScreen />);
+
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(pollRequests).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    // `waitFor`/`findBy*` poll with real timers internally, which never advance under fake timers;
+    // flush by hand instead.
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.some((call) => call.method === "DELETE")).toBe(true);
+    expect(screen.getByRole("checkbox", { name: /Entendo que este canal não é oficial/ })).toBeInTheDocument();
+
+    // The stale poll answers only now, after the user already cancelled — it must be ignored.
+    resolvePoll?.();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(screen.getByRole("checkbox", { name: /Entendo que este canal não é oficial/ })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "QR code para conectar" })).not.toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(pollRequests).toBe(1);
+  });
+
+  it("reconnects after a drop, keeping the acceptance ticked", async () => {
     const closed = { ...pending, state: WhatsappInstanceState.Closed, qr: null, phone: "5511988887777" };
     const calls = arrange({ ...receivy, sender: WhatsappSender.Own, instance: closed });
 
@@ -220,5 +349,59 @@ describe("WhatsappScreen", () => {
     receivyRadioOpen.focus();
     fireEvent.keyDown(receivyRadioOpen, { key: "ArrowDown" });
     await waitFor(() => expect(withInstance.some((call) => call.method === "PATCH" && (call.body as { sender: string })?.sender === "own")).toBe(true));
+  });
+
+  it("keeps arrow-key selection locked on the Free plan, same as a click", async () => {
+    const calls = arrange({ ...receivy, quota: null }, PlanTier.Free);
+
+    render(<WhatsappScreen />);
+
+    const receivyRadio = await screen.findByRole("radio", { name: /Número do Receivy/ });
+
+    receivyRadio.focus();
+    fireEvent.keyDown(receivyRadio, { key: "ArrowDown" });
+
+    expect(calls.some((call) => call.method === "PATCH")).toBe(false);
+  });
+
+  it("keeps arrow-key selection from firing a second PATCH while one is already in flight", async () => {
+    const open = { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" };
+    const calls = arrange({ ...receivy, sender: WhatsappSender.Own, instance: open });
+    let resolvePatch: (() => void) | undefined;
+
+    fetchMock.mockImplementation(async (path, init) => {
+      const method = init?.method ?? "GET";
+
+      calls.push({ path: String(path), method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+
+      if (String(path).endsWith("/plan")) {
+        return json({ plan: PlanTier.Basic, usage: { indefinite: { used: 0, limit: 30 } } });
+      }
+
+      if (String(path).endsWith("/whatsapp") && method === "GET") {
+        return json({ ...receivy, sender: WhatsappSender.Own, instance: open });
+      }
+
+      if (String(path).endsWith("/whatsapp/sender") && method === "PATCH") {
+        return new Promise((resolve) => {
+          resolvePatch = () => resolve(json({ sender: WhatsappSender.Receivy }));
+        });
+      }
+
+      return json({});
+    });
+
+    render(<WhatsappScreen />);
+
+    const ownRadio = await screen.findByRole("radio", { name: /Meu número/ });
+
+    ownRadio.focus();
+    fireEvent.keyDown(ownRadio, { key: "ArrowUp" });
+    fireEvent.keyDown(ownRadio, { key: "ArrowUp" });
+
+    expect(calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+
+    resolvePatch?.();
+    await waitFor(() => expect(screen.getByRole("radio", { name: /Número do Receivy/ })).toHaveAttribute("aria-checked", "true"));
   });
 });

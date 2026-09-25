@@ -97,7 +97,7 @@ function SenderCard({ value, selected, disabled, title, tabIndex, cardRef, onSel
   );
 }
 
-const POLL_MS = 5000;
+export const POLL_MS = 5000;
 
 const RISK_POINTS = [
   'Canal não oficial: seu WhatsApp fica ligado ao Receivy como um "dispositivo conectado".',
@@ -118,13 +118,16 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnProps) {
   const [error, setError] = useState<string | null>(null);
 
   const patch = useCallback(
-    (next: WhatsappInstanceView | null) => {
+    (next: WhatsappInstanceView | null, forceSender?: WhatsappSender) => {
       if (!settings) {
         return;
       }
 
-      // The API flips the sender to own when the instance opens; mirror it so the radio follows without a reload.
-      onChange({ ...settings, instance: next, sender: next?.state === WhatsappInstanceState.Open ? WhatsappSender.Own : next ? settings.sender : WhatsappSender.Receivy });
+      // The API sets the sender on POST (create) and DELETE, never on GET; mirror only those two —
+      // a poll (or a manual "Gerar novo" refresh) leaves whatever sender is already in `settings`.
+      const sender = next === null ? WhatsappSender.Receivy : (forceSender ?? settings.sender);
+
+      onChange({ ...settings, instance: next, sender });
     },
     [onChange, settings],
   );
@@ -137,22 +140,41 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnProps) {
     patchRef.current = patch;
   });
 
+  // Bumped by every user action (connect/refresh/disconnect/reconnect) and by the poll effect's own
+  // cleanup, so a poll answered after the user has already moved on gets ignored instead of patching
+  // stale state back in (e.g. a slow poll resolving with a QR after "Cancelar" already deleted it).
+  const seqRef = useRef(0);
+
   // Poll while pending; the interval dies with the card or when the state moves on.
   useEffect(() => {
     if (instance?.state !== WhatsappInstanceState.Pending) {
       return;
     }
 
+    let cancelled = false;
+
     const timer = setInterval(() => {
+      const seq = seqRef.current;
+
       client
         .instance()
-        .then((next) => patchRef.current(next))
+        .then((next) => {
+          if (cancelled || seqRef.current !== seq) {
+            return;
+          }
+
+          patchRef.current(next);
+        })
         .catch(() => {
           // A failed poll is just the next tick's problem.
         });
     }, POLL_MS);
 
-    return () => clearInterval(timer);
+    return () => {
+      cancelled = true;
+      seqRef.current += 1;
+      clearInterval(timer);
+    };
   }, [client, instance?.state]);
 
   async function run<T>(action: () => Promise<T>, fallback: string): Promise<T | undefined> {
@@ -171,14 +193,18 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnProps) {
   }
 
   async function connect() {
+    seqRef.current += 1;
+
     const next = await run(() => client.connect({ riskAccepted: true, ...(byCode && phone ? { phone } : {}) }), "Não deu para conectar agora.");
 
     if (next) {
-      patch(next);
+      patch(next, WhatsappSender.Own);
     }
   }
 
   async function refresh() {
+    seqRef.current += 1;
+
     const next = await run(() => client.instance(true), "Não deu para gerar um novo código.");
 
     if (next) {
@@ -187,6 +213,7 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnProps) {
   }
 
   async function disconnect() {
+    seqRef.current += 1;
     setConfirming(false);
 
     const done = await run(() => client.disconnect().then(() => true), "Não deu para desconectar agora.");
@@ -197,6 +224,8 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnProps) {
   }
 
   async function reconnect() {
+    seqRef.current += 1;
+
     const done = await run(() => client.disconnect().then(() => true), "Não deu para desconectar agora.");
 
     if (done) {
@@ -413,8 +442,15 @@ export function WhatsappScreen({ client = whatsappClient }: Props) {
     const index = CARD_ORDER.indexOf(current);
     const next = CARD_ORDER[(index + direction + CARD_ORDER.length) % CARD_ORDER.length]!;
 
-    void select(next);
     cardRefFor(next).current?.focus();
+
+    // Same guard a click gets from `SenderCard`'s own `disabled` check: no PATCH on the Free plan,
+    // and no second PATCH while one from a previous click or arrow press is still in flight.
+    if (locked) {
+      return;
+    }
+
+    void select(next);
   }
 
   return (

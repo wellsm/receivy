@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import Constants from "expo-constants";
 import { Image } from "expo-image";
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, momentText, planName, PlanTier, THEME_PREFERENCE_OPTIONS, type AuthUser, type PlanSummary } from "@receivy/common";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, momentText, planName, PlanTier, THEME_PREFERENCE_OPTIONS, type AuthUser, type PlanSummary, type WhatsappSettings } from "@receivy/common";
 import { pickAndUploadAvatar } from "@/account/avatar";
 import { accountClient, type AccountClient } from "@/account/client";
 import { financialClient, type FinancialClient } from "@/financial/client";
@@ -13,15 +13,17 @@ import { useTabHeader } from "@/navigation/tab-header";
 import { LegalSheet, type LegalKind } from "@/components/app/legal-sheet";
 import { useThemeColors, type ThemeColors } from "@/theme/colors";
 import { useThemePreference } from "@/theme/preference";
+import { whatsappEnabled, whatsappSubtitle } from "@/whatsapp-flag";
 
 type ProfileScreenProps = {
-  client?: Pick<AccountClient, "profile" | "save" | "logout" | "erase" | "startAvatarUpload" | "completeAvatarUpload">;
+  client?: Pick<AccountClient, "profile" | "save" | "logout" | "erase" | "startAvatarUpload" | "completeAvatarUpload" | "whatsapp">;
   store?: Pick<ProfileStore, "remember">;
   plans?: Pick<FinancialClient, "plan">;
   version?: string;
   onOpenContacts?: () => void;
   onOpenPaymentMethods?: () => void;
   onOpenReminders?: () => void;
+  onOpenWhatsapp?: () => void;
   onLoggedOut?: () => void;
 };
 
@@ -29,6 +31,7 @@ type Dialog = "logout" | "delete" | null;
 
 const ICONS = {
   bell: require("../../../assets/images/auth/bell.svg"),
+  chat: require("../../../assets/images/auth/chat.svg"),
   check: require("../../../assets/images/auth/check.svg"),
   chevron: require("../../../assets/images/auth/chevron.svg"),
   edit: require("../../../assets/images/auth/edit.svg"),
@@ -114,6 +117,7 @@ export function ProfileScreen({
   onOpenContacts,
   onOpenPaymentMethods,
   onOpenReminders,
+  onOpenWhatsapp,
   onLoggedOut,
 }: ProfileScreenProps) {
   const colors = useThemeColors();
@@ -128,6 +132,7 @@ export function ProfileScreen({
   const [ended, setEnded] = useState(false);
   const [legal, setLegal] = useState<LegalKind | null>(null);
   const [plan, setPlan] = useState<PlanSummary | null>(null);
+  const [whatsapp, setWhatsapp] = useState<WhatsappSettings | null>(null);
   const [themePreference, chooseTheme] = useThemePreference();
 
   useEffect(() => {
@@ -158,10 +163,17 @@ export function ProfileScreen({
       () => active && setPlan(null),
     );
 
+    if (whatsappEnabled()) {
+      client.whatsapp().then(
+        (settings) => active && setWhatsapp(settings),
+        () => active && setWhatsapp(null),
+      );
+    }
+
     return () => {
       active = false;
     };
-  }, [plans]);
+  }, [client, plans]);
 
   async function saveName() {
     const name = draft.trim();
@@ -408,6 +420,21 @@ export function ProfileScreen({
                     subtitle="Quando e por onde avisar quem te deve"
                     onPress={onOpenReminders}
                   />
+
+                  {whatsappEnabled() ? (
+                    <>
+                      <View className="mx-4 h-px bg-outline/60" />
+
+                      <Row
+                        icon="chat"
+                        tone="primary"
+                        label="Configurar WhatsApp"
+                        title="WhatsApp"
+                        subtitle={whatsappSubtitle(whatsapp, plan?.plan ?? null)}
+                        onPress={onOpenWhatsapp}
+                      />
+                    </>
+                  ) : null}
                 </View>
               </Section>
 

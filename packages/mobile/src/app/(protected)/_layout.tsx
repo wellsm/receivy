@@ -33,6 +33,7 @@ export default function ProtectedLayout() {
         <Stack.Screen name="contacts/[id]" options={{ title: "Contato" }} />
         <Stack.Screen name="settings/payment-methods" options={{ title: "Meios de pagamento" }} />
         <Stack.Screen name="settings/reminders" options={{ title: "Lembretes" }} />
+        <Stack.Screen name="settings/whatsapp" options={{ title: "WhatsApp" }} />
         <Stack.Screen name="settings/payment-methods/new" options={{ title: "Novo meio de pagamento" }} />
         <Stack.Screen name="billings/new" options={{ title: "Nova conta" }} />
         <Stack.Screen name="billings/[id]" options={{ title: "Detalhes da conta" }} />

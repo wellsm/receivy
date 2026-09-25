@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
-import { ACCOUNT_DELETED, PlanTier, SubscriptionStatus } from "@receivy/common";
+import { ACCOUNT_DELETED, PlanTier, SubscriptionStatus, WhatsappSender } from "@receivy/common";
 import { ProfileScreen } from "@/components/screens/profile-screen";
 import { financialClient } from "@/financial/client";
 
@@ -20,7 +20,7 @@ const user = {
 } as const;
 
 function client(
-  overrides: Partial<Record<"profile" | "save" | "logout" | "erase" | "startAvatarUpload" | "completeAvatarUpload", jest.Mock>> = {},
+  overrides: Partial<Record<"profile" | "save" | "logout" | "erase" | "startAvatarUpload" | "completeAvatarUpload" | "whatsapp", jest.Mock>> = {},
 ) {
   return {
     profile: jest.fn().mockResolvedValue(user),
@@ -29,6 +29,7 @@ function client(
     erase: jest.fn().mockResolvedValue(true),
     startAvatarUpload: jest.fn(),
     completeAvatarUpload: jest.fn(),
+    whatsapp: jest.fn().mockResolvedValue({ available: false, sender: WhatsappSender.Receivy, instance: null, quota: null }),
     ...overrides,
   };
 }
@@ -196,5 +197,36 @@ describe("ProfileScreen", () => {
     await render(<ProfileScreen client={client()} store={store} version="1.0.0" />);
 
     expect(await screen.findByText("Plano Grátis")).toBeTruthy();
+  });
+
+  it("shows the WhatsApp row with the cycle quota and opens it", async () => {
+    process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "true";
+
+    const onOpenWhatsapp = jest.fn();
+    const whatsapp = jest.fn().mockResolvedValue({
+      available: true,
+      sender: WhatsappSender.Receivy,
+      instance: null,
+      quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" },
+    });
+
+    await render(<ProfileScreen client={client({ whatsapp })} store={store} plans={plans} version="1.0.0" onOpenWhatsapp={onOpenWhatsapp} />);
+
+    expect(await screen.findByText("WhatsApp")).toBeOnTheScreen();
+    expect(screen.getByText("Pelo número do Receivy · 37 de 150 neste ciclo")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByLabelText("Configurar WhatsApp"));
+
+    expect(onOpenWhatsapp).toHaveBeenCalled();
+
+    delete process.env.EXPO_PUBLIC_WHATSAPP_ENABLED;
+  });
+
+  it("hides the WhatsApp row when the kill switch is off", async () => {
+    await render(<ProfileScreen client={client()} store={store} plans={plans} version="1.0.0" />);
+
+    await screen.findByText("Meios de pagamento");
+
+    expect(screen.queryByText("WhatsApp")).toBeNull();
   });
 });

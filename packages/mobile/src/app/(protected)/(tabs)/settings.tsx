@@ -9,6 +9,7 @@ export default function SettingsRoute() {
       onOpenContacts={() => router.push("/contacts")}
       onOpenPaymentMethods={() => router.push("/settings/payment-methods")}
       onOpenReminders={() => router.push("/settings/reminders")}
+      onOpenWhatsapp={() => router.push("/settings/whatsapp")}
       onLoggedOut={() => router.replace("/login")}
     />
   );

@@ -273,4 +273,16 @@ describe('WhatsApp instance service', () => {
     expect(await client.setSender(OWNER, WhatsappSender.Own)).toBe(WhatsappSender.Own);
     expect(state.events).toEqual(['whatsapp_instance.created', 'whatsapp_sender.changed', 'whatsapp_sender.changed']);
   });
+
+  it('refuses the own number on the Free plan before looking at the instance, without writing', async () => {
+    const { db, state } = fakeDb();
+
+    state.instance = { id: 'instance-1', owner_id: OWNER, name: `rcv_${OWNER}`, state: WhatsappInstanceState.Open };
+
+    const client = createInstanceClient({ db, plans: free, variables, request: vi.fn<typeof fetch>() });
+
+    await expect(client.setSender(OWNER, WhatsappSender.Own)).rejects.toMatchObject({ status: 402 });
+    expect(state.sender).toBe(WhatsappSender.Receivy);
+    expect(state.events).toEqual([]);
+  });
 });

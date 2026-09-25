@@ -225,6 +225,10 @@ async function get(deps: InstanceDeps, request: typeof fetch, ownerId: string, r
 }
 
 async function setSender(deps: InstanceDeps, ownerId: string, sender: WhatsappSender): Promise<WhatsappSender> {
+  if (sender === WhatsappSender.Own && (await deps.plans.get(ownerId)).plan === PlanTier.Free) {
+    throw new WhatsappPlanRequiredError();
+  }
+
   const current = await AccountRepository.whatsappSender(deps.db, ownerId);
 
   if (sender === WhatsappSender.Own && !(await WhatsappInstanceRepository.byOwner(deps.db, ownerId))) {

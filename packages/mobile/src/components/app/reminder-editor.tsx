@@ -19,6 +19,7 @@ import {
   whatsappLockLabel,
 } from "@receivy/common";
 import { useThemeColors } from "@/theme/colors";
+import { whatsappEnabled } from "@/whatsapp-flag";
 
 const trashMark = require("../../../assets/images/auth/trash.svg");
 const plusMark = require("../../../assets/images/auth/plus.svg");
@@ -134,18 +135,22 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
                 <Text className={`${PILL_TEXT} ${opened === "days" ? "text-primary-foreground" : "text-primary-strong"}`}>{reminderOffsetLabel(offset)}</Text>
               </Pressable>
 
-              <Text className="font-sans text-[14.5px] text-muted">por</Text>
+              {whatsappEnabled() ? (
+                <>
+                  <Text className="font-sans text-[14.5px] text-muted">por</Text>
 
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Canais do lembrete ${position}`}
-                accessibilityState={{ expanded: opened === "channels", disabled }}
-                disabled={disabled}
-                onPress={() => toggle(index, "channels")}
-                className={`${PILL} ${opened === "channels" ? "border-primary bg-primary" : "border-outline bg-surface-muted"}`}
-              >
-                <Text className={`${PILL_TEXT} ${opened === "channels" ? "text-primary-foreground" : "text-ink"}`}>{channelSetLabel(rule.channels)}</Text>
-              </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Canais do lembrete ${position}`}
+                    accessibilityState={{ expanded: opened === "channels", disabled }}
+                    disabled={disabled}
+                    onPress={() => toggle(index, "channels")}
+                    className={`${PILL} ${opened === "channels" ? "border-primary bg-primary" : "border-outline bg-surface-muted"}`}
+                  >
+                    <Text className={`${PILL_TEXT} ${opened === "channels" ? "text-primary-foreground" : "text-ink"}`}>{channelSetLabel(rule.channels)}</Text>
+                  </Pressable>
+                </>
+              ) : null}
 
               <View className="ml-auto flex-row items-center gap-3">
                 <Switch
@@ -223,7 +228,7 @@ export function ReminderEditor({ rules, onChange, whatsapp, disabled }: Reminder
               </View>
             ) : null}
 
-            {opened === "channels" ? (
+            {opened === "channels" && whatsappEnabled() ? (
               <View className="mt-3.5 gap-1.5 border-t border-outline/50 pt-3.5">
                 {CHANNEL_SET_OPTIONS.map((option) => (
                   <ChannelOption

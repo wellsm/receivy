@@ -12,6 +12,7 @@ import {
 import { accountClient, type AccountClient } from "@/account/client";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
+import { whatsappEnabled } from "@/whatsapp-flag";
 import { ManualRulerChannels, ReminderRuler, RulerPreview } from "@/components/app/reminder-ruler";
 
 type Client = Pick<AccountClient, "reminders" | "saveReminders" | "clearReminders">;
@@ -81,8 +82,12 @@ export function RemindersScreen({ client = accountClient, plans = financialClien
 
     try {
       config = validateReminderConfig({
-        reminders: rules.map((rule) => ({ ...rule, offsetDays: Number(rule.offsetDays) })),
-        manual,
+        reminders: rules.map((rule) => ({
+          ...rule,
+          offsetDays: Number(rule.offsetDays),
+          channels: whatsappEnabled() ? rule.channels : { email: true, whatsapp: false },
+        })),
+        manual: whatsappEnabled() ? manual : { email: true, whatsapp: false },
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : ACTION_ERROR);
@@ -135,9 +140,11 @@ export function RemindersScreen({ client = accountClient, plans = financialClien
           <RulerPreview rules={rules} dueDate={example} />
         </Section>
 
-        <Section title="LEMBRETE MANUAL">
-          <ManualRulerChannels value={manual} onChange={setManual} whatsapp={whatsapp} disabled={busy} />
-        </Section>
+        {whatsappEnabled() ? (
+          <Section title="LEMBRETE MANUAL">
+            <ManualRulerChannels value={manual} onChange={setManual} whatsapp={whatsapp} disabled={busy} />
+          </Section>
+        ) : null}
 
         {error ? (
           <Text accessibilityRole="alert" className="rounded-xl bg-danger-soft p-3 font-sans text-sm text-danger">

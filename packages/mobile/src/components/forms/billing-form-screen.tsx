@@ -67,6 +67,7 @@ import { CategorySelect } from "@/components/app/category-select";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
 import { SplitEditor, type SplitRow } from "@/components/app/split-editor";
 import { useThemeColors } from "@/theme/colors";
+import { whatsappEnabled } from "@/whatsapp-flag";
 
 const closeMark = require("../../../assets/images/auth/plus.svg");
 const keyMark = require("../../../assets/images/auth/key.svg");
@@ -758,9 +759,11 @@ export function BillingFormScreen({
       // Never send "Não notificar" for a participant the agenda no longer shows as reachable: the
       // switch does not render for them, so a stale value seeded from editing must not travel either.
       const notify = draft.notify && Object.fromEntries(Object.entries(draft.notify).filter(([userId]) => notifiableIds.has(userId)));
+      // The kill switch off never lets a whatsapp channel out, whatever the picker showed before it flipped.
+      const reminders = whatsappEnabled() || !draft.reminders ? draft.reminders : draft.reminders.map((rule) => ({ ...rule, channels: { email: true, whatsapp: false } }));
       // Only a creation checks that a recorrente registro starts today or later.
       const next: Attempt = {
-        input: buildBillingInput({ ...draft, notify, pix: payingKey() }, billing ? undefined : new Date()),
+        input: buildBillingInput({ ...draft, notify, pix: payingKey(), reminders }, billing ? undefined : new Date()),
         key: Crypto.randomUUID(),
         uncertain: false,
       };

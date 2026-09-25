@@ -1040,6 +1040,31 @@ describe("BillingFormScreen", () => {
     expect(client.createBilling).not.toHaveBeenCalled();
   });
 
+  it("hides the reminder channel picker and sends a stored whatsapp rule as e-mail, when the kill switch is off", async () => {
+    const billing = {
+      ...onceBilling,
+      reminders: [{ offsetDays: 0, enabled: true, channels: { email: false, whatsapp: true } }],
+      effectiveReminders: [{ offsetDays: 0, enabled: true, channels: { email: false, whatsapp: true } }],
+    };
+    const patchBilling = jest.fn().mockResolvedValue(billing);
+    const client = financialApi({ patchBilling });
+
+    await render(<BillingFormScreen client={client as never} contacts={contactsApi()} billing={billing} onSaved={jest.fn()} onBack={jest.fn()} />);
+    await screen.findByLabelText("Quando avisar no lembrete 1");
+
+    expect(screen.queryByLabelText("Canais do lembrete 1")).toBeNull();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+    await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
+    expect(patchBilling).toHaveBeenCalledWith("b1", {
+      paymentMethodId: "pix-1",
+      clearPaymentMethod: false,
+      reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: false } }],
+      category: "food",
+    });
+  });
+
   const monthCharge: ChargeDetail = {
     id: "c9",
     description: "Jantar",

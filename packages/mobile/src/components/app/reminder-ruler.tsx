@@ -12,6 +12,7 @@ import {
   whatsappLockLabel,
 } from "@receivy/common";
 import { useThemeColors } from "@/theme/colors";
+import { whatsappEnabled } from "@/whatsapp-flag";
 
 const trashMark = require("../../../assets/images/auth/trash.svg");
 const chevronMark = require("../../../assets/images/auth/chevron.svg");
@@ -68,13 +69,18 @@ function offsetAt(ratio: number): number {
   return Math.min(REMINDER_MAX_OFFSET, Math.max(-REMINDER_MAX_OFFSET, raw));
 }
 
+/** The kill switch off reads every rule as e-mail, whatever the stored channels say; it never rewrites them. */
+function displayChannels(channels: ChannelSet): ChannelSet {
+  return whatsappEnabled() ? single(channels) : { email: true, whatsapp: false };
+}
+
 /** What a row says under its title: the configured channels plus the implicit push, or that it is paused. */
 function rowSubtitle(rule: ReminderDraft): string {
   if (!rule.enabled) {
     return "pausado";
   }
 
-  return `${singleChannelLabel(single(rule.channels))} · push`;
+  return `${singleChannelLabel(displayChannels(rule.channels))} · push`;
 }
 
 export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderRulerProps) {
@@ -205,28 +211,30 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
 
               {editing === index ? (
                 <View className="gap-1.5 px-4 pb-3.5">
-                  {SINGLE_CHANNELS.map((option) => {
-                    const label = singleChannelLabel(option);
-                    const locked = option.whatsapp ? lock : null;
-                    const picked = single(rule.channels);
-                    const active = option.email === picked.email && option.whatsapp === picked.whatsapp;
-                    const off = disabled || locked !== null;
+                  {whatsappEnabled()
+                    ? SINGLE_CHANNELS.map((option) => {
+                        const label = singleChannelLabel(option);
+                        const locked = option.whatsapp ? lock : null;
+                        const picked = single(rule.channels);
+                        const active = option.email === picked.email && option.whatsapp === picked.whatsapp;
+                        const off = disabled || locked !== null;
 
-                    return (
-                      <Pressable
-                        key={label}
-                        accessibilityRole="radio"
-                        accessibilityLabel={`${label} no lembrete ${index + 1}`}
-                        accessibilityState={{ checked: active, disabled: off }}
-                        disabled={off}
-                        onPress={() => patch(index, { channels: { ...option } })}
-                        className={`h-10 flex-row items-center gap-2 rounded-xl border px-3 ${active ? "border-primary bg-primary-soft" : "border-outline"} ${off ? "opacity-60" : ""}`}
-                      >
-                        <Text className={`font-sans text-[13px] font-semibold ${active ? "text-primary-strong" : "text-ink"}`}>{label}</Text>
-                        {locked ? <Text className="rounded-md bg-surface-muted px-1.5 py-0.5 font-sans text-[10px] font-semibold text-muted">{locked}</Text> : null}
-                      </Pressable>
-                    );
-                  })}
+                        return (
+                          <Pressable
+                            key={label}
+                            accessibilityRole="radio"
+                            accessibilityLabel={`${label} no lembrete ${index + 1}`}
+                            accessibilityState={{ checked: active, disabled: off }}
+                            disabled={off}
+                            onPress={() => patch(index, { channels: { ...option } })}
+                            className={`h-10 flex-row items-center gap-2 rounded-xl border px-3 ${active ? "border-primary bg-primary-soft" : "border-outline"} ${off ? "opacity-60" : ""}`}
+                          >
+                            <Text className={`font-sans text-[13px] font-semibold ${active ? "text-primary-strong" : "text-ink"}`}>{label}</Text>
+                            {locked ? <Text className="rounded-md bg-surface-muted px-1.5 py-0.5 font-sans text-[10px] font-semibold text-muted">{locked}</Text> : null}
+                          </Pressable>
+                        );
+                      })
+                    : null}
 
                   <Pressable
                     accessibilityRole="button"

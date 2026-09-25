@@ -33,4 +33,22 @@ describe("RemindSheet", () => {
     expect(screen.getByText("Ninguém alcançável. Compartilhe o link direto.")).toBeTruthy();
     expect(screen.getByLabelText("Enviar lembrete").props.accessibilityState.disabled).toBe(true);
   });
+
+  it("drops WhatsApp from the channels and the drops when the kill switch is off", async () => {
+    delete process.env.EXPO_PUBLIC_WHATSAPP_ENABLED;
+
+    await render(
+      <RemindSheet
+        charge={summary()}
+        today="2026-10-01"
+        loading={false}
+        preview={{ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }}
+        onSend={jest.fn()}
+        onClose={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Vai por: notificação no app, e-mail")).toBeTruthy();
+    expect(screen.queryByText(/WhatsApp/)).toBeNull();
+  });
 });

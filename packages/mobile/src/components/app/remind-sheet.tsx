@@ -1,7 +1,8 @@
 import { Image } from "expo-image";
 import { Modal, Pressable, Text, View } from "react-native";
-import { type ChargeSummary, feedDayLabel, formatMoney, type ManualReminderResult, NOBODY_REACHABLE, PREVIEW_UNAVAILABLE, remindLines } from "@receivy/common";
+import { type ChargeSummary, feedDayLabel, formatMoney, type ManualReminderResult, NOBODY_REACHABLE, NoticeChannel, PREVIEW_UNAVAILABLE, remindLines } from "@receivy/common";
 import { useThemeColors } from "@/theme/colors";
+import { whatsappEnabled } from "@/whatsapp-flag";
 
 const copyMark = require("../../../assets/images/auth/copy.svg");
 
@@ -17,6 +18,18 @@ type RemindSheetProps = {
 
 const LOADING_COPY = "Conferindo por onde avisar…";
 
+/** The kill switch off drops WhatsApp from the preview entirely: never a channel going out, never a reason it was not. */
+function visiblePreview(preview: ManualReminderResult): ManualReminderResult {
+  if (whatsappEnabled()) {
+    return preview;
+  }
+
+  return {
+    channels: preview.channels.filter((channel) => channel !== NoticeChannel.WhatsApp),
+    dropped: preview.dropped.filter((drop) => drop.channel !== NoticeChannel.WhatsApp),
+  };
+}
+
 function dueText(charge: ChargeSummary, today: string): string {
   if (charge.dueDate < today) {
     return "atrasado";
@@ -31,9 +44,10 @@ export function RemindSheet({ charge, today, preview, loading, onSend, onClose }
   const firstName = charge.counterpartName.trim().split(/\s+/)[0] ?? charge.counterpartName;
   const amount = formatMoney(charge.amount);
   const due = dueText(charge, today);
-  const nobody = preview !== null && preview.channels.length === 0;
+  const visible = preview ? visiblePreview(preview) : null;
+  const nobody = visible !== null && visible.channels.length === 0;
   const unavailable = !loading && preview === null;
-  const { going, dropped } = preview ? remindLines(preview) : { going: "", dropped: [] };
+  const { going, dropped } = visible ? remindLines(visible) : { going: "", dropped: [] };
   const disabled = loading || nobody;
 
   return (

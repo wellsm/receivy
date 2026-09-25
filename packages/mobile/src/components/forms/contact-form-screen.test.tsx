@@ -58,7 +58,15 @@ const TODAY = "2026-09-10";
 const LINKED_NOTE = "Contato vinculado a uma conta: só o apelido pode mudar.";
 
 describe("ContactFormScreen", () => {
-  afterEach(() => clearDraft());
+  // Every existing test assumes the WhatsApp consent switch exists; the kill-switch tests flip it off themselves.
+  beforeEach(() => {
+    process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "true";
+  });
+
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_WHATSAPP_ENABLED;
+    clearDraft();
+  });
 
   it("saves a contact with the name and the e-mail", async () => {
     const client = contactsApi();
@@ -379,6 +387,21 @@ describe("ContactFormScreen", () => {
     await fireEvent.press(screen.getByLabelText("Salvar contato"));
 
     await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana", phone: "+5511987654321", whatsappConsent: true }, undefined));
+  });
+
+  it("hides the WhatsApp consent switch and omits the field when the kill switch is off", async () => {
+    process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "false";
+
+    const client = contactsApi();
+
+    await render(<ContactFormScreen client={client} />);
+
+    expect(screen.queryByLabelText("Essa pessoa concordou em receber cobranças por WhatsApp")).toBeNull();
+
+    await fireEvent.changeText(screen.getByLabelText("Nome completo"), "Ana");
+    await fireEvent.press(screen.getByLabelText("Salvar contato"));
+
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana" }, undefined));
   });
 
   it("freezes the WhatsApp number the person filed themselves", async () => {

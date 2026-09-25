@@ -24,6 +24,15 @@ function base() {
 const plans = { plan: jest.fn().mockResolvedValue({ plan: "basic", usage: { indefinite: { used: 0, limit: 30 } } }) };
 
 describe("RemindersScreen", () => {
+  // Every existing test assumes the channel chips exist; the kill-switch tests flip the flag off themselves.
+  beforeEach(() => {
+    process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "true";
+  });
+
+  afterEach(() => {
+    delete process.env.EXPO_PUBLIC_WHATSAPP_ENABLED;
+  });
+
   it("puts the default rule on the ruler and lists it with its channels", async () => {
     await render(<RemindersScreen client={client()} plans={plans} />);
 
@@ -101,5 +110,39 @@ describe("RemindersScreen", () => {
 
     expect(await screen.findByText(/Lembretes inválidos/)).toBeTruthy();
     expect(api.saveReminders).not.toHaveBeenCalled();
+  });
+
+  it("hides the channel chips and the manual section, and saves whatsapp rules back as e-mail, when the kill switch is off", async () => {
+    process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "false";
+
+    const api = client({
+      reminders: jest.fn().mockResolvedValue({
+        config: {
+          reminders: [{ offsetDays: 0, enabled: true, channels: { email: false, whatsapp: true } }],
+          manual: { email: true, whatsapp: true },
+        },
+        inherited: true,
+        whatsappAvailable: true,
+      }),
+    });
+
+    await render(<RemindersScreen client={api} plans={plans} />);
+
+    expect(await screen.findByText("email · push")).toBeTruthy();
+    expect(screen.queryByText("LEMBRETE MANUAL")).toBeNull();
+
+    await fireEvent.press(await screen.findByLabelText("Editar lembrete 1"));
+
+    expect(screen.queryByLabelText("whatsapp no lembrete 1")).toBeNull();
+    expect(screen.queryByLabelText("email no lembrete 1")).toBeNull();
+
+    await fireEvent.press(screen.getByLabelText("Salvar"));
+
+    expect(api.saveReminders).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reminders: [expect.objectContaining({ channels: { email: true, whatsapp: false } })],
+        manual: { email: true, whatsapp: false },
+      }),
+    );
   });
 });

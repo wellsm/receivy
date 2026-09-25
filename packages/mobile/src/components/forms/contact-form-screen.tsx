@@ -8,6 +8,7 @@ import { financialClient, type FinancialClient } from "@/financial/client";
 import { patchDraft } from "@/financial/draft-store";
 import { contactsClient, ContactsRequestError } from "@/contacts/client";
 import { useThemeColors } from "@/theme/colors";
+import { whatsappEnabled } from "@/whatsapp-flag";
 
 type ContactFormClient = Pick<typeof contactsClient, "get" | "save">;
 /** The keys filed under this contact live on the financial API, not on the contact itself. */
@@ -223,7 +224,7 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
   function phoneInput(): { phone?: string; whatsappConsent?: boolean } {
     const phoneEditable = phoneSource !== PhoneSource.Person;
 
-    return { ...(phoneEditable ? { phone } : {}), whatsappConsent };
+    return { ...(phoneEditable ? { phone } : {}), ...(whatsappEnabled() ? { whatsappConsent } : {}) };
   }
 
   async function save() {
@@ -325,15 +326,17 @@ export function ContactFormScreen({ contactId, client = contactsClient, financia
             />
           </Field>
 
-          <View className="flex-row items-center justify-between gap-3">
-            <Text className="flex-1 text-sm text-ink">Essa pessoa concordou em receber cobranças por WhatsApp</Text>
-            <Switch
-              accessibilityLabel="Essa pessoa concordou em receber cobranças por WhatsApp"
-              value={whatsappConsent}
-              onValueChange={setWhatsappConsent}
-              trackColor={{ true: colors.primary }}
-            />
-          </View>
+          {whatsappEnabled() ? (
+            <View className="flex-row items-center justify-between gap-3">
+              <Text className="flex-1 text-sm text-ink">Essa pessoa concordou em receber cobranças por WhatsApp</Text>
+              <Switch
+                accessibilityLabel="Essa pessoa concordou em receber cobranças por WhatsApp"
+                value={whatsappConsent}
+                onValueChange={setWhatsappConsent}
+                trackColor={{ true: colors.primary }}
+              />
+            </View>
+          ) : null}
         </View>
 
         <View className="gap-4 rounded-3xl border border-outline/40 bg-surface p-5">

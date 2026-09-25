@@ -29,3 +29,9 @@ export class WhatsappInstanceUnavailableError extends ServiceUnavailableError {
     super(message, 'WHATSAPP_INSTANCE_UNAVAILABLE');
   }
 }
+
+export class WhatsappInstanceRequiredError extends ConflictError {
+  constructor(message = 'Conecte seu número antes de escolher enviar por ele.') {
+    super(message, 'WHATSAPP_INSTANCE_REQUIRED');
+  }
+}

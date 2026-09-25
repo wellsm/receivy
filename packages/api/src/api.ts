@@ -39,6 +39,7 @@ import type {
   DeviceOwnedElsewhereError,
   DeviceRegisteredError,
   ReminderQuotaError,
+  WhatsappInstanceRequiredError,
   WhatsappInstanceUnavailableError,
   WhatsappPlanRequiredError
 } from './notifications/errors';
@@ -129,7 +130,8 @@ export declare class Api extends Http.Service {
         PixRequiredError,
         PixSnapshotLockedError,
         StaleSessionError,
-        PlanAlreadyActiveError
+        PlanAlreadyActiveError,
+        WhatsappInstanceRequiredError
       ];
       422: [
         AvatarInvalidError,

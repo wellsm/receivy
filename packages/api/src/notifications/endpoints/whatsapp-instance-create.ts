@@ -14,5 +14,5 @@ declare class InstanceResponse implements Http.Response {
 }
 
 export async function createWhatsappInstanceHandler({ identity }: InstanceRequest, { whatsappInstances }: Service.Context<NotificationProvider>): Promise<InstanceResponse> {
-  return { status: 201, body: await whatsappInstances.create(identity.userId) };
+  return { status: 201, body: await whatsappInstances.create(identity.userId, { riskAccepted: true }) };
 }

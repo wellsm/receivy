@@ -18,6 +18,8 @@ export interface WhatsappInstanceSchema extends Database.Schema {
   phone?: String.Max<32>;
   /** The last QR (base64 PNG) while pending; cleared when the instance opens. */
   qr?: String.Max<16384>;
+  /** The "connect with phone number" code while pending; cleared with the QR when the instance opens. */
+  pairing_code?: String.Max<16>;
   connected_at?: String.DateTime;
   disconnected_at?: String.DateTime;
   created_at: String.DateTime;

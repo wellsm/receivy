@@ -6,7 +6,12 @@ const OWNER = 'd1111111-1111-4111-8111-111111111111';
 
 /** Just enough of the database for the service: one instance row, one user sender, the event log. */
 function fakeDb() {
-  const state = { instance: null as Record<string, unknown> | null, sender: WhatsappSender.Receivy as WhatsappSender, events: [] as string[] };
+  const state = {
+    instance: null as Record<string, unknown> | null,
+    sender: WhatsappSender.Receivy as WhatsappSender,
+    events: [] as string[],
+    lastEventPayload: undefined as Record<string, unknown> | undefined
+  };
   const db = {
     whatsapp_instances: {
       findOne: async ({ where }: { where: Record<string, unknown> }) => {
@@ -40,8 +45,9 @@ function fakeDb() {
       }
     },
     events: {
-      insertOne: async ({ data }: { data: { type: string } }) => {
+      insertOne: async ({ data }: { data: { type: string; payload?: Record<string, unknown> } }) => {
         state.events.push(data.type);
+        state.lastEventPayload = data.payload;
       }
     },
     // One active device, so the disconnect warning has somewhere to land.
@@ -63,7 +69,7 @@ describe('WhatsApp instance service', () => {
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(created());
     const client = createInstanceClient({ db, plans: basic, variables, request });
 
-    expect(await client.create(OWNER)).toEqual({ state: WhatsappInstanceState.Pending, phone: null, qr: 'data:image/png;base64,QR', connectedAt: null });
+    expect(await client.create(OWNER, { riskAccepted: true })).toEqual({ state: WhatsappInstanceState.Pending, phone: null, qr: 'data:image/png;base64,QR', pairingCode: null, connectedAt: null });
     expect(state.sender).toBe(WhatsappSender.Own);
     expect(state.events).toEqual(['whatsapp_instance.created']);
 
@@ -89,8 +95,8 @@ describe('WhatsApp instance service', () => {
     const { db } = fakeDb();
     const request = vi.fn<typeof fetch>();
 
-    await expect(createInstanceClient({ db, plans: free, variables, request }).create(OWNER)).rejects.toMatchObject({ status: 402 });
-    await expect(createInstanceClient({ db, plans: basic, variables: { ...variables, EVOLUTION_API_KEY: 'disabled' }, request }).create(OWNER)).rejects.toMatchObject({ status: 503 });
+    await expect(createInstanceClient({ db, plans: free, variables, request }).create(OWNER, { riskAccepted: true })).rejects.toMatchObject({ status: 402 });
+    await expect(createInstanceClient({ db, plans: basic, variables: { ...variables, EVOLUTION_API_KEY: 'disabled' }, request }).create(OWNER, { riskAccepted: true })).rejects.toMatchObject({ status: 503 });
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -99,12 +105,12 @@ describe('WhatsApp instance service', () => {
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(created());
     const client = createInstanceClient({ db, plans: basic, variables, request });
 
-    await client.create(OWNER);
+    await client.create(OWNER, { riskAccepted: true });
 
-    const again = await client.create(OWNER);
+    const again = await client.create(OWNER, { riskAccepted: true });
 
     expect(request).toHaveBeenCalledTimes(2);
-    expect(Object.keys(again).sort()).toEqual(['connectedAt', 'phone', 'qr', 'state']);
+    expect(Object.keys(again).sort()).toEqual(['connectedAt', 'pairingCode', 'phone', 'qr', 'state']);
     expect(state.events).toEqual(['whatsapp_instance.created']);
   });
 
@@ -113,7 +119,7 @@ describe('WhatsApp instance service', () => {
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(new Response(null, { status: 500 }));
     const client = createInstanceClient({ db, plans: basic, variables, request });
 
-    await expect(client.create(OWNER)).rejects.toMatchObject({ status: 503 });
+    await expect(client.create(OWNER, { riskAccepted: true })).rejects.toMatchObject({ status: 503 });
     expect(state.instance).toBeNull();
     expect(state.sender).toBe(WhatsappSender.Receivy);
     expect(state.events).toEqual([]);
@@ -138,7 +144,7 @@ describe('WhatsApp instance service', () => {
     } as never;
     const client = createInstanceClient({ db, plans: basic, variables, request, transport });
 
-    await client.create(OWNER);
+    await client.create(OWNER, { riskAccepted: true });
     await client.applyConnection(`rcv_${OWNER}`, 'open', '5511988887777');
 
     expect(state.instance).toMatchObject({ state: WhatsappInstanceState.Open, phone: '5511988887777' });
@@ -164,7 +170,7 @@ describe('WhatsApp instance service', () => {
       .mockResolvedValueOnce(Response.json({ status: 'SUCCESS' }));
     const client = createInstanceClient({ db, plans: basic, variables, request });
 
-    await client.create(OWNER);
+    await client.create(OWNER, { riskAccepted: true });
     await client.remove(OWNER);
 
     expect(state.instance).toBeNull();
@@ -172,5 +178,64 @@ describe('WhatsApp instance service', () => {
     expect(String(request.mock.calls[2]![0])).toBe(`http://evo/instance/logout/rcv_${OWNER}`);
     expect(String(request.mock.calls[3]![0])).toBe(`http://evo/instance/delete/rcv_${OWNER}`);
     expect(await client.get(OWNER)).toBeNull();
+  });
+
+  it('refuses to create without the risk acceptance and with a phone that is not a number', async () => {
+    const { db } = fakeDb();
+    const request = vi.fn<typeof fetch>();
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    await expect(client.create(OWNER, { riskAccepted: false })).rejects.toMatchObject({ status: 400 });
+    await expect(client.create(OWNER, { riskAccepted: true, phone: '12' })).rejects.toMatchObject({ status: 400 });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('asks Evolution for a pairing code when a phone is given and records the acceptance', async () => {
+    const { db, state } = fakeDb();
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(Response.json({ pairingCode: 'ABCD-1234', code: 'x', base64: 'data:image/png;base64,QR2' }));
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    const view = await client.create(OWNER, { riskAccepted: true, phone: '(11) 98888-7777' });
+
+    expect(view).toMatchObject({ state: WhatsappInstanceState.Pending, phone: '5511988887777', pairingCode: 'ABCD-1234' });
+    expect(String(request.mock.calls[2]![0])).toBe(`http://evo/instance/connect/rcv_${OWNER}?number=5511988887777`);
+    expect(JSON.parse(String(request.mock.calls[1]![1]?.body)).number).toBe('5511988887777');
+    expect(state.events).toEqual(['whatsapp_instance.created']);
+    expect(state.lastEventPayload).toMatchObject({ pairing: 'code' });
+    expect(typeof state.lastEventPayload?.['riskAcceptedAt']).toBe('string');
+  });
+
+  it('refreshes the qr and the code on demand while pending, and keeps them otherwise', async () => {
+    const { db } = fakeDb();
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(Response.json({ base64: 'data:image/png;base64,QR9' }));
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    await client.create(OWNER, { riskAccepted: true });
+
+    expect((await client.get(OWNER))?.qr).toBe('data:image/png;base64,QR');
+    expect(request).toHaveBeenCalledTimes(2);
+    expect((await client.get(OWNER, true))?.qr).toBe('data:image/png;base64,QR9');
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it('switches the sender freely and refuses own without an instance', async () => {
+    const { db, state } = fakeDb();
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(created());
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    await expect(client.setSender(OWNER, WhatsappSender.Own)).rejects.toMatchObject({ status: 409 });
+    await client.create(OWNER, { riskAccepted: true });
+    expect(await client.setSender(OWNER, WhatsappSender.Receivy)).toBe(WhatsappSender.Receivy);
+    expect(state.sender).toBe(WhatsappSender.Receivy);
+    expect(await client.setSender(OWNER, WhatsappSender.Own)).toBe(WhatsappSender.Own);
+    expect(state.events).toEqual(['whatsapp_instance.created', 'whatsapp_sender.changed', 'whatsapp_sender.changed']);
   });
 });

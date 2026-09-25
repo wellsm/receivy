@@ -82,9 +82,6 @@ const NATIVE_DEFERRED: Record<string, string> = {
   "plan/payment-method/confirm": "managed on the web only",
   "charges/by-link/{p}": "the checkout returns to the web pay page; the app reloads the charge when the in-app browser closes",
   "public/notices/opt-out/{p}": "the e-mail footer always opens in the browser",
-  "whatsapp": "the WhatsApp settings screen ships on the web first; the mobile screen is a later task",
-  "whatsapp/sender": "the WhatsApp settings screen ships on the web first; the mobile screen is a later task",
-  "whatsapp/instance": "the WhatsApp settings screen ships on the web first; the mobile screen is a later task",
   "webhooks/whatsapp/meta": "Meta posts here server-to-server; no client ever calls it",
   "webhooks/whatsapp/evolution": "Evolution posts here server-to-server; no client ever calls it",
 };
@@ -124,7 +121,7 @@ describe("OpenAPI × BFF", () => {
  * expressions become `{p}`, and string literals inside an expression (e.g.
  * `${rotate ? "/rotate" : ""}`) expand into one candidate per alternative. */
 function extractPathTemplates(source: string): Set<string> {
-  const prefixes = /^(billings|payment-methods|charges|contacts|account|auth|devices|public|plan)\b/;
+  const prefixes = /^(billings|payment-methods|charges|contacts|account|auth|devices|public|plan|whatsapp)\b/;
   const found = new Set<string>();
   const finish = (candidate: string) => {
     const template = candidate.split("?")[0]!.trim().replace(/(?<!\/)\{p\}$/, "");

@@ -23,5 +23,7 @@ describe('verifyEvolutionSecret', () => {
     expect(verifyEvolutionSecret('abc', 'abd')).toBe(false);
     expect(verifyEvolutionSecret('abc', undefined)).toBe(false);
     expect(verifyEvolutionSecret('', '')).toBe(false);
+    expect(verifyEvolutionSecret('abc', 'abcd')).toBe(false);
+    expect(verifyEvolutionSecret('abcd', 'abc')).toBe(false);
   });
 });

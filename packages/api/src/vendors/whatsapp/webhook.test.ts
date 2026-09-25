@@ -58,6 +58,7 @@ describe('parseEvolutionEvent', () => {
     expect(parseEvolutionEvent({ event: 'qrcode.updated', instance: 'rcv_a', data: { qrcode: { base64: 'data:image/png;base64,AAA' } } })).toEqual({ kind: 'qr', instance: 'rcv_a', qr: 'data:image/png;base64,AAA' });
     expect(parseEvolutionEvent({ event: 'contacts.upsert', instance: 'rcv_a', data: {} })).toBeNull();
     expect(parseEvolutionEvent('junk')).toBeNull();
+    expect(parseEvolutionEvent({ event: 'connection.update', instance: 'rcv_a', data: { state: 'foo' } })).toBeNull();
   });
 
   it('names the instance before the event is trusted', () => {

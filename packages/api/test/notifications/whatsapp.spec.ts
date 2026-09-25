@@ -5,6 +5,7 @@ import { BucketTester } from '@ez4/local-storage/test';
 import { BillingRecurrence, PaymentProvider, PixKeyType, SplitMode, SplitPartKind, WhatsappInstanceState, WhatsappMessageStatus, WhatsappSender } from '@receivy/common';
 import { createBilling } from '../../src/billings/services/billing';
 import { WhatsappInstanceRepository } from '../../src/notifications/repositories/whatsapp-instance';
+import { WhatsappMessageRepository } from '../../src/notifications/repositories/whatsapp-message';
 import { reminderPreview } from '../../src/notifications/services/notification';
 import { NoticeTemplate, notifyCharge } from '../../src/notifications/services/send';
 import { AccountRepository } from '../../src/users/repositories/account';
@@ -153,5 +154,26 @@ describe('WhatsApp notices', () => {
 
     deepEqual(settings.whatsapp, { available: false, sender: WhatsappSender.Receivy, instance: null });
     equal(settings.whatsappAvailable, false);
+  });
+
+  it('advances a message status from the webhook and never regresses it', async () => {
+    // No `sent.reset()` here: the fake transport ids messages as `wamid-${whatsapps.length}`, and every
+    // earlier test in this file resets and sends once, so a reset would hand this charge the same
+    // `wamid-1` a previous test's row already carries. `applyStatus` looks a row up by
+    // `provider_message_id` alone (no charge scoping), so a collision would let this test update someone
+    // else's row instead of its own. Not resetting keeps the counter climbing past every id already in use.
+    const { id } = await charge(OWNER);
+
+    await notifyCharge(db, context, id, NoticeTemplate.Reminder, clock, 0);
+
+    const [row] = await messages(id);
+    const now = new Date(clock).toISOString();
+
+    equal(await WhatsappMessageRepository.applyStatus(db, row!.provider_message_id!, WhatsappMessageStatus.Read, undefined, now), true);
+    equal(await WhatsappMessageRepository.applyStatus(db, row!.provider_message_id!, WhatsappMessageStatus.Delivered, undefined, now), false);
+    equal(await WhatsappMessageRepository.applyStatus(db, 'wamid.nobody', WhatsappMessageStatus.Delivered, undefined, now), false);
+    equal((await messages(id))[0]!.status, WhatsappMessageStatus.Read);
+    equal(await WhatsappMessageRepository.applyStatus(db, row!.provider_message_id!, WhatsappMessageStatus.Failed, '131026: gone', now), true);
+    equal((await messages(id))[0]!.status, WhatsappMessageStatus.Failed);
   });
 });

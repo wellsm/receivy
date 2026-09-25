@@ -1,10 +1,12 @@
 import type { Environment } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { Db } from '../database';
+import type { WhatsappInstanceService } from '../notifications/services/whatsapp-instance';
 
 export declare class WebhookProvider implements Http.Provider {
   services: {
     db: Environment.Service<Db>;
+    whatsappInstances: Environment.Service<WhatsappInstanceService>;
     variables: Environment.ServiceVariables;
   };
 

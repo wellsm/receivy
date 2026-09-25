@@ -4,6 +4,9 @@ import type { fakePayHandler } from './endpoints/fake-pay';
 import type { infinitePayWebhookHandler } from './endpoints/infinitepay';
 import type { pagSeguroWebhookHandler } from './endpoints/pagseguro';
 import type { stripeWebhookHandler } from './endpoints/stripe';
+import type { whatsappEvolutionWebhookHandler } from './endpoints/whatsapp-evolution';
+import type { whatsappMetaWebhookHandler } from './endpoints/whatsapp-meta';
+import type { verifyWhatsappWebhookHandler } from './endpoints/whatsapp-meta-verify';
 
 export type WebhookRoutes = [
   Http.UseRoute<{
@@ -22,6 +25,15 @@ export type WebhookRoutes = [
     name: 'stripeWebhook';
     path: 'POST /webhooks/stripe';
     handler: typeof stripeWebhookHandler;
+  }>,
+  Http.UseRoute<{ name: 'verifyWhatsappWebhook'; path: 'GET /webhooks/whatsapp/meta'; handler: typeof verifyWhatsappWebhookHandler }>,
+  Http.UseRoute<{ name: 'whatsappMetaWebhook'; path: 'POST /webhooks/whatsapp/meta'; handler: typeof whatsappMetaWebhookHandler }>,
+  Http.UseRoute<{
+    name: 'whatsappEvolutionWebhook';
+    path: 'POST /webhooks/whatsapp/evolution';
+    handler: typeof whatsappEvolutionWebhookHandler;
+    // Evolution posts `instance`, `data.keyId`, `data.wuid`: the default camelCase must not rename or drop them.
+    preferences: { namingStyle: NamingStyle.Preserve };
   }>,
   Http.UseRoute<{
     name: 'fakeCheckoutPay';

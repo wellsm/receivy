@@ -9,6 +9,8 @@ export type WhatsappInstanceView = {
   /** The 8-char code for "Conectar com número de telefone"; only while pending and only when a phone was given. */
   pairingCode: string | null;
   connectedAt: string | null;
+  /** When the phone last dropped; set while `closed`. */
+  disconnectedAt: string | null;
 };
 
 /** Receivy-number messages spent in the plan cycle; `cycleEnd` null when there is no subscription period. */

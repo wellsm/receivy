@@ -38,7 +38,7 @@ export async function whatsappSettings(db: DbClient, userId: string, variables: 
   return {
     available: whatsappAvailableFrom(variables),
     sender,
-    instance: row ? { state: row.state, phone: row.phone ?? null, qr: row.qr ?? null, pairingCode: row.pairing_code ?? null, connectedAt: row.connected_at ?? null } : null,
+    instance: row ? { state: row.state, phone: row.phone ?? null, qr: row.qr ?? null, pairingCode: row.pairing_code ?? null, connectedAt: row.connected_at ?? null, disconnectedAt: row.disconnected_at ?? null } : null,
     quota: reach.quotaLimit > 0 ? { used: reach.quotaLimit - reach.quotaLeft, limit: reach.quotaLimit, cycleEnd: subscription?.current_period_end ? cycleOf(subscription.current_period_end, now).to : null } : null
   };
 }

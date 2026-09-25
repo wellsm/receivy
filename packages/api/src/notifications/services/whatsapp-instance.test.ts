@@ -69,7 +69,7 @@ describe('WhatsApp instance service', () => {
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(created());
     const client = createInstanceClient({ db, plans: basic, variables, request });
 
-    expect(await client.create(OWNER, { riskAccepted: true })).toEqual({ state: WhatsappInstanceState.Pending, phone: null, qr: 'data:image/png;base64,QR', pairingCode: null, connectedAt: null });
+    expect(await client.create(OWNER, { riskAccepted: true })).toEqual({ state: WhatsappInstanceState.Pending, phone: null, qr: 'data:image/png;base64,QR', pairingCode: null, connectedAt: null, disconnectedAt: null });
     expect(state.sender).toBe(WhatsappSender.Own);
     expect(state.events).toEqual(['whatsapp_instance.created']);
 
@@ -110,7 +110,7 @@ describe('WhatsApp instance service', () => {
     const again = await client.create(OWNER, { riskAccepted: true });
 
     expect(request).toHaveBeenCalledTimes(2);
-    expect(Object.keys(again).sort()).toEqual(['connectedAt', 'pairingCode', 'phone', 'qr', 'state']);
+    expect(Object.keys(again).sort()).toEqual(['connectedAt', 'disconnectedAt', 'pairingCode', 'phone', 'qr', 'state']);
     expect(state.events).toEqual(['whatsapp_instance.created']);
   });
 

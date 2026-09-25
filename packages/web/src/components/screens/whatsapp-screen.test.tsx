@@ -11,7 +11,7 @@ const fetchMock = vi.mocked(browserFetch);
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 
 const receivy = { available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } };
-const pending = { state: WhatsappInstanceState.Pending, phone: null, qr: "data:image/png;base64,QR", pairingCode: null, connectedAt: null };
+const pending = { state: WhatsappInstanceState.Pending, phone: null, qr: "data:image/png;base64,QR", pairingCode: null, connectedAt: null, disconnectedAt: null };
 
 function arrange(settings: unknown = receivy, plan: PlanTier = PlanTier.Basic) {
   const calls: { path: string; method: string; body?: unknown }[] = [];
@@ -67,7 +67,7 @@ describe("WhatsappScreen", () => {
   });
 
   it("switches the sender back to Receivy through PATCH and keeps the pairing", async () => {
-    const calls = arrange({ ...receivy, sender: WhatsappSender.Own, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" } });
+    const calls = arrange({ ...receivy, sender: WhatsappSender.Own, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null } });
 
     render(<WhatsappScreen />);
 
@@ -231,7 +231,7 @@ describe("WhatsappScreen", () => {
     const calls = arrange({
       ...receivy,
       sender: WhatsappSender.Own,
-      instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" },
+      instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null },
     });
 
     render(<WhatsappScreen />);
@@ -310,12 +310,12 @@ describe("WhatsappScreen", () => {
   });
 
   it("reconnects after a drop, keeping the acceptance ticked", async () => {
-    const closed = { ...pending, state: WhatsappInstanceState.Closed, qr: null, phone: "5511988887777" };
+    const closed = { ...pending, state: WhatsappInstanceState.Closed, qr: null, phone: "5511988887777", connectedAt: "2026-09-20T12:00:00.000Z", disconnectedAt: "2026-09-24T12:00:00.000Z" };
     const calls = arrange({ ...receivy, sender: WhatsappSender.Own, instance: closed });
 
     render(<WhatsappScreen />);
 
-    expect(await screen.findByText(/Seu número desconectou/)).toBeInTheDocument();
+    expect(await screen.findByText(/Seu número desconectou em 24\/09\/2026\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reconectar" }));
     await waitFor(() => expect(calls.some((call) => call.method === "DELETE")).toBe(true));
     expect(screen.getByRole("checkbox", { name: /Entendo que este canal não é oficial/ })).toBeChecked();
@@ -339,7 +339,7 @@ describe("WhatsappScreen", () => {
 
     const withInstance = arrange({
       ...receivy,
-      instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" },
+      instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null },
     });
 
     render(<WhatsappScreen />);
@@ -365,7 +365,7 @@ describe("WhatsappScreen", () => {
   });
 
   it("keeps arrow-key selection from firing a second PATCH while one is already in flight", async () => {
-    const open = { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" };
+    const open = { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null };
     const calls = arrange({ ...receivy, sender: WhatsappSender.Own, instance: open });
     let resolvePatch: (() => void) | undefined;
 

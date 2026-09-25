@@ -270,7 +270,7 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnProps) {
     body = (
       <>
         <p role="status" className="m-0 text-sm text-danger">
-          {`Seu número desconectou${instance.connectedAt ? ` em ${chargeDateText(instance.connectedAt.slice(0, 10))}` : ""}. Os lembretes por WhatsApp estão parados.`}
+          {`Seu número desconectou${instance.disconnectedAt ? ` em ${chargeDateText(instance.disconnectedAt.slice(0, 10))}` : ""}. Os lembretes por WhatsApp estão parados.`}
         </p>
         <button type="button" className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary" disabled={busy} onClick={() => void reconnect()}>
           Reconectar

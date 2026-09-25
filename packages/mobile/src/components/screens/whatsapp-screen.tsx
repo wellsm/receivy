@@ -302,7 +302,7 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnNumberCardPr
     body = (
       <>
         <Text accessibilityLiveRegion="polite" className="font-sans text-sm text-danger">
-          {`Seu número desconectou${instance.connectedAt ? ` em ${chargeDateText(instance.connectedAt.slice(0, 10))}` : ""}. Os lembretes por WhatsApp estão parados.`}
+          {`Seu número desconectou${instance.disconnectedAt ? ` em ${chargeDateText(instance.disconnectedAt.slice(0, 10))}` : ""}. Os lembretes por WhatsApp estão parados.`}
         </Text>
 
         <Pressable

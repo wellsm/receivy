@@ -10,7 +10,7 @@ jest.mock("expo-router", () => {
 });
 
 const receivy: WhatsappSettings = { available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } };
-const pending = { state: WhatsappInstanceState.Pending, phone: "5511988887777", qr: null, pairingCode: "ABCD-1234", connectedAt: null };
+const pending = { state: WhatsappInstanceState.Pending, phone: "5511988887777", qr: null, pairingCode: "ABCD-1234", connectedAt: null, disconnectedAt: null };
 
 function client(settings: WhatsappSettings = receivy) {
   return {
@@ -49,7 +49,7 @@ describe("WhatsappScreen", () => {
   });
 
   it("switches the sender through the client and keeps the pairing", async () => {
-    const api = client({ ...receivy, sender: WhatsappSender.Own, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" } });
+    const api = client({ ...receivy, sender: WhatsappSender.Own, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null } });
 
     await render(<WhatsappScreen client={api as never} plans={plans()} />);
     await screen.findByText(/Conectado ao/);
@@ -91,7 +91,7 @@ describe("WhatsappScreen", () => {
 
     const api = client({ ...receivy, instance: pending });
 
-    api.whatsappInstance.mockResolvedValueOnce(pending).mockResolvedValueOnce({ ...pending, state: WhatsappInstanceState.Open, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" });
+    api.whatsappInstance.mockResolvedValueOnce(pending).mockResolvedValueOnce({ ...pending, state: WhatsappInstanceState.Open, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null });
 
     const { unmount } = await render(<WhatsappScreen client={api as never} plans={plans()} />);
 
@@ -125,11 +125,11 @@ describe("WhatsappScreen", () => {
     expect(await screen.findByText("NEW-CODE")).toBeTruthy();
     expect(refreshApi.whatsappInstance).toHaveBeenCalledWith(true);
 
-    const closed = { ...pending, state: WhatsappInstanceState.Closed, pairingCode: null };
+    const closed = { ...pending, state: WhatsappInstanceState.Closed, pairingCode: null, connectedAt: "2026-09-20T12:00:00.000Z", disconnectedAt: "2026-09-24T12:00:00.000Z" };
     const api = client({ ...receivy, sender: WhatsappSender.Own, instance: closed });
 
     await render(<WhatsappScreen client={api as never} plans={plans()} />);
-    expect(await screen.findByText(/Seu número desconectou/)).toBeTruthy();
+    expect(await screen.findByText(/Seu número desconectou em 24\/09\/2026\./)).toBeTruthy();
     await fireEvent.press(screen.getByLabelText("Reconectar"));
 
     await waitFor(() => expect(api.disconnectWhatsapp).toHaveBeenCalled());
@@ -209,7 +209,7 @@ describe("WhatsappScreen", () => {
   });
 
   it("disconnects the open instance after confirming, back to the initial state", async () => {
-    const api = client({ ...receivy, sender: WhatsappSender.Own, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" } });
+    const api = client({ ...receivy, sender: WhatsappSender.Own, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null } });
 
     await render(<WhatsappScreen client={api as never} plans={plans()} />);
     await screen.findByText(/Conectado ao/);

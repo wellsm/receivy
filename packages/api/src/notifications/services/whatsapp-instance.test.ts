@@ -1,0 +1,149 @@
+import { PlanTier, WhatsappInstanceState, WhatsappSender } from '@receivy/common';
+import { describe, expect, it, vi } from 'vitest';
+import { createInstanceClient } from './whatsapp-instance';
+
+const OWNER = 'd1111111-1111-4111-8111-111111111111';
+
+/** Just enough of the database for the service: one instance row, one user sender, the event log. */
+function fakeDb() {
+  const state = { instance: null as Record<string, unknown> | null, sender: WhatsappSender.Receivy as WhatsappSender, events: [] as string[] };
+  const db = {
+    whatsapp_instances: {
+      findOne: async ({ where }: { where: Record<string, unknown> }) => {
+        const row = state.instance;
+
+        if (!row) {
+          return undefined;
+        }
+
+        const byOwner = where['owner_id'] !== undefined && row['owner_id'] === where['owner_id'];
+        const byName = where['name'] !== undefined && row['name'] === where['name'];
+
+        return byOwner || byName ? row : undefined;
+      },
+      insertOne: async ({ data }: { data: Record<string, unknown> }) => {
+        state.instance = { ...data, owner_id: (data['owner'] as { id: string }).id };
+
+        return state.instance;
+      },
+      updateOne: async ({ data }: { data: Record<string, unknown> }) => {
+        state.instance = { ...state.instance, ...data };
+      },
+      deleteOne: async () => {
+        state.instance = null;
+      }
+    },
+    users: {
+      findOne: async () => ({ whatsapp_sender: state.sender }),
+      updateOne: async ({ data }: { data: { whatsapp_sender: WhatsappSender } }) => {
+        state.sender = data.whatsapp_sender;
+      }
+    },
+    events: {
+      insertOne: async ({ data }: { data: { type: string } }) => {
+        state.events.push(data.type);
+      }
+    },
+    // One active device, so the disconnect warning has somewhere to land.
+    device_tokens: { findMany: async () => ({ records: [{ id: 'device-1', token: 'ExpoPushToken[fixture]' }] }) }
+  };
+
+  return { db: db as never, state };
+}
+
+const basic = { get: async () => ({ plan: PlanTier.Basic }) as never };
+const free = { get: async () => ({ plan: PlanTier.Free }) as never };
+const variables = { EVOLUTION_API_URL: 'http://evo', EVOLUTION_API_KEY: 'global', PUBLIC_API_ORIGIN: 'https://api.receivy.example', PUBLIC_WEB_ORIGIN: 'https://receivy.example' };
+const created = () => Response.json({ instance: { instanceName: `rcv_${OWNER}` }, hash: 'ignored', qrcode: { base64: 'data:image/png;base64,QR' } }, { status: 201 });
+
+describe('WhatsApp instance service', () => {
+  it('creates the instance on Evolution with a per-owner token and webhook, and switches the sender', async () => {
+    const { db, state } = fakeDb();
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(created());
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    expect(await client.create(OWNER)).toEqual({ state: WhatsappInstanceState.Pending, phone: null, qr: 'data:image/png;base64,QR', connectedAt: null });
+    expect(state.sender).toBe(WhatsappSender.Own);
+    expect(state.events).toEqual(['whatsapp_instance.created']);
+
+    const [url, init] = request.mock.calls[0]!;
+    const body = JSON.parse(String(init?.body));
+
+    expect(String(url)).toBe('http://evo/instance/create');
+    expect(new Headers(init?.headers).get('apikey')).toBe('global');
+    expect(body.instanceName).toBe(`rcv_${OWNER}`);
+    expect(body.integration).toBe('WHATSAPP-BAILEYS');
+    expect(body.qrcode).toBe(true);
+    expect(body.token).toBe(state.instance?.['token']);
+    expect(String(body.token)).toHaveLength(64);
+    expect(body.webhook.url).toBe('https://api.receivy.example/webhooks/whatsapp/evolution');
+    expect(body.webhook.headers.authorization).toBe(state.instance?.['webhook_secret']);
+    expect(body.webhook.events).toEqual(['QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPDATE']);
+  });
+
+  it('refuses the free plan before calling Evolution and answers 503 when Evolution is off', async () => {
+    const { db } = fakeDb();
+    const request = vi.fn<typeof fetch>();
+
+    await expect(createInstanceClient({ db, plans: free, variables, request }).create(OWNER)).rejects.toMatchObject({ status: 402 });
+    await expect(createInstanceClient({ db, plans: basic, variables: { ...variables, EVOLUTION_API_KEY: 'disabled' }, request }).create(OWNER)).rejects.toMatchObject({ status: 503 });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('returns the existing row on a second create, and never the token or the secret', async () => {
+    const { db, state } = fakeDb();
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(created());
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    await client.create(OWNER);
+
+    const again = await client.create(OWNER);
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(Object.keys(again).sort()).toEqual(['connectedAt', 'phone', 'qr', 'state']);
+    expect(state.events).toEqual(['whatsapp_instance.created']);
+  });
+
+  it('opens and closes on connection updates, clearing the qr and warning the owner once on close', async () => {
+    const { db, state } = fakeDb();
+    const pushes: string[] = [];
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(created());
+    const transport = {
+      push: async (input: { title: string }) => {
+        pushes.push(input.title);
+
+        return { status: 'accepted' as const, id: 't' };
+      }
+    } as never;
+    const client = createInstanceClient({ db, plans: basic, variables, request, transport });
+
+    await client.create(OWNER);
+    await client.applyConnection(`rcv_${OWNER}`, 'open', '5511988887777');
+
+    expect(state.instance).toMatchObject({ state: WhatsappInstanceState.Open, phone: '5511988887777' });
+    expect(state.instance?.['qr']).toBeNull();
+
+    await client.applyConnection(`rcv_${OWNER}`, 'close');
+    await client.applyConnection(`rcv_${OWNER}`, 'close');
+    await client.applyConnection('rcv_unknown', 'close');
+
+    expect(state.instance).toMatchObject({ state: WhatsappInstanceState.Closed });
+    expect(state.events).toEqual(['whatsapp_instance.created', 'whatsapp_instance.opened', 'whatsapp_instance.closed']);
+    expect(pushes).toEqual(['Seu WhatsApp desconectou']);
+  });
+
+  it('removes the instance on Evolution, tolerating a 404, and puts the sender back', async () => {
+    const { db, state } = fakeDb();
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(created()).mockResolvedValueOnce(new Response(null, { status: 404 })).mockResolvedValueOnce(Response.json({ status: 'SUCCESS' }));
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    await client.create(OWNER);
+    await client.remove(OWNER);
+
+    expect(state.instance).toBeNull();
+    expect(state.sender).toBe(WhatsappSender.Receivy);
+    expect(String(request.mock.calls[1]![0])).toBe(`http://evo/instance/logout/rcv_${OWNER}`);
+    expect(String(request.mock.calls[2]![0])).toBe(`http://evo/instance/delete/rcv_${OWNER}`);
+    expect(await client.get(OWNER)).toBeNull();
+  });
+});

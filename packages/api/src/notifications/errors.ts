@@ -1,4 +1,4 @@
-import { ConflictError, RateLimitedError } from '../common/errors';
+import { ConflictError, PaymentRequiredError, RateLimitedError, ServiceUnavailableError } from '../common/errors';
 
 export class DeviceOwnedElsewhereError extends ConflictError {
   constructor(message = 'O dispositivo deve ser removido da conta anterior.') {
@@ -15,5 +15,17 @@ export class DeviceRegisteredError extends ConflictError {
 export class ReminderQuotaError extends RateLimitedError {
   constructor(message = 'Aguarde 24 horas antes de enviar outro lembrete.') {
     super(message, 'REMINDER_QUOTA');
+  }
+}
+
+export class WhatsappPlanRequiredError extends PaymentRequiredError {
+  constructor(message = 'Enviar pelo seu número faz parte do plano Básico.') {
+    super(message, 'PLAN_REQUIRED');
+  }
+}
+
+export class WhatsappInstanceUnavailableError extends ServiceUnavailableError {
+  constructor(message = 'Não deu para falar com o WhatsApp agora. Tente de novo em instantes.') {
+    super(message, 'WHATSAPP_INSTANCE_UNAVAILABLE');
   }
 }

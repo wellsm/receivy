@@ -35,7 +35,13 @@ import type {
   SplitInProgressError
 } from './invites/errors';
 import type { InviteRoutes } from './invites/routes';
-import type { DeviceOwnedElsewhereError, DeviceRegisteredError, ReminderQuotaError } from './notifications/errors';
+import type {
+  DeviceOwnedElsewhereError,
+  DeviceRegisteredError,
+  ReminderQuotaError,
+  WhatsappInstanceUnavailableError,
+  WhatsappPlanRequiredError
+} from './notifications/errors';
 import type { NotificationRoutes } from './notifications/routes';
 import type {
   InfinitePayCheckoutDisabledError,
@@ -85,7 +91,7 @@ export declare class Api extends Http.Service {
       namingStyle: NamingStyle.CamelCase;
     };
     httpErrors: {
-      402: [PlanLimitReachedError, PlanRequiredError];
+      402: [PlanLimitReachedError, PlanRequiredError, WhatsappPlanRequiredError];
       403: [ProofDeclarationForbiddenError];
       409: [
         IdempotencyMismatchError,
@@ -138,7 +144,13 @@ export declare class Api extends Http.Service {
         PagSeguroTokenInvalidError
       ];
       429: [TooManyRequestsError, ReminderQuotaError];
-      503: [PaymentLinkUnavailableError, PaymentCredentialKeyMissingError, PlanBillingDisabledError, PlanUnavailableError];
+      503: [
+        PaymentLinkUnavailableError,
+        PaymentCredentialKeyMissingError,
+        PlanBillingDisabledError,
+        PlanUnavailableError,
+        WhatsappInstanceUnavailableError
+      ];
     };
   }>;
 

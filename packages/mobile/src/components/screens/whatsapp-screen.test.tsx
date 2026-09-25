@@ -10,6 +10,7 @@ jest.mock("expo-router", () => {
 });
 
 const receivy: WhatsappSettings = { available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } };
+const pending = { state: WhatsappInstanceState.Pending, phone: "5511988887777", qr: null, pairingCode: "ABCD-1234", connectedAt: null };
 
 function client(settings: WhatsappSettings = receivy) {
   return {
@@ -64,5 +65,139 @@ describe("WhatsappScreen", () => {
     const { toJSON } = await render(<WhatsappScreen client={client() as never} plans={plans()} />);
 
     expect(toJSON()).toBeNull();
+  });
+
+  it("prefills the phone, keeps Conectar disabled until accepted, then shows the pairing code", async () => {
+    const api = client({ ...receivy, instance: null });
+
+    api.connectWhatsapp.mockResolvedValue(pending);
+    await render(<WhatsappScreen client={api as never} plans={plans()} />);
+
+    const button = await screen.findByLabelText("Conectar");
+
+    expect(screen.getByDisplayValue("+55 11 98888-7777")).toBeTruthy();
+    expect(button.props.accessibilityState?.disabled).toBe(true);
+    await fireEvent.press(screen.getByLabelText(/Entendo que este canal não é oficial/));
+    expect(button.props.accessibilityState?.disabled).toBe(false);
+    await fireEvent.press(button);
+
+    expect(await screen.findByText("ABCD-1234")).toBeTruthy();
+    expect(api.connectWhatsapp).toHaveBeenCalledWith({ riskAccepted: true, phone: "+55 11 98888-7777" });
+    expect(screen.getByText(/Conectar com número de telefone/)).toBeTruthy();
+  });
+
+  it("polls every 5 s while pending and stops on open and on unmount", async () => {
+    jest.useFakeTimers();
+
+    const api = client({ ...receivy, instance: pending });
+
+    api.whatsappInstance.mockResolvedValueOnce(pending).mockResolvedValueOnce({ ...pending, state: WhatsappInstanceState.Open, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" });
+
+    const { unmount } = await render(<WhatsappScreen client={api as never} plans={plans()} />);
+
+    await screen.findByText("ABCD-1234");
+    await jest.advanceTimersByTimeAsync(5000);
+    await jest.advanceTimersByTimeAsync(5000);
+    // React needs an extra macrotask handoff to flush the passive effect the second poll triggers.
+    await jest.advanceTimersByTimeAsync(0);
+    expect(api.whatsappInstance).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/Conectado ao/)).toBeTruthy();
+
+    await jest.advanceTimersByTimeAsync(10000);
+    expect(api.whatsappInstance).toHaveBeenCalledTimes(2);
+    unmount();
+    await jest.advanceTimersByTimeAsync(10000);
+    expect(api.whatsappInstance).toHaveBeenCalledTimes(2);
+    jest.useRealTimers();
+  });
+
+  it("refreshes the code on demand and reconnects after a drop with the acceptance kept", async () => {
+    const closed = { ...pending, state: WhatsappInstanceState.Closed, pairingCode: null };
+    const api = client({ ...receivy, sender: WhatsappSender.Own, instance: closed });
+
+    await render(<WhatsappScreen client={api as never} plans={plans()} />);
+    expect(await screen.findByText(/Seu número desconectou/)).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Reconectar"));
+
+    await waitFor(() => expect(api.disconnectWhatsapp).toHaveBeenCalled());
+    expect(screen.getByLabelText(/Entendo que este canal não é oficial/).props.accessibilityState?.checked).toBe(true);
+    expect(screen.getByLabelText("Conectar").props.accessibilityState?.disabled).toBe(false);
+  });
+
+  it("guards against a double press on Conectar while the POST is in flight", async () => {
+    const api = client({ ...receivy, instance: null });
+    let resolveConnect: ((value: typeof pending) => void) | undefined;
+
+    api.connectWhatsapp.mockImplementation(() => new Promise((resolve) => { resolveConnect = resolve; }));
+    await render(<WhatsappScreen client={api as never} plans={plans()} />);
+
+    const button = await screen.findByLabelText("Conectar");
+
+    await fireEvent.press(screen.getByLabelText(/Entendo que este canal não é oficial/));
+    await fireEvent.press(button);
+    await fireEvent.press(button);
+
+    expect(api.connectWhatsapp).toHaveBeenCalledTimes(1);
+
+    resolveConnect?.(pending);
+    expect(await screen.findByText("ABCD-1234")).toBeTruthy();
+  });
+
+  it("ignores a poll answered after the user already cancelled the pairing", async () => {
+    jest.useFakeTimers();
+
+    const api = client({ ...receivy, instance: pending });
+    let resolvePoll: ((value: typeof pending) => void) | undefined;
+
+    api.whatsappInstance.mockImplementation(() => new Promise((resolve) => { resolvePoll = resolve; }));
+    await render(<WhatsappScreen client={api as never} plans={plans()} />);
+
+    await screen.findByText("ABCD-1234");
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(api.whatsappInstance).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(screen.getByLabelText("Cancelar"));
+    await jest.advanceTimersByTimeAsync(0);
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(api.disconnectWhatsapp).toHaveBeenCalled();
+    expect(screen.getByLabelText(/Entendo que este canal não é oficial/)).toBeTruthy();
+
+    resolvePoll?.(pending);
+    await jest.advanceTimersByTimeAsync(0);
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(screen.getByLabelText(/Entendo que este canal não é oficial/)).toBeTruthy();
+    expect(screen.queryByText("ABCD-1234")).toBeNull();
+
+    await jest.advanceTimersByTimeAsync(10000);
+    expect(api.whatsappInstance).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it("disconnects the open instance after confirming, back to the initial state", async () => {
+    const api = client({ ...receivy, sender: WhatsappSender.Own, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z" } });
+
+    await render(<WhatsappScreen client={api as never} plans={plans()} />);
+    await screen.findByText(/Conectado ao/);
+    await fireEvent.press(screen.getByLabelText("Desconectar"));
+
+    expect(await screen.findByText("Os lembretes voltam a sair pelo número do Receivy.")).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText("Confirmar desconexão"));
+
+    await waitFor(() => expect(api.disconnectWhatsapp).toHaveBeenCalled());
+    expect(screen.getByLabelText(/Entendo que este canal não é oficial/)).toBeTruthy();
+    expect(screen.getByLabelText("Número do Receivy").props.accessibilityState?.checked).toBe(true);
+  });
+
+  it("cancels the pending pairing and returns to the initial state", async () => {
+    const api = client({ ...receivy, instance: pending });
+
+    await render(<WhatsappScreen client={api as never} plans={plans()} />);
+    await screen.findByText("ABCD-1234");
+    await fireEvent.press(screen.getByLabelText("Cancelar"));
+
+    await waitFor(() => expect(api.disconnectWhatsapp).toHaveBeenCalled());
+    expect(screen.getByLabelText(/Entendo que este canal não é oficial/)).toBeTruthy();
   });
 });

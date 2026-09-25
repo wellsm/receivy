@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { PlanTier, WhatsappInstanceState, WhatsappSender, type WhatsappSettings } from "@receivy/common";
 import { WhatsappScreen } from "./whatsapp-screen";
 
@@ -96,10 +96,13 @@ describe("WhatsappScreen", () => {
     const { unmount } = await render(<WhatsappScreen client={api as never} plans={plans()} />);
 
     await screen.findByText("ABCD-1234");
+    // The first tick polls back the identical instance, so the handler skips `patch` and there is
+    // nothing to flush. The second tick actually changes the state (pending → open), so that one
+    // update is wrapped in `act` to keep the output clean.
     await jest.advanceTimersByTimeAsync(5000);
-    await jest.advanceTimersByTimeAsync(5000);
-    // React needs an extra macrotask handoff to flush the passive effect the second poll triggers.
-    await jest.advanceTimersByTimeAsync(0);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(5000);
+    });
     expect(api.whatsappInstance).toHaveBeenCalledTimes(2);
     expect(screen.getByText(/Conectado ao/)).toBeTruthy();
 
@@ -112,6 +115,16 @@ describe("WhatsappScreen", () => {
   });
 
   it("refreshes the code on demand and reconnects after a drop with the acceptance kept", async () => {
+    const refreshApi = client({ ...receivy, instance: pending });
+
+    refreshApi.whatsappInstance.mockResolvedValueOnce({ ...pending, pairingCode: "NEW-CODE" });
+    await render(<WhatsappScreen client={refreshApi as never} plans={plans()} />);
+    await screen.findByText("ABCD-1234");
+    await fireEvent.press(screen.getByLabelText("Gerar novo"));
+
+    expect(await screen.findByText("NEW-CODE")).toBeTruthy();
+    expect(refreshApi.whatsappInstance).toHaveBeenCalledWith(true);
+
     const closed = { ...pending, state: WhatsappInstanceState.Closed, pairingCode: null };
     const api = client({ ...receivy, sender: WhatsappSender.Own, instance: closed });
 
@@ -122,6 +135,16 @@ describe("WhatsappScreen", () => {
     await waitFor(() => expect(api.disconnectWhatsapp).toHaveBeenCalled());
     expect(screen.getByLabelText(/Entendo que este canal não é oficial/).props.accessibilityState?.checked).toBe(true);
     expect(screen.getByLabelText("Conectar").props.accessibilityState?.disabled).toBe(false);
+  });
+
+  it("swallows a tap inside the pending body instead of bubbling it up as a card selection", async () => {
+    const api = client({ ...receivy, instance: pending });
+
+    await render(<WhatsappScreen client={api as never} plans={plans()} />);
+    await screen.findByText("ABCD-1234");
+    await fireEvent.press(screen.getByText("ABCD-1234"));
+
+    expect(api.setWhatsappSender).not.toHaveBeenCalled();
   });
 
   it("guards against a double press on Conectar while the POST is in flight", async () => {
@@ -148,8 +171,10 @@ describe("WhatsappScreen", () => {
 
     const api = client({ ...receivy, instance: pending });
     let resolvePoll: ((value: typeof pending) => void) | undefined;
+    let resolveDisconnect: (() => void) | undefined;
 
     api.whatsappInstance.mockImplementation(() => new Promise((resolve) => { resolvePoll = resolve; }));
+    api.disconnectWhatsapp.mockImplementation(() => new Promise<void>((resolve) => { resolveDisconnect = resolve; }));
     await render(<WhatsappScreen client={api as never} plans={plans()} />);
 
     await screen.findByText("ABCD-1234");
@@ -158,17 +183,25 @@ describe("WhatsappScreen", () => {
 
     await fireEvent.press(screen.getByLabelText("Cancelar"));
     await jest.advanceTimersByTimeAsync(0);
+
+    // The stale poll answers while `disconnectWhatsapp` itself is still in flight: the polling
+    // effect's own `cancelled` flag hasn't flipped yet (the instance is still `pending`, since
+    // `patch(null)` only runs once the disconnect resolves), so only the `seqRef` bump made at the
+    // top of `disconnect()` can be what discards this response.
+    resolvePoll?.({ ...pending, pairingCode: "STALE-CODE" });
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(screen.queryByText("STALE-CODE")).toBeNull();
+    expect(screen.getByText("ABCD-1234")).toBeTruthy();
+
+    resolveDisconnect?.();
+    await jest.advanceTimersByTimeAsync(0);
     await jest.advanceTimersByTimeAsync(0);
 
     expect(api.disconnectWhatsapp).toHaveBeenCalled();
     expect(screen.getByLabelText(/Entendo que este canal não é oficial/)).toBeTruthy();
-
-    resolvePoll?.(pending);
-    await jest.advanceTimersByTimeAsync(0);
-    await jest.advanceTimersByTimeAsync(0);
-
-    expect(screen.getByLabelText(/Entendo que este canal não é oficial/)).toBeTruthy();
     expect(screen.queryByText("ABCD-1234")).toBeNull();
+    expect(screen.queryByText("STALE-CODE")).toBeNull();
 
     await jest.advanceTimersByTimeAsync(10000);
     expect(api.whatsappInstance).toHaveBeenCalledTimes(1);

@@ -28,6 +28,19 @@ const RISK_POINTS = [
   "Se o celular desconectar, os lembretes por WhatsApp param até você conectar de novo. Você é avisado por push e e-mail.",
 ];
 
+/** Compares only the fields a poll can change, so an unchanged tick never triggers a re-render. */
+function sameInstance(a: WhatsappInstanceView | null, b: WhatsappInstanceView | null): boolean {
+  if (a === b) {
+    return true;
+  }
+
+  if (!a || !b) {
+    return false;
+  }
+
+  return a.state === b.state && a.qr === b.qr && a.pairingCode === b.pairingCode && a.phone === b.phone;
+}
+
 /** `5511988887777` → `+55 11 9····-7777`; identical to the web `maskPhone`. */
 export function maskPhone(phone: string | null): string {
   if (!phone) {
@@ -108,8 +121,14 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnNumberCardPr
   // polling interval below is set up once per pending run instead of being torn down on every tick.
   const patchRef = useRef(patch);
 
+  // The latest instance, read by the poll handler below to skip a tick that changed nothing — an
+  // identical poll result would otherwise still call `onChange`, causing a needless re-render (and,
+  // under fake timers in tests, an act() warning for an update no one can observe).
+  const instanceRef = useRef(instance);
+
   useEffect(() => {
     patchRef.current = patch;
+    instanceRef.current = instance;
   });
 
   // Bumped by every user action (connect/refresh/disconnect/reconnect) and by the poll effect's own
@@ -135,7 +154,7 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnNumberCardPr
       client
         .whatsappInstance()
         .then((next) => {
-          if (cancelled || seqRef.current !== seq) {
+          if (cancelled || seqRef.current !== seq || sameInstance(next, instanceRef.current)) {
             return;
           }
 
@@ -387,8 +406,18 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnNumberCardPr
     );
   }
 
-  // Every control here is interactive; a bare press must never bubble up as a card selection.
-  return <View className="gap-3">{body}</View>;
+  // A `Pressable` (not a plain `View`) so it claims its own responder and a no-op `onPress`: a bare
+  // press on the pairing code, the risk bullets, "Aguardando…" or the closed-state warning is then
+  // handled right here instead of bubbling up to `RadioCard`'s own press, which would fire
+  // `select(Own)` while a pending/closed instance still sits underneath. Inner `Pressable`s (Conectar,
+  // Cancelar, Desconectar…) sit closer to the touch and still claim it for themselves first, so they
+  // keep working as usual. `accessible={false}` keeps this wrapper out of the accessibility tree —
+  // it does nothing on its own, only the controls inside it are meant to be reachable.
+  return (
+    <Pressable accessible={false} onPress={() => {}} className="gap-3">
+      {body}
+    </Pressable>
+  );
 }
 
 type RadioCardProps = {

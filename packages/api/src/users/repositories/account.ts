@@ -1,5 +1,5 @@
 import { HttpNotFoundError, HttpUnauthorizedError } from '@ez4/gateway';
-import { type AuthUser, UserStatus } from '@receivy/common';
+import { type AuthUser, UserStatus, WhatsappSender } from '@receivy/common';
 import type { PersonRow } from '../../contacts/utils/person';
 import type { DbClient } from '../../database';
 import { type AuthUserRow, toAuthUser } from '../utils/auth-user';
@@ -131,6 +131,16 @@ export namespace AccountRepository {
 
   export async function setEmailOptOut(db: DbClient, id: string, at: string | null, now: string): Promise<void> {
     await db.users.updateOne({ where: { id }, data: { email_opt_out_at: at ?? sqlNull, updated_at: now } });
+  }
+
+  export async function whatsappSender(db: DbClient, id: string): Promise<WhatsappSender> {
+    const row = await db.users.findOne({ select: { whatsapp_sender: true }, where: { id } });
+
+    return row?.whatsapp_sender ?? WhatsappSender.Receivy;
+  }
+
+  export async function setWhatsappSender(db: DbClient, id: string, sender: WhatsappSender, now: string): Promise<void> {
+    await db.users.updateOne({ select: { id: true }, where: { id }, data: { whatsapp_sender: sender, updated_at: now } });
   }
 
   /** The live account as its own session reads it. */

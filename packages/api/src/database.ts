@@ -10,6 +10,8 @@ import type { EventSchema } from './common/schemas/event';
 import type { ContactSchema } from './contacts/schemas/contact';
 import type { IntegrationSchema } from './integrations/schemas/integration';
 import type { DeviceTokenSchema } from './notifications/schemas/notification';
+import type { WhatsappInstanceSchema } from './notifications/schemas/whatsapp-instance';
+import type { WhatsappMessageSchema } from './notifications/schemas/whatsapp-message';
 import type { PaymentMethodSchema } from './payment-methods/schemas/payment-method';
 import type { SubscriptionSchema } from './plans/schemas/subscription';
 import type { ProofSchema } from './proofs/schemas/proof';
@@ -35,6 +37,27 @@ export declare class Db extends Database.Service<PostgresEngine> {
         id: Index.Primary;
         token: Index.Unique;
         'user_id:installation_id': Index.Unique;
+      };
+    }>,
+    Database.UseTable<{
+      name: 'whatsapp_messages';
+      schema: WhatsappMessageSchema;
+      relations: { 'owner_id@owner': 'users:id'; 'charge_id@charge': 'charges:id' };
+      indexes: {
+        id: Index.Primary;
+        owner_id: Index.Secondary;
+        charge_id: Index.Secondary;
+        provider_message_id: Index.Secondary;
+      };
+    }>,
+    Database.UseTable<{
+      name: 'whatsapp_instances';
+      schema: WhatsappInstanceSchema;
+      relations: { 'owner_id@owner': 'users:id' };
+      indexes: {
+        id: Index.Primary;
+        owner_id: Index.Unique;
+        name: Index.Unique;
       };
     }>,
     Database.UseTable<{

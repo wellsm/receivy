@@ -1,6 +1,6 @@
 import type { Database } from '@ez4/database';
 import type { String } from '@ez4/schema';
-import type { UserStatus } from '@receivy/common';
+import type { UserStatus, WhatsappSender } from '@receivy/common';
 
 export interface UserSchema extends Database.Schema {
   id: String.UUID;
@@ -16,6 +16,8 @@ export interface UserSchema extends Database.Schema {
   email_opt_out_at?: String.DateTime;
   /** Reserved for the WhatsApp quick reply (phase 3); nothing writes it yet. */
   whatsapp_opt_out_at?: String.DateTime;
+  /** Whose number this owner's WhatsApp notices leave from; absent reads as the Receivy number. */
+  whatsapp_sender?: WhatsappSender;
   avatar_url?: String.Max<512>;
   /** When the photo at `avatars/<id>` was last replaced; absent means no photo. */
   avatar_updated_at?: String.DateTime;

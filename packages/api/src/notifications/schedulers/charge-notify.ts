@@ -52,6 +52,8 @@ export declare class ChargeNotifyScheduler extends Cron.Service<ChargeNotifySche
     PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
     WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+    EVOLUTION_API_URL: Environment.VariableOrValue<'EVOLUTION_API_URL', 'http://127.0.0.1:8080'>;
+    EVOLUTION_API_KEY: Environment.VariableOrValue<'EVOLUTION_API_KEY', 'disabled'>;
     WHATSAPP_TEMPLATE_INITIAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_INITIAL', 'receivy_charge_initial'>;
     WHATSAPP_TEMPLATE_REMINDER: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_REMINDER', 'receivy_charge_reminder'>;
     WHATSAPP_TEMPLATE_MANUAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_MANUAL', 'receivy_charge_manual'>;

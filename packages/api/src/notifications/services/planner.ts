@@ -14,6 +14,8 @@ export interface NotificationConfig {
   pushAvailable?: boolean;
   /** Whether the WhatsApp transport can send at all; a rule that wants it is dropped as unavailable until it can. */
   whatsappAvailable: boolean;
+  /** Whether the own-number path (Evolution) is configured in this environment. */
+  ownAvailable: boolean;
   /** The WABA template names in force, as `buildChargeTemplate` needs them. */
   templates: TemplateNames;
 }
@@ -30,6 +32,7 @@ export interface NotificationVariables {
   PAYMENT_CREDENTIAL_KEY_B64?: string;
   WHATSAPP_TRANSPORT?: string;
   EVOLUTION_API_URL?: string;
+  EVOLUTION_API_KEY?: string;
   WHATSAPP_TEMPLATE_INITIAL?: string;
   WHATSAPP_TEMPLATE_REMINDER?: string;
   WHATSAPP_TEMPLATE_MANUAL?: string;
@@ -46,6 +49,11 @@ export function whatsappAvailableFrom(variables: { WHATSAPP_TRANSPORT?: string }
   return isWhatsappTransport(variables.WHATSAPP_TRANSPORT) && variables.WHATSAPP_TRANSPORT !== WhatsappTransport.Disabled;
 }
 
+/** Whether the own-number path (Evolution) is configured in this environment; same rule as `evolutionOf`. */
+export function evolutionAvailableFrom(variables: { EVOLUTION_API_URL?: string; EVOLUTION_API_KEY?: string }): boolean {
+  return Boolean(variables.EVOLUTION_API_URL) && Boolean(variables.EVOLUTION_API_KEY) && variables.EVOLUTION_API_KEY !== 'disabled';
+}
+
 export function notificationConfigFrom(variables: NotificationVariables): NotificationConfig {
   return {
     publicOrigin: variables.PUBLIC_WEB_ORIGIN,
@@ -55,6 +63,7 @@ export function notificationConfigFrom(variables: NotificationVariables): Notifi
     from: variables.RESEND_FROM_EMAIL,
     pushAvailable: variables.NOTIFICATION_PUSH_TRANSPORT === 'expo',
     whatsappAvailable: whatsappAvailableFrom(variables),
+    ownAvailable: evolutionAvailableFrom(variables),
     templates: templateNamesFrom(variables)
   };
 }

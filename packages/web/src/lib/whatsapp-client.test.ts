@@ -2,7 +2,7 @@ import { PlanTier, WhatsappInstanceState, WhatsappSender, type WhatsappInstanceV
 import { describe, expect, it } from "vitest";
 import { whatsappSubtitle } from "./whatsapp-client";
 
-const receivy: WhatsappSettings = { available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: null } };
+const receivy: WhatsappSettings = { available: true, ownAvailable: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: null } };
 
 function own(state: WhatsappInstanceState): WhatsappSettings {
   const instance: WhatsappInstanceView = { state, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: null, disconnectedAt: null };

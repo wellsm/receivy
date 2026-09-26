@@ -91,6 +91,7 @@ export const TEST_CONFIG: NotificationConfig = {
   from: 'fixture@example.invalid',
   pushAvailable: true,
   whatsappAvailable: false,
+  ownAvailable: false,
   templates: DEFAULT_TEMPLATE_NAMES
 };
 

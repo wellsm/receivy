@@ -9,7 +9,7 @@ jest.mock("expo-router", () => {
   return { useFocusEffect: (effect: () => void) => react.useEffect(effect, []), useRouter: () => ({ back: jest.fn(), push: jest.fn() }) };
 });
 
-const receivy: WhatsappSettings = { available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } };
+const receivy: WhatsappSettings = { available: true, ownAvailable: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } };
 const pending = { state: WhatsappInstanceState.Pending, phone: "5511988887777", qr: null, pairingCode: "ABCD-1234", connectedAt: null, disconnectedAt: null };
 
 function client(settings: WhatsappSettings = receivy) {

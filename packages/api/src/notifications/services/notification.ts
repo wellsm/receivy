@@ -48,6 +48,8 @@ export declare class NotificationService extends Factory.Service<NotificationCli
     NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
     EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
     WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+    EVOLUTION_API_URL: Environment.VariableOrValue<'EVOLUTION_API_URL', 'http://127.0.0.1:8080'>;
+    EVOLUTION_API_KEY: Environment.VariableOrValue<'EVOLUTION_API_KEY', 'disabled'>;
     WHATSAPP_TEMPLATE_INITIAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_INITIAL', 'receivy_charge_initial'>;
     WHATSAPP_TEMPLATE_REMINDER: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_REMINDER', 'receivy_charge_reminder'>;
     WHATSAPP_TEMPLATE_MANUAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_MANUAL', 'receivy_charge_manual'>;
@@ -157,6 +159,7 @@ export async function reminderPreview(db: DbClient, userId: string, chargeId: st
     target,
     contact: reach,
     whatsappAvailable: notice.config.whatsappAvailable,
+    ownAvailable: notice.config.ownAvailable,
     sender: sender.sender,
     instanceOpen: sender.instanceOpen,
     quotaLeft: sender.quotaLeft

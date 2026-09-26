@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { DropReason, NoticeChannel, resolveChannels } from './channels';
 
 const target = { email: 'a@b.c', phone: '+5511999999999' };
-const receivy = { sender: WhatsappSender.Receivy, instanceOpen: false, quotaLeft: 10 };
-const own = { sender: WhatsappSender.Own, instanceOpen: true, quotaLeft: 0 };
+const receivy = { sender: WhatsappSender.Receivy, instanceOpen: false, quotaLeft: 10, ownAvailable: true };
+const own = { sender: WhatsappSender.Own, instanceOpen: true, quotaLeft: 0, ownAvailable: true };
 
 describe('resolveChannels', () => {
   it('sends e-mail when wanted and possible, and drops it with a reason otherwise', () => {
@@ -53,6 +53,15 @@ describe('resolveChannels', () => {
       { channel: NoticeChannel.WhatsApp, reason: DropReason.SenderOffline }
     ]);
     expect(resolveChannels({ wanted, ownBill: false, target, contact: null, whatsappAvailable: true, ...own }).whatsapp).toBe(true);
+  });
+
+  it('lets the own sender through with the Receivy transport off, as long as Evolution is configured and open', () => {
+    const wanted = { email: false, whatsapp: true };
+
+    expect(resolveChannels({ wanted, ownBill: false, target, contact: null, whatsappAvailable: false, ...own }).whatsapp).toBe(true);
+    expect(resolveChannels({ wanted, ownBill: false, target, contact: null, whatsappAvailable: true, ...own, ownAvailable: false }).dropped).toEqual([
+      { channel: NoticeChannel.WhatsApp, reason: DropReason.Unavailable }
+    ]);
   });
 
   it('drops the Receivy sender when the cycle quota is spent', () => {

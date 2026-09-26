@@ -61,7 +61,7 @@ const TZ = 'America/Sao_Paulo';
 const clock = Date.parse('2029-01-04T11:00:00Z');
 const WHATSAPP_ONLY = { reminders: [{ offsetDays: 0, enabled: true, channels: { email: true, whatsapp: true } }], manual: { email: false, whatsapp: true } };
 
-const notice = fakeNotice({ whatsappAvailable: true });
+const notice = fakeNotice({ whatsappAvailable: true, ownAvailable: true });
 const { context, sent } = notice;
 const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
 const accounts = createAccountService({ db, avatarFiles: bucket, proofFiles: bucket, whatsappInstances: { get: async () => null, remove: async () => undefined } } as unknown as Service.Context<AccountService>);
@@ -214,6 +214,26 @@ describe('WhatsApp notices', () => {
 
       deepEqual(await notifyCharge(db, context, closed.id, NoticeTemplate.Reminder, clock, 0), { channels: ['email'], dropped: [{ channel: 'whatsapp', reason: 'sender_offline' }] });
       deepEqual(await reminderPreview(db, OWNER, closed.id, context), { channels: [], dropped: [{ channel: 'whatsapp', reason: 'sender_offline' }] });
+    } finally {
+      await AccountRepository.setWhatsappSender(db, OWNER, WhatsappSender.Receivy, now);
+      await WhatsappInstanceRepository.remove(db, instance.id);
+    }
+  });
+
+  it('reaches the own sender even with the Receivy transport off, as long as Evolution is configured and the instance is open', async () => {
+    const ownNotice = fakeNotice({ whatsappAvailable: false, ownAvailable: true });
+    const now = new Date(clock).toISOString();
+    const instance = await WhatsappInstanceRepository.insert(db, { ownerId: OWNER, name: `rcv_${OWNER}`, token: 'tok', webhookSecret: 'sec', now });
+
+    await WhatsappInstanceRepository.setState(db, instance.id, { state: WhatsappInstanceState.Open, phone: '5511988887777', connectedAt: now }, now);
+    await AccountRepository.setWhatsappSender(db, OWNER, WhatsappSender.Own, now);
+
+    try {
+      const { id } = await charge(OWNER);
+
+      const result = await notifyCharge(db, ownNotice.context, id, NoticeTemplate.Reminder, clock, 0);
+
+      ok(result.channels.includes(NoticeChannel.WhatsApp));
     } finally {
       await AccountRepository.setWhatsappSender(db, OWNER, WhatsappSender.Receivy, now);
       await WhatsappInstanceRepository.remove(db, instance.id);

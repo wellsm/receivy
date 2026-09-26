@@ -7,7 +7,7 @@ import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
 import type { Db, DbClient } from '../../database';
 import { WhatsappInstanceRepository } from '../../notifications/repositories/whatsapp-instance';
-import { whatsappAvailableFrom } from '../../notifications/services/planner';
+import { evolutionAvailableFrom, whatsappAvailableFrom } from '../../notifications/services/planner';
 import type { WhatsappInstanceService } from '../../notifications/services/whatsapp-instance';
 import { cycleOf, whatsappReach } from '../../notifications/services/whatsapp-quota';
 import { SubscriptionRepository } from '../../plans/repositories/subscription';
@@ -28,7 +28,11 @@ export type AccountClient = {
 };
 
 /** The owner's WhatsApp as the settings screen shows it: which number, how the own one is doing, and the cycle quota. */
-export async function whatsappSettings(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string }): Promise<WhatsappSettings> {
+export async function whatsappSettings(
+  db: DbClient,
+  userId: string,
+  variables: { WHATSAPP_TRANSPORT?: string; EVOLUTION_API_URL?: string; EVOLUTION_API_KEY?: string }
+): Promise<WhatsappSettings> {
   const now = new Date();
   const sender = await AccountRepository.whatsappSender(db, userId);
   const row = await WhatsappInstanceRepository.byOwner(db, userId);
@@ -37,6 +41,7 @@ export async function whatsappSettings(db: DbClient, userId: string, variables: 
 
   return {
     available: whatsappAvailableFrom(variables),
+    ownAvailable: evolutionAvailableFrom(variables),
     sender,
     instance: row ? { state: row.state, phone: row.phone ?? null, qr: row.qr ?? null, pairingCode: row.pairing_code ?? null, connectedAt: row.connected_at ?? null, disconnectedAt: row.disconnected_at ?? null } : null,
     quota: reach.quotaLimit > 0 ? { used: reach.quotaLimit - reach.quotaLeft, limit: reach.quotaLimit, cycleEnd: subscription?.current_period_end ? cycleOf(subscription.current_period_end, now).to : null } : null
@@ -96,6 +101,8 @@ export declare class AccountService extends Factory.Service<AccountClient> {
 
   variables: {
     WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+    EVOLUTION_API_URL: Environment.VariableOrValue<'EVOLUTION_API_URL', 'http://127.0.0.1:8080'>;
+    EVOLUTION_API_KEY: Environment.VariableOrValue<'EVOLUTION_API_KEY', 'disabled'>;
   };
 
   services: {

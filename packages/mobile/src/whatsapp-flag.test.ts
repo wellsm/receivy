@@ -1,7 +1,7 @@
 import { PlanTier, WhatsappInstanceState, WhatsappSender, type WhatsappInstanceView, type WhatsappSettings } from "@receivy/common";
 import { whatsappSubtitle } from "@/whatsapp-flag";
 
-const receivy: WhatsappSettings = { available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: null } };
+const receivy: WhatsappSettings = { available: true, ownAvailable: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: null } };
 
 function own(state: WhatsappInstanceState): WhatsappSettings {
   const instance: WhatsappInstanceView = { state, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: null, disconnectedAt: null };

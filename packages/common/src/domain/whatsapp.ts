@@ -19,6 +19,8 @@ export type WhatsappQuota = { used: number; limit: number; cycleEnd: string | nu
 export type WhatsappSettings = {
   /** Whether any WhatsApp transport is switched on in this environment. */
   available: boolean;
+  /** Whether the own-number path (Evolution) is configured in this environment. */
+  ownAvailable: boolean;
   sender: WhatsappSender;
   instance: WhatsappInstanceView | null;
   /** Null when the plan has no WhatsApp quota (Free). */

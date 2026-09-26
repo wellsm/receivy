@@ -215,7 +215,7 @@ describe('account lifecycle on dedicated PostgreSQL', () => {
       manual: { email: false, whatsapp: true }
     };
 
-    const whatsapp = { available: false, sender: WhatsappSender.Receivy, instance: null, quota: null };
+    const whatsapp = { available: false, ownAvailable: false, sender: WhatsappSender.Receivy, instance: null, quota: null };
 
     deepEqual(await accounts.reminders(owner), { config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false, whatsapp });
     deepEqual(await accounts.saveReminders(owner, config), { config, inherited: false, whatsappAvailable: false, whatsapp });

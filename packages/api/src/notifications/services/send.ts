@@ -207,6 +207,7 @@ export async function sendChargeNotice(
     target,
     contact: reach,
     whatsappAvailable: context.config.whatsappAvailable,
+    ownAvailable: context.config.ownAvailable,
     sender: sender.sender,
     instanceOpen: sender.instanceOpen,
     quotaLeft: sender.quotaLeft

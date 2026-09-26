@@ -14,6 +14,8 @@ export type ResolveInput = {
   target: ReachTarget;
   contact: ReachContact;
   whatsappAvailable: boolean;
+  /** Whether the own-number path (Evolution) is configured in this environment. */
+  ownAvailable: boolean;
   /** Whose number the owner sends from, and its state, as `whatsappReach` reads them. */
   sender: WhatsappSender;
   instanceOpen: boolean;
@@ -39,12 +41,16 @@ function whatsappDrop(input: ResolveInput): DropReason | null {
     return DropReason.OptedOut;
   }
 
-  if (!input.whatsappAvailable) {
-    return DropReason.Unavailable;
+  if (input.sender === WhatsappSender.Own) {
+    if (!input.ownAvailable) {
+      return DropReason.Unavailable;
+    }
+
+    return input.instanceOpen ? null : DropReason.SenderOffline;
   }
 
-  if (input.sender === WhatsappSender.Own) {
-    return input.instanceOpen ? null : DropReason.SenderOffline;
+  if (!input.whatsappAvailable) {
+    return DropReason.Unavailable;
   }
 
   if (input.quotaLeft <= 0) {

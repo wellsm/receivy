@@ -26,7 +26,14 @@ export function whatsappSubtitle(
   plan: PlanTier | null,
   options: { receivy: boolean; evolution: boolean } = { receivy: receivyEnabled(), evolution: evolutionEnabled() },
 ): string {
-  if (!settings || !settings.available) {
+  if (!settings) {
+    return "Em breve";
+  }
+
+  const receivyUsable = options.receivy && settings.available;
+  const ownUsable = options.evolution && settings.ownAvailable;
+
+  if (!receivyUsable && !ownUsable) {
     return "Em breve";
   }
 
@@ -34,7 +41,8 @@ export function whatsappSubtitle(
     return "Disponível no plano Básico";
   }
 
-  if (options.receivy && settings.sender === WhatsappSender.Receivy) {
+  // Without a usable own option, a stored own sender still reads as the Receivy line.
+  if (receivyUsable && (settings.sender === WhatsappSender.Receivy || !ownUsable)) {
     return settings.quota
       ? `Pelo número do Receivy · ${settings.quota.used} de ${settings.quota.limit} neste ciclo`
       : "Pelo número do Receivy";
@@ -54,7 +62,7 @@ export function whatsappSubtitle(
     return "Seu número desconectou";
   }
 
-  if (options.evolution && !options.receivy) {
+  if (!receivyUsable) {
     return "Conecte seu número";
   }
 

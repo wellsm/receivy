@@ -562,6 +562,16 @@ export function WhatsappScreen({ client = whatsappClient }: Props) {
         </PlainCard>
       ) : evolutionOn ? (
         <PlainCard title="Meu número" disabled={locked || ownCapabilityLocked} lockedTag={ownCapabilityLocked ? "Em breve" : null}>
+          {!ownCapabilityLocked && settings?.instance && settings.sender !== WhatsappSender.Own ? (
+            <button
+              type="button"
+              className="self-start rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary"
+              disabled={locked}
+              onClick={() => void select(WhatsappSender.Own)}
+            >
+              Usar este número
+            </button>
+          ) : null}
           {ownCapabilityLocked ? null : <OwnNumberCard settings={settings} client={client} disabled={locked} onChange={setSettings} />}
         </PlainCard>
       ) : null}

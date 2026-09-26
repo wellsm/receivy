@@ -604,6 +604,18 @@ export function WhatsappScreen({ client = accountClient, plans = financialClient
             </PlainCard>
           ) : evolutionOn ? (
             <PlainCard title="Meu número" disabled={locked || ownCapabilityLocked} lockedTag={ownCapabilityLocked ? "Em breve" : null}>
+              {!ownCapabilityLocked && settings?.instance && settings.sender !== WhatsappSender.Own ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Usar este número"
+                  accessibilityState={{ disabled: locked }}
+                  disabled={locked}
+                  onPress={() => void select(WhatsappSender.Own)}
+                  className="min-h-11 items-center justify-center rounded-xl bg-primary px-4"
+                >
+                  <Text className="font-sans text-sm font-semibold text-on-primary">Usar este número</Text>
+                </Pressable>
+              ) : null}
               {ownCapabilityLocked ? null : <OwnNumberCard settings={settings} client={client} onChange={setSettings} disabled={locked} />}
             </PlainCard>
           ) : null}

@@ -135,6 +135,19 @@ describe("WhatsappScreen", () => {
     expect(screen.queryByText(/mensagens neste ciclo/)).not.toBeInTheDocument();
   });
 
+  it("switches the plain own-number card back to own with Usar este número, then hides the button", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+
+    const calls = arrange({ ...receivy, available: false, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null } });
+
+    render(<WhatsappScreen />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Usar este número" }));
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Usar este número" })).not.toBeInTheDocument());
+    expect(calls.some((call) => call.path.endsWith("/whatsapp/sender") && call.method === "PATCH" && (call.body as { sender: string }).sender === "own")).toBe(true);
+  });
+
   it("disables the own-number radio and tags it Em breve when the capability is off, with both flags on", async () => {
     arrange({ ...receivy, ownAvailable: false });
 

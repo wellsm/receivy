@@ -273,6 +273,23 @@ describe('WhatsApp notices', () => {
     equal(settings.whatsappAvailable, false);
   });
 
+  it('unlocks the reminder chips in an Evolution-only deployment', async () => {
+    const variables = { WHATSAPP_TRANSPORT: 'disabled', EVOLUTION_API_URL: 'http://evo', EVOLUTION_API_KEY: 'k' };
+    const evolutionOnly = createAccountService({
+      db,
+      avatarFiles: bucket,
+      proofFiles: bucket,
+      whatsappInstances: { get: async () => null, remove: async () => undefined },
+      variables
+    } as unknown as Service.Context<AccountService>);
+
+    const settings = await evolutionOnly.reminders(OWNER);
+
+    equal(settings.whatsappAvailable, true);
+    equal(settings.whatsapp.available, false);
+    equal(settings.whatsapp.ownAvailable, true);
+  });
+
   it('exposes the cycle quota on the settings: null on free, used/limit on basic', async () => {
     const basic = await accounts.reminders(OWNER);
     const free = await accounts.reminders(FREE);

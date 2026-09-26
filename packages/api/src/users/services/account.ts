@@ -49,7 +49,7 @@ export async function whatsappSettings(
 }
 
 /** What actually fires today, or the system default the account has not customised yet. */
-async function reminderSettings(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string }): Promise<ReminderSettings> {
+async function reminderSettings(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string; EVOLUTION_API_URL?: string; EVOLUTION_API_KEY?: string }): Promise<ReminderSettings> {
   const row = await AccountRepository.reminderConfig(db, userId);
 
   if (!row) {
@@ -59,10 +59,10 @@ async function reminderSettings(db: DbClient, userId: string, variables: { WHATS
   const config = parseReminderConfig(row.reminder_config);
   const whatsapp = await whatsappSettings(db, userId, variables);
 
-  return { config: config ?? SYSTEM_REMINDER_CONFIG, inherited: config === null, whatsappAvailable: whatsapp.available, whatsapp };
+  return { config: config ?? SYSTEM_REMINDER_CONFIG, inherited: config === null, whatsappAvailable: whatsapp.available || whatsapp.ownAvailable, whatsapp };
 }
 
-async function saveReminders(db: DbClient, userId: string, input: ReminderConfig, variables: { WHATSAPP_TRANSPORT?: string }): Promise<ReminderSettings> {
+async function saveReminders(db: DbClient, userId: string, input: ReminderConfig, variables: { WHATSAPP_TRANSPORT?: string; EVOLUTION_API_URL?: string; EVOLUTION_API_KEY?: string }): Promise<ReminderSettings> {
   let json: string;
 
   try {
@@ -83,7 +83,7 @@ async function saveReminders(db: DbClient, userId: string, input: ReminderConfig
   return reminderSettings(db, userId, variables);
 }
 
-async function clearReminders(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string }): Promise<ReminderSettings> {
+async function clearReminders(db: DbClient, userId: string, variables: { WHATSAPP_TRANSPORT?: string; EVOLUTION_API_URL?: string; EVOLUTION_API_KEY?: string }): Promise<ReminderSettings> {
   await db.transaction(async (tx) => {
     await AccountRepository.lock(tx, userId);
 

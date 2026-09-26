@@ -1,11 +1,10 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Cron } from '@ez4/scheduler';
-import { checkoutClients } from '../../charges/services/payment-link';
 import type { EmailService } from '../../common/services/email/service';
 import type { Db } from '../../database';
 import type { ChargeNotifyScheduler } from '../../notifications/schedulers/charge-notify';
-import { notificationConfigFrom } from '../../notifications/services/planner';
-import { notificationTransport } from '../../notifications/services/transport';
+import { noticeContext } from '../../notifications/services/context';
+import type { WhatsappService } from '../../vendors/whatsapp/service';
 import { materializeDueBillings, settleRegistered } from '../services/materialize';
 
 /**
@@ -29,6 +28,7 @@ export declare class BillingCron extends Cron.Service {
   services: {
     db: Environment.Service<Db>;
     email: Environment.Service<EmailService>;
+    whatsapp: Environment.Service<WhatsappService>;
     chargeNotifyScheduler: Environment.Service<ChargeNotifyScheduler>;
     variables: Environment.ServiceVariables;
   };
@@ -45,20 +45,21 @@ export declare class BillingCron extends Cron.Service {
     PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
     PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
     PUBLIC_LINK_HMAC_SECRET: Environment.Variable<'PUBLIC_LINK_HMAC_SECRET'>;
+    WHATSAPP_TRANSPORT: Environment.VariableOrValue<'WHATSAPP_TRANSPORT', 'disabled'>;
+    EVOLUTION_API_URL: Environment.VariableOrValue<'EVOLUTION_API_URL', 'http://127.0.0.1:8080'>;
+    EVOLUTION_API_KEY: Environment.VariableOrValue<'EVOLUTION_API_KEY', 'disabled'>;
+    WHATSAPP_TEMPLATE_INITIAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_INITIAL', 'receivy_charge_initial'>;
+    WHATSAPP_TEMPLATE_REMINDER: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_REMINDER', 'receivy_charge_reminder'>;
+    WHATSAPP_TEMPLATE_MANUAL: Environment.VariableOrValue<'WHATSAPP_TEMPLATE_MANUAL', 'receivy_charge_manual'>;
   };
 }
 
 export async function handler(
   _request: Cron.Incoming<null>,
-  { db, variables, email, chargeNotifyScheduler }: Service.Context<BillingCron>
+  { db, variables, email, whatsapp }: Service.Context<BillingCron>
 ): Promise<void> {
   const now = new Date();
-  const notice = {
-    config: notificationConfigFrom(variables),
-    transport: notificationTransport(variables, globalThis.fetch, email),
-    notify: chargeNotifyScheduler,
-    links: checkoutClients(variables)
-  };
+  const notice = noticeContext({ variables, email, whatsapp });
 
   const materialized = await materializeDueBillings(db, notice, now);
   // After the sweep: the occurrence it just created is already paid, and this pays what came due since yesterday.

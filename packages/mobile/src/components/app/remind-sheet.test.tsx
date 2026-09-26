@@ -51,4 +51,24 @@ describe("RemindSheet", () => {
     expect(screen.getByText("Vai por: notificação no app, e-mail")).toBeTruthy();
     expect(screen.queryByText(/WhatsApp/)).toBeNull();
   });
+
+  it("keeps WhatsApp in the drops with only the Evolution flag on", async () => {
+    delete process.env.EXPO_PUBLIC_WHATSAPP_ENABLED;
+    process.env.EXPO_PUBLIC_EVOLUTION_ENABLED = "true";
+
+    await render(
+      <RemindSheet
+        charge={summary()}
+        today="2026-10-01"
+        loading={false}
+        preview={{ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }}
+        onSend={jest.fn()}
+        onClose={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/WhatsApp/)).toBeTruthy();
+
+    delete process.env.EXPO_PUBLIC_EVOLUTION_ENABLED;
+  });
 });

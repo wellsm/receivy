@@ -145,4 +145,18 @@ describe("RemindersScreen", () => {
       }),
     );
   });
+
+  it("keeps the WhatsApp channel option with only the Evolution flag on", async () => {
+    process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "false";
+    process.env.EXPO_PUBLIC_EVOLUTION_ENABLED = "true";
+
+    const api = client({ reminders: jest.fn().mockResolvedValue({ config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: true }) });
+
+    await render(<RemindersScreen client={api} plans={plans} />);
+    await fireEvent.press(await screen.findByLabelText("Editar lembrete 1"));
+
+    expect(screen.getByLabelText("whatsapp no lembrete 1")).toBeTruthy();
+
+    delete process.env.EXPO_PUBLIC_EVOLUTION_ENABLED;
+  });
 });

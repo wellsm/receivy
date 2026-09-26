@@ -28,10 +28,12 @@ const plans = (plan = PlanTier.Basic) => ({ plan: jest.fn().mockResolvedValue({ 
 describe("WhatsappScreen", () => {
   beforeEach(() => {
     process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "true";
+    process.env.EXPO_PUBLIC_EVOLUTION_ENABLED = "true";
   });
 
   afterEach(() => {
     delete process.env.EXPO_PUBLIC_WHATSAPP_ENABLED;
+    delete process.env.EXPO_PUBLIC_EVOLUTION_ENABLED;
   });
 
   it("locks both cards on the free plan and points to the site", async () => {
@@ -59,12 +61,41 @@ describe("WhatsappScreen", () => {
     expect(screen.getByText(/Conectado ao/)).toBeTruthy();
   });
 
-  it("renders nothing with the kill switch off", async () => {
+  it("renders nothing with both flags off", async () => {
     process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "false";
+    process.env.EXPO_PUBLIC_EVOLUTION_ENABLED = "false";
 
     const { toJSON } = await render(<WhatsappScreen client={client() as never} plans={plans()} />);
 
     expect(toJSON()).toBeNull();
+  });
+
+  it("shows only the Receivy quota card, with no radios and no own-number option, when only that flag is on", async () => {
+    process.env.EXPO_PUBLIC_EVOLUTION_ENABLED = "false";
+
+    await render(<WhatsappScreen client={client() as never} plans={plans()} />);
+
+    expect(await screen.findByText("37 de 150 mensagens neste ciclo")).toBeTruthy();
+    expect(screen.queryByLabelText("Enviar por")).toBeNull();
+    expect(screen.queryByLabelText("Meu número")).toBeNull();
+  });
+
+  it("shows only the own-number card, with no radios and no quota line, when only the Evolution flag is on", async () => {
+    process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "false";
+
+    await render(<WhatsappScreen client={client({ ...receivy, instance: null }) as never} plans={plans()} />);
+
+    expect(await screen.findByLabelText(/Entendo que este canal não é oficial/)).toBeTruthy();
+    expect(screen.queryByLabelText("Enviar por")).toBeNull();
+    expect(screen.queryByText(/mensagens neste ciclo/)).toBeNull();
+  });
+
+  it("disables the own-number radio and tags it Em breve when the capability is off, with both flags on", async () => {
+    await render(<WhatsappScreen client={client({ ...receivy, ownAvailable: false }) as never} plans={plans()} />);
+
+    expect(await screen.findByText("37 de 150 mensagens neste ciclo")).toBeTruthy();
+    expect(screen.getByLabelText("Meu número").props.accessibilityState?.disabled).toBe(true);
+    expect(screen.getByText("Em breve")).toBeTruthy();
   });
 
   it("prefills the phone, keeps Conectar disabled until accepted, then shows the pairing code", async () => {

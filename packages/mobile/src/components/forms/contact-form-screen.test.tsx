@@ -406,6 +406,19 @@ describe("ContactFormScreen", () => {
     await waitFor(() => expect(client.save).toHaveBeenCalledWith({ name: "Ana" }, undefined));
   });
 
+  it("keeps the WhatsApp consent switch with only the Evolution flag on", async () => {
+    process.env.EXPO_PUBLIC_WHATSAPP_ENABLED = "false";
+    process.env.EXPO_PUBLIC_EVOLUTION_ENABLED = "true";
+
+    const client = contactsApi();
+
+    await render(<ContactFormScreen client={client} />);
+
+    expect(screen.getByLabelText("Essa pessoa concordou em receber cobranças por WhatsApp")).toBeTruthy();
+
+    delete process.env.EXPO_PUBLIC_EVOLUTION_ENABLED;
+  });
+
   it("freezes the WhatsApp number the person filed themselves", async () => {
     const client = contactsApi(contact({ phone: "+5511987654321", phoneSource: PhoneSource.Person }));
 

@@ -379,6 +379,21 @@ describe("ChargeDetailScreen", () => {
     expect(screen.queryByText(/WhatsApp/)).not.toBeInTheDocument();
   });
 
+  it("keeps WhatsApp in the reminder preview with only the Evolution flag on", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "true");
+    serve(charge({ direction: Direction.Receivable }), {
+      "GET /api/financial/charges/charge/reminders/preview": () =>
+        Response.json({ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }),
+    });
+
+    render(<ChargeDetailScreen id="charge" />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
+
+    expect(await screen.findByText(/WhatsApp/)).toBeInTheDocument();
+  });
+
   it("disables sending when nobody is reachable", async () => {
     serve(charge({ direction: Direction.Receivable }), {
       "GET /api/financial/charges/charge/reminders/preview": () => Response.json({ channels: [], dropped: [{ channel: NoticeChannel.Email, reason: DropReason.NoEmail }] }),

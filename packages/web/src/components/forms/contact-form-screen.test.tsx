@@ -156,6 +156,16 @@ it("hides the WhatsApp consent checkbox and omits the field when the kill switch
   expect(body).toEqual({ name: "Ana Souza" });
 });
 
+it("keeps the WhatsApp consent checkbox with only the Evolution flag on", async () => {
+  vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+  vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "true");
+
+  api();
+  render(<ContactFormScreen />);
+
+  expect(screen.getByLabelText("Essa pessoa concordou em receber cobranças por WhatsApp")).toBeInTheDocument();
+});
+
 it("loads a contact for editing and returns to its ledger", async () => {
   const sent = api();
 

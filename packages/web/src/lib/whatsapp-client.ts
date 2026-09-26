@@ -1,6 +1,7 @@
 import { PlanTier, WhatsappInstanceState, WhatsappSender, type WhatsappInstanceView, type WhatsappSettings } from "@receivy/common";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
+import { evolutionEnabled, receivyEnabled } from "@/lib/whatsapp-flag";
 
 const LOAD_ERROR = "Não foi possível carregar o WhatsApp.";
 
@@ -34,7 +35,11 @@ export const whatsappClient = {
 export type WhatsappClient = typeof whatsappClient;
 
 /** The hub row subtitle, one line per state (spec §4). */
-export function whatsappSubtitle(settings: WhatsappSettings | null, plan: PlanTier | null): string {
+export function whatsappSubtitle(
+  settings: WhatsappSettings | null,
+  plan: PlanTier | null,
+  options: { receivy: boolean; evolution: boolean } = { receivy: receivyEnabled(), evolution: evolutionEnabled() },
+): string {
   if (!settings || !settings.available) {
     return "Em breve";
   }
@@ -43,7 +48,7 @@ export function whatsappSubtitle(settings: WhatsappSettings | null, plan: PlanTi
     return "Disponível no plano Básico";
   }
 
-  if (settings.sender === WhatsappSender.Receivy) {
+  if (options.receivy && settings.sender === WhatsappSender.Receivy) {
     return settings.quota
       ? `Pelo número do Receivy · ${settings.quota.used} de ${settings.quota.limit} neste ciclo`
       : "Pelo número do Receivy";
@@ -61,6 +66,10 @@ export function whatsappSubtitle(settings: WhatsappSettings | null, plan: PlanTi
 
   if (instance?.state === WhatsappInstanceState.Closed) {
     return "Seu número desconectou";
+  }
+
+  if (options.evolution && !options.receivy) {
+    return "Conecte seu número";
   }
 
   return "Pelo seu número";

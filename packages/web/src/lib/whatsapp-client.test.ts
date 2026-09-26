@@ -10,16 +10,21 @@ function own(state: WhatsappInstanceState): WhatsappSettings {
   return { ...receivy, sender: WhatsappSender.Own, instance };
 }
 
+const both = { receivy: true, evolution: true };
+
 describe("whatsappSubtitle", () => {
-  it.each<[string, WhatsappSettings | null, PlanTier | null, string]>([
-    ["not loaded", null, PlanTier.Basic, "Em breve"],
-    ["unavailable", { ...receivy, available: false }, PlanTier.Basic, "Em breve"],
-    ["free plan", receivy, PlanTier.Free, "Disponível no plano Básico"],
-    ["receivy number", receivy, PlanTier.Basic, "Pelo número do Receivy · 37 de 150 neste ciclo"],
-    ["own open", own(WhatsappInstanceState.Open), PlanTier.Basic, "Pelo seu número · conectado"],
-    ["own pending", own(WhatsappInstanceState.Pending), PlanTier.Basic, "Pelo seu número · aguardando pareamento"],
-    ["own closed", own(WhatsappInstanceState.Closed), PlanTier.Basic, "Seu número desconectou"],
-  ])("%s", (_name, settings, plan, expected) => {
-    expect(whatsappSubtitle(settings, plan)).toBe(expected);
+  it.each<[string, WhatsappSettings | null, PlanTier | null, { receivy: boolean; evolution: boolean }, string]>([
+    ["not loaded", null, PlanTier.Basic, both, "Em breve"],
+    ["unavailable", { ...receivy, available: false }, PlanTier.Basic, both, "Em breve"],
+    ["free plan", receivy, PlanTier.Free, both, "Disponível no plano Básico"],
+    ["receivy number", receivy, PlanTier.Basic, both, "Pelo número do Receivy · 37 de 150 neste ciclo"],
+    ["own open", own(WhatsappInstanceState.Open), PlanTier.Basic, both, "Pelo seu número · conectado"],
+    ["own pending", own(WhatsappInstanceState.Pending), PlanTier.Basic, both, "Pelo seu número · aguardando pareamento"],
+    ["own closed", own(WhatsappInstanceState.Closed), PlanTier.Basic, both, "Seu número desconectou"],
+    ["receivy only", receivy, PlanTier.Basic, { receivy: true, evolution: false }, "Pelo número do Receivy · 37 de 150 neste ciclo"],
+    ["evolution only, no instance", { ...receivy, instance: null }, PlanTier.Basic, { receivy: false, evolution: true }, "Conecte seu número"],
+    ["evolution only, open instance", own(WhatsappInstanceState.Open), PlanTier.Basic, { receivy: false, evolution: true }, "Pelo seu número · conectado"],
+  ])("%s", (_name, settings, plan, options, expected) => {
+    expect(whatsappSubtitle(settings, plan, options)).toBe(expected);
   });
 });

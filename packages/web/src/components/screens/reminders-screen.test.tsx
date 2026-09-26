@@ -146,4 +146,15 @@ describe("RemindersScreen", () => {
       expect(body.manual).toEqual({ email: true, whatsapp: false });
     });
   });
+
+  it("keeps the WhatsApp channel option with only the Evolution flag on", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "true");
+    arrange({ config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: true }, "basic");
+    render(<RemindersScreen />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Editar lembrete 1" }));
+
+    expect(screen.getByRole("radio", { name: "whatsapp no lembrete 1" })).toBeInTheDocument();
+  });
 });

@@ -7,7 +7,7 @@ import { type KeyboardEvent, type ReactNode, type RefObject, useCallback, useEff
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { type WhatsappClient, whatsappClient } from "@/lib/whatsapp-client";
-import { whatsappEnabled } from "@/lib/whatsapp-flag";
+import { evolutionEnabled, receivyEnabled, whatsappEnabled } from "@/lib/whatsapp-flag";
 
 type Props = { client?: WhatsappClient };
 
@@ -35,6 +35,8 @@ type SenderCardProps = {
   value: WhatsappSender;
   selected: WhatsappSender;
   disabled: boolean;
+  /** "Em breve" tag text when the flag is on but the API capability for this sender is off; null otherwise. */
+  lockedTag?: string | null;
   title: string;
   /** Roving tabindex: 0 for the checked (or first enabled) card in the radiogroup, -1 for the other. */
   tabIndex: number;
@@ -44,8 +46,12 @@ type SenderCardProps = {
   children: ReactNode;
 };
 
+function LockedTag({ children }: { children: ReactNode }) {
+  return <span className="ml-auto rounded-md bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted">{children}</span>;
+}
+
 /** The radio is the header only; the body is its sibling, so its buttons and checkbox stay reachable on their own. */
-function SenderCard({ value, selected, disabled, title, tabIndex, cardRef, onSelect, onArrow, children }: SenderCardProps) {
+function SenderCard({ value, selected, disabled, lockedTag = null, title, tabIndex, cardRef, onSelect, onArrow, children }: SenderCardProps) {
   const active = value === selected;
 
   function select() {
@@ -94,6 +100,7 @@ function SenderCard({ value, selected, disabled, title, tabIndex, cardRef, onSel
           {active ? <span className="size-2 rounded-full bg-primary" /> : null}
         </span>
         <p className="m-0 font-semibold text-ink">{title}</p>
+        {lockedTag ? <LockedTag>{lockedTag}</LockedTag> : null}
       </div>
       {children}
     </div>
@@ -365,6 +372,36 @@ export function maskPhone(phone: string | null): string {
   return `+${phone.slice(0, 2)} ${phone.slice(2, 4)} 9····-${phone.slice(-4)}`;
 }
 
+function ReceivyCardBody({ settings }: { settings: WhatsappSettings | null }) {
+  return (
+    <>
+      {settings?.quota ? (
+        <>
+          <p className="m-0 text-sm text-ink">{`${settings.quota.used} de ${settings.quota.limit} mensagens neste ciclo`}</p>
+          <QuotaBar used={settings.quota.used} limit={settings.quota.limit} />
+          <p className="m-0 text-xs text-muted">{settings.quota.cycleEnd ? `Renova em ${chargeDateText(settings.quota.cycleEnd.slice(0, 10))}` : "Renova todo mês"}</p>
+        </>
+      ) : null}
+      <p className="m-0 text-xs text-muted">Número oficial, mensagens com modelos aprovados pela Meta. Seus contatos precisam ter aceitado receber.</p>
+    </>
+  );
+}
+
+type PlainCardProps = { title: string; disabled: boolean; lockedTag: string | null; children: ReactNode };
+
+/** Only one sender option is enabled: no radiogroup, just the card body (spec: no radio header/indicator). */
+function PlainCard({ title, disabled, lockedTag, children }: PlainCardProps) {
+  return (
+    <div className={`flex flex-col gap-2 rounded-2xl border border-outline p-4 ${disabled ? "opacity-60" : ""}`}>
+      <div className="flex items-center gap-3">
+        <p className="m-0 font-semibold text-ink">{title}</p>
+        {lockedTag ? <LockedTag>{lockedTag}</LockedTag> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 const CARD_ORDER = [WhatsappSender.Receivy, WhatsappSender.Own] as const;
 
 export function WhatsappScreen({ client = whatsappClient }: Props) {
@@ -398,9 +435,17 @@ export function WhatsappScreen({ client = whatsappClient }: Props) {
     return null;
   }
 
+  const receivyOn = receivyEnabled();
+  const evolutionOn = evolutionEnabled();
+  const both = receivyOn && evolutionOn;
+
   const free = plan === PlanTier.Free;
   const locked = free || busy || !settings;
   const senderValue = settings?.sender ?? WhatsappSender.Receivy;
+
+  // A flag can be on while the API capability behind it is off; that card renders disabled with "Em breve".
+  const receivyCapabilityLocked = settings ? !settings.available : false;
+  const ownCapabilityLocked = settings ? !settings.ownAvailable : false;
 
   function cardRefFor(sender: WhatsappSender): RefObject<HTMLDivElement | null> {
     return sender === WhatsappSender.Receivy ? receivyCardRef : ownCardRef;
@@ -423,6 +468,15 @@ export function WhatsappScreen({ client = whatsappClient }: Props) {
 
     // Picking the own number without a pairing opens the connect flow instead (Task 5); the API switches on its own once it opens.
     if (sender === WhatsappSender.Own && !settings.instance) {
+      return;
+    }
+
+    // A capability-locked card ("Em breve") never switches, even from an arrow-key press.
+    if (sender === WhatsappSender.Receivy && receivyCapabilityLocked) {
+      return;
+    }
+
+    if (sender === WhatsappSender.Own && ownCapabilityLocked) {
       return;
     }
 
@@ -472,42 +526,45 @@ export function WhatsappScreen({ client = whatsappClient }: Props) {
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-3" role="radiogroup" aria-label="Enviar por">
-        <SenderCard
-          value={WhatsappSender.Receivy}
-          selected={senderValue}
-          disabled={locked}
-          title="Número do Receivy"
-          tabIndex={tabIndexFor(WhatsappSender.Receivy)}
-          cardRef={receivyCardRef}
-          onSelect={(sender) => void select(sender)}
-          onArrow={(direction) => moveSelection(WhatsappSender.Receivy, direction)}
-        >
-          {settings?.quota ? (
-            <>
-              <p className="m-0 text-sm text-ink">{`${settings.quota.used} de ${settings.quota.limit} mensagens neste ciclo`}</p>
-              <QuotaBar used={settings.quota.used} limit={settings.quota.limit} />
-              <p className="m-0 text-xs text-muted">
-                {settings.quota.cycleEnd ? `Renova em ${chargeDateText(settings.quota.cycleEnd.slice(0, 10))}` : "Renova todo mês"}
-              </p>
-            </>
-          ) : null}
-          <p className="m-0 text-xs text-muted">Número oficial, mensagens com modelos aprovados pela Meta. Seus contatos precisam ter aceitado receber.</p>
-        </SenderCard>
+      {both ? (
+        <div className="flex flex-col gap-3" role="radiogroup" aria-label="Enviar por">
+          <SenderCard
+            value={WhatsappSender.Receivy}
+            selected={senderValue}
+            disabled={locked || receivyCapabilityLocked}
+            lockedTag={receivyCapabilityLocked ? "Em breve" : null}
+            title="Número do Receivy"
+            tabIndex={tabIndexFor(WhatsappSender.Receivy)}
+            cardRef={receivyCardRef}
+            onSelect={(sender) => void select(sender)}
+            onArrow={(direction) => moveSelection(WhatsappSender.Receivy, direction)}
+          >
+            {receivyCapabilityLocked ? null : <ReceivyCardBody settings={settings} />}
+          </SenderCard>
 
-        <SenderCard
-          value={WhatsappSender.Own}
-          selected={senderValue}
-          disabled={locked}
-          title="Meu número"
-          tabIndex={tabIndexFor(WhatsappSender.Own)}
-          cardRef={ownCardRef}
-          onSelect={(sender) => void select(sender)}
-          onArrow={(direction) => moveSelection(WhatsappSender.Own, direction)}
-        >
-          <OwnNumberCard settings={settings} client={client} disabled={locked} onChange={setSettings} />
-        </SenderCard>
-      </div>
+          <SenderCard
+            value={WhatsappSender.Own}
+            selected={senderValue}
+            disabled={locked || ownCapabilityLocked}
+            lockedTag={ownCapabilityLocked ? "Em breve" : null}
+            title="Meu número"
+            tabIndex={tabIndexFor(WhatsappSender.Own)}
+            cardRef={ownCardRef}
+            onSelect={(sender) => void select(sender)}
+            onArrow={(direction) => moveSelection(WhatsappSender.Own, direction)}
+          >
+            {ownCapabilityLocked ? null : <OwnNumberCard settings={settings} client={client} disabled={locked} onChange={setSettings} />}
+          </SenderCard>
+        </div>
+      ) : receivyOn ? (
+        <PlainCard title="Número do Receivy" disabled={locked || receivyCapabilityLocked} lockedTag={receivyCapabilityLocked ? "Em breve" : null}>
+          {receivyCapabilityLocked ? null : <ReceivyCardBody settings={settings} />}
+        </PlainCard>
+      ) : evolutionOn ? (
+        <PlainCard title="Meu número" disabled={locked || ownCapabilityLocked} lockedTag={ownCapabilityLocked ? "Em breve" : null}>
+          {ownCapabilityLocked ? null : <OwnNumberCard settings={settings} client={client} disabled={locked} onChange={setSettings} />}
+        </PlainCard>
+      ) : null}
     </div>
   );
 }

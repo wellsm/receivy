@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 const fetchMock = vi.mocked(browserFetch);
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 
-const receivy = { available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } };
+const receivy = { available: true, ownAvailable: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } };
 const pending = { state: WhatsappInstanceState.Pending, phone: null, qr: "data:image/png;base64,QR", pairingCode: null, connectedAt: null, disconnectedAt: null };
 
 function arrange(settings: unknown = receivy, plan: PlanTier = PlanTier.Basic) {
@@ -40,7 +40,10 @@ function arrange(settings: unknown = receivy, plan: PlanTier = PlanTier.Basic) {
 }
 
 describe("WhatsappScreen", () => {
-  beforeEach(() => vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true"));
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true");
+    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "true");
+  });
   afterEach(() => {
     cleanup();
     vi.resetAllMocks();
@@ -98,13 +101,48 @@ describe("WhatsappScreen", () => {
     expect(calls.some((call) => call.method === "PATCH")).toBe(false);
   });
 
-  it("renders nothing with the kill switch off", () => {
+  it("renders nothing with both flags off", () => {
     vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "false");
     arrange();
 
     const { container } = render(<WhatsappScreen />);
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows only the Receivy quota card, with no radios and no own-number option, when only that flag is on", async () => {
+    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "false");
+    arrange();
+
+    render(<WhatsappScreen />);
+
+    expect(await screen.findByText("37 de 150 mensagens neste ciclo")).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByText("Meu número")).not.toBeInTheDocument();
+  });
+
+  it("shows only the own-number card, with no radios and no quota line, when only the Evolution flag is on", async () => {
+    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    arrange({ ...receivy, instance: null });
+
+    render(<WhatsappScreen />);
+
+    expect(await screen.findByRole("checkbox", { name: /Entendo que este canal não é oficial/ })).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.queryByText(/mensagens neste ciclo/)).not.toBeInTheDocument();
+  });
+
+  it("disables the own-number radio and tags it Em breve when the capability is off, with both flags on", async () => {
+    arrange({ ...receivy, ownAvailable: false });
+
+    render(<WhatsappScreen />);
+
+    expect(await screen.findByText("37 de 150 mensagens neste ciclo")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Meu número/ })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText("Em breve")).toBeInTheDocument();
   });
 
   it("keeps Conectar disabled until the risk checkbox is ticked, then posts the acceptance and shows the QR", async () => {

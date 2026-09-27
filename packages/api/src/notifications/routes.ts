@@ -3,6 +3,7 @@ import type { sessionAuthorizer } from '../common/authorizers/session';
 import type { manualReminderHandler } from './endpoints/manual-reminder';
 import type { registerDeviceHandler } from './endpoints/register-device';
 import type { reminderPreviewHandler } from './endpoints/reminder-preview';
+import type { getWhatsappGroupsHandler } from './endpoints/whatsapp-groups';
 import type { getWhatsappHandler } from './endpoints/whatsapp-get';
 import type { createWhatsappInstanceHandler } from './endpoints/whatsapp-instance-create';
 import type { deleteWhatsappInstanceHandler } from './endpoints/whatsapp-instance-delete';
@@ -31,5 +32,6 @@ export type NotificationRoutes = [
   Http.UseRoute<{ name: 'patchWhatsappSender'; path: 'PATCH /whatsapp/sender'; authorizer: typeof sessionAuthorizer; handler: typeof patchWhatsappSenderHandler }>,
   Http.UseRoute<{ name: 'createWhatsappInstance'; path: 'POST /whatsapp/instance'; authorizer: typeof sessionAuthorizer; handler: typeof createWhatsappInstanceHandler }>,
   Http.UseRoute<{ name: 'getWhatsappInstance'; path: 'GET /whatsapp/instance'; authorizer: typeof sessionAuthorizer; handler: typeof getWhatsappInstanceHandler }>,
-  Http.UseRoute<{ name: 'deleteWhatsappInstance'; path: 'DELETE /whatsapp/instance'; authorizer: typeof sessionAuthorizer; handler: typeof deleteWhatsappInstanceHandler }>
+  Http.UseRoute<{ name: 'deleteWhatsappInstance'; path: 'DELETE /whatsapp/instance'; authorizer: typeof sessionAuthorizer; handler: typeof deleteWhatsappInstanceHandler }>,
+  Http.UseRoute<{ name: 'getWhatsappGroups'; path: 'GET /whatsapp/groups'; authorizer: typeof sessionAuthorizer; handler: typeof getWhatsappGroupsHandler }>
 ];

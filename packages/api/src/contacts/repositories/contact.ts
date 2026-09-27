@@ -361,6 +361,23 @@ export namespace ContactRepository {
     return { phone: row.phone ?? undefined, consentAt: row.whatsapp_consent_at ?? undefined };
   }
 
+  /**
+   * Every phone that may reach each of `userIds` from `ownerId`'s agenda: the one the owner filed on the
+   * contact and the person's own. Only for matching people to WhatsApp groups, never for sending.
+   */
+  export async function phonesOf(db: DbClient, ownerId: string, userIds: string[]): Promise<Map<string, string[]>> {
+    if (!userIds.length) {
+      return new Map();
+    }
+
+    const { records } = await db.contacts.findMany({
+      select: { user_id: true, phone: true, user: { phone: true } },
+      where: { owner_id: ownerId, user_id: { isIn: userIds } }
+    });
+
+    return new Map(records.map((entry) => [entry.user_id, [entry.phone, entry.user?.phone].filter((phone): phone is string => Boolean(phone))]));
+  }
+
   /** The viewer's nicknames for `userIds`, by person; people the agenda has no nickname for are left out. */
   export async function nicknames(db: DbClient, viewerId: string, userIds: string[]): Promise<Map<string, string>> {
     if (!userIds.length) {

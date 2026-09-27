@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toWhatsappNumber } from './phone';
+import { toWhatsappNumber, whatsappNumberVariants } from './phone';
 
 describe('toWhatsappNumber', () => {
   it('strips the mask and adds the Brazilian country code when missing', () => {
@@ -16,3 +16,16 @@ describe('toWhatsappNumber', () => {
     expect(toWhatsappNumber('5511999999999999')).toBeNull();
   });
 });
+
+describe('whatsappNumberVariants', () => {
+  it('spells a Brazilian mobile with and without the ninth digit', () => {
+    expect(whatsappNumberVariants('5511988887777')).toEqual(['5511988887777', '551188887777']);
+    expect(whatsappNumberVariants('551188887777')).toEqual(['551188887777', '5511988887777']);
+  });
+
+  it('leaves landlines and foreign numbers alone', () => {
+    expect(whatsappNumberVariants('551133334444')).toEqual(['551133334444']);
+    expect(whatsappNumberVariants('14155550100')).toEqual(['14155550100']);
+  });
+});
+

@@ -35,3 +35,9 @@ export class WhatsappInstanceRequiredError extends ConflictError {
     super(message, 'WHATSAPP_INSTANCE_REQUIRED');
   }
 }
+
+export class WhatsappGroupsRequireInstanceError extends ConflictError {
+  constructor(message = 'Conecte seu número de WhatsApp para avisar num grupo.') {
+    super(message, 'WHATSAPP_INSTANCE_REQUIRED');
+  }
+}

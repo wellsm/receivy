@@ -1,4 +1,4 @@
-import type { AuthUser, AccountProfileInput, AvatarMime, AvatarUploadTicket, ReminderConfig, ReminderSettings, UserAvatar, WhatsappInstanceView, WhatsappSender, WhatsappSettings } from "@receivy/common";
+import type { AuthUser, AccountProfileInput, AvatarMime, AvatarUploadTicket, ReminderConfig, ReminderSettings, UserAvatar, WhatsappGroup, WhatsappInstanceView, WhatsappSender, WhatsappSettings } from "@receivy/common";
 import { apiErrorMessage } from "@receivy/common";
 import { authClient } from "@/auth/client";
 
@@ -42,6 +42,9 @@ export const accountClient = {
   connectWhatsapp: (input: { riskAccepted: true; phone: string }) => request<WhatsappInstanceView>("whatsapp/instance", { method: "POST", body: JSON.stringify(input) }, "Não deu para conectar agora."),
   disconnectWhatsapp: () => request<void>("whatsapp/instance", { method: "DELETE" }, "Não deu para desconectar agora."),
   setWhatsappSender: (sender: WhatsappSender) => request<{ sender: WhatsappSender }>("whatsapp/sender", { method: "PATCH", body: JSON.stringify({ sender }) }, "Não deu para trocar o remetente.").then((body) => body.sender),
+  /** The groups of the connected number; the ones holding every participant come first, marked `suggested`. */
+  whatsappGroups: (participants: string[]) =>
+    request<{ groups: WhatsappGroup[] }>(`whatsapp/groups?participants=${encodeURIComponent(participants.join(","))}`, undefined, "Não foi possível carregar os grupos.").then((body) => body.groups),
 };
 
 export type AccountClient = typeof accountClient;

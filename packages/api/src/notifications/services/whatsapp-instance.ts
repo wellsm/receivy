@@ -2,15 +2,17 @@ import { randomBytes } from 'node:crypto';
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
 import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
-import { PlanTier, WhatsappInstanceState, type WhatsappInstanceView, WhatsappSender } from '@receivy/common';
+import { PlanTier, type WhatsappGroup, WhatsappInstanceState, type WhatsappInstanceView, WhatsappSender } from '@receivy/common';
 import { EventRepository } from '../../common/repositories/events';
+import { ContactRepository } from '../../contacts/repositories/contact';
 import { EventableType } from '../../common/schemas/event';
 import type { Db, DbClient } from '../../database';
 import type { PlanClient, PlanService } from '../../plans/services/plan';
 import { AccountRepository } from '../../users/repositories/account';
+import { groupHasEveryone, parseEvolutionGroups } from '../../vendors/whatsapp/groups';
 import { toWhatsappNumber } from '../../vendors/whatsapp/phone';
 import type { EvolutionConnectionState } from '../../vendors/whatsapp/webhook';
-import { WhatsappInstanceRequiredError, WhatsappInstanceUnavailableError, WhatsappPlanRequiredError } from '../errors';
+import { WhatsappGroupsRequireInstanceError, WhatsappInstanceRequiredError, WhatsappInstanceUnavailableError, WhatsappPlanRequiredError } from '../errors';
 import { WhatsappInstanceRepository } from '../repositories/whatsapp-instance';
 import { pushToUser } from './direct';
 import { type NotificationTransport, notificationTransport } from './transport';
@@ -44,6 +46,11 @@ export type WhatsappInstanceClient = {
   /** From the Evolution webhook: the instance connected or dropped. */
   applyConnection(name: string, state: EvolutionConnectionState, phone?: string, now?: Date): Promise<void>;
   applyQr(name: string, qr: string, now?: Date): Promise<void>;
+  /**
+   * The groups the owner's connected number is in. A group with every one of `participantIds` (people
+   * from the owner's agenda, matched by phone) is `suggested`, and those come first.
+   */
+  groups(ownerId: string, participantIds: string[]): Promise<WhatsappGroup[]>;
 };
 
 export type InstanceDeps = {
@@ -336,6 +343,38 @@ async function applyQr(deps: InstanceDeps, name: string, qr: string, now: Date):
   await WhatsappInstanceRepository.setState(deps.db, row.id, { qr }, now.toISOString());
 }
 
+/**
+ * Asked with the instance's own token, like a message: the global key only manages instances. Only an
+ * open instance can list its groups; anything else is the owner's number not being connected.
+ */
+async function groups(deps: InstanceDeps, request: typeof fetch, ownerId: string, participantIds: string[]): Promise<WhatsappGroup[]> {
+  const row = await WhatsappInstanceRepository.byOwner(deps.db, ownerId);
+
+  if (!row || row.state !== WhatsappInstanceState.Open) {
+    throw new WhatsappGroupsRequireInstanceError();
+  }
+
+  const base = (deps.variables.EVOLUTION_API_URL ?? 'http://127.0.0.1:8080').replace(/\/+$/, '');
+  const response = await request(`${base}/group/fetchAllGroups/${encodeURIComponent(row.name)}?getParticipants=true`, {
+    method: 'GET',
+    headers: { apikey: row.token },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  }).catch(() => null);
+
+  if (!response?.ok) {
+    throw new WhatsappInstanceUnavailableError();
+  }
+
+  const listed = parseEvolutionGroups(await response.json().catch(() => []));
+  const phones = await ContactRepository.phonesOf(deps.db, ownerId, participantIds);
+  // Someone the agenda has no phone for can never be matched, so nothing is suggested for them.
+  const people = participantIds.map((id) => phones.get(id) ?? []);
+
+  return listed
+    .map((group) => ({ jid: group.jid, name: group.name, size: group.size, suggested: groupHasEveryone(group, people) }))
+    .sort((a, b) => Number(b.suggested) - Number(a.suggested) || a.name.localeCompare(b.name, 'pt-BR'));
+}
+
 /** The client behind the factory and the tests: everything it needs comes in `deps`. */
 export function createInstanceClient(deps: InstanceDeps): WhatsappInstanceClient {
   const request = deps.request ?? globalThis.fetch;
@@ -347,7 +386,8 @@ export function createInstanceClient(deps: InstanceDeps): WhatsappInstanceClient
     remove: (ownerId) => remove(deps, request, ownerId),
     setSender: (ownerId, sender) => setSender(deps, ownerId, sender),
     applyConnection: (name, state, phone, now = new Date()) => applyConnection(deps, transport, name, state, phone, now),
-    applyQr: (name, qr, now = new Date()) => applyQr(deps, name, qr, now)
+    applyQr: (name, qr, now = new Date()) => applyQr(deps, name, qr, now),
+    groups: (ownerId, participantIds) => groups(deps, request, ownerId, participantIds)
   };
 }
 

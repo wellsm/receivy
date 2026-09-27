@@ -50,6 +50,15 @@ function fakeDb() {
         state.lastEventPayload = data.payload;
       }
     },
+    // Ana (u1) is filed with a phone; Bruno (u2) has only his own, which predates the ninth digit.
+    contacts: {
+      findMany: async () => ({
+        records: [
+          { user_id: 'u1', phone: '(11) 98888-7777', user: { phone: null } },
+          { user_id: 'u2', phone: null, user: { phone: '+55 21 97777-6666' } }
+        ]
+      })
+    },
     // One active device, so the disconnect warning has somewhere to land.
     device_tokens: { findMany: async () => ({ records: [{ id: 'device-1', token: 'ExpoPushToken[fixture]' }] }) },
     transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db)
@@ -284,5 +293,47 @@ describe('WhatsApp instance service', () => {
     await expect(client.setSender(OWNER, WhatsappSender.Own)).rejects.toMatchObject({ status: 402 });
     expect(state.sender).toBe(WhatsappSender.Receivy);
     expect(state.events).toEqual([]);
+  });
+
+  it('lists the groups of the connected number with its own token, the ones holding every participant first', async () => {
+    const { db, state } = fakeDb();
+
+    state.instance = { id: 'i1', owner_id: OWNER, name: `rcv_${OWNER}`, token: 'instance-token', state: WhatsappInstanceState.Open };
+
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      Response.json([
+        { id: '120363000000000001@g.us', subject: 'Zeladoria', size: 40, participants: [{ id: '5511988887777@s.whatsapp.net' }] },
+        { id: '120363000000000002@g.us', subject: 'Creche Pet', size: 3, participants: [{ id: '5511988887777@s.whatsapp.net' }, { id: '552177776666@s.whatsapp.net' }, { id: '123@lid' }] },
+        { id: '5511999999999@s.whatsapp.net', subject: 'not a group' }
+      ])
+    );
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    expect(await client.groups(OWNER, ['u1', 'u2'])).toEqual([
+      { jid: '120363000000000002@g.us', name: 'Creche Pet', size: 3, suggested: true },
+      { jid: '120363000000000001@g.us', name: 'Zeladoria', size: 40, suggested: false }
+    ]);
+
+    const [url, init] = request.mock.calls[0]!;
+
+    expect(url).toBe(`http://evo/group/fetchAllGroups/rcv_${OWNER}?getParticipants=true`);
+    expect((init?.headers as Record<string, string>).apikey).toBe('instance-token');
+  });
+
+  it('refuses to list groups without an open instance and answers 503 when Evolution fails', async () => {
+    const { db, state } = fakeDb();
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 500 }));
+    const client = createInstanceClient({ db, plans: basic, variables, request });
+
+    await expect(client.groups(OWNER, [])).rejects.toMatchObject({ context: { code: 'WHATSAPP_INSTANCE_REQUIRED' } });
+
+    state.instance = { id: 'i1', owner_id: OWNER, name: `rcv_${OWNER}`, token: 't', state: WhatsappInstanceState.Closed };
+
+    await expect(client.groups(OWNER, [])).rejects.toMatchObject({ context: { code: 'WHATSAPP_INSTANCE_REQUIRED' } });
+    expect(request).not.toHaveBeenCalled();
+
+    state.instance = { ...state.instance, state: WhatsappInstanceState.Open };
+
+    await expect(client.groups(OWNER, [])).rejects.toMatchObject({ context: { code: 'WHATSAPP_INSTANCE_UNAVAILABLE' } });
   });
 });

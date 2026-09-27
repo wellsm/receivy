@@ -18,8 +18,11 @@ type DetailRowProps = {
   tone?: DetailTone;
   label: string;
   value: string;
-  /** "Alterar" on the creation column, "open" shows the chevron that lifts a dialog. */
-  action?: "alter" | "open";
+  /**
+   * "alter": "Alterar" on the creation column, the chevron below `md` where that column is the review step (6e).
+   * "edit": "Editar", back to a step. "open": the chevron that lifts a dialog.
+   */
+  action?: "alter" | "edit" | "open";
   /** What sits before the action: the participant avatars of the Divisão row. */
   trailing?: ReactNode;
   disabled?: boolean;
@@ -49,7 +52,9 @@ export function DetailRow({ icon: Icon, tone = "primary", label, value, action =
   return (
     <button ref={buttonRef} type="button" aria-label={label} disabled={disabled} onClick={onClick} className="flex min-h-[68px] w-full items-center gap-3 bg-transparent px-3.5 py-3 text-left disabled:opacity-60">
       {content}
-      {action === "alter" ? <span className="text-[13.5px] font-bold text-primary">Alterar</span> : <ChevronRight size={16} aria-hidden="true" className="shrink-0 text-muted" />}
+      {action === "edit" && <span className="text-[13.5px] font-bold text-primary">Editar</span>}
+      {action === "alter" && <span className="hidden text-[13.5px] font-bold text-primary md:inline">Alterar</span>}
+      {action !== "edit" && <ChevronRight size={16} aria-hidden="true" className={`shrink-0 text-muted ${action === "alter" ? "md:hidden" : ""}`} />}
     </button>
   );
 }

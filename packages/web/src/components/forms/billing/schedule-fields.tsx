@@ -117,21 +117,23 @@ export function AmountTitleFields({ draft, locked, frozen, onChange }: AmountTit
   return (
     <div className="flex flex-col gap-4">
       {/* Valor */}
-      <fieldset className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0" disabled={locked || frozen}>
-        <label htmlFor="billing-amount" className={LABEL_CLASS}>
+      {/* Below `md` the app's hero (6a): big, centered, the label under it; above, the boxed field of the columns (6f). */}
+      <fieldset className="m-0 flex min-w-0 flex-col items-center gap-1 border-0 px-0 py-2 md:items-stretch md:py-0" disabled={locked || frozen}>
+        <label htmlFor="billing-amount" className="order-last text-[12.5px] lowercase text-muted md:order-none md:ml-0.5 md:text-[11px] md:font-semibold md:uppercase md:tracking-[0.08em]">
           {AMOUNT_LABELS[draft.type]}
         </label>
-        <div className="flex items-baseline gap-1.5 rounded-2xl border border-outline bg-surface px-4 py-2.5">
-          <span aria-hidden="true" className="font-display text-base font-medium text-muted">
+        <div className="flex max-w-full items-baseline justify-center gap-1.5 md:justify-start md:rounded-2xl md:border md:border-outline md:bg-surface md:px-4 md:py-2.5">
+          <span aria-hidden="true" className="font-display text-lg font-semibold text-muted md:text-base md:font-medium">
             R$
           </span>
           <input
             id="billing-amount"
             inputMode="numeric"
             placeholder="0,00"
+            size={Math.max(4, formatAmountDigits(amountInputToDigits(draft.amount)).length)}
             value={formatAmountDigits(amountInputToDigits(draft.amount))}
             onChange={(event) => typeAmount(event.target.value)}
-            className="w-full min-w-0 border-0 bg-transparent p-0 font-display text-[30px] font-bold leading-none tracking-[-0.02em] text-ink tabular-nums outline-none disabled:opacity-60"
+            className="min-w-0 border-0 bg-transparent p-0 font-display text-[44px] font-bold leading-none tracking-[-0.02em] text-ink tabular-nums outline-none [field-sizing:content] disabled:opacity-60 md:w-full md:text-[30px] md:[field-sizing:fixed]"
           />
         </div>
         {installmentPreview && (

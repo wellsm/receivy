@@ -235,7 +235,7 @@ describe("accessibility of the main web screens", () => {
     expect(screen.queryByRole("radiogroup", { name: "Tipo de chave" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("E-mail Pix")).not.toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: "Divisão" })).not.toBeInTheDocument();
-    expect(screen.getByText("Escolha quem recebe.")).toBeInTheDocument();
+    expect(screen.getAllByText("Escolha quem recebe.")[0]).toBeInTheDocument();
 
     await expectNoViolations(container);
   });

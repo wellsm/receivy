@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  billingCategoryColor,
+  billingCategoryLabel,
   buildBillingInput,
   calendarDate,
   canNotifyContact,
@@ -9,7 +11,9 @@ import {
   editScopeExplanation,
   EMPTY_BILLING_DRAFT,
   EMPTY_SPLIT_VALUES,
+  directionLine,
   firstNoticeDate,
+  firstNoticeSentence,
   groupFirstNoticeSentence,
   formatMoney,
   parseBRLCents,
@@ -22,6 +26,7 @@ import {
   shouldAskEditScope,
   splitCountLabel,
   splitFooterLine,
+  splitSummaryLine,
   splitParties,
   splitPartyKey,
   untilInstallmentPreview,
@@ -87,6 +92,7 @@ import {
 } from "@/components/app/reminder-editor";
 import { ScopeDialog } from "@/components/app/scope-dialog";
 import { WhatsappGroupDialog } from "@/components/app/whatsapp-group-dialog";
+import { CategoryIcon } from "@/components/ui/category-icon";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { ProviderIcon } from "@/components/ui/provider-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
@@ -325,7 +331,8 @@ function stepClass(current: Step, own: Step): string {
 
 function Card({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-4 rounded-[20px] border border-outline bg-surface p-4">
+    // Below `md` the step is the screen itself (6a/6b/6e): the column card only exists in the three columns (6f).
+    <div className="flex flex-col gap-4 md:rounded-[20px] md:border md:border-outline md:bg-surface md:p-4">
       {children}
     </div>
   );
@@ -342,7 +349,8 @@ function ColumnTitle({
   trailing?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-7 items-center justify-between gap-2">
+    // Below `md` the step header already names the step.
+    <div className="hidden min-h-7 items-center justify-between gap-2 md:flex">
       <h2 className="m-0 flex items-center gap-2 text-[15px] font-bold text-ink">
         <span
           className="flex h-6 w-6 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-surface"
@@ -1457,6 +1465,63 @@ export function BillingFormScreen({
     );
   }
 
+  /** The review step of the app (6e), only below `md`: what the conta is and what each step filled, with a way back. */
+  function renderReview() {
+    const splitValue = seating
+      ? seated
+        ? seated.displayName
+        : SEAT_HINTS[draft.direction]
+      : lines.length
+        ? splitSummaryLine(lines)
+        : splitCountLabel(draft, splitKeys);
+
+    return (
+      <div className="flex flex-col gap-3 md:hidden">
+        <div className="flex items-center gap-3 rounded-[20px] border border-outline bg-surface p-4">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: `${billingCategoryColor(draft.category)}1F` }}
+          >
+            <CategoryIcon category={draft.category} size={20} />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-[15px] font-bold text-ink">
+              {draft.description || billingCategoryLabel(draft.category)}
+            </span>
+            <span className="text-[12.5px] text-muted">
+              {directionLine(draft)}
+            </span>
+          </span>
+          <span className="font-display text-[19px] font-bold text-ink tabular-nums">
+            {money(typedCents(draft))}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className={LABEL_CLASS}>Do que você preencheu</span>
+          <DetailCard>
+            <DetailRow
+              icon={CalendarDays}
+              label="Repetição · passo 1"
+              value={repetitionLabel(draft)}
+              action="edit"
+              disabled={locked}
+              onClick={() => setStep(1)}
+            />
+            <DetailRow
+              icon={Users}
+              label={`${seating ? SEAT_LABELS[draft.direction] : "Divisão"} · passo 2`}
+              value={splitValue}
+              action="edit"
+              disabled={locked}
+              onClick={() => setStep(2)}
+            />
+          </DetailCard>
+        </div>
+      </div>
+    );
+  }
+
   function renderCreate() {
     return (
       <div className="grid min-w-0 gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1fr)] md:items-start">
@@ -1534,8 +1599,27 @@ export function BillingFormScreen({
           <ColumnTitle number={3}>
             {settled ? "Resumo" : "Avisos e recebimento"}
           </ColumnTitle>
-          {!settled && <DetailCard>{renderDefaultRows("alter")}</DetailCard>}
-          {renderSummary()}
+          {renderReview()}
+          {!settled && (
+            <div className="flex flex-col gap-2">
+              <span className={`${LABEL_CLASS} md:hidden`}>
+                Já configurado pelo padrão
+              </span>
+              <DetailCard>{renderDefaultRows("alter")}</DetailCard>
+            </div>
+          )}
+          {noticeDate && (
+            <p className="m-0 rounded-2xl bg-primary-soft/60 px-4 py-3 text-[13px] leading-5 text-primary-strong md:hidden">
+              {group
+                ? groupFirstNoticeSentence(group.name, noticeDate)
+                : firstNoticeSentence(
+                    noticed.map((contact) => contact.displayName),
+                    noticeDate,
+                    Boolean(selectedPix),
+                  )}
+            </p>
+          )}
+          <div className="hidden md:contents">{renderSummary()}</div>
         </section>
       </div>
     );

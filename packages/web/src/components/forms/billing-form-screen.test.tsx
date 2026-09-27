@@ -843,7 +843,7 @@ it("records a registro naming the single contact who paid it, with nobody to spl
   expect(screen.queryByText("Receber por")).not.toBeInTheDocument();
   expect(screen.queryByText("Lembretes")).not.toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "De quem" })).toBeInTheDocument();
-  expect(screen.getByText("Escolha quem pagou.")).toBeInTheDocument();
+  expect(screen.getAllByText("Escolha quem pagou.")[0]).toBeInTheDocument();
 
   await seatAna(user);
   await user.type(screen.getByLabelText("Valor total"), "5000,00");
@@ -1123,7 +1123,7 @@ it("refuses a conta a pagar whose receiving contact was removed", async () => {
   await user.click(await screen.findByRole("button", { name: "Ana" }));
 
   expect(screen.queryByRole("button", { name: "Ana" })).not.toBeInTheDocument();
-  expect(screen.getByText("Escolha quem recebe.")).toBeInTheDocument();
+  expect(screen.getAllByText("Escolha quem recebe.")[0]).toBeInTheDocument();
 
   await user.click(createButton());
 
@@ -1150,7 +1150,7 @@ it("never offers a Pix selector on a conta a pagar with no seated contact", asyn
   await user.click(await screen.findByRole("radio", { name: "Vou pagar" }));
 
   expect(screen.queryByText("Pagar via Pix")).not.toBeInTheDocument();
-  expect(screen.getByText("Escolha quem recebe.")).toBeInTheDocument();
+  expect(screen.getAllByText("Escolha quem recebe.")[0]).toBeInTheDocument();
 });
 
 const emailReminder: ReminderRule = { offsetDays: -3, enabled: true, channels: { email: true, whatsapp: false } };
@@ -1804,7 +1804,7 @@ it("picks a group for the notices, quiets the bells and creates the billing with
 
   await user.type(screen.getByLabelText("Valor total"), "100,00");
 
-  expect(screen.getByText(/^O grupo Creche Pet recebe o primeiro aviso em/)).toBeInTheDocument();
+  expect(screen.getAllByText(/^O grupo Creche Pet recebe o primeiro aviso em/)[0]).toBeInTheDocument();
 
   await user.click(createButton());
 

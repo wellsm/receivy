@@ -120,7 +120,7 @@ export function AppShell({ children, activePath = "/", notificationsBadge = fals
       <div className="min-h-screen pb-23.5 md:pb-0">
         <ScreenHeader title={title} back={back} activePath={activePath} />
 
-        <main className={`mx-auto w-full max-w-270 px-5 pb-24 md:px-8 md:pt-7 md:pb-22.5 xl:px-10 ${back ? "" : "pt-[max(1rem,env(safe-area-inset-top))]"}`}>{children}</main>
+        <main className={`mx-auto w-full max-w-270 px-5 pb-24 md:px-8 md:pt-7 md:pb-22.5 xl:px-10 ${back ? "pt-4" : "pt-[max(1rem,env(safe-area-inset-top))]"}`}>{children}</main>
 
         <Navigation mobile activePath={activePath} />
       </div>

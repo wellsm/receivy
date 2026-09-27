@@ -125,14 +125,14 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
           const copyValue = paymentMethodCopyValue(method);
 
           return (
-            <article key={method.id} className="flex flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4 shadow-sm">
+            <article key={method.id} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-outline/30 bg-surface p-4 shadow-sm">
               <div className="flex items-start justify-between">
-                <div className="flex flex-1 items-center gap-3">
-                  <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${method.isDefault ? "bg-primary text-on-primary" : "bg-surface-muted text-primary-strong"}`}>
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${method.isDefault ? "bg-primary text-on-primary" : "bg-surface-muted text-primary-strong"}`}>
                     <ProviderIcon method={method} size={20} />
                   </span>
-                  <div className="flex flex-col gap-0.5">
-                    <strong className="text-base font-bold text-ink">{text.title}</strong>
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <strong className="truncate text-base font-bold text-ink">{text.title}</strong>
                     <div className="flex">
                       {method.isDefault ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft/70 px-2 py-0.5 text-[11px] font-semibold text-primary-strong">
@@ -155,7 +155,7 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
                     trigger.current = event.currentTarget;
                     setRemoving(method);
                   }}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-danger transition hover:bg-danger-soft active:scale-95 disabled:opacity-50"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-danger transition hover:bg-danger-soft active:scale-95 disabled:opacity-50"
                 >
                   <Trash2 size={18} aria-hidden="true" />
                 </button>
@@ -220,7 +220,7 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
           detail={
             <>
               <span className="text-[11px] font-medium text-muted">{paymentMethodText(removing).title}</span>
-              <span className="text-sm font-bold text-ink">{paymentMethodText(removing).value}</span>
+              <span className="break-all text-sm font-bold text-ink">{paymentMethodText(removing).value}</span>
             </>
           }
           explanation="O meio sai dos próximos links de cobrança. As cobranças já criadas não mudam."

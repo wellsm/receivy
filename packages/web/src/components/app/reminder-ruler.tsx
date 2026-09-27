@@ -183,7 +183,10 @@ export function ReminderRuler({ rules, onChange, whatsapp, disabled }: ReminderR
                   }
                 }}
               />
-              <span className="absolute top-[23px] left-0 -translate-x-1/2 whitespace-nowrap text-[10.5px] font-semibold text-primary">{reminderOffsetLabel(offset)}</span>
+              {/* Slides from left-aligned at the start to right-aligned at the end, so edge labels stay inside the track. */}
+              <span className="absolute top-[23px] left-0 whitespace-nowrap text-[10.5px] font-semibold text-primary" style={{ transform: `translateX(-${percentOf(offset)}%)` }}>
+                {reminderOffsetLabel(offset)}
+              </span>
             </div>
           ))}
         </div>

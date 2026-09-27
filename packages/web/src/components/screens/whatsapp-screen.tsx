@@ -510,7 +510,7 @@ export function WhatsappScreen({ client = whatsappClient }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-4 px-4 pb-8">
+    <div className="flex flex-col gap-4 pb-8">
       {error ? (
         <p role="alert" className="m-0 rounded-xl bg-danger-soft p-3 text-sm text-danger">
           {error}

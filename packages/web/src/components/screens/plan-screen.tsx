@@ -213,7 +213,7 @@ export function PlanScreen() {
     : null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4">
       <section className="rounded-[20px] border border-outline bg-surface p-5">
         <div className="flex items-center justify-between">
           <h2 className="m-0 font-display text-lg font-bold text-ink">Plano</h2>

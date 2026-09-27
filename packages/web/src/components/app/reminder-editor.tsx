@@ -36,7 +36,7 @@ type OpenPanel = { index: number; panel: "days" | "channels" } | null;
 const MODES = [ReminderOffsetMode.Before, ReminderOffsetMode.Due, ReminderOffsetMode.After];
 
 const PILL = "inline-flex h-8 items-center gap-1.5 rounded-[10px] border px-2.5 text-[13px] font-bold";
-const PILL_ON = `${PILL} border-primary bg-primary text-primary-foreground`;
+const PILL_ON = `${PILL} border-primary bg-primary text-on-primary`;
 const PILL_SOFT = `${PILL} border-primary/40 bg-primary-soft text-primary-strong`;
 const PILL_MUTED = `${PILL} border-outline bg-surface-muted text-ink`;
 

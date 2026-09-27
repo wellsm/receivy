@@ -140,9 +140,7 @@ export function RemindersScreen() {
   const example = calendarDate();
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="m-0 font-display text-lg font-bold text-ink">Lembretes</h1>
-
+    <div className="flex flex-col gap-4 pb-4">
       <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">
         <h2 className="m-0 text-sm font-bold text-ink">Lembretes automáticos</h2>
         <ReminderRuler rules={rules} onChange={setRules} whatsapp={whatsapp} disabled={busy} />
@@ -165,7 +163,7 @@ export function RemindersScreen() {
       <div className="flex gap-3">
         <button
           type="button"
-          className="h-11 flex-1 rounded-xl bg-primary text-sm font-bold text-primary-foreground disabled:opacity-60"
+          className="h-11 flex-1 rounded-xl bg-primary text-sm font-bold text-on-primary disabled:opacity-60"
           disabled={busy}
           onClick={() => void save()}
         >

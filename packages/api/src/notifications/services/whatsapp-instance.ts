@@ -5,6 +5,7 @@ import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import { PlanTier, WhatsappInstanceState, type WhatsappInstanceView, WhatsappSender } from '@receivy/common';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
+import { Logger } from '../../common/services/logger';
 import type { Db, DbClient } from '../../database';
 import type { PlanClient, PlanService } from '../../plans/services/plan';
 import { AccountRepository } from '../../users/repositories/account';
@@ -65,9 +66,9 @@ function view(row: WhatsappInstanceRepository.Row): WhatsappInstanceView {
 
 type EvolutionApi = { url: string; key: string };
 
-/** One JSON line per Evolution failure, for CloudWatch: never the key, the instance token or a request body. */
+/** One line per Evolution failure (local or `APP_DEBUG=true`): never the key, the instance token or a request body. */
 function log(event: string, data: Record<string, unknown>): void {
-  console.error(JSON.stringify({ source: 'whatsapp-instance', event, ...data }));
+  Logger.debug(`[WHATSAPP] ${event}`, data);
 }
 
 /** What a failed Evolution response is worth logging: the status and the first bytes of its body (no secret travels there). */

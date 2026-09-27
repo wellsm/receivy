@@ -5,7 +5,6 @@ import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
 import { PlanTier, WhatsappInstanceState, type WhatsappInstanceView, WhatsappSender } from '@receivy/common';
 import { EventRepository } from '../../common/repositories/events';
 import { EventableType } from '../../common/schemas/event';
-import { Logger } from '../../common/services/logger';
 import type { Db, DbClient } from '../../database';
 import type { PlanClient, PlanService } from '../../plans/services/plan';
 import { AccountRepository } from '../../users/repositories/account';
@@ -66,22 +65,6 @@ function view(row: WhatsappInstanceRepository.Row): WhatsappInstanceView {
 
 type EvolutionApi = { url: string; key: string };
 
-/** One line per Evolution failure (local or `APP_DEBUG=true`): never the key, the instance token or a request body. */
-function log(event: string, data: Record<string, unknown>): void {
-  Logger.debug(`[WHATSAPP] ${event}`, data);
-}
-
-/** What a failed Evolution response is worth logging: the status and the first bytes of its body (no secret travels there). */
-async function describe(response: Response | null, error: unknown): Promise<Record<string, unknown>> {
-  if (!response) {
-    return { status: null, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) };
-  }
-
-  const body = await response.text().catch(() => '');
-
-  return { status: response.status, body: body.slice(0, 300) };
-}
-
 function evolutionOf(variables: InstanceVariables): EvolutionApi | null {
   const url = variables.EVOLUTION_API_URL;
   const key = variables.EVOLUTION_API_KEY;
@@ -116,18 +99,9 @@ function pairingOf(body: unknown): Pairing {
 /** A fresh QR, and the pairing code when the row has a phone, from Evolution's connect endpoint. */
 async function connect(api: EvolutionApi, request: typeof fetch, name: string, phone: string | undefined): Promise<Pairing> {
   const query = phone ? `?number=${encodeURIComponent(phone)}` : '';
-
-  let caught: unknown = null;
-
-  const response = await call(api, request, 'GET', `/instance/connect/${encodeURIComponent(name)}${query}`).catch((error: unknown) => {
-    caught = error;
-
-    return null;
-  });
+  const response = await call(api, request, 'GET', `/instance/connect/${encodeURIComponent(name)}${query}`).catch(() => null);
 
   if (!response?.ok) {
-    log('connect_failed', { name, withPhone: Boolean(phone), ...(await describe(response, caught)) });
-
     return {};
   }
 
@@ -148,8 +122,6 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
   const api = evolutionOf(deps.variables);
 
   if (!api) {
-    log('unconfigured', { ownerId, hasUrl: Boolean(deps.variables.EVOLUTION_API_URL), hasKey: Boolean(deps.variables.EVOLUTION_API_KEY && deps.variables.EVOLUTION_API_KEY !== 'disabled') });
-
     throw new WhatsappInstanceUnavailableError();
   }
 
@@ -186,8 +158,6 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
   // orphan first costs nothing: a 404 means there was none.
   await call(api, request, 'DELETE', `/instance/delete/${encodeURIComponent(name)}`).catch(() => null);
 
-  let caught: unknown = null;
-
   const response = await call(api, request, 'POST', '/instance/create', {
     instanceName: name,
     token,
@@ -195,16 +165,10 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
     integration: 'WHATSAPP-BAILEYS',
     ...(phone ? { number: phone } : {}),
     webhook: { url: `${origin}/webhooks/whatsapp/evolution`, byEvents: false, base64: false, headers: { authorization: webhookSecret }, events: WEBHOOK_EVENTS }
-  }).catch((error: unknown) => {
-    caught = error;
-
-    return null;
-  });
+  }).catch(() => null);
 
   if (!response?.ok) {
     const failed = new Date().toISOString();
-
-    log('create_failed', { ownerId, name, evolutionHost: new URL(api.url).host, webhookOrigin: origin, withPhone: Boolean(phone), ...(await describe(response, caught)) });
 
     // Nothing to pair: the row and the sender go back to how they were, so a retry starts clean.
     await deps.db.transaction(async (tx) => {
@@ -296,19 +260,8 @@ async function remove(deps: InstanceDeps, request: typeof fetch, ownerId: string
 
   // Best effort on the Evolution side: a 404 means it is already gone; a failure leaves an orphan Evolution can list later.
   if (api) {
-    for (const step of ['logout', 'delete'] as const) {
-      let caught: unknown = null;
-
-      const response = await call(api, request, 'DELETE', `/instance/${step}/${encodeURIComponent(row.name)}`).catch((error: unknown) => {
-        caught = error;
-
-        return null;
-      });
-
-      if (!response?.ok && response?.status !== 404) {
-        log('remove_failed', { ownerId, name: row.name, step, ...(await describe(response, caught)) });
-      }
-    }
+    await call(api, request, 'DELETE', `/instance/logout/${encodeURIComponent(row.name)}`).catch(() => null);
+    await call(api, request, 'DELETE', `/instance/delete/${encodeURIComponent(row.name)}`).catch(() => null);
   }
 
   const now = new Date().toISOString();

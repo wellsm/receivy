@@ -1,7 +1,7 @@
 import { PaymentProvider } from "@receivy/common";
 import type { PagSeguroClient } from "../pagseguro/types";
 import type { CheckoutClient } from "./types";
-import { Logger } from "@/common/services/logger";
+import { Logger } from "../../common/services/logger";
 
 const PAID = "PAID";
 

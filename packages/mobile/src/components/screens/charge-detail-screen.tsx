@@ -314,7 +314,7 @@ export function ChargeDetailScreen({ id, client = financialClient, notifications
 
       setCharge(detail);
 
-      const url = client.publicChargeUrl(result.token);
+      const url = client.publicChargeUrl(result);
 
       await Share.share({ title: "Cobrança Receivy", message: chargeShareText(detail, url), url });
     }, "Não foi possível compartilhar o link.");

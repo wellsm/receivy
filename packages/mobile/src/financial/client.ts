@@ -64,7 +64,8 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
     ensurePaymentLink(id: string) { return request<ChargeDetail>(`charges/${id}/payment-link`, { method: "POST" }, "Não foi possível gerar o link."); },
     publicLink(id: string, rotate = false, paymentMethodId?: string) { return request<PublicLink>(`charges/${id}/public-link${rotate ? "/rotate" : ""}`, { method: "POST", ...(paymentMethodId ? { body: JSON.stringify({ paymentMethodId }) } : {}) }); },
     ledger(id: string, cursor?: string) { return request<ContactLedger>(`contacts/${id}/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`); },
-    publicChargeUrl(token: string) {
+    /** What a share hands out: the short `/p/<code>` when the link has one, the signed `/pay/<token>` otherwise. */
+    publicChargeUrl(link: Pick<PublicLink, "token" | "shortCode">) {
       if (!publicWebBaseUrl) {
         throw new Error("Configure EXPO_PUBLIC_WEB_URL para compartilhar links públicos.");
       }
@@ -77,7 +78,9 @@ export function createFinancialClient({ authenticatedFetch, publicWebBaseUrl }: 
         throw new Error("EXPO_PUBLIC_WEB_URL precisa usar http ou https.");
       }
 
-      return new URL(`/pay/${encodeURIComponent(token)}`, base).toString();
+      const path = link.shortCode ? `/p/${encodeURIComponent(link.shortCode)}` : `/pay/${encodeURIComponent(link.token)}`;
+
+      return new URL(path, base).toString();
     },
   };
 }

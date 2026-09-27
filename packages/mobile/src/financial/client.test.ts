@@ -14,13 +14,14 @@ describe("native financial client", () => {
   it("builds public links only from the explicit web base", () => {
     const client = createFinancialClient({ authenticatedFetch: jest.fn(), publicWebBaseUrl: "https://receivy.example/app" });
 
-    expect(client.publicChargeUrl("token.with.parts")).toBe("https://receivy.example/pay/token.with.parts");
+    expect(client.publicChargeUrl({ token: "token.with.parts" })).toBe("https://receivy.example/pay/token.with.parts");
+    expect(client.publicChargeUrl({ token: "token.with.parts", shortCode: "K7m2xQ9aB" })).toBe("https://receivy.example/p/K7m2xQ9aB");
   });
 
   it("reports actionable configuration when the web base is absent", () => {
     const client = createFinancialClient({ authenticatedFetch: jest.fn() });
 
-    expect(() => client.publicChargeUrl("token")).toThrow("EXPO_PUBLIC_WEB_URL");
+    expect(() => client.publicChargeUrl({ token: "token" })).toThrow("EXPO_PUBLIC_WEB_URL");
   });
 
   it("translates the stable code without displaying arbitrary backend text", async () => {

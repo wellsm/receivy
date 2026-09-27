@@ -98,7 +98,7 @@ function makeClient(detail = billing(), overrides: Record<string, unknown> = {})
     resolveGuest: jest.fn().mockResolvedValue(detail),
     setParticipantNotify: jest.fn().mockResolvedValue(detail),
     publicLink: jest.fn().mockResolvedValue({ token: "tk" }),
-    publicChargeUrl: (token: string) => `http://localhost:3000/pay/${token}`,
+    publicChargeUrl: (link: { token: string }) => `http://localhost:3000/pay/${link.token}`,
     paymentMethods: jest.fn().mockResolvedValue({ paymentMethods: [] }),
     pay: jest.fn().mockResolvedValue(charge({ id: "c6", name: "Carlos", state: ChargeState.Paid })),
     reopen: jest.fn().mockResolvedValue(charge({ id: "c4", name: "Lucas F." })),

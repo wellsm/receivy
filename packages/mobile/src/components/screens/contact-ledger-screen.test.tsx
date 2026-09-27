@@ -88,7 +88,7 @@ function makeClient(page = ledger()) {
   return {
     ledger: jest.fn().mockResolvedValue(page),
     publicLink: jest.fn().mockResolvedValue({ token: "tk" }),
-    publicChargeUrl: (token: string) => `http://localhost:3000/pay/${token}`,
+    publicChargeUrl: (link: { token: string }) => `http://localhost:3000/pay/${link.token}`,
   };
 }
 

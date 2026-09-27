@@ -71,7 +71,7 @@ function makeClient(overrides: Overrides = {}) {
     profile: jest.fn().mockResolvedValue({ user: { timezone: "America/Sao_Paulo" } }),
     createBilling: jest.fn(),
     publicLink: jest.fn().mockResolvedValue({ token: "tk" }),
-    publicChargeUrl: (token: string) => `http://localhost:3000/pay/${token}`,
+    publicChargeUrl: (link: { token: string }) => `http://localhost:3000/pay/${link.token}`,
     invite: jest.fn().mockResolvedValue({ url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" }),
     revokeInvite: jest.fn().mockResolvedValue(undefined),
     ...overrides,

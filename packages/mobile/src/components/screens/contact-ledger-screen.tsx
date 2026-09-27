@@ -165,7 +165,7 @@ export function ContactLedgerScreen({
   async function shareLink(charge: ChargeDetail) {
     await run(async () => {
       const link = await client.publicLink(charge.id);
-      const url = client.publicChargeUrl(link.token);
+      const url = client.publicChargeUrl(link);
 
       await Share.share({ title: "Cobrança Receivy", message: url, url });
     }, "Não foi possível compartilhar o link.");

@@ -152,7 +152,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
 
     try {
       const link = await client.publicLink(chargeId);
-      const url = client.publicChargeUrl(link.token);
+      const url = client.publicChargeUrl(link);
 
       await Share.share({ title: "Cobrança Receivy", message: url, url });
     } catch {

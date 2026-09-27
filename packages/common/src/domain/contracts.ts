@@ -244,7 +244,8 @@ export type ChargeDetail = ChargeSummary & {
   createdAt: string;
 };
 
-export type PublicLink = { token: string; expiresAt: string };
+/** `shortCode` opens the same link as `/p/<code>`; a link issued before short codes may lack it. */
+export type PublicLink = { token: string; expiresAt: string; shortCode?: string };
 
 export type PublicChargeView = {
   creditorFirstName: string;

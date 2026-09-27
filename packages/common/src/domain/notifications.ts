@@ -56,4 +56,6 @@ export const enum WhatsappMessageStatus {
 export type ManualReminderResult = {
   channels: NoticeChannel[];
   dropped: { channel: NoticeChannel; reason: DropReason }[];
+  /** The WhatsApp group the reminder goes to, when the billing notifies one. */
+  group?: string;
 };

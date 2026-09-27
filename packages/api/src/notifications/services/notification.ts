@@ -1,7 +1,7 @@
 import type { Environment, Service } from '@ez4/common';
 import type { Factory } from '@ez4/factory';
 import { HttpForbiddenError, HttpNotFoundError } from '@ez4/gateway';
-import { ChargeState, type DeviceRegistration, Direction, type ManualReminderResult, type NotificationDevice, type ReminderConfig, WhatsappSender } from '@receivy/common';
+import { ChargeState, type DeviceRegistration, Direction, type ManualReminderResult, type NotificationDevice, type ReminderConfig, WhatsappInstanceState, WhatsappSender } from '@receivy/common';
 import { billingRegistered } from '../../billings/utils/columns';
 import { effectiveConfigOf } from '../../billings/utils/reminders';
 import { ChargeClosedError, ChargeInReviewError, SettledNoRemindersError } from '../../charges/errors';
@@ -20,6 +20,7 @@ import { SessionRepository } from '../../users/repositories/sessions';
 import type { WhatsappService } from '../../vendors/whatsapp/service';
 import { DeviceOwnedElsewhereError, DeviceRegisteredError, ReminderQuotaError } from '../errors';
 import { DeviceRepository } from '../repositories/device';
+import { WhatsappInstanceRepository } from '../repositories/whatsapp-instance';
 import type { ChargeNotifyScheduler } from '../schedulers/charge-notify';
 import { assertDeviceRegistration } from '../utils/device';
 import { NoticeChannel, resolveChannels } from './channels';
@@ -149,8 +150,18 @@ export async function reminderPreview(db: DbClient, userId: string, chargeId: st
     return { channels: [], dropped: [] };
   }
 
-  const reach = charge.creditor_id ? await ContactRepository.reachability(db, charge.creditor_id, target.id) : null;
   const ownBill = ownerPays(charge);
+
+  // A billing with a group reminds in the group while the owner's number is connected.
+  if (charge.billing.whatsapp_group_jid && !ownBill) {
+    const instance = await WhatsappInstanceRepository.byOwner(db, charge.owner_id);
+
+    if (instance?.state === WhatsappInstanceState.Open) {
+      return { channels: [NoticeChannel.WhatsApp], dropped: [], group: charge.billing.whatsapp_group_name ?? 'Grupo' };
+    }
+  }
+
+  const reach = charge.creditor_id ? await ContactRepository.reachability(db, charge.creditor_id, target.id) : null;
   const wantsWhatsapp = config.manual.whatsapp && !ownBill && Boolean(target.phone ?? reach?.phone);
   const sender = wantsWhatsapp ? await whatsappReach(db, charge.owner_id, new Date()) : { sender: WhatsappSender.Receivy, instanceOpen: false, instance: null, quotaLeft: 0, quotaLimit: 0 };
   const resolved = resolveChannels({

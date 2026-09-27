@@ -20,6 +20,7 @@ import { DeviceRepository } from '../repositories/device';
 import { WhatsappMessageRepository } from '../repositories/whatsapp-message';
 import { type Dropped, DropReason, NoticeChannel, resolveChannels } from './channels';
 import { civilDate, instantAt, type NotificationConfig, PLAN_WINDOW_MS, REMINDER_HOUR, shouldSendInitialNotice } from './planner';
+import { groupOf, sendGroupNotice } from './group-notice';
 import { NoticeTemplate, renderNotice } from './render';
 import type { NotificationTransport, SendResult as TransportResult } from './transport';
 import { whatsappReach } from './whatsapp-quota';
@@ -137,6 +138,24 @@ export async function sendChargeNotice(
   // Somebody said it was paid, with a file or without: nothing chases them while the other side answers.
   if (await inReview(db, chargeId)) {
     return skipped(db, chargeId, payload, SkipReason.InReview);
+  }
+
+  // A registro was already received or paid, and a conta a pagar reminds its own owner: neither has a group.
+  // Otherwise the group carries the notice, bells and all: only when it fails does each person hear.
+  if (groupOf(charge) && !billingRegistered(charge.billing) && !ownerPays(charge)) {
+    const outcome = await sendGroupNotice(db, context, charge, template, now, options.offsetDays);
+
+    if (outcome === 'delivered') {
+      await EventRepository.record(db, {
+        type: 'notice.sent',
+        eventableType: EventableType.Charge,
+        eventableId: chargeId,
+        payload: { ...payload, channels: [NoticeChannel.WhatsApp], group: true },
+        at: new Date(now).toISOString()
+      });
+
+      return { channels: [NoticeChannel.WhatsApp], dropped: [] };
+    }
   }
 
   // The creditor paused the automatic notices: only the manual reminder still reaches the debtor.

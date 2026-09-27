@@ -1,6 +1,6 @@
 import { PaymentProvider } from '@receivy/common';
 import { describe, expect, it } from 'vitest';
-import { NoticeTemplate, type RenderInputs, renderNotice } from './render';
+import { NoticeTemplate, type RenderInputs, renderGroupNotice, renderGroupReminder, renderNotice } from './render';
 
 const input: RenderInputs = {
   email: 'fixture@example.com',
@@ -103,3 +103,29 @@ describe('renderNotice for the owner of a conta a pagar', () => {
     expect(notice.html).toBeUndefined();
   });
 });
+
+describe('group notices', () => {
+  const ed = { name: 'Ed', cents: 2156, url: 'https://receivy.app/p/AAAAAAAAA' };
+  const gustavo = { name: 'Gustavo', cents: 1078, url: 'https://receivy.app/p/BBBBBBBBB' };
+
+  it('gives a single payer one line and their link', () => {
+    expect(renderGroupNotice({ description: 'Creche Pet', dueDate: '2026-09-25', lines: [{ ...ed, cents: 30000 }] }, NoticeTemplate.Initial)).toBe(
+      'Nova cobrança · Creche Pet: R$ 300,00 vence em 25/set.\nPague em https://receivy.app/p/AAAAAAAAA'
+    );
+  });
+
+  it('lists several payers with one link each and leaves out whoever owes nothing', () => {
+    const text = renderGroupNotice({ description: 'Youtube Premium', dueDate: '2026-09-25', lines: [ed, gustavo, { name: 'Eu', cents: 0, url: 'x' }] }, NoticeTemplate.Reminder);
+
+    expect(text).toBe('Lembrete · Youtube Premium vence em 25/set:\n• Ed R$ 21,56 https://receivy.app/p/AAAAAAAAA\n• Gustavo R$ 10,78 https://receivy.app/p/BBBBBBBBB');
+  });
+
+  it('groups the thousands of a large amount', () => {
+    expect(renderGroupNotice({ description: 'Aluguel', dueDate: '2026-10-05', lines: [{ ...ed, cents: 250000 }] }, NoticeTemplate.Reminder)).toContain('R$ 2.500,00');
+  });
+
+  it('names the person a manual reminder is for', () => {
+    expect(renderGroupReminder({ description: 'Youtube Premium', line: gustavo })).toBe('Gustavo, falta R$ 10,78 de Youtube Premium: https://receivy.app/p/BBBBBBBBB');
+  });
+});
+

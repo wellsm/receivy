@@ -1,12 +1,14 @@
-import { deepEqual, equal, rejects } from 'node:assert/strict';
+import { deepEqual, equal, match, ok, rejects } from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { type BillingInput, BillingKind, BillingRecurrence, PaymentProvider, PixKeyType, SplitMode, SplitPartKind, WhatsappInstanceState } from '@receivy/common';
+import { type BillingInput, BillingKind, type BillingSplit, BillingRecurrence, PaymentProvider, PixKeyType, SplitMode, SplitPartKind, WhatsappInstanceState } from '@receivy/common';
 import { createBilling, patchBilling } from '../../src/billings/services/billing';
 import { getBilling } from '../../src/billings/services/detail';
 import { BillingRepository } from '../../src/billings/repositories/billing';
 import { ApiError } from '../../src/common/errors';
 import { WhatsappInstanceRepository } from '../../src/notifications/repositories/whatsapp-instance';
+import { NoticeTemplate, notifyCharge, sendChargeNotice } from '../../src/notifications/services/send';
 import { cleanupUsers, contacts, createUser, db, paymentMethods } from '../fixtures/financial';
+import { fakeNotice } from '../fixtures/scheduling';
 
 const OWNER = 'e5111111-1111-4111-8111-111111111111';
 const GROUP = { jid: '120363000000000002@g.us', name: 'Creche Pet' };
@@ -94,4 +96,74 @@ describe('billings notified in a WhatsApp group', () => {
 
     await rejects(() => patchBilling(db, OWNER, payable.id, { whatsappGroup: GROUP }), RangeError);
   });
+
+  describe('sending to the group', () => {
+    let secondId: string;
+
+    before(async () => {
+      secondId = (await contacts.save(OWNER, { name: 'Bia Souza', email: 'group-second@example.com' })).userId;
+    });
+
+    function split(): BillingSplit {
+      return {
+        mode: SplitMode.Fixed,
+        parts: [
+          { kind: SplitPartKind.User, userId: debtorId, amountCents: 20_000 },
+          { kind: SplitPartKind.User, userId: secondId, amountCents: 10_000 }
+        ]
+      };
+    }
+
+    it('tells the group once per due date, one line and one short link per person, and nobody in private', async () => {
+      const { context, sent } = fakeNotice();
+      const billing = await createBilling(db, OWNER, 'group-send', once({ whatsappGroup: GROUP, split: split() }));
+      const [first, second] = billing.charges;
+
+      deepEqual(await notifyCharge(db, context, first!.id, NoticeTemplate.Reminder, Date.now(), 0), { channels: ['whatsapp'], dropped: [] });
+      deepEqual(await notifyCharge(db, context, second!.id, NoticeTemplate.Reminder, Date.now(), 0), { channels: ['whatsapp'], dropped: [] });
+
+      equal(sent.whatsapps.length, 1);
+      equal(sent.whatsapps[0]!.to, GROUP.jid);
+      equal(sent.whatsapps[0]!.sender, 'own');
+      equal(sent.whatsapps[0]!.instance, `rcv_${OWNER}`);
+      match(sent.whatsapps[0]!.text, /^Lembrete · Creche vence em 01\/dez:/);
+      match(sent.whatsapps[0]!.text, /• Well R\$ 200,00 https:\/\/receivy\.example\/p\/[1-9A-HJ-NP-Za-km-z]{9}/);
+      match(sent.whatsapps[0]!.text, /• Bia R\$ 100,00 https:\/\/receivy\.example\/p\/[1-9A-HJ-NP-Za-km-z]{9}/);
+      equal(sent.emails.length, 0);
+      equal(sent.pushes.length, 0);
+    });
+
+    it('reminds one person by name in the group', async () => {
+      const { context, sent } = fakeNotice();
+      const billing = await createBilling(db, OWNER, 'group-manual', once({ whatsappGroup: GROUP, split: split() }));
+      const second = billing.charges.find((charge) => charge.amount.amountCents === 10_000)!;
+
+      deepEqual(await sendChargeNotice(db, context, second.id, NoticeTemplate.Manual, Date.now(), { channels: { email: true, whatsapp: false } }), { channels: ['whatsapp'], dropped: [] });
+
+      equal(sent.whatsapps.length, 1);
+      match(sent.whatsapps[0]!.text, /^Bia, falta R\$ 100,00 de Creche: https:\/\/receivy\.example\/p\//);
+    });
+
+    it('falls back to each person and marks the billing when the group cannot be told', async () => {
+      const { context, sent } = fakeNotice();
+      const billing = await createBilling(db, OWNER, 'group-fallback', once({ whatsappGroup: GROUP, split: split() }));
+
+      sent.state.whatsappStatus = 'permanent';
+
+      const result = await notifyCharge(db, context, billing.charges[0]!.id, NoticeTemplate.Reminder, Date.now(), 0);
+
+      deepEqual(result.channels, ['email']);
+      equal(sent.emails.length, 1);
+      equal((await getBilling(db, OWNER, billing.id)).whatsappGroupFailing, true);
+
+      // The next group notice that gets through clears the mark.
+      sent.state.whatsappStatus = 'accepted';
+
+      await notifyCharge(db, context, billing.charges[1]!.id, NoticeTemplate.Reminder, Date.now(), 0);
+
+      equal((await getBilling(db, OWNER, billing.id)).whatsappGroupFailing, false);
+      ok(sent.whatsapps.some((message) => message.to === GROUP.jid));
+    });
+  });
 });
+

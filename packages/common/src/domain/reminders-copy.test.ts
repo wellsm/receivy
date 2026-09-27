@@ -47,6 +47,7 @@ describe('reminder copy', () => {
       dropped: ['WhatsApp: sem número no contato']
     });
     expect(NOBODY_REACHABLE).toBe('Ninguém alcançável. Compartilhe o link direto.');
+    expect(remindLines({ channels: [NoticeChannel.WhatsApp], dropped: [], group: 'Creche Pet' }).going).toBe('WhatsApp, no grupo Creche Pet');
   });
 
   it('names the preview-unavailable copy', () => {

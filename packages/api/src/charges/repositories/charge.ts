@@ -184,7 +184,14 @@ export namespace ChargeRepository {
 
   /** A charge with what a notice needs around it: the billing rules, the owner's timezone and whoever has to pay. */
   export type NoticeRow = Row & {
-    billing: { kind: BillingKind; reminders?: string; owner: { timezone: string; reminder_config?: string } };
+    billing: {
+      kind: BillingKind;
+      reminders?: string;
+      whatsapp_group_jid?: string;
+      whatsapp_group_name?: string;
+      whatsapp_group_failed_at?: string;
+      owner: { timezone: string; reminder_config?: string };
+    };
     debtor?: { id: string; name?: string; email?: string; phone?: string; deleted_at?: string; email_opt_out_at?: string; whatsapp_opt_out_at?: string };
     creditor?: { name?: string };
   };
@@ -214,7 +221,14 @@ export namespace ChargeRepository {
         notify: true,
         created_at: true,
         updated_at: true,
-        billing: { kind: true, reminders: true, owner: { timezone: true, reminder_config: true } },
+        billing: {
+          kind: true,
+          reminders: true,
+          whatsapp_group_jid: true,
+          whatsapp_group_name: true,
+          whatsapp_group_failed_at: true,
+          owner: { timezone: true, reminder_config: true }
+        },
         debtor: { id: true, name: true, email: true, phone: true, deleted_at: true, email_opt_out_at: true, whatsapp_opt_out_at: true },
         creditor: { name: true }
       },

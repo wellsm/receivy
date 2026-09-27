@@ -149,7 +149,7 @@ export function whatsappLockLabel(gate: { available: boolean; planAllows: boolea
 
 /** What the manual-reminder confirm shows: the channels going out (push once, however many devices) and one line per drop. */
 export function remindLines(preview: ManualReminderResult): { going: string; dropped: string[] } {
-  const going = [...new Set(preview.channels)].map(channelLabel).join(', ');
+  const going = preview.group ? `WhatsApp, no grupo ${preview.group}` : [...new Set(preview.channels)].map(channelLabel).join(', ');
   const dropped = preview.dropped.map((drop) => `${channelLabel(drop.channel).replace(/^./, (c) => c.toUpperCase())}: ${dropReasonText(drop.reason)}`);
 
   return { going, dropped };

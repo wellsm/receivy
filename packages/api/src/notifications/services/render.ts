@@ -1,4 +1,4 @@
-import { chargeDateText, PaymentProvider } from '@receivy/common';
+import { chargeDateText, dayMonth, PaymentProvider } from '@receivy/common';
 import { buttonRow, chargeRow, emailDocument, linkRow, noticeRow } from '../../common/services/email/layout';
 import { issuePublicChargeToken, PublicTokenPurpose } from '../../public/services/capability';
 import { shortLinkUrl } from '../../public/services/links';
@@ -93,4 +93,40 @@ export function renderNotice(input: RenderInputs, template: NoticeTemplate, secr
   });
 
   return { subject, text, html, url, token, optOutUrl: input.optOutUrl };
+}
+
+/** One person on a group notice: their name as the owner knows them, what they owe and their short link. */
+export type GroupNoticeLine = { name: string; cents: number; url: string };
+
+export type GroupNoticeInput = { description: string; dueDate: string; lines: GroupNoticeLine[] };
+
+function brl(cents: number): string {
+  const whole = Math.floor(cents / 100).toLocaleString('pt-BR');
+
+  return `R$ ${whole},${String(cents % 100).padStart(2, '0')}`;
+}
+
+/**
+ * The message a WhatsApp group reads for one due date: a single person owing gets one line and their
+ * link; several get a list, one link each. Nobody who owes nothing ever shows up.
+ */
+export function renderGroupNotice(input: GroupNoticeInput, template: NoticeTemplate): string {
+  const lines = input.lines.filter((line) => line.cents > 0);
+  const opening = template === NoticeTemplate.Initial ? 'Nova cobrança' : 'Lembrete';
+  const due = dayMonth(input.dueDate);
+
+  if (lines.length === 1) {
+    const [line] = lines;
+
+    return `${opening} · ${input.description}: ${brl(line!.cents)} vence em ${due}.\nPague em ${line!.url}`;
+  }
+
+  const list = lines.map((line) => `• ${line.name} ${brl(line.cents)} ${line.url}`).join('\n');
+
+  return `${opening} · ${input.description} vence em ${due}:\n${list}`;
+}
+
+/** The manual reminder in a group names who it is for: everyone else in the group reads it too. */
+export function renderGroupReminder(input: { description: string; line: GroupNoticeLine }): string {
+  return `${input.line.name}, falta ${brl(input.line.cents)} de ${input.description}: ${input.line.url}`;
 }

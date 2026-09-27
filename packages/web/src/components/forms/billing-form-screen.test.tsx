@@ -125,7 +125,7 @@ it("starts with only me on the split and adds contacts through the agenda dialog
   const sent = api();
   const { user } = renderForm();
 
-  expect(await screen.findByRole("checkbox", { name: "Eu também participo" })).toBeChecked();
+  expect(await screen.findByRole("switch", { name: "Eu também participo" })).toBeChecked();
   expect(screen.queryByRole("button", { name: "Remover Ana" })).not.toBeInTheDocument();
   expect(sent.some((entry) => entry.path === "/api/contacts?sort=recent")).toBe(true);
 
@@ -341,7 +341,7 @@ it("posts the rounded-up per-installment amount for a parcelado billing", async 
   const { user } = renderForm();
 
   await pickAna(user);
-  await user.click(screen.getByRole("checkbox", { name: "Eu também participo" }));
+  await user.click(screen.getByRole("switch", { name: "Eu também participo" }));
   await user.click(screen.getByRole("radio", { name: "Parcelado" }));
   await user.clear(screen.getByLabelText("Parcelas"));
   await user.type(screen.getByLabelText("Parcelas"), "3");
@@ -368,7 +368,8 @@ it("computes the live amount for each share row", async () => {
   await user.type(screen.getByLabelText("Cotas de Eu"), "2");
 
   expect(screen.getByLabelText("Cotas de Ana")).toHaveValue("2");
-  expect(splitSection().getAllByText("R$ 50,00")).toHaveLength(2);
+  // Each row prints its amount twice: under the name below md, in the Valor column above.
+  expect(splitSection().getAllByText("R$ 50,00")).toHaveLength(4);
   expect(splitSection().getByText("4")).toBeInTheDocument();
   expect(screen.getByText("4 cotas · R$ 25,00 cada")).toBeInTheDocument();
   expect(screen.getByText("fecha R$ 100,00")).toBeInTheDocument();
@@ -385,7 +386,7 @@ it("warns about the missing remainder on a fixed split when the owner does not p
 
   await pickAna(user);
   await user.type(screen.getByLabelText("Valor total"), "100,00");
-  await user.click(screen.getByRole("checkbox", { name: "Eu também participo" }));
+  await user.click(screen.getByRole("switch", { name: "Eu também participo" }));
   await user.click(screen.getByRole("radio", { name: "Valor fixo" }));
   await user.type(screen.getByLabelText("Valor de Ana"), "40,00");
 
@@ -763,7 +764,7 @@ it("offers the bell only on a conta a receber", async () => {
   expect(screen.queryByText("Sino riscado = sem aviso automático")).not.toBeInTheDocument();
 });
 
-it("renders the bell only for a participant who can actually be reached", async () => {
+it("dims the bell of a participant who cannot be reached", async () => {
   api((path) => (path.startsWith("/api/contacts") && !path.includes("search") ? Response.json({ contacts: [ana, carla], nextCursor: null }) : undefined));
 
   const { user } = renderForm();
@@ -776,8 +777,9 @@ it("renders the bell only for a participant who can actually be reached", async 
   await user.click(within(panel).getByRole("checkbox", { name: "Carla" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
 
-  expect(screen.getByRole("switch", { name: "Avisar Ana" })).toBeInTheDocument();
-  expect(screen.queryByRole("switch", { name: "Avisar Carla" })).not.toBeInTheDocument();
+  expect(screen.getByRole("switch", { name: "Avisar Ana" })).toBeEnabled();
+  expect(screen.getByRole("switch", { name: "Avisar Carla" })).toBeDisabled();
+  expect(screen.getByRole("switch", { name: "Avisar Carla" })).not.toBeChecked();
   expect(screen.getByText("sem como avisar")).toBeInTheDocument();
   expect(screen.getByText("Sino riscado = sem aviso automático")).toBeInTheDocument();
 });
@@ -794,7 +796,7 @@ it("hides the bell note entirely when no selected participant can be reached", a
   await user.click(await within(panel).findByRole("checkbox", { name: "Carla" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
 
-  expect(screen.queryByRole("switch", { name: "Avisar Carla" })).not.toBeInTheDocument();
+  expect(screen.getByRole("switch", { name: "Avisar Carla" })).toBeDisabled();
   expect(screen.queryByText("Sino riscado = sem aviso automático")).not.toBeInTheDocument();
 });
 
@@ -820,7 +822,7 @@ it("never sends a stale Não notificar for a participant the agenda no longer sh
 
   const dialog = await openRow(user, "Divisão");
 
-  expect(within(dialog).queryByRole("switch", { name: /^Avisar/ })).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("switch", { name: "Avisar Carla" })).toBeDisabled();
 
   await user.click(within(dialog).getByRole("button", { name: "Pronto" }));
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
@@ -1677,7 +1679,7 @@ it("places the bell and Eu on their rows, with Adicionar pessoa below the list",
 
   const modeTabs = screen.getByRole("radiogroup", { name: "Divisão" });
   const bell = screen.getByRole("switch", { name: "Avisar Ana" });
-  const alsoParticipate = screen.getByRole("checkbox", { name: "Eu também participo" });
+  const alsoParticipate = screen.getByRole("switch", { name: "Eu também participo" });
   const addButton = screen.getByRole("button", { name: "Adicionar" });
 
   expect(isBefore(modeTabs, bell)).toBe(true);
@@ -1692,7 +1694,7 @@ it("sums the review column for a parcelado draft", async () => {
   const { user } = renderForm();
 
   await pickAna(user);
-  await user.click(screen.getByRole("checkbox", { name: "Eu também participo" }));
+  await user.click(screen.getByRole("switch", { name: "Eu também participo" }));
   await user.click(screen.getByRole("radio", { name: "Parcelado" }));
   await user.clear(screen.getByLabelText("Parcelas"));
   await user.type(screen.getByLabelText("Parcelas"), "3");
@@ -1798,7 +1800,7 @@ it("picks a group for the notices, quiets the bells and creates the billing with
   await user.click(within(dialog).getByRole("button", { name: /Creche Pet/ }));
 
   expect(screen.getByText("O aviso vai pelo grupo Creche Pet. Todos no grupo veem o valor de cada pessoa.")).toBeInTheDocument();
-  expect(screen.queryByRole("switch", { name: "Avisar Ana" })).not.toBeInTheDocument();
+  expect(screen.getByRole("switch", { name: "Avisar Ana" })).toBeDisabled();
 
   await user.type(screen.getByLabelText("Valor total"), "100,00");
 

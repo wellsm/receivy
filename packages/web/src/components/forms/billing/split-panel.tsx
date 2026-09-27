@@ -135,25 +135,34 @@ export function SplitPanel({ draft, people, hint, footer, disabled, addRef, onMo
       </div>
 
       <div className="overflow-hidden rounded-[18px] border border-outline bg-surface">
-        <div className="hidden grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-outline/60 bg-surface-muted/60 px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted sm:grid">
-          <span>Pessoa</span>
+        <div className="hidden items-center gap-2.5 border-b border-outline/60 bg-surface-muted/60 px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted md:flex">
+          <span className="flex-1">Pessoa</span>
           <span>{draft.mode === SplitMode.Equal ? "" : FIELD_LABELS[draft.mode]}</span>
-          <span>Valor{bells ? " · aviso" : ""}</span>
+          <span className="w-[84px] text-right">Valor</span>
+          <span className="w-[74px] text-center">Aviso</span>
         </div>
         <ul className="m-0 list-none p-0">
           {people.map((person, index) => {
             const out = person.owner && !draft.owner;
             const amount = person.amountCents !== undefined && !out ? money(person.amountCents) : "";
+            const bellOn = person.notifiable && !grouped;
 
             return (
-              <li key={person.key} className={`flex min-h-[60px] flex-wrap items-center gap-2.5 px-3 py-2 ${index ? "border-t border-outline/60" : ""} ${out ? "opacity-50" : ""}`}>
+              <li key={person.key} className={`flex min-h-[60px] items-center gap-2.5 px-3 py-2 ${index ? "border-t border-outline/60" : ""} ${out ? "opacity-50" : ""}`}>
                 {person.owner ? <InitialsAvatar name="Eu" size={32} inverted /> : <InitialsAvatar name={person.name} size={32} avatar={person.avatar} />}
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="flex items-center gap-1.5">
                     <span className="truncate text-[14px] font-bold text-ink">{person.name}</span>
                     {person.owner && <span className="rounded-md bg-surface-muted px-1.5 py-0.5 text-[9.5px] font-bold text-muted">VOCÊ</span>}
                   </span>
-                  {person.readonlyText ? <span className="text-[12px] font-semibold text-primary-strong">{person.readonlyText}</span> : <span className="truncate text-[12px] text-muted">{person.subtitle}</span>}
+                  {person.readonlyText ? (
+                    <span className="text-[12px] font-semibold text-primary-strong">{person.readonlyText}</span>
+                  ) : (
+                    <>
+                      <span className="hidden truncate text-[12px] text-muted md:block">{person.subtitle}</span>
+                      {amount && <span className="text-[12.5px] text-muted tabular-nums md:hidden">{amount}</span>}
+                    </>
+                  )}
                 </span>
 
                 {!person.readonlyText && !out && draft.mode === SplitMode.Shares && <Stepper name={person.name} value={person.value} disabled={disabled} onChange={(value) => onValue(person.key, value)} />}
@@ -172,33 +181,39 @@ export function SplitPanel({ draft, people, hint, footer, disabled, addRef, onMo
                   </span>
                 )}
 
-                {amount && !person.readonlyText && <span className="min-w-[72px] text-right font-display text-[14px] font-bold text-ink tabular-nums">{amount}</span>}
+                <span className="hidden w-[84px] text-right font-display text-[14px] font-bold text-ink tabular-nums md:block">{person.readonlyText ? "" : amount}</span>
 
-                {person.owner ? (
-                  <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
-                    participo
-                    <input type="checkbox" aria-label="Eu também participo" className="h-5 w-5 accent-primary" disabled={disabled} checked={draft.owner} onChange={(event) => onOwner(event.target.checked)} />
-                  </label>
-                ) : (
-                  <>
-                    {person.notifiable && !grouped && (
+                {/* One fixed column for the bell and × or the owner's switch, so every field above it lines up. */}
+                <span className="flex w-[74px] shrink-0 items-center justify-end gap-2.5">
+                  {person.owner ? (
+                    <label className="flex w-full cursor-pointer flex-col items-center gap-0.5 text-[10px] font-semibold text-muted">
+                      <input type="checkbox" role="switch" aria-label="Eu também participo" className="peer sr-only" disabled={disabled} checked={draft.owner} onChange={(event) => onOwner(event.target.checked)} />
+                      <span
+                        aria-hidden="true"
+                        className="relative h-5 w-[34px] rounded-full bg-outline transition after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-surface after:shadow-sm after:transition peer-checked:bg-primary peer-checked:after:translate-x-[14px] peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30 peer-disabled:opacity-50"
+                      />
+                      participo
+                    </label>
+                  ) : (
+                    <>
+                      {/* Always there; with no channel, or while a group carries the notice, it stays dimmer than a plain disabled control. */}
                       <button
                         type="button"
                         role="switch"
                         aria-label={`Avisar ${person.name}`}
-                        aria-checked={person.notify}
-                        disabled={disabled}
+                        aria-checked={bellOn && person.notify}
+                        disabled={disabled || !bellOn}
                         onClick={() => onNotify(person.key, !person.notify)}
-                        className={`flex h-9 w-9 items-center justify-center rounded-xl ${person.notify ? "bg-primary-soft text-primary-strong" : "bg-surface-muted text-muted"} disabled:opacity-50`}
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl ${bellOn && person.notify ? "bg-primary-soft text-primary-strong" : "bg-surface-muted text-muted"} ${bellOn ? "disabled:opacity-50" : "opacity-30"}`}
                       >
-                        {person.notify ? <Bell size={16} aria-hidden="true" /> : <BellOff size={16} aria-hidden="true" />}
+                        {bellOn && person.notify ? <Bell size={16} aria-hidden="true" /> : <BellOff size={16} aria-hidden="true" />}
                       </button>
-                    )}
-                    <button type="button" aria-label={`Remover ${person.name}`} disabled={disabled} onClick={() => onRemove(person.key)} className="flex h-9 w-7 items-center justify-center bg-transparent text-muted disabled:opacity-50">
-                      <X size={14} aria-hidden="true" />
-                    </button>
-                  </>
-                )}
+                      <button type="button" aria-label={`Remover ${person.name}`} disabled={disabled} onClick={() => onRemove(person.key)} className="flex h-9 w-7 items-center justify-center bg-transparent text-muted disabled:opacity-50">
+                        <X size={14} aria-hidden="true" />
+                      </button>
+                    </>
+                  )}
+                </span>
               </li>
             );
           })}

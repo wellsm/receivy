@@ -6,6 +6,8 @@ import type { BillingDraft } from "@receivy/common";
  * dies with the process and never reaches the server.
  */
 let parked: BillingDraft | null = null;
+/** The step the creation was on when it left, so the return lands on the same screen. */
+let parkedStep = 1;
 
 /**
  * The billing form pushes the Pix key screen the first time an account without a
@@ -14,8 +16,9 @@ let parked: BillingDraft | null = null;
  * so does leaving the form.
  */
 
-export function saveDraft(draft: BillingDraft): void {
+export function saveDraft(draft: BillingDraft, step = 1): void {
   parked = draft;
+  parkedStep = step;
 }
 
 /** Reads the parked draft and clears it, so a restore never happens twice. */
@@ -25,6 +28,11 @@ export function takeDraft(): BillingDraft | null {
   parked = null;
 
   return draft;
+}
+
+/** The step saved with the last draft; read right after `takeDraft`. */
+export function parkedStepOf(): number {
+  return parkedStep;
 }
 
 /** A conta a receber splits between everyone; a registro a receber has a single payer, so the newcomer takes the seat. */
@@ -61,4 +69,5 @@ export function patchDraft(patch: { contact?: { id: string; userId: string }; pi
 
 export function clearDraft(): void {
   parked = null;
+  parkedStep = 1;
 }

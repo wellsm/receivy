@@ -72,25 +72,24 @@ function Navigation({ mobile = false, activePath = "/" }: { mobile?: boolean; ac
 }
 
 /**
- * Mirrors the mobile app's chrome: tab roots get a bare header with the logo, sub
- * screens get a back button and a centered title, and the three tabs sit at the bottom.
+ * Mirrors the mobile app's chrome: tab roots get no header, sub screens get a back
+ * button and a centered title, and the three tabs sit at the bottom.
  * On wide viewports the sidebar takes over: tab roots get a title bar, sub screens keep their header.
  */
 function ScreenHeader({ title, back, activePath }: { title?: string; back?: string; activePath: string }) {
   if (!back) {
     const tab = navigation.find(({ href }) => href === activePath);
 
+    // Like the app, the tab roots show no header on narrow viewports: the bottom tabs already name
+    // the screen. Wide viewports keep the title bar, since the sidebar replaces the tabs there.
+    if (!tab) {
+      return null;
+    }
+
     return (
-      <>
-        <header className={`${HEADER_BAR} justify-items-center md:hidden`}>
-          <Image className="block h-8 w-8 rounded-[9px]" src="/brand-icon.png" alt="Receivy" width={32} height={32} priority />
-        </header>
-        {tab && (
-          <header className="hidden border-b border-outline/60 bg-surface px-8 py-[22px] md:block xl:px-10">
-            <h1 className="m-0 font-display text-[26px] font-bold tracking-[-0.02em] text-ink">{tab.label}</h1>
-          </header>
-        )}
-      </>
+      <header className="hidden border-b border-outline/60 bg-surface px-8 py-[22px] md:block xl:px-10">
+        <h1 className="m-0 font-display text-[26px] font-bold tracking-[-0.02em] text-ink">{tab.label}</h1>
+      </header>
     );
   }
 
@@ -121,7 +120,7 @@ export function AppShell({ children, activePath = "/", notificationsBadge = fals
       <div className="min-h-screen pb-23.5 md:pb-0">
         <ScreenHeader title={title} back={back} activePath={activePath} />
 
-        <main className="mx-auto w-full max-w-270 px-5 pb-24 md:px-8 md:pt-7 md:pb-22.5 xl:px-10">{children}</main>
+        <main className={`mx-auto w-full max-w-270 px-5 pb-24 md:px-8 md:pt-7 md:pb-22.5 xl:px-10 ${back ? "" : "pt-[max(1rem,env(safe-area-inset-top))]"}`}>{children}</main>
 
         <Navigation mobile activePath={activePath} />
       </div>

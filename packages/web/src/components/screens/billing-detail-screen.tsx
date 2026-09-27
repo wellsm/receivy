@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
+import { publicLinkUrl } from "@/lib/public-link-url";
 import { ScopeDialog } from "@/components/app/scope-dialog";
 import { Toast } from "@/components/app/toast";
 import { ActionTile } from "@/components/ui/action-tile";
@@ -335,7 +336,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
     await run(async () => {
       const link = await request<{ token: string }>(`/api/financial/charges/${charge.id}/public-link`, { method: "POST" }, "Não foi possível compartilhar o link.");
 
-      const url = `${window.location.origin}/pay/${encodeURIComponent(link.token)}`;
+      const url = publicLinkUrl(window.location.origin, link);
 
       await shareUrl(url, "Cobrança Receivy", chargeShareText(charge, url));
     }, "Não foi possível compartilhar o link.");

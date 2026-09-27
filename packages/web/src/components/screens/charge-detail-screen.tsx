@@ -35,6 +35,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
 import { uploadProofFile } from "@/lib/proof-upload";
+import { publicLinkUrl } from "@/lib/public-link-url";
 import { FirstSharePix } from "@/components/app/first-share-pix";
 import { ProofCard } from "@/components/app/proof-card";
 import { RemindDialog } from "@/components/app/remind-dialog";
@@ -275,7 +276,7 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
         setCharge(await request<ChargeDetail>(base));
       }
 
-      const url = `${window.location.origin}/pay/${encodeURIComponent(link.token)}`;
+      const url = publicLinkUrl(window.location.origin, link);
       const text = chargeShareText(charge!, url);
 
       if (navigator.share) {

@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft } from "@/lib/billing-draft";
 import { responseMessage } from "@/lib/financial-response";
+import { publicLinkUrl } from "@/lib/public-link-url";
 import { ActionTile } from "@/components/ui/action-tile";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
@@ -147,7 +148,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
       }
 
       const link = (await response.json()) as PublicLink;
-      const url = `${window.location.origin}/pay/${encodeURIComponent(link.token)}`;
+      const url = publicLinkUrl(window.location.origin, link);
 
       await navigator.clipboard?.writeText(url);
 

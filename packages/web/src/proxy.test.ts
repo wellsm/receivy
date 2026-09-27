@@ -49,6 +49,15 @@ describe("public charge proxy headers", () => {
     expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
   });
+
+  it("lets an anonymous visitor open a short opt-out link without caching or indexing it", async () => {
+    const response = await proxy(request("/o/K7m2xQ"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
 });
 
 describe("session gate", () => {

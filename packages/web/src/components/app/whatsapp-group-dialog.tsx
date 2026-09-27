@@ -1,7 +1,7 @@
 "use client";
 
 import { groupSizeLabel, type WhatsappGroup } from "@receivy/common";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { useEffect, useState, type RefObject } from "react";
 import { BillingDialog } from "@/components/app/billing-dialog";
 
@@ -16,6 +16,34 @@ type WhatsappGroupDialogProps = {
 };
 
 const LOAD_ERROR = "Não foi possível carregar os grupos.";
+/** Placeholder rows while the number is asked for its groups: varied widths read as real names. */
+const SKELETON_WIDTHS = ["w-3/5", "w-2/5", "w-1/2", "w-2/3"];
+
+/** The list's shape while it loads, so the wait reads as progress instead of a bare line of text. */
+function GroupsSkeleton() {
+  return (
+    <div role="status" aria-label="Carregando grupos" className="flex flex-col gap-2">
+      <p className="m-0 flex items-center gap-2 text-[13px] text-muted">
+        <Loader2 size={16} aria-hidden="true" className="animate-spin text-primary-strong" />
+        Buscando grupos no seu WhatsApp…
+      </p>
+      <ul aria-hidden="true" className="m-0 flex list-none flex-col gap-2 p-0">
+        {SKELETON_WIDTHS.map((width, index) => (
+          <li
+            key={width}
+            className="flex min-h-14 animate-pulse items-center gap-3 rounded-2xl border border-outline bg-surface px-4 py-3"
+            style={{ animationDelay: `${index * 150}ms` }}
+          >
+            <span className="flex flex-1 flex-col gap-2">
+              <span className={`h-3.5 rounded-full bg-outline ${width}`} />
+              <span className="h-2.5 w-16 rounded-full bg-outline/60" />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /** The groups of the owner's connected number, searchable, the suggested ones on top. */
 export function WhatsappGroupDialog({ participants, selected, load, returnFocusTo, onPick, onClose }: WhatsappGroupDialogProps) {
@@ -61,11 +89,7 @@ export function WhatsappGroupDialog({ participants, selected, load, returnFocusT
           {error}
         </p>
       )}
-      {!groups && !error && (
-        <p role="status" className="m-0 text-sm text-muted">
-          Carregando grupos…
-        </p>
-      )}
+      {!groups && !error && <GroupsSkeleton />}
       {groups && !visible.length && <p className="m-0 py-6 text-center text-muted">Nenhum grupo encontrado.</p>}
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {visible.map((group) => {

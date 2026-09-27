@@ -23,9 +23,9 @@ import type { WhatsappService } from '../../vendors/whatsapp/service';
 import { PixRequiredError, PixSnapshotLockedError } from '../errors';
 import { LinkRepository, type LinkRow } from '../repositories/link';
 import { LinkableType } from '../schemas/link';
-import { isShortCode } from '../utils/short-code';
-import { assertPublicLinkSecretConfigured, PublicTokenPurpose, verifyOptOutToken, verifyPublicChargeToken } from './capability';
-import { ensurePublicLink, linkAlive, linkToken } from './links';
+import { isShortCode, OPT_OUT_CODE_LENGTH } from '../utils/short-code';
+import { assertPublicLinkSecretConfigured, issueOptOutToken, PublicTokenPurpose, verifyOptOutToken, verifyPublicChargeToken } from './capability';
+import { ensurePublicLink, ensureShortCode, linkAlive, linkToken } from './links';
 
 export type PublicLinkClient = {
   /**
@@ -41,6 +41,8 @@ export type PublicLinkClient = {
   shortLink(code: string): Promise<PublicLink>;
   /** The charge id behind a public token, for a signed-in participant; 404 for anyone else. */
   chargeId(actorId: string, token: string): Promise<string>;
+  /** The footer token behind `/o/<code>`; 404 for anything malformed or unknown. */
+  optOutLink(code: string): Promise<{ token: string }>;
   /** Stops e-mail notices for the account named in the footer token. */
   optOut(token: string): Promise<{ optedOut: boolean }>;
   /** Resumes e-mail notices for the account named in the footer token. */
@@ -78,8 +80,8 @@ export declare class PublicLinkService extends Factory.Service<PublicLinkClient>
   };
 }
 
-function response(link: LinkRow, secret: string): PublicLink {
-  return { token: linkToken(link, secret), expiresAt: link.expires_at };
+function response(link: LinkRow, secret: string, shortCode = link.short_code): PublicLink {
+  return { token: linkToken(link, secret), expiresAt: link.expires_at, ...(shortCode ? { shortCode } : {}) };
 }
 
 /** The owner's own live key a conta a receber may publish; never one kept about a contact, never an archived one. */
@@ -155,8 +157,9 @@ export async function publishChargeLink(
     }
 
     const linked = await ensurePublicLink(tx, row.id, nowSeconds, rotate);
+    const shortCode = await ensureShortCode(tx, linked);
 
-    return { link: response(linked, secret), announce: published };
+    return { link: response(linked, secret, shortCode), announce: published };
   });
 
   if (announce && notice) {
@@ -328,6 +331,25 @@ export async function resolveShortLink(db: DbClient, code: string, secret: strin
   return response(link, secret);
 }
 
+/** `/o/<code>` asks here for the account's opt-out token, then opens `/opt-out/<token>`, which still asks for the click. */
+export async function resolveOptOutCode(db: DbClient, code: string, secret: string): Promise<{ token: string }> {
+  assertPublicLinkSecretConfigured(secret);
+
+  if (!isShortCode(code, OPT_OUT_CODE_LENGTH)) {
+    throw new HttpNotFoundError();
+  }
+
+  const account = await AccountRepository.byOptOutCode(db, code);
+
+  if (!account?.email) {
+    throw new HttpNotFoundError();
+  }
+
+  await throttlePublicRead(db, `opt-out:${account.id}`);
+
+  return { token: issueOptOutToken({ userId: account.id, email: account.email, secret }) };
+}
+
 export function optOutByToken(db: DbClient, secret: string, token: string): Promise<{ optedOut: boolean }> {
   return setOptOut(db, secret, token, true);
 }
@@ -361,6 +383,7 @@ export function createService({ db, email, whatsapp, variables }: Service.Contex
     },
     shortLink: (code) => resolveShortLink(db, code, secret),
     chargeId: (actorId, token) => chargeIdByToken(db, actorId, token, secret),
+    optOutLink: (code) => resolveOptOutCode(db, code, secret),
     optOut: (token) => optOutByToken(db, secret, token),
     optIn: (token) => optInByToken(db, secret, token)
   };

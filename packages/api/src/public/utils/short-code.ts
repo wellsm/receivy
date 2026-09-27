@@ -5,13 +5,17 @@ const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 export const SHORT_CODE_LENGTH = 9;
 
-const SHAPE = new RegExp(`^[${ALPHABET}]{${SHORT_CODE_LENGTH}}$`);
+/**
+ * One per account, for `/o/<code>`: 58^6 ≈ 3.8 × 10^10 codes against a few thousand accounts, and a lucky
+ * guess only opens the opt-out confirmation, which still asks for the click and can be undone.
+ */
+export const OPT_OUT_CODE_LENGTH = 6;
 
 /** 58^9 ≈ 7.4 × 10^15 codes: guessing a live one over HTTP is out of reach, and the unique index catches the rest. */
-export function newShortCode(): string {
+export function newShortCode(length = SHORT_CODE_LENGTH): string {
   let code = '';
 
-  for (let index = 0; index < SHORT_CODE_LENGTH; index++) {
+  for (let index = 0; index < length; index++) {
     code += ALPHABET[randomInt(ALPHABET.length)];
   }
 
@@ -19,6 +23,10 @@ export function newShortCode(): string {
 }
 
 /** Whether `value` could be a short code at all: anything else is a 404 without a read. */
-export function isShortCode(value: string): boolean {
-  return SHAPE.test(value);
+export function isShortCode(value: string, length = SHORT_CODE_LENGTH): boolean {
+  if (value.length !== length) {
+    return false;
+  }
+
+  return [...value].every((char) => ALPHABET.includes(char));
 }

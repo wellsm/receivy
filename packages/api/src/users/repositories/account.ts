@@ -129,6 +129,23 @@ export namespace AccountRepository {
     await db.users.updateOne({ where: { id }, data: { reminder_config: json ?? sqlNull, updated_at: now } });
   }
 
+  export async function optOutCode(db: DbClient, id: string): Promise<string | null> {
+    const row = await db.users.findOne({ select: { opt_out_code: true }, where: { id } });
+
+    return row?.opt_out_code ?? null;
+  }
+
+  /** Writes the code only while the account has none, so two notices minting at once keep the first. */
+  export async function setOptOutCode(db: DbClient, id: string, code: string): Promise<void> {
+    await db.users.updateMany({ where: { id, opt_out_code: { isNull: true } }, data: { opt_out_code: code } });
+  }
+
+  export async function byOptOutCode(db: DbClient, code: string): Promise<{ id: string; email?: string } | null> {
+    const row = await db.users.findOne({ select: { id: true, email: true }, where: { opt_out_code: code, deleted_at: { isNull: true } } });
+
+    return row ?? null;
+  }
+
   export async function setEmailOptOut(db: DbClient, id: string, at: string | null, now: string): Promise<void> {
     await db.users.updateOne({ where: { id }, data: { email_opt_out_at: at ?? sqlNull, updated_at: now } });
   }

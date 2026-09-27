@@ -208,7 +208,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
     Database.UseTable<{
       name: 'users';
       schema: UserSchema;
-      indexes: { id: Index.Primary; email: Index.Unique };
+      indexes: { id: Index.Primary; email: Index.Unique; opt_out_code: Index.Unique };
     }>,
     Database.UseTable<{
       name: 'auth_identities';

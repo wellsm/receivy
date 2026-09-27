@@ -260,6 +260,8 @@ describe('financial repositories on PostgreSQL', () => {
     const rotated = await publishChargeLink(db, OWNER, chargeId, SECRET, true, 2_000);
 
     notEqual(rotated.token, first.token);
+    ok(first.shortCode && /^[1-9A-HJ-NP-Za-km-z]{9}$/.test(first.shortCode), 'the shared link carries its /p code');
+    notEqual(rotated.shortCode, first.shortCode);
 
     await rejects(() => publicChargeByToken(db, first.token, SECRET, 2_001), HttpNotFoundError);
     await revokeChargeLink(db, OWNER, chargeId);

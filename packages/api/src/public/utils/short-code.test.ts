@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isShortCode, newShortCode, SHORT_CODE_LENGTH } from './short-code';
+import { isShortCode, newShortCode, OPT_OUT_CODE_LENGTH, SHORT_CODE_LENGTH } from './short-code';
 
 describe('short codes', () => {
   it('draws 9 base58 characters, never the misread ones', () => {
@@ -20,5 +20,14 @@ describe('short codes', () => {
     expect(isShortCode('K7m2xQ9aBc')).toBe(false);
     expect(isShortCode('K7m2xQ9a0')).toBe(false);
     expect(isShortCode('K7m2xQ9a/')).toBe(false);
+  });
+
+  it('draws and checks the 6-character opt-out code on its own length', () => {
+    const code = newShortCode(OPT_OUT_CODE_LENGTH);
+
+    expect(code).toHaveLength(6);
+    expect(isShortCode(code, OPT_OUT_CODE_LENGTH)).toBe(true);
+    expect(isShortCode(code)).toBe(false);
+    expect(isShortCode('K7m2x0', OPT_OUT_CODE_LENGTH)).toBe(false);
   });
 });

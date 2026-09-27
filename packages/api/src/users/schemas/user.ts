@@ -14,6 +14,8 @@ export interface UserSchema extends Database.Schema {
   reminder_config?: String.Max<2000>;
   /** The person asked, from an e-mail footer, to stop receiving charge notices. */
   email_opt_out_at?: String.DateTime;
+  /** Short handle for `/o/<code>`, the opt-out link a notice prints: 6 base58 characters, unique, minted by the first notice. */
+  opt_out_code?: String.Max<16>;
   /** Reserved for the WhatsApp quick reply (phase 3); nothing writes it yet. */
   whatsapp_opt_out_at?: String.DateTime;
   /** Whose number this owner's WhatsApp notices leave from; absent reads as the Receivy number. */

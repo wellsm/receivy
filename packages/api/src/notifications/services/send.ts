@@ -11,8 +11,7 @@ import { EventableType } from '../../common/schemas/event';
 import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
 import { ProofRepository } from '../../proofs/repositories/proof';
-import { issueOptOutToken } from '../../public/services/capability';
-import { ensurePublicLink, ensureShortCode } from '../../public/services/links';
+import { ensureOptOutCode, ensurePublicLink, ensureShortCode, optOutUrl } from '../../public/services/links';
 import type { CheckoutClients } from '../../vendors/checkout/types';
 import { toWhatsappNumber } from '../../vendors/whatsapp/phone';
 import { buildChargeTemplate } from '../../vendors/whatsapp/templates';
@@ -195,6 +194,7 @@ export async function sendChargeNotice(
   // The owner pays their own bill: no link is minted for them, and the notice carries none.
   const link = ownBill ? null : await ensurePublicLink(db, charge.id, Math.floor(now / 1000));
   const shortCode = link ? await ensureShortCode(db, link) : undefined;
+  const optOutCode = ownBill || !target.email ? undefined : await ensureOptOutCode(db, target.id);
   const rendered = renderNotice(
     {
       email: ownBill ? undefined : target.email,
@@ -209,10 +209,7 @@ export async function sendChargeNotice(
       from: context.config.from ?? 'disabled',
       self: ownBill,
       provider: paymentOf(charge)?.provider,
-      optOutUrl:
-        ownBill || !target.email
-          ? undefined
-          : `${context.config.publicOrigin}/opt-out/${issueOptOutToken({ userId: target.id, email: target.email, secret: context.config.secret })}`
+      optOutUrl: optOutCode ? optOutUrl(context.config.publicOrigin, optOutCode) : undefined
     },
     template,
     context.config.secret

@@ -18,7 +18,7 @@ import { announceCharges, NoticeTemplate, notifyCharge, notifyIdentifier, planRe
 import { LinkRepository } from '../../src/public/repositories/link';
 import { LinkableType } from '../../src/public/schemas/link';
 import { issueOptOutToken } from '../../src/public/services/capability';
-import { optInByToken, optOutByToken, resolveShortLink } from '../../src/public/services/public-link';
+import { optInByToken, optOutByToken, resolveOptOutCode, resolveShortLink } from '../../src/public/services/public-link';
 import { AccountRepository } from '../../src/users/repositories/account';
 import { type AccountService, createService as createAccountService } from '../../src/users/services/account';
 import { charges, cleanupUsers, contacts, createUser, db, paymentMethods } from '../fixtures/financial';
@@ -42,6 +42,7 @@ const bucket = BucketTester.getClientMock('ProofFiles', { keys: {} });
 const accounts = createAccountService({ db, avatarFiles: bucket, proofFiles: bucket, whatsappInstances: { get: async () => null, remove: async () => undefined } } as unknown as Service.Context<AccountService>);
 
 const publicLinks = {
+  optOutLink: (code: string) => resolveOptOutCode(db, code, TEST_CONFIG.secret),
   optOut: (token: string) => optOutByToken(db, TEST_CONFIG.secret, token),
   optIn: (token: string) => optInByToken(db, TEST_CONFIG.secret, token)
 };
@@ -244,7 +245,7 @@ describe('charge notices, channels and devices', () => {
     equal(sent.pushes.length, 1);
     equal(sent.emails.length, 1);
     equal(notify.events.has(notifyIdentifier(id)), false);
-    ok(sent.emails[0]!.text.includes('/opt-out/'), 'the e-mail carries the opt-out link');
+    ok(/\/o\/[1-9A-HJ-NP-Za-km-z]{6}\b/.test(sent.emails[0]!.text), 'the e-mail carries the short opt-out link');
   });
 
   it('follows the owner config: a WhatsApp-only rule drops the e-mail and reports WhatsApp unavailable', async () => {
@@ -898,5 +899,28 @@ describe('charge notices, channels and devices', () => {
     ok(row?.email_opt_out_at);
     deepEqual(await publicLinks.optIn(token), { optedOut: false });
     await rejects(publicLinks.optOut(`${userId}.bad`), HttpNotFoundError);
+  });
+
+  it('opens the opt-out through the /o code the e-mail prints, one code per account', async () => {
+    clock = start;
+    sent.reset();
+
+    const first = await charge(OWNER, DEBTOR_EMAIL);
+    const second = await charge(OWNER, DEBTOR_EMAIL);
+
+    await notifyCharge(db, context, first.id, NoticeTemplate.Reminder, clock, 0);
+    await notifyCharge(db, context, second.id, NoticeTemplate.Reminder, clock, 0);
+
+    const codes = sent.emails.map((mail) => /\/o\/([1-9A-HJ-NP-Za-km-z]{6})\b/.exec(mail.text)?.[1]);
+
+    ok(codes[0]);
+    equal(codes[1], codes[0]);
+
+    const { token } = await publicLinks.optOutLink(codes[0]!);
+
+    deepEqual(await publicLinks.optOut(token), { optedOut: true });
+    deepEqual(await publicLinks.optIn(token), { optedOut: false });
+    await rejects(publicLinks.optOutLink('K7m2xQ9aB'), HttpNotFoundError);
+    await rejects(publicLinks.optOutLink('zzzzzz'), HttpNotFoundError);
   });
 });

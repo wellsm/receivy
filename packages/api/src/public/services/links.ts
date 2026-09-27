@@ -1,7 +1,8 @@
 import type { DbClient } from '../../database';
 import { type LinkRow, LinkRepository } from '../repositories/link';
 import { LinkableType } from '../schemas/link';
-import { newShortCode } from '../utils/short-code';
+import { AccountRepository } from '../../users/repositories/account';
+import { newShortCode, OPT_OUT_CODE_LENGTH } from '../utils/short-code';
 import { issuePublicChargeToken, PublicTokenPurpose } from './capability';
 
 export const LINK_TTL_SECONDS = 90 * 24 * 60 * 60;
@@ -53,6 +54,25 @@ export async function ensureShortCode(db: DbClient, link: LinkRow): Promise<stri
   await LinkRepository.setShortCode(db, link.id, shortCode);
 
   return shortCode;
+}
+
+/** The account's opt-out code, minted the first time a notice prints the link. */
+export async function ensureOptOutCode(db: DbClient, userId: string): Promise<string> {
+  const current = await AccountRepository.optOutCode(db, userId);
+
+  if (current) {
+    return current;
+  }
+
+  await AccountRepository.setOptOutCode(db, userId, newShortCode(OPT_OUT_CODE_LENGTH));
+
+  // Another notice may have minted first: whatever is stored is the code.
+  return (await AccountRepository.optOutCode(db, userId))!;
+}
+
+/** `https://receivy.app/o/K7m2xQ`: the opt-out link of a notice. */
+export function optOutUrl(origin: string, code: string): string {
+  return `${origin.replace(/\/+$/, '')}/o/${code}`;
 }
 
 /** `https://receivy.app/p/K7m2xQ9aB`: what a notice prints instead of the long signed token. */

@@ -216,14 +216,15 @@ describe("accessibility of the main web screens", () => {
 
     await keyboard.click(within(panel).getByRole("button", { name: "Concluir" }));
 
-    expect(screen.getByRole("button", { name: /Ana/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Remover Ana" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Avisar Ana" })).toBeChecked();
 
     expect(screen.getByRole("radiogroup", { name: "Modalidade" })).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: "Divisão" })).toBeInTheDocument();
     expect(screen.getByLabelText("Valor total")).toBeInTheDocument();
     expect(screen.getByLabelText("Título")).toBeInTheDocument();
     expect(screen.getByLabelText("Vencimento")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Criar conta" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Criar conta e avisar" })).toBeInTheDocument();
 
     await expectNoViolations(container);
 

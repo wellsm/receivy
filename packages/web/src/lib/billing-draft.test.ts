@@ -74,6 +74,14 @@ it("replaces the Pix key and keeps everything else", () => {
   expect(stored?.draft.selected).toEqual(["u1"]);
 });
 
+it("keeps the step the creation stood on through a patch", () => {
+  saveDraft(draft(), "/billings/new", 2);
+
+  patchDraft({ contact: { id: "c2", userId: "u2" } });
+
+  expect(takeDraft()?.step).toBe(2);
+});
+
 it("ignores a patch when no draft is stored", () => {
   patchDraft({ pix: "pix-1" });
 

@@ -188,10 +188,62 @@ it("lays the creation out as three numbered columns", async () => {
   api();
   renderForm();
 
-  expect(await screen.findByRole("heading", { name: "O quê e quando" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Divisão" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Avisos e recebimento" })).toBeInTheDocument();
+  const first = await screen.findByRole("region", { name: "O quê e quando" });
+
+  expect(within(first).getByRole("heading", { name: "O quê e quando" })).toBeInTheDocument();
+  expect(within(screen.getByRole("region", { name: "Divisão" })).getByRole("heading", { name: "Divisão" })).toBeInTheDocument();
+  expect(within(screen.getByRole("region", { name: "Avisos e recebimento" })).getByRole("heading", { name: "Avisos e recebimento" })).toBeInTheDocument();
   expect(screen.queryByText("Quem divide")).not.toBeInTheDocument();
+});
+
+it("walks the creation in the app's three steps below md", async () => {
+  api();
+
+  const { user } = renderForm();
+  const first = await screen.findByRole("region", { name: "O quê e quando" });
+
+  // jsdom applies no CSS: the step shows through its classes, `hidden md:flex` off-step.
+  expect(first).toHaveClass("flex");
+  expect(screen.getByRole("region", { name: "Divisão" })).toHaveClass("hidden", "md:flex");
+  expect(screen.getByText("1 de 3")).toBeInTheDocument();
+  expect(createButton()).toHaveClass("hidden", "md:flex");
+
+  await user.click(screen.getByRole("button", { name: "Continuar · divisão" }));
+
+  expect(screen.getByRole("alert")).toHaveTextContent("Informe o valor.");
+  expect(screen.getByText("1 de 3")).toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+  await user.click(screen.getByRole("combobox", { name: "Categoria" }));
+  await user.click(screen.getByRole("option", { name: "Alimentação" }));
+  await user.click(screen.getByRole("button", { name: "Continuar · divisão" }));
+
+  expect(screen.getByText("2 de 3")).toBeInTheDocument();
+  expect(first).toHaveClass("hidden", "md:flex");
+  expect(screen.getByRole("region", { name: "Divisão" })).not.toHaveClass("hidden");
+
+  await user.click(screen.getByRole("button", { name: "Continuar · revisar" }));
+
+  expect(screen.getByRole("alert")).toHaveTextContent("Selecione ao menos um contato.");
+
+  await pickAna(user);
+  await user.click(screen.getByRole("button", { name: "Continuar · revisar" }));
+
+  expect(screen.getByText("3 de 3")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Continuar/ })).not.toBeInTheDocument();
+  expect(createButton()).not.toHaveClass("hidden");
+
+  await user.click(screen.getByRole("button", { name: "Voltar" }));
+
+  expect(screen.getByText("2 de 3")).toBeInTheDocument();
+});
+
+it("returns from a side trip to the step it left", async () => {
+  api();
+  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), selected: ["u1"], amount: "80,00" }, "/billings/new", 2);
+  renderForm();
+
+  expect(await screen.findByText("2 de 3")).toBeInTheDocument();
 });
 
 it("types the amount like a bank keypad and posts the cents", async () => {
@@ -583,7 +635,8 @@ it("creates the billing in one screen, with category, shares and an idempotency 
   await user.click(screen.getByRole("option", { name: "Alimentação" }));
   await user.click(screen.getByRole("radio", { name: "Cotas" }));
 
-  expect(screen.queryByRole("button", { name: /Revisar|Continuar/ })).not.toBeInTheDocument();
+  // Continuar only walks the steps below md; the desktop columns submit straight away.
+  expect(screen.getByRole("button", { name: /Continuar/ })).toHaveClass("md:hidden");
   expect(createButton()).toHaveAccessibleName("Criar conta e avisar");
 
   await user.click(createButton());

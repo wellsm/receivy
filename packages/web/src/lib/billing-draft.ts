@@ -2,7 +2,8 @@ import type { BillingDraft } from "@receivy/common";
 
 const KEY = "receivy.billingDraft";
 
-export type StoredDraft = { draft: BillingDraft; returnTo: string };
+/** `step` is where the creation stood on a narrow screen, so the return lands on the same step. */
+export type StoredDraft = { draft: BillingDraft; returnTo: string; step?: number };
 
 /**
  * The quick billing form leaves the page to register a contact or a Pix key, so
@@ -24,7 +25,9 @@ function read(): StoredDraft | null {
       return null;
     }
 
-    return { draft: parsed.draft, returnTo: parsed.returnTo };
+    const step = typeof parsed.step === "number" ? { step: parsed.step } : {};
+
+    return { draft: parsed.draft, returnTo: parsed.returnTo, ...step };
   } catch {
     return null;
   }
@@ -38,8 +41,8 @@ function write(stored: StoredDraft): void {
   }
 }
 
-export function saveDraft(draft: BillingDraft, returnTo: string): void {
-  write({ draft, returnTo });
+export function saveDraft(draft: BillingDraft, returnTo: string, step?: number): void {
+  write({ draft, returnTo, step });
 }
 
 /** Reads the stored draft and clears it, so a restore never happens twice. */
@@ -81,12 +84,12 @@ export function patchDraft(patch: { contact?: { id: string; userId: string }; pi
   if (stored.draft.direction === "payable") {
     const payee = patch.contact ? { payee: patch.contact.id } : {};
 
-    write({ returnTo: stored.returnTo, draft: { ...stored.draft, ...payee, ...pix } });
+    write({ ...stored, draft: { ...stored.draft, ...payee, ...pix } });
 
     return;
   }
 
   const selected = patch.contact ? selectedWith(stored.draft, patch.contact.userId) : stored.draft.selected;
 
-  write({ returnTo: stored.returnTo, draft: { ...stored.draft, selected, ...pix } });
+  write({ ...stored, draft: { ...stored.draft, selected, ...pix } });
 }

@@ -46,6 +46,8 @@ const DEDICATED_BFF = [
   "POST public/charges/{p}/proof/declaration",
   // The pay page is a server component and closes the charge with authApiFetch, like /pay itself.
   "POST public/charges/{p}/provider-return",
+  // The short link page (/p/[code]) is a server component: it resolves the code with authApiFetch and redirects to /pay.
+  "GET public/short/{p}",
   // Back from the checkout, the pay page resolves the signed-in participant's charge server-side (lib/auth/own-charge.ts).
   "GET charges/by-link/{p}",
   // Provider callbacks land on the web domain and are bridged to the API (lib/auth/provider-callback.ts).

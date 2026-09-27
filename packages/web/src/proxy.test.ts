@@ -40,6 +40,15 @@ describe("public charge proxy headers", () => {
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
   });
+
+  it("lets an anonymous visitor open a short payment link without caching or indexing it", async () => {
+    const response = await proxy(request("/p/K7m2xQ9aB"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
 });
 
 describe("session gate", () => {

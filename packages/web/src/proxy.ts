@@ -75,8 +75,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   // The invite page is public and renders no upload surface, so it only needs
-  // the private cache, the crawler opt-out and a clickjacking guard.
-  if (pathname.startsWith("/join/")) {
+  // the private cache, the crawler opt-out and a clickjacking guard. The short
+  // payment link only redirects to /pay, so it needs the same and nothing more.
+  if (pathname.startsWith("/join/") || pathname.startsWith("/p/")) {
     const response = NextResponse.next();
 
     response.headers.set("cache-control", "private, no-store");
@@ -108,5 +109,5 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/login/code", "/onboarding", "/charges/:path*", "/pay/:path*", "/join/:path*", "/contacts/:path*", "/feed/:path*", "/billings/:path*", "/settings/:path*"],
+  matcher: ["/", "/login", "/login/code", "/onboarding", "/charges/:path*", "/pay/:path*", "/p/:path*", "/join/:path*", "/contacts/:path*", "/feed/:path*", "/billings/:path*", "/settings/:path*"],
 };

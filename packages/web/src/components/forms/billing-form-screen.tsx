@@ -324,6 +324,10 @@ function typedCents(draft: BillingDraft): number {
   }
 }
 
+/** The track of the Já recebi / Já paguei switch; its checkbox sits right before it as the `peer`. */
+const SWITCH_TRACK =
+  "relative h-6 w-10 shrink-0 rounded-full bg-outline transition after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-surface after:shadow-sm after:transition peer-checked:bg-primary peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30 peer-disabled:opacity-50";
+
 /** Shows a creation column only on its own step below `md`; wider screens show them all. */
 function stepClass(current: Step, own: Step): string {
   return current === own ? "flex" : "hidden md:flex";
@@ -639,9 +643,6 @@ export function BillingFormScreen({
     });
   }
 
-  function clearSeat() {
-    update(payable ? { payee: "" } : { selected: [] });
-  }
 
   /**
    * Each direction is paid through other keys: a conta a pagar through the seated
@@ -1172,7 +1173,6 @@ export function BillingFormScreen({
           disabled={locked || frozen}
           pickRef={pickPayee}
           onPick={() => setPicker(true)}
-          onClear={clearSeat}
         />
       );
     }
@@ -1540,19 +1540,20 @@ export function BillingFormScreen({
               disabled={locked}
               onChange={pickDirection}
             />
-            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-2">
-              <span className="text-xs font-semibold text-ink">
+            <label className="flex cursor-pointer items-center justify-between gap-3 min-h-[52px] rounded-2xl border border-outline/30 bg-surface px-3.5 py-2.5">
+              <span className="text-[13.5px] font-semibold text-ink">
                 {SETTLED_LABELS[draft.direction]}
               </span>
               <input
                 type="checkbox"
                 role="switch"
                 aria-label={SETTLED_LABELS[draft.direction]}
-                className="h-5 w-5 accent-primary"
+                className="peer sr-only"
                 disabled={locked}
                 checked={settled}
                 onChange={(event) => update({ settled: event.target.checked })}
               />
+              <span aria-hidden="true" className={SWITCH_TRACK} />
             </label>
             {settled && (
               <p className="m-0 -mt-2 text-[11px] text-muted">{SETTLED_HELP}</p>
@@ -1651,22 +1652,23 @@ export function BillingFormScreen({
         )}
         {/* A registro stays one: the switch shows locked, so the screen still says what this conta is. */}
         {settled && (
-          <label className="flex items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface p-3">
+          <label className="flex items-center justify-between gap-3 min-h-[56px] rounded-2xl border border-outline/30 bg-surface px-3.5 py-2.5">
             <span className="flex min-w-0 flex-col">
-              <span className="text-xs font-semibold text-ink">
+              <span className="text-[13.5px] font-semibold text-ink">
                 {SETTLED_LABELS[draft.direction]}
               </span>
-              <span className="text-[11px] text-muted">{SETTLED_LOCKED}</span>
+              <span className="text-[12px] text-muted">{SETTLED_LOCKED}</span>
             </span>
             <input
               type="checkbox"
               role="switch"
               aria-label={SETTLED_LABELS[draft.direction]}
-              className="h-5 w-5 accent-primary"
+              className="peer sr-only"
               disabled
               checked
               readOnly
             />
+            <span aria-hidden="true" className={SWITCH_TRACK} />
           </label>
         )}
         <Card>
@@ -1762,19 +1764,20 @@ export function BillingFormScreen({
               disabled={locked}
               onChange={pickDirection}
             />
-            <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-2">
-              <span className="text-xs font-semibold text-ink">
+            <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 min-h-[52px] rounded-2xl border border-outline/30 bg-surface px-3.5 py-2.5">
+              <span className="text-[13.5px] font-semibold text-ink">
                 {SETTLED_LABELS[draft.direction]}
               </span>
               <input
                 type="checkbox"
                 role="switch"
                 aria-label={SETTLED_LABELS[draft.direction]}
-                className="h-5 w-5 accent-primary"
+                className="peer sr-only"
                 disabled={locked}
                 checked={settled}
                 onChange={(event) => update({ settled: event.target.checked })}
               />
+              <span aria-hidden="true" className={SWITCH_TRACK} />
             </label>
           </div>
         </section>

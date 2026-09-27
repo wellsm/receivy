@@ -252,31 +252,21 @@ type SeatPanelProps = {
   disabled: boolean;
   pickRef?: RefObject<HTMLButtonElement | null>;
   onPick: () => void;
-  onClear: () => void;
 };
 
-/** The other side of a conta a pagar or a registro: one contact, picked from the agenda. */
-export function SeatPanel({ label, hint, seated, locked, disabled, pickRef, onPick, onClear }: SeatPanelProps) {
-  // A locked seat is not a toggle: it announces no pressed state and offers no remove hint.
-  const chipToggle = locked ? {} : { "aria-pressed": true, title: "Remove quem está do outro lado" };
-
+/** The other side of a conta a pagar or a registro: one contact, picked from the agenda. Once seated it is only swapped, never emptied. */
+export function SeatPanel({ label, hint, seated, locked, disabled, pickRef, onPick }: SeatPanelProps) {
   return (
-    <fieldset className="relative m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={disabled}>
+    <fieldset className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0" disabled={disabled}>
       <legend className="ml-0.5 p-0 text-[11px] font-semibold uppercase tracking-[0.08em] leading-10 text-muted">{label}</legend>
-      {!locked && seated && (
-        <button ref={pickRef} type="button" onClick={onPick} className="absolute right-0 top-0 flex min-h-10 items-center gap-1 bg-transparent px-1 text-xs font-semibold text-primary">
-          <Plus size={14} aria-hidden="true" />
-          Trocar
-        </button>
-      )}
 
       {seated ? (
         <div className="flex min-h-[60px] items-center gap-2.5 rounded-[18px] border border-outline bg-surface px-3 py-2">
           <InitialsAvatar name={seated.displayName} size={32} avatar={seated.avatar} />
           <span className="min-w-0 flex-1 truncate text-[14px] font-bold text-ink">{seated.displayName}</span>
           {!locked && (
-            <button type="button" aria-label={seated.displayName} {...chipToggle} onClick={onClear} className="flex h-9 w-7 items-center justify-center bg-transparent text-muted">
-              <X size={14} aria-hidden="true" />
+            <button ref={pickRef} type="button" aria-label={`Trocar ${seated.displayName}`} onClick={onPick} className="min-h-9 bg-transparent px-1 text-[13px] font-bold text-primary">
+              Trocar
             </button>
           )}
         </div>

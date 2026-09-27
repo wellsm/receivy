@@ -980,7 +980,7 @@ it("creates a conta a pagar without participants, naming the contact who receive
 
   await seatAna(user);
 
-  expect(screen.getByRole("button", { name: "Ana" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Trocar Ana" })).toBeInTheDocument();
   // The seated contact's default key comes preselected.
   expect(await screen.findByRole("button", { name: "Pagar via Pix" })).toBeInTheDocument();
   expect(sent.some((entry) => entry.path === "/api/financial/payment-methods?contactId=c1")).toBe(true);
@@ -1113,17 +1113,14 @@ it("sends a conta a pagar with no key at all when the contact has none", async (
   expect(body.paymentMethodId).toBeUndefined();
 });
 
-it("refuses a conta a pagar whose receiving contact was removed", async () => {
+it("refuses a conta a pagar with nobody to receive it", async () => {
   const sent = api((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
 
-  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), direction: Direction.Payable, payee: "c1", amount: "50,00" }, "/billings/new");
+  saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), direction: Direction.Payable, amount: "50,00" }, "/billings/new");
 
   const { user } = renderForm();
 
-  await user.click(await screen.findByRole("button", { name: "Ana" }));
-
-  expect(screen.queryByRole("button", { name: "Ana" })).not.toBeInTheDocument();
-  expect(screen.getAllByText("Escolha quem recebe.")[0]).toBeInTheDocument();
+  expect((await screen.findAllByText("Escolha quem recebe."))[0]).toBeInTheDocument();
 
   await user.click(createButton());
 
@@ -1420,7 +1417,7 @@ it("patches the receiving contact of a conta a pagar once the seat moves", async
 
   const dialog = await openRow(user, "Para quem");
 
-  await user.click(within(dialog).getByRole("button", { name: "Trocar" }));
+  await user.click(within(dialog).getByRole("button", { name: /^Trocar / }));
 
   const panel = screen.getByRole("dialog", { name: "Contatos" });
 
@@ -1428,7 +1425,7 @@ it("patches the receiving contact of a conta a pagar once the seat moves", async
   await user.click(await within(panel).findByRole("checkbox", { name: "Bruno Lima" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
 
-  expect(within(dialog).getByRole("button", { name: "Bruno Lima" })).toHaveAttribute("aria-pressed", "true");
+  expect(within(dialog).getByRole("button", { name: "Trocar Bruno Lima" })).toBeInTheDocument();
 
   await vi.waitFor(() => expect(sent.some((entry) => entry.path === "/api/financial/payment-methods?contactId=c2")).toBe(true));
 

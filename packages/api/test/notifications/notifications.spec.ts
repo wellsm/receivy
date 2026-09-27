@@ -18,7 +18,7 @@ import { announceCharges, NoticeTemplate, notifyCharge, notifyIdentifier, planRe
 import { LinkRepository } from '../../src/public/repositories/link';
 import { LinkableType } from '../../src/public/schemas/link';
 import { issueOptOutToken } from '../../src/public/services/capability';
-import { optInByToken, optOutByToken } from '../../src/public/services/public-link';
+import { optInByToken, optOutByToken, resolveShortLink } from '../../src/public/services/public-link';
 import { AccountRepository } from '../../src/users/repositories/account';
 import { type AccountService, createService as createAccountService } from '../../src/users/services/account';
 import { charges, cleanupUsers, contacts, createUser, db, paymentMethods } from '../fixtures/financial';
@@ -352,7 +352,16 @@ describe('charge notices, channels and devices', () => {
     equal(sent.emails[0]!.to, address);
     equal(sent.emails[0]!.key, `${id}:initial:${clock}`);
     equal(sent.emails[0]!.from, context.config.from);
-    ok(sent.emails[0]!.text.includes('/pay/'));
+    // The text carries the short link; the HTML button keeps the signed one.
+    const shortUrl = sent.emails[0]!.text.match(/\/p\/([1-9A-HJ-NP-Za-km-z]{9})\b/);
+
+    ok(shortUrl, 'the mail text prints /p/<code>');
+    ok(!sent.emails[0]!.text.includes('/pay/'));
+
+    const live = await LinkRepository.live(db, LinkableType.Charge, id);
+
+    equal(live?.short_code, shortUrl[1]);
+    equal((await resolveShortLink(db, shortUrl[1]!, TEST_CONFIG.secret)).token.split('.')[0], live?.public_id);
     deepEqual((await EventRepository.list(db, id, 'notice.sent'))[0]?.payload, { template: 'initial', channels: ['email'] });
 
     // A reminder names its offset so a redelivery can be told apart from the next one.
@@ -361,6 +370,23 @@ describe('charge notices, channels and devices', () => {
     const reminder = (await EventRepository.list(db, id, 'notice.sent')).find((event) => event.payload['template'] === 'reminder');
 
     deepEqual(reminder?.payload, { template: 'reminder', channels: ['email'], offsetDays: 0 });
+  });
+
+  it('opens only a live charge link, and refuses unknown, malformed, revoked and expired codes', async () => {
+    const { id } = await charge();
+    const now = Math.floor(Date.now() / 1000);
+    const link = await LinkRepository.issue(db, { linkableType: LinkableType.Charge, linkableId: id, expiresAt: new Date((now + 3600) * 1000).toISOString() }, new Date(now * 1000).toISOString());
+
+    ok(link.short_code && /^[1-9A-HJ-NP-Za-km-z]{9}$/.test(link.short_code), 'every new link gets a 9-character base58 code');
+    equal((await resolveShortLink(db, link.short_code!, TEST_CONFIG.secret, now)).token.split('.')[0], link.public_id);
+
+    await rejects(resolveShortLink(db, 'zzzzzzzzz', TEST_CONFIG.secret, now), HttpNotFoundError);
+    await rejects(resolveShortLink(db, 'not-a-code', TEST_CONFIG.secret, now), HttpNotFoundError);
+    await rejects(resolveShortLink(db, link.short_code!, TEST_CONFIG.secret, now + 7200), HttpNotFoundError);
+
+    await LinkRepository.revokeLive(db, LinkableType.Charge, id, new Date(now * 1000).toISOString());
+
+    await rejects(resolveShortLink(db, link.short_code!, TEST_CONFIG.secret, now), HttpNotFoundError);
   });
 
   it('deactivates a dead device and falls back to e-mail', async () => {

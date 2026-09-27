@@ -1,6 +1,7 @@
 import type { DbClient } from '../../database';
 import { type LinkRow, LinkRepository } from '../repositories/link';
 import { LinkableType } from '../schemas/link';
+import { newShortCode } from '../utils/short-code';
 import { issuePublicChargeToken, PublicTokenPurpose } from './capability';
 
 export const LINK_TTL_SECONDS = 90 * 24 * 60 * 60;
@@ -39,4 +40,22 @@ export async function ensurePublicLink(db: DbClient, chargeId: string, nowSecond
 /** The live link of a charge, if it has one; the caller decides what to do when it does not. */
 export async function liveChargeLink(db: DbClient, chargeId: string, nowSeconds?: number): Promise<LinkRow | null> {
   return LinkRepository.live(db, LinkableType.Charge, chargeId, nowSeconds);
+}
+
+/** The short code of a live link, minting one for a link issued before short codes existed. */
+export async function ensureShortCode(db: DbClient, link: LinkRow): Promise<string> {
+  if (link.short_code) {
+    return link.short_code;
+  }
+
+  const shortCode = newShortCode();
+
+  await LinkRepository.setShortCode(db, link.id, shortCode);
+
+  return shortCode;
+}
+
+/** `https://receivy.app/p/K7m2xQ9aB`: what a notice prints instead of the long signed token. */
+export function shortLinkUrl(origin: string, shortCode: string): string {
+  return `${origin.replace(/\/+$/, '')}/p/${shortCode}`;
 }

@@ -18,6 +18,11 @@ export interface LinkSchema extends Database.Schema {
   linkable_id: String.UUID;
   /** Random base64url handle; the signed token is derived from it and never stored. */
   public_id: String.Max<64>;
+  /**
+   * Short handle for `/p/<code>`: 9 base58 characters, random, unique. The page it opens resolves it
+   * to the signed token. Null on links issued before it existed until a notice asks for one.
+   */
+  short_code?: String.Max<16>;
   expires_at: String.DateTime;
   revoked_at?: String.DateTime;
   /** Invite only: how many people joined through this link. Null on a charge link. */

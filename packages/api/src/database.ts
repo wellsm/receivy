@@ -165,6 +165,7 @@ export declare class Db extends Database.Service<PostgresEngine> {
       indexes: {
         id: Index.Primary;
         public_id: Index.Unique;
+        short_code: Index.Unique;
         linkable_id: Index.Secondary;
       };
     }>,

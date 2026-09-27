@@ -1,6 +1,7 @@
 import { chargeDateText, PaymentProvider } from '@receivy/common';
 import { buttonRow, chargeRow, emailDocument, linkRow, noticeRow } from '../../common/services/email/layout';
 import { issuePublicChargeToken, PublicTokenPurpose } from '../../public/services/capability';
+import { shortLinkUrl } from '../../public/services/links';
 
 /** Declared here, not in `send.ts`, so rendering never imports the sender back (a runtime cycle). */
 export const enum NoticeTemplate {
@@ -32,6 +33,8 @@ export interface RenderInputs {
   dueDate: string;
   publicId: string;
   expires: number;
+  /** The link's short code: the text versions print `/p/<code>` instead of the long signed url. */
+  shortCode?: string;
   origin: string;
   from: string;
   /** A conta a pagar reminding its own owner: no public link, no "you received a charge" framing. */
@@ -55,7 +58,7 @@ export function renderNotice(input: RenderInputs, template: NoticeTemplate, secr
     const subject = 'Lembrete da sua conta no Receivy';
     const text = `Sua conta «${input.description}» de R$ ${amount} vence em ${due}.\nAbra o Receivy para pagar e marcar como paga.`;
 
-    return { subject, text, url: '' };
+    return { subject, text, url: '', token: '' };
   }
 
   const token = issuePublicChargeToken({
@@ -65,12 +68,15 @@ export function renderNotice(input: RenderInputs, template: NoticeTemplate, secr
     purpose: PublicTokenPurpose.Charge
   });
 
+  // The push opens the app by the signed url and the Meta button is registered as `/pay/{{1}}`, so both
+  // keep the token; what people read (the mail text, a free-text WhatsApp) gets the short link.
   const url = `${input.origin}/pay/${token}`;
+  const readable = input.shortCode ? shortLinkUrl(input.origin, input.shortCode) : url;
   const initial = template === NoticeTemplate.Initial;
   const subject = initial ? 'Uma nova cobrança no Receivy' : 'Lembrete de cobrança no Receivy';
   const opening = `${input.name}, ${initial ? 'você recebeu uma cobrança' : 'há uma cobrança pendente'} de R$ ${amount}, com vencimento em ${due}.`;
   const optOut = input.optOutUrl ? `\nPara parar de receber avisos de cobrança do Receivy: ${input.optOutUrl}` : '';
-  const text = `${opening}\n${input.description}\nConfira os detalhes: ${url}\n${CLOSING}${optOut}`;
+  const text = `${opening}\n${input.description}\nConfira os detalhes: ${readable}\n${CLOSING}${optOut}`;
 
   const html = emailDocument({
     eyebrow: initial ? 'Nova cobrança' : 'Lembrete de pagamento',
@@ -86,5 +92,5 @@ export function renderNotice(input: RenderInputs, template: NoticeTemplate, secr
     preheader: opening
   });
 
-  return { subject, text, html, url, optOutUrl: input.optOutUrl };
+  return { subject, text, html, url, token, optOutUrl: input.optOutUrl };
 }

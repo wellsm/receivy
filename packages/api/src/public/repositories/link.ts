@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { newShortCode } from '../utils/short-code';
 import { Order } from '@ez4/database';
 import type { DbClient } from '../../database';
 import { LinkableType } from '../schemas/link';
@@ -10,6 +11,7 @@ export type LinkRow = {
   linkable_type: LinkableType;
   linkable_id: string;
   public_id: string;
+  short_code?: string;
   expires_at: string;
   revoked_at?: string;
   accepted_count?: number;
@@ -29,7 +31,7 @@ export namespace LinkRepository {
     lock = false
   ): Promise<LinkRow | null> {
     const { records } = await db.links.findMany({
-      select: { id: true, linkable_type: true, linkable_id: true, public_id: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true },
+      select: { id: true, linkable_type: true, linkable_id: true, public_id: true, short_code: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true },
       where: { linkable_type: linkableType, linkable_id: linkableId, revoked_at: { isNull: true } },
       order: { created_at: Order.Desc },
       take: 1,
@@ -66,12 +68,13 @@ export namespace LinkRepository {
     await revokeLive(db, input.linkableType, input.linkableId, now);
 
     return db.links.insertOne({
-      select: { id: true, linkable_type: true, linkable_id: true, public_id: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true },
+      select: { id: true, linkable_type: true, linkable_id: true, public_id: true, short_code: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true },
       data: {
         id: crypto.randomUUID(),
         linkable_type: input.linkableType,
         linkable_id: input.linkableId,
         public_id: randomBytes(16).toString('base64url'),
+        short_code: newShortCode(),
         expires_at: input.expiresAt,
         revoked_at: sqlNull,
         ...(input.acceptedCount === undefined ? {} : { accepted_count: input.acceptedCount }),
@@ -114,15 +117,27 @@ export namespace LinkRepository {
 
   /** One row by id, for a caller that already resolved it and now needs it under lock. */
   export async function byId(db: DbClient, id: string, lock = false): Promise<LinkRow | null> {
-    const row = await db.links.findOne({ select: { id: true, linkable_type: true, linkable_id: true, public_id: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true }, where: { id }, ...(lock ? { lock: true } : {}) });
+    const row = await db.links.findOne({ select: { id: true, linkable_type: true, linkable_id: true, public_id: true, short_code: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true }, where: { id }, ...(lock ? { lock: true } : {}) });
 
     return row ?? null;
   }
 
   /** The row behind a handle, whatever its state: the caller decides what revoked or expired means. */
   export async function byPublicId(db: DbClient, publicId: string): Promise<LinkRow | null> {
-    const row = await db.links.findOne({ select: { id: true, linkable_type: true, linkable_id: true, public_id: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true }, where: { public_id: publicId } });
+    const row = await db.links.findOne({ select: { id: true, linkable_type: true, linkable_id: true, public_id: true, short_code: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true }, where: { public_id: publicId } });
 
     return row ?? null;
+  }
+
+  /** The row behind a short code, whatever its state: the caller decides what revoked or expired means. */
+  export async function byShortCode(db: DbClient, shortCode: string): Promise<LinkRow | null> {
+    const row = await db.links.findOne({ select: { id: true, linkable_type: true, linkable_id: true, public_id: true, short_code: true, expires_at: true, revoked_at: true, accepted_count: true, created_at: true }, where: { short_code: shortCode } });
+
+    return row ?? null;
+  }
+
+  /** Gives a link issued before short codes existed its code. */
+  export async function setShortCode(db: DbClient, id: string, shortCode: string): Promise<void> {
+    await db.links.updateOne({ where: { id }, data: { short_code: shortCode } });
   }
 }

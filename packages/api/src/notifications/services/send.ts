@@ -12,7 +12,7 @@ import { ContactRepository } from '../../contacts/repositories/contact';
 import type { DbClient } from '../../database';
 import { ProofRepository } from '../../proofs/repositories/proof';
 import { issueOptOutToken } from '../../public/services/capability';
-import { ensurePublicLink } from '../../public/services/links';
+import { ensurePublicLink, ensureShortCode } from '../../public/services/links';
 import type { CheckoutClients } from '../../vendors/checkout/types';
 import { toWhatsappNumber } from '../../vendors/whatsapp/phone';
 import { buildChargeTemplate } from '../../vendors/whatsapp/templates';
@@ -175,6 +175,7 @@ export async function sendChargeNotice(
 
   // The owner pays their own bill: no link is minted for them, and the notice carries none.
   const link = ownBill ? null : await ensurePublicLink(db, charge.id, Math.floor(now / 1000));
+  const shortCode = link ? await ensureShortCode(db, link) : undefined;
   const rendered = renderNotice(
     {
       email: ownBill ? undefined : target.email,
@@ -184,6 +185,7 @@ export async function sendChargeNotice(
       dueDate: charge.due_date,
       publicId: link?.public_id ?? '',
       expires: link ? Math.floor(Date.parse(link.expires_at) / 1000) : 0,
+      shortCode,
       origin: context.config.publicOrigin,
       from: context.config.from ?? 'disabled',
       self: ownBill,
@@ -249,7 +251,7 @@ export async function sendChargeNotice(
               cents: charge.amount_cents,
               dueDate: charge.due_date,
               description: charge.description,
-              token: rendered.url.slice(rendered.url.lastIndexOf('/') + 1)
+              token: rendered.token
             },
             context.config.templates
           ),

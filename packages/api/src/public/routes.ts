@@ -7,6 +7,7 @@ import type { optInHandler } from './endpoints/opt-in';
 import type { optOutHandler } from './endpoints/opt-out';
 import type { providerReturnHandler } from './endpoints/provider-return';
 import type { rotatePublicLinkHandler } from './endpoints/rotate-link';
+import type { shortLinkHandler } from './endpoints/short-link';
 
 export type PublicRoutes = [
   Http.UseRoute<{
@@ -28,6 +29,7 @@ export type PublicRoutes = [
     handler: typeof chargeByLinkHandler;
   }>,
   Http.UseRoute<{ name: 'publicCharge'; path: 'GET /public/charges/{token}'; handler: typeof publicChargeHandler }>,
+  Http.UseRoute<{ name: 'publicShortLink'; path: 'GET /public/short/{code}'; handler: typeof shortLinkHandler }>,
   Http.UseRoute<{ name: 'providerReturn'; path: 'POST /public/charges/{token}/provider-return'; handler: typeof providerReturnHandler }>,
   Http.UseRoute<{ name: 'noticeOptOut'; path: 'POST /public/notices/opt-out/{token}'; handler: typeof optOutHandler }>,
   Http.UseRoute<{ name: 'noticeOptIn'; path: 'DELETE /public/notices/opt-out/{token}'; handler: typeof optInHandler }>

@@ -23,8 +23,9 @@ import type { WhatsappService } from '../../vendors/whatsapp/service';
 import { PixRequiredError, PixSnapshotLockedError } from '../errors';
 import { LinkRepository, type LinkRow } from '../repositories/link';
 import { LinkableType } from '../schemas/link';
+import { isShortCode } from '../utils/short-code';
 import { assertPublicLinkSecretConfigured, PublicTokenPurpose, verifyOptOutToken, verifyPublicChargeToken } from './capability';
-import { ensurePublicLink, linkToken } from './links';
+import { ensurePublicLink, linkAlive, linkToken } from './links';
 
 export type PublicLinkClient = {
   /**
@@ -36,6 +37,8 @@ export type PublicLinkClient = {
   rotate(creditorId: string, chargeId: string): Promise<PublicLink>;
   /** The charge behind a public token, as the page shows it; 404 for anything forged, rotated, revoked or expired. */
   view(token: string): Promise<{ charge: ChargeRepository.Row; view: PublicChargeView }>;
+  /** The signed token behind a short code, for `/p/<code>`; 404 for anything unknown, revoked or expired. */
+  shortLink(code: string): Promise<PublicLink>;
   /** The charge id behind a public token, for a signed-in participant; 404 for anyone else. */
   chargeId(actorId: string, token: string): Promise<string>;
   /** Stops e-mail notices for the account named in the footer token. */
@@ -306,6 +309,25 @@ async function setOptOut(db: DbClient, secret: string, token: string, optedOut: 
   return { optedOut };
 }
 
+/** A short code opens the same charge its link's token does, under the same rules: live, a charge, not expired. */
+export async function resolveShortLink(db: DbClient, code: string, secret: string, nowSeconds = Math.floor(Date.now() / 1000)): Promise<PublicLink> {
+  assertPublicLinkSecretConfigured(secret);
+
+  if (!isShortCode(code)) {
+    throw new HttpNotFoundError();
+  }
+
+  const link = await LinkRepository.byShortCode(db, code);
+
+  if (!link || link.linkable_type !== LinkableType.Charge || !linkAlive(link, nowSeconds)) {
+    throw new HttpNotFoundError();
+  }
+
+  await throttlePublicRead(db, link.linkable_id);
+
+  return response(link, secret);
+}
+
 export function optOutByToken(db: DbClient, secret: string, token: string): Promise<{ optedOut: boolean }> {
   return setOptOut(db, secret, token, true);
 }
@@ -337,6 +359,7 @@ export function createService({ db, email, whatsapp, variables }: Service.Contex
 
       return { charge, view: await publicChargeView(db, charge) };
     },
+    shortLink: (code) => resolveShortLink(db, code, secret),
     chargeId: (actorId, token) => chargeIdByToken(db, actorId, token, secret),
     optOut: (token) => optOutByToken(db, secret, token),
     optIn: (token) => optInByToken(db, secret, token)

@@ -53,6 +53,24 @@ describe('renderNotice', () => {
   });
 });
 
+describe('renderNotice links', () => {
+  it('prints the short link in the text and keeps the signed one for the button, the push and the template', () => {
+    const notice = renderNotice({ ...input, shortCode: 'K7m2xQ9aB' }, NoticeTemplate.Reminder, 'fixture-secret');
+
+    expect(notice.text).toContain('Confira os detalhes: https://receivy.app/p/K7m2xQ9aB');
+    expect(notice.text).not.toContain('/pay/');
+    expect(notice.url).toBe(`https://receivy.app/pay/${notice.token}`);
+    expect(notice.token.startsWith('public-id.')).toBe(true);
+    expect(notice.html).toContain(notice.url);
+  });
+
+  it('falls back to the signed url when the link has no short code', () => {
+    const notice = renderNotice(input, NoticeTemplate.Initial, 'fixture-secret');
+
+    expect(notice.text).toContain(`Confira os detalhes: ${notice.url}`);
+  });
+});
+
 describe('renderNotice footnote by provider', () => {
   it('mentions the Pix key by default, with no provider set', () => {
     const notice = renderNotice(input, NoticeTemplate.Initial, 'fixture-secret');

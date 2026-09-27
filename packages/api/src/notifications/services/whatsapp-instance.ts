@@ -1,25 +1,45 @@
-import { randomBytes } from 'node:crypto';
-import type { Environment, Service } from '@ez4/common';
-import type { Factory } from '@ez4/factory';
-import { HttpBadRequestError, HttpNotFoundError } from '@ez4/gateway';
-import { PlanTier, type WhatsappGroup, WhatsappInstanceState, type WhatsappInstanceView, WhatsappSender } from '@receivy/common';
-import { EventRepository } from '../../common/repositories/events';
-import { ContactRepository } from '../../contacts/repositories/contact';
-import { EventableType } from '../../common/schemas/event';
-import type { Db, DbClient } from '../../database';
-import type { PlanClient, PlanService } from '../../plans/services/plan';
-import { AccountRepository } from '../../users/repositories/account';
-import { groupHasEveryone, parseEvolutionGroups } from '../../vendors/whatsapp/groups';
-import { toWhatsappNumber } from '../../vendors/whatsapp/phone';
-import type { EvolutionConnectionState } from '../../vendors/whatsapp/webhook';
-import { WhatsappGroupsRequireInstanceError, WhatsappInstanceRequiredError, WhatsappInstanceUnavailableError, WhatsappPlanRequiredError } from '../errors';
-import { WhatsappInstanceRepository } from '../repositories/whatsapp-instance';
-import { pushToUser } from './direct';
-import { type NotificationTransport, notificationTransport } from './transport';
+import { randomBytes } from "node:crypto";
+import type { Environment, Service } from "@ez4/common";
+import type { Factory } from "@ez4/factory";
+import { HttpBadRequestError, HttpNotFoundError } from "@ez4/gateway";
+import {
+  PlanTier,
+  type WhatsappGroup,
+  WhatsappInstanceState,
+  type WhatsappInstanceView,
+  WhatsappSender,
+} from "@receivy/common";
+import { EventRepository } from "../../common/repositories/events";
+import { ContactRepository } from "../../contacts/repositories/contact";
+import { EventableType } from "../../common/schemas/event";
+import type { Db, DbClient } from "../../database";
+import type { PlanClient, PlanService } from "../../plans/services/plan";
+import { AccountRepository } from "../../users/repositories/account";
+import {
+  groupHasEveryone,
+  parseEvolutionGroups,
+} from "../../vendors/whatsapp/groups";
+import { toWhatsappNumber } from "../../vendors/whatsapp/phone";
+import type { EvolutionConnectionState } from "../../vendors/whatsapp/webhook";
+import {
+  WhatsappGroupsRequireInstanceError,
+  WhatsappInstanceRequiredError,
+  WhatsappInstanceUnavailableError,
+  WhatsappPlanRequiredError,
+} from "../errors";
+import { WhatsappInstanceRepository } from "../repositories/whatsapp-instance";
+import { pushToUser } from "./direct";
+import { type NotificationTransport, notificationTransport } from "./transport";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+/** `fetchAllGroups` with participants takes past 15s on a number with many groups; the gateway still cuts at 30s. */
+const GROUPS_TIMEOUT_MS = 25_000;
 
-const WEBHOOK_EVENTS = ['QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPDATE'];
+const WEBHOOK_EVENTS = [
+  "QRCODE_UPDATED",
+  "CONNECTION_UPDATE",
+  "MESSAGES_UPDATE",
+];
 
 export type InstanceVariables = {
   EVOLUTION_API_URL?: string;
@@ -39,12 +59,20 @@ export type InstanceVariables = {
 export type CreateInstanceInput = { riskAccepted: boolean; phone?: string };
 
 export type WhatsappInstanceClient = {
-  create(ownerId: string, input: CreateInstanceInput): Promise<WhatsappInstanceView>;
+  create(
+    ownerId: string,
+    input: CreateInstanceInput,
+  ): Promise<WhatsappInstanceView>;
   get(ownerId: string, refresh?: boolean): Promise<WhatsappInstanceView | null>;
   remove(ownerId: string): Promise<void>;
   setSender(ownerId: string, sender: WhatsappSender): Promise<WhatsappSender>;
   /** From the Evolution webhook: the instance connected or dropped. */
-  applyConnection(name: string, state: EvolutionConnectionState, phone?: string, now?: Date): Promise<void>;
+  applyConnection(
+    name: string,
+    state: EvolutionConnectionState,
+    phone?: string,
+    now?: Date,
+  ): Promise<void>;
   applyQr(name: string, qr: string, now?: Date): Promise<void>;
   /**
    * The groups the owner's connected number is in. A group with every one of `participantIds` (people
@@ -55,7 +83,7 @@ export type WhatsappInstanceClient = {
 
 export type InstanceDeps = {
   db: DbClient;
-  plans: Pick<PlanClient, 'get'>;
+  plans: Pick<PlanClient, "get">;
   variables: InstanceVariables;
   request?: typeof fetch;
   transport?: NotificationTransport;
@@ -67,7 +95,14 @@ export function instanceNameOf(ownerId: string): string {
 }
 
 function view(row: WhatsappInstanceRepository.Row): WhatsappInstanceView {
-  return { state: row.state, phone: row.phone ?? null, qr: row.qr ?? null, pairingCode: row.pairing_code ?? null, connectedAt: row.connected_at ?? null, disconnectedAt: row.disconnected_at ?? null };
+  return {
+    state: row.state,
+    phone: row.phone ?? null,
+    qr: row.qr ?? null,
+    pairingCode: row.pairing_code ?? null,
+    connectedAt: row.connected_at ?? null,
+    disconnectedAt: row.disconnected_at ?? null,
+  };
 }
 
 type EvolutionApi = { url: string; key: string };
@@ -76,37 +111,60 @@ function evolutionOf(variables: InstanceVariables): EvolutionApi | null {
   const url = variables.EVOLUTION_API_URL;
   const key = variables.EVOLUTION_API_KEY;
 
-  if (!url || !key || key === 'disabled') {
+  if (!url || !key || key === "disabled") {
     return null;
   }
 
-  return { url: url.replace(/\/+$/, ''), key };
+  return { url: url.replace(/\/+$/, ""), key };
 }
 
 /** One call with the global key; only instance management goes through here, never a message. */
-function call(api: EvolutionApi, request: typeof fetch, method: 'POST' | 'GET' | 'DELETE', path: string, body?: unknown): Promise<Response> {
+function call(
+  api: EvolutionApi,
+  request: typeof fetch,
+  method: "POST" | "GET" | "DELETE",
+  path: string,
+  body?: unknown,
+): Promise<Response> {
   return request(`${api.url}${path}`, {
     method,
-    headers: { apikey: api.key, 'Content-Type': 'application/json' },
+    headers: { apikey: api.key, "Content-Type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 }
 
 type Pairing = { qr?: string; pairingCode?: string };
 
 function pairingOf(body: unknown): Pairing {
-  const data = body as { base64?: unknown; pairingCode?: unknown; qrcode?: { base64?: unknown; pairingCode?: unknown } } | null;
+  const data = body as {
+    base64?: unknown;
+    pairingCode?: unknown;
+    qrcode?: { base64?: unknown; pairingCode?: unknown };
+  } | null;
   const qr = data?.qrcode?.base64 ?? data?.base64;
   const code = data?.qrcode?.pairingCode ?? data?.pairingCode;
 
-  return { ...(typeof qr === 'string' && qr ? { qr } : {}), ...(typeof code === 'string' && code ? { pairingCode: code } : {}) };
+  return {
+    ...(typeof qr === "string" && qr ? { qr } : {}),
+    ...(typeof code === "string" && code ? { pairingCode: code } : {}),
+  };
 }
 
 /** A fresh QR, and the pairing code when the row has a phone, from Evolution's connect endpoint. */
-async function connect(api: EvolutionApi, request: typeof fetch, name: string, phone: string | undefined): Promise<Pairing> {
-  const query = phone ? `?number=${encodeURIComponent(phone)}` : '';
-  const response = await call(api, request, 'GET', `/instance/connect/${encodeURIComponent(name)}${query}`).catch(() => null);
+async function connect(
+  api: EvolutionApi,
+  request: typeof fetch,
+  name: string,
+  phone: string | undefined,
+): Promise<Pairing> {
+  const query = phone ? `?number=${encodeURIComponent(phone)}` : "";
+  const response = await call(
+    api,
+    request,
+    "GET",
+    `/instance/connect/${encodeURIComponent(name)}${query}`,
+  ).catch(() => null);
 
   if (!response?.ok) {
     return {};
@@ -115,15 +173,23 @@ async function connect(api: EvolutionApi, request: typeof fetch, name: string, p
   return pairingOf(await response.json().catch(() => ({})));
 }
 
-async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string, input: CreateInstanceInput): Promise<WhatsappInstanceView> {
+async function create(
+  deps: InstanceDeps,
+  request: typeof fetch,
+  ownerId: string,
+  input: CreateInstanceInput,
+): Promise<WhatsappInstanceView> {
   if (input.riskAccepted !== true) {
-    throw new HttpBadRequestError('Aceite os termos do canal não oficial para continuar.');
+    throw new HttpBadRequestError(
+      "Aceite os termos do canal não oficial para continuar.",
+    );
   }
 
-  const phone = input.phone === undefined ? undefined : toWhatsappNumber(input.phone);
+  const phone =
+    input.phone === undefined ? undefined : toWhatsappNumber(input.phone);
 
   if (input.phone !== undefined && !phone) {
-    throw new HttpBadRequestError('Telefone inválido.');
+    throw new HttpBadRequestError("Telefone inválido.");
   }
 
   const api = evolutionOf(deps.variables);
@@ -145,17 +211,32 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
   }
 
   const name = instanceNameOf(ownerId);
-  const token = randomBytes(32).toString('hex');
-  const webhookSecret = randomBytes(24).toString('hex');
-  const origin = (deps.variables.PUBLIC_API_ORIGIN ?? 'http://127.0.0.1:3735/local-receivy-api').replace(/\/+$/, '');
+  const token = randomBytes(32).toString("hex");
+  const webhookSecret = randomBytes(24).toString("hex");
+  const origin = (
+    deps.variables.PUBLIC_API_ORIGIN ??
+    "http://127.0.0.1:3735/local-receivy-api"
+  ).replace(/\/+$/, "");
 
   const created = new Date().toISOString();
   // The row and the sender go first, in one transaction: the unique `owner_id` index makes a second
   // concurrent create fail here, before it could delete and recreate the instance the first one made.
   const row = await deps.db.transaction(async (tx) => {
-    const inserted = await WhatsappInstanceRepository.insert(tx, { ownerId, name, token, webhookSecret, ...(phone ? { phone } : {}), now: created });
+    const inserted = await WhatsappInstanceRepository.insert(tx, {
+      ownerId,
+      name,
+      token,
+      webhookSecret,
+      ...(phone ? { phone } : {}),
+      now: created,
+    });
 
-    await AccountRepository.setWhatsappSender(tx, ownerId, WhatsappSender.Own, created);
+    await AccountRepository.setWhatsappSender(
+      tx,
+      ownerId,
+      WhatsappSender.Own,
+      created,
+    );
 
     return inserted;
   });
@@ -163,15 +244,26 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
   // A previous attempt may have created the instance on Evolution and then lost its row (a timeout, a dead
   // database); creating with the same name would otherwise get "name in use" forever. Clearing a possible
   // orphan first costs nothing: a 404 means there was none.
-  await call(api, request, 'DELETE', `/instance/delete/${encodeURIComponent(name)}`).catch(() => null);
+  await call(
+    api,
+    request,
+    "DELETE",
+    `/instance/delete/${encodeURIComponent(name)}`,
+  ).catch(() => null);
 
-  const response = await call(api, request, 'POST', '/instance/create', {
+  const response = await call(api, request, "POST", "/instance/create", {
     instanceName: name,
     token,
     qrcode: true,
-    integration: 'WHATSAPP-BAILEYS',
+    integration: "WHATSAPP-BAILEYS",
     ...(phone ? { number: phone } : {}),
-    webhook: { url: `${origin}/webhooks/whatsapp/evolution`, byEvents: false, base64: false, headers: { authorization: webhookSecret }, events: WEBHOOK_EVENTS }
+    webhook: {
+      url: `${origin}/webhooks/whatsapp/evolution`,
+      byEvents: false,
+      base64: false,
+      headers: { authorization: webhookSecret },
+      events: WEBHOOK_EVENTS,
+    },
   }).catch(() => null);
 
   if (!response?.ok) {
@@ -180,7 +272,12 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
     // Nothing to pair: the row and the sender go back to how they were, so a retry starts clean.
     await deps.db.transaction(async (tx) => {
       await WhatsappInstanceRepository.remove(tx, row.id);
-      await AccountRepository.setWhatsappSender(tx, ownerId, WhatsappSender.Receivy, failed);
+      await AccountRepository.setWhatsappSender(
+        tx,
+        ownerId,
+        WhatsappSender.Receivy,
+        failed,
+      );
     });
 
     throw new WhatsappInstanceUnavailableError();
@@ -189,24 +286,40 @@ async function create(deps: InstanceDeps, request: typeof fetch, ownerId: string
   const body = await response.json().catch(() => ({}));
   // Without a phone the QR comes straight from `create`; with one, `connect?number=` hands back both the QR and the pairing
   // code — its fields win when present, but a failed `connect` never discards the QR the `create` body already gave us.
-  const pairing = phone ? { ...pairingOf(body), ...(await connect(api, request, name, phone)) } : pairingOf(body);
+  const pairing = phone
+    ? { ...pairingOf(body), ...(await connect(api, request, name, phone)) }
+    : pairingOf(body);
   const now = new Date().toISOString();
 
-  await WhatsappInstanceRepository.setState(deps.db, row.id, { qr: pairing.qr ?? null, pairingCode: pairing.pairingCode ?? null }, now);
+  await WhatsappInstanceRepository.setState(
+    deps.db,
+    row.id,
+    { qr: pairing.qr ?? null, pairingCode: pairing.pairingCode ?? null },
+    now,
+  );
 
   await EventRepository.record(deps.db, {
-    type: 'whatsapp_instance.created',
+    type: "whatsapp_instance.created",
     eventableType: EventableType.Account,
     eventableId: ownerId,
     actorId: ownerId,
-    payload: { riskAcceptedAt: now, pairing: phone ? 'code' : 'qr' },
-    at: now
+    payload: { riskAcceptedAt: now, pairing: phone ? "code" : "qr" },
+    at: now,
   });
 
-  return view({ ...row, ...(pairing.qr ? { qr: pairing.qr } : {}), ...(pairing.pairingCode ? { pairing_code: pairing.pairingCode } : {}) });
+  return view({
+    ...row,
+    ...(pairing.qr ? { qr: pairing.qr } : {}),
+    ...(pairing.pairingCode ? { pairing_code: pairing.pairingCode } : {}),
+  });
 }
 
-async function get(deps: InstanceDeps, request: typeof fetch, ownerId: string, refresh: boolean): Promise<WhatsappInstanceView | null> {
+async function get(
+  deps: InstanceDeps,
+  request: typeof fetch,
+  ownerId: string,
+  refresh: boolean,
+): Promise<WhatsappInstanceView | null> {
   const row = await WhatsappInstanceRepository.byOwner(deps.db, ownerId);
 
   if (!row) {
@@ -217,28 +330,51 @@ async function get(deps: InstanceDeps, request: typeof fetch, ownerId: string, r
 
   // A pending instance asked to refresh, or with neither the QR nor the code in hand, asks Evolution for
   // a fresh pair; a failure here just keeps what the row already had.
-  if (row.state === WhatsappInstanceState.Pending && api && (refresh || (!row.qr && !row.pairing_code))) {
+  if (
+    row.state === WhatsappInstanceState.Pending &&
+    api &&
+    (refresh || (!row.qr && !row.pairing_code))
+  ) {
     const pairing = await connect(api, request, row.name, row.phone);
 
     if (pairing.qr !== undefined || pairing.pairingCode !== undefined) {
-      await WhatsappInstanceRepository.setState(deps.db, row.id, { qr: pairing.qr ?? null, pairingCode: pairing.pairingCode ?? null }, new Date().toISOString());
+      await WhatsappInstanceRepository.setState(
+        deps.db,
+        row.id,
+        { qr: pairing.qr ?? null, pairingCode: pairing.pairingCode ?? null },
+        new Date().toISOString(),
+      );
 
       // Mirrors what was just saved: a code-only refresh clears the (now expired) qr, and vice versa.
-      return view({ ...row, qr: pairing.qr, pairing_code: pairing.pairingCode });
+      return view({
+        ...row,
+        qr: pairing.qr,
+        pairing_code: pairing.pairingCode,
+      });
     }
   }
 
   return view(row);
 }
 
-async function setSender(deps: InstanceDeps, ownerId: string, sender: WhatsappSender): Promise<WhatsappSender> {
-  if (sender === WhatsappSender.Own && (await deps.plans.get(ownerId)).plan === PlanTier.Free) {
+async function setSender(
+  deps: InstanceDeps,
+  ownerId: string,
+  sender: WhatsappSender,
+): Promise<WhatsappSender> {
+  if (
+    sender === WhatsappSender.Own &&
+    (await deps.plans.get(ownerId)).plan === PlanTier.Free
+  ) {
     throw new WhatsappPlanRequiredError();
   }
 
   const current = await AccountRepository.whatsappSender(deps.db, ownerId);
 
-  if (sender === WhatsappSender.Own && !(await WhatsappInstanceRepository.byOwner(deps.db, ownerId))) {
+  if (
+    sender === WhatsappSender.Own &&
+    !(await WhatsappInstanceRepository.byOwner(deps.db, ownerId))
+  ) {
     throw new WhatsappInstanceRequiredError();
   }
 
@@ -250,13 +386,24 @@ async function setSender(deps: InstanceDeps, ownerId: string, sender: WhatsappSe
 
   await deps.db.transaction(async (tx) => {
     await AccountRepository.setWhatsappSender(tx, ownerId, sender, now);
-    await EventRepository.record(tx, { type: 'whatsapp_sender.changed', eventableType: EventableType.Account, eventableId: ownerId, actorId: ownerId, payload: { from: current, to: sender }, at: now });
+    await EventRepository.record(tx, {
+      type: "whatsapp_sender.changed",
+      eventableType: EventableType.Account,
+      eventableId: ownerId,
+      actorId: ownerId,
+      payload: { from: current, to: sender },
+      at: now,
+    });
   });
 
   return sender;
 }
 
-async function remove(deps: InstanceDeps, request: typeof fetch, ownerId: string): Promise<void> {
+async function remove(
+  deps: InstanceDeps,
+  request: typeof fetch,
+  ownerId: string,
+): Promise<void> {
   const row = await WhatsappInstanceRepository.byOwner(deps.db, ownerId);
 
   if (!row) {
@@ -267,20 +414,48 @@ async function remove(deps: InstanceDeps, request: typeof fetch, ownerId: string
 
   // Best effort on the Evolution side: a 404 means it is already gone; a failure leaves an orphan Evolution can list later.
   if (api) {
-    await call(api, request, 'DELETE', `/instance/logout/${encodeURIComponent(row.name)}`).catch(() => null);
-    await call(api, request, 'DELETE', `/instance/delete/${encodeURIComponent(row.name)}`).catch(() => null);
+    await call(
+      api,
+      request,
+      "DELETE",
+      `/instance/logout/${encodeURIComponent(row.name)}`,
+    ).catch(() => null);
+    await call(
+      api,
+      request,
+      "DELETE",
+      `/instance/delete/${encodeURIComponent(row.name)}`,
+    ).catch(() => null);
   }
 
   const now = new Date().toISOString();
 
   await deps.db.transaction(async (tx) => {
     await WhatsappInstanceRepository.remove(tx, row.id);
-    await AccountRepository.setWhatsappSender(tx, ownerId, WhatsappSender.Receivy, now);
-    await EventRepository.record(tx, { type: 'whatsapp_instance.removed', eventableType: EventableType.Account, eventableId: ownerId, actorId: ownerId, at: now });
+    await AccountRepository.setWhatsappSender(
+      tx,
+      ownerId,
+      WhatsappSender.Receivy,
+      now,
+    );
+    await EventRepository.record(tx, {
+      type: "whatsapp_instance.removed",
+      eventableType: EventableType.Account,
+      eventableId: ownerId,
+      actorId: ownerId,
+      at: now,
+    });
   });
 }
 
-async function applyConnection(deps: InstanceDeps, transport: NotificationTransport, name: string, state: EvolutionConnectionState, phone: string | undefined, now: Date): Promise<void> {
+async function applyConnection(
+  deps: InstanceDeps,
+  transport: NotificationTransport,
+  name: string,
+  state: EvolutionConnectionState,
+  phone: string | undefined,
+  now: Date,
+): Promise<void> {
   const row = await WhatsappInstanceRepository.byName(deps.db, name);
 
   if (!row) {
@@ -289,32 +464,61 @@ async function applyConnection(deps: InstanceDeps, transport: NotificationTransp
 
   const stamp = now.toISOString();
 
-  if (state === 'open') {
+  if (state === "open") {
     if (row.state === WhatsappInstanceState.Open) {
       return;
     }
 
-    await WhatsappInstanceRepository.setState(deps.db, row.id, { state: WhatsappInstanceState.Open, qr: null, pairingCode: null, connectedAt: stamp, disconnectedAt: null, ...(phone ? { phone } : {}) }, stamp);
-    await EventRepository.record(deps.db, { type: 'whatsapp_instance.opened', eventableType: EventableType.Account, eventableId: row.owner_id, at: stamp });
+    await WhatsappInstanceRepository.setState(
+      deps.db,
+      row.id,
+      {
+        state: WhatsappInstanceState.Open,
+        qr: null,
+        pairingCode: null,
+        connectedAt: stamp,
+        disconnectedAt: null,
+        ...(phone ? { phone } : {}),
+      },
+      stamp,
+    );
+    await EventRepository.record(deps.db, {
+      type: "whatsapp_instance.opened",
+      eventableType: EventableType.Account,
+      eventableId: row.owner_id,
+      at: stamp,
+    });
 
     return;
   }
 
   // `connecting` and a repeated `close` say nothing new.
-  if (state !== 'close' || row.state !== WhatsappInstanceState.Open) {
+  if (state !== "close" || row.state !== WhatsappInstanceState.Open) {
     return;
   }
 
-  await WhatsappInstanceRepository.setState(deps.db, row.id, { state: WhatsappInstanceState.Closed, disconnectedAt: stamp }, stamp);
-  await EventRepository.record(deps.db, { type: 'whatsapp_instance.closed', eventableType: EventableType.Account, eventableId: row.owner_id, at: stamp });
+  await WhatsappInstanceRepository.setState(
+    deps.db,
+    row.id,
+    { state: WhatsappInstanceState.Closed, disconnectedAt: stamp },
+    stamp,
+  );
+  await EventRepository.record(deps.db, {
+    type: "whatsapp_instance.closed",
+    eventableType: EventableType.Account,
+    eventableId: row.owner_id,
+    at: stamp,
+  });
 
-  const origin = (deps.variables.PUBLIC_WEB_ORIGIN ?? 'http://localhost:3000').replace(/\/+$/, '');
+  const origin = (
+    deps.variables.PUBLIC_WEB_ORIGIN ?? "http://localhost:3000"
+  ).replace(/\/+$/, "");
 
   // One warning per open → closed transition; the reminders that fall meanwhile are reported on their own events.
   await pushToUser(deps.db, transport, row.owner_id, {
-    title: 'Seu WhatsApp desconectou',
-    body: 'Os lembretes pelo seu número ficam parados até você conectar de novo.',
-    url: `${origin}/settings/reminders`
+    title: "Seu WhatsApp desconectou",
+    body: "Os lembretes pelo seu número ficam parados até você conectar de novo.",
+    url: `${origin}/settings/reminders`,
   });
 
   const owner = await AccountRepository.get(deps.db, row.owner_id);
@@ -327,67 +531,104 @@ async function applyConnection(deps: InstanceDeps, transport: NotificationTransp
   await transport.email({
     to,
     key: `whatsapp-instance:${row.id}:closed:${stamp}`,
-    subject: 'Seu WhatsApp desconectou',
+    subject: "Seu WhatsApp desconectou",
     text: `Os lembretes pelo seu número ficam parados até você conectar de novo no Receivy.\n${origin}/settings/reminders`,
-    from: deps.variables.RESEND_FROM_EMAIL ?? 'disabled'
+    from: deps.variables.RESEND_FROM_EMAIL ?? "disabled",
   });
 }
 
-async function applyQr(deps: InstanceDeps, name: string, qr: string, now: Date): Promise<void> {
+async function applyQr(
+  deps: InstanceDeps,
+  name: string,
+  qr: string,
+  now: Date,
+): Promise<void> {
   const row = await WhatsappInstanceRepository.byName(deps.db, name);
 
   if (!row || row.state !== WhatsappInstanceState.Pending) {
     return;
   }
 
-  await WhatsappInstanceRepository.setState(deps.db, row.id, { qr }, now.toISOString());
+  await WhatsappInstanceRepository.setState(
+    deps.db,
+    row.id,
+    { qr },
+    now.toISOString(),
+  );
 }
 
 /**
  * Asked with the instance's own token, like a message: the global key only manages instances. Only an
  * open instance can list its groups; anything else is the owner's number not being connected.
  */
-async function groups(deps: InstanceDeps, request: typeof fetch, ownerId: string, participantIds: string[]): Promise<WhatsappGroup[]> {
+async function groups(
+  deps: InstanceDeps,
+  request: typeof fetch,
+  ownerId: string,
+  participantIds: string[],
+): Promise<WhatsappGroup[]> {
   const row = await WhatsappInstanceRepository.byOwner(deps.db, ownerId);
 
   if (!row || row.state !== WhatsappInstanceState.Open) {
     throw new WhatsappGroupsRequireInstanceError();
   }
 
-  const base = (deps.variables.EVOLUTION_API_URL ?? 'http://127.0.0.1:8080').replace(/\/+$/, '');
-  const response = await request(`${base}/group/fetchAllGroups/${encodeURIComponent(row.name)}?getParticipants=true`, {
-    method: 'GET',
-    headers: { apikey: row.token },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-  }).catch(() => null);
+  const base = (
+    deps.variables.EVOLUTION_API_URL ?? "http://127.0.0.1:8080"
+  ).replace(/\/+$/, "");
+  const response = await request(
+    `${base}/group/fetchAllGroups/${encodeURIComponent(row.name)}?getParticipants=true`,
+    {
+      method: "GET",
+      headers: { apikey: row.token },
+      signal: AbortSignal.timeout(GROUPS_TIMEOUT_MS),
+    },
+  ).catch(() => null);
 
   if (!response?.ok) {
     throw new WhatsappInstanceUnavailableError();
   }
 
   const listed = parseEvolutionGroups(await response.json().catch(() => []));
-  const phones = await ContactRepository.phonesOf(deps.db, ownerId, participantIds);
-  // Someone the agenda has no phone for can never be matched, so nothing is suggested for them.
+  const phones = await ContactRepository.phonesOf(
+    deps.db,
+    ownerId,
+    participantIds,
+  );
   const people = participantIds.map((id) => phones.get(id) ?? []);
 
   return listed
-    .map((group) => ({ jid: group.jid, name: group.name, size: group.size, suggested: groupHasEveryone(group, people) }))
-    .sort((a, b) => Number(b.suggested) - Number(a.suggested) || a.name.localeCompare(b.name, 'pt-BR'));
+    .map((group) => ({
+      jid: group.jid,
+      name: group.name,
+      size: group.size,
+      suggested: groupHasEveryone(group, people),
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.suggested) - Number(a.suggested) ||
+        a.name.localeCompare(b.name, "pt-BR"),
+    );
 }
 
 /** The client behind the factory and the tests: everything it needs comes in `deps`. */
-export function createInstanceClient(deps: InstanceDeps): WhatsappInstanceClient {
+export function createInstanceClient(
+  deps: InstanceDeps,
+): WhatsappInstanceClient {
   const request = deps.request ?? globalThis.fetch;
-  const transport = deps.transport ?? notificationTransport({ ...deps.variables });
+  const transport =
+    deps.transport ?? notificationTransport({ ...deps.variables });
 
   return {
     create: (ownerId, input) => create(deps, request, ownerId, input),
     get: (ownerId, refresh = false) => get(deps, request, ownerId, refresh),
     remove: (ownerId) => remove(deps, request, ownerId),
     setSender: (ownerId, sender) => setSender(deps, ownerId, sender),
-    applyConnection: (name, state, phone, now = new Date()) => applyConnection(deps, transport, name, state, phone, now),
+    applyConnection: (name, state, phone, now = new Date()) =>
+      applyConnection(deps, transport, name, state, phone, now),
     applyQr: (name, qr, now = new Date()) => applyQr(deps, name, qr, now),
-    groups: (ownerId, participantIds) => groups(deps, request, ownerId, participantIds)
+    groups: (ownerId, participantIds) =>
+      groups(deps, request, ownerId, participantIds),
   };
 }
 
@@ -395,18 +636,45 @@ export declare class WhatsappInstanceService extends Factory.Service<WhatsappIns
   handler: typeof createService;
 
   variables: {
-    EVOLUTION_API_URL: Environment.VariableOrValue<'EVOLUTION_API_URL', 'http://127.0.0.1:8080'>;
-    EVOLUTION_API_KEY: Environment.VariableOrValue<'EVOLUTION_API_KEY', 'disabled'>;
-    PUBLIC_API_ORIGIN: Environment.VariableOrValue<'PUBLIC_API_ORIGIN', 'http://127.0.0.1:3735/local-receivy-api'>;
-    PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<'PUBLIC_WEB_ORIGIN', 'http://localhost:3000'>;
-    NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<'NOTIFICATION_PUSH_TRANSPORT', 'disabled'>;
-    EXPO_ACCESS_TOKEN: Environment.VariableOrValue<'EXPO_ACCESS_TOKEN', 'disabled'>;
-    APP_STAGE: Environment.Variable<'APP_STAGE'>;
-    EMAIL_TRANSPORT: Environment.Variable<'EMAIL_TRANSPORT'>;
-    RESEND_API_KEY: Environment.Variable<'RESEND_API_KEY'>;
-    RESEND_FROM_EMAIL: Environment.VariableOrValue<'RESEND_FROM_EMAIL', 'disabled'>;
-    MAILPIT_API_URL: Environment.VariableOrValue<'MAILPIT_API_URL', 'http://127.0.0.1:8025'>;
-    EMAIL_FILE_DIRECTORY: Environment.VariableOrValue<'EMAIL_FILE_DIRECTORY', '.ez4/emails'>;
+    EVOLUTION_API_URL: Environment.VariableOrValue<
+      "EVOLUTION_API_URL",
+      "http://127.0.0.1:8080"
+    >;
+    EVOLUTION_API_KEY: Environment.VariableOrValue<
+      "EVOLUTION_API_KEY",
+      "disabled"
+    >;
+    PUBLIC_API_ORIGIN: Environment.VariableOrValue<
+      "PUBLIC_API_ORIGIN",
+      "http://127.0.0.1:3735/local-receivy-api"
+    >;
+    PUBLIC_WEB_ORIGIN: Environment.VariableOrValue<
+      "PUBLIC_WEB_ORIGIN",
+      "http://localhost:3000"
+    >;
+    NOTIFICATION_PUSH_TRANSPORT: Environment.VariableOrValue<
+      "NOTIFICATION_PUSH_TRANSPORT",
+      "disabled"
+    >;
+    EXPO_ACCESS_TOKEN: Environment.VariableOrValue<
+      "EXPO_ACCESS_TOKEN",
+      "disabled"
+    >;
+    APP_STAGE: Environment.Variable<"APP_STAGE">;
+    EMAIL_TRANSPORT: Environment.Variable<"EMAIL_TRANSPORT">;
+    RESEND_API_KEY: Environment.Variable<"RESEND_API_KEY">;
+    RESEND_FROM_EMAIL: Environment.VariableOrValue<
+      "RESEND_FROM_EMAIL",
+      "disabled"
+    >;
+    MAILPIT_API_URL: Environment.VariableOrValue<
+      "MAILPIT_API_URL",
+      "http://127.0.0.1:8025"
+    >;
+    EMAIL_FILE_DIRECTORY: Environment.VariableOrValue<
+      "EMAIL_FILE_DIRECTORY",
+      ".ez4/emails"
+    >;
   };
 
   services: {
@@ -416,6 +684,10 @@ export declare class WhatsappInstanceService extends Factory.Service<WhatsappIns
   };
 }
 
-export function createService({ db, plans, variables }: Service.Context<WhatsappInstanceService>): WhatsappInstanceClient {
+export function createService({
+  db,
+  plans,
+  variables,
+}: Service.Context<WhatsappInstanceService>): WhatsappInstanceClient {
   return createInstanceClient({ db, plans, variables });
 }

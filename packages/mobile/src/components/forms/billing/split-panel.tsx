@@ -47,18 +47,22 @@ function money(amountCents: number): string {
   return formatMoney({ amountCents, currency: "BRL" });
 }
 
-/** The bell of a participant: whole when the notice goes out, struck through when it does not. */
-function Bell({ name, on, disabled, onToggle }: { name: string; on: boolean; disabled: boolean; onToggle: () => void }) {
+/**
+ * The bell of a participant: whole when the notice goes out, struck through when it does not. `idle` (no channel, or a
+ * group carries the notice) keeps it on the row, dimmer than a plain disabled control.
+ */
+function Bell({ name, on, idle, disabled, onToggle }: { name: string; on: boolean; idle: boolean; disabled: boolean; onToggle: () => void }) {
   const colors = useThemeColors();
+  const dim = idle ? "opacity-30" : disabled ? "opacity-50" : "";
 
   return (
     <Pressable
       accessibilityRole="switch"
       accessibilityLabel={`Avisar ${name}`}
-      accessibilityState={{ checked: on, disabled }}
-      disabled={disabled}
+      accessibilityState={{ checked: on, disabled: disabled || idle }}
+      disabled={disabled || idle}
       onPress={onToggle}
-      className={`h-9 w-9 items-center justify-center rounded-xl ${on ? "bg-primary-soft" : "bg-surface-muted"} ${disabled ? "opacity-50" : ""}`}
+      className={`h-9 w-9 items-center justify-center rounded-xl ${on ? "bg-primary-soft" : "bg-surface-muted"} ${dim}`}
     >
       <Image source={bellMark} tintColor={on ? colors.primaryStrong : colors.muted} style={{ width: 16, height: 16 }} />
       {!on && <View className="absolute h-[2px] w-5 rotate-45 rounded-full bg-muted" />}
@@ -179,6 +183,7 @@ export function SplitPanel({ draft, people, hint, footer, totalCents, disabled, 
         {people.map((person, index) => {
           const out = person.owner && !draft.owner;
           const amount = person.amountCents !== undefined && !out ? money(person.amountCents) : "";
+          const bellOn = person.notifiable && !grouped;
 
           return (
             <View key={person.key} className={`min-h-[60px] flex-row items-center gap-2.5 px-3 py-2 ${index ? "border-t border-outline/60" : ""} ${out ? "opacity-50" : ""}`}>
@@ -216,14 +221,21 @@ export function SplitPanel({ draft, people, hint, footer, totalCents, disabled, 
                 </View>
               )}
 
+              {/* One fixed column for the bell and × or the owner's switch, so every field before it lines up. */}
               {person.owner ? (
-                <View className="items-center">
+                <View className="w-[74px] items-center">
                   <Switch accessibilityLabel="Eu também participo" disabled={disabled} value={draft.owner} onValueChange={onOwner} trackColor={{ true: colors.primary }} />
                   <Text className="font-sans text-[9.5px] font-semibold text-muted">participo</Text>
                 </View>
               ) : (
-                <>
-                  {person.notifiable && !grouped && <Bell name={person.name} on={person.notify} disabled={disabled} onToggle={() => onNotify(person.key, !person.notify)} />}
+                <View className="w-[74px] flex-row items-center justify-end gap-2.5">
+                  <Bell
+                    name={person.name}
+                    on={bellOn && person.notify}
+                    idle={!bellOn}
+                    disabled={disabled}
+                    onToggle={() => onNotify(person.key, !person.notify)}
+                  />
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Remover ${person.name}`}
@@ -234,7 +246,7 @@ export function SplitPanel({ draft, people, hint, footer, totalCents, disabled, 
                   >
                     <Image source={plusMark} tintColor={colors.muted} style={{ width: 14, height: 14, transform: [{ rotate: "45deg" }] }} />
                   </Pressable>
-                </>
+                </View>
               )}
             </View>
           );

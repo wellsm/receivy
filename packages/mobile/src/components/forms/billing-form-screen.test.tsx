@@ -475,7 +475,7 @@ describe("BillingFormScreen", () => {
     expect(client.createBilling.mock.calls[0][0].split).toEqual({ mode: "equal", parts: [{ kind: "user", userId: "u1", notify: false }, { kind: "owner" }] });
   });
 
-  it("renders the bell only for a participant who can actually be reached", async () => {
+  it("dims the bell of a participant who cannot be reached", async () => {
     await quickForm(financialApi(), contactsApi([{ contacts: [ana, carla], nextCursor: null }]));
     await fillStep1();
     await toStep2();
@@ -486,7 +486,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Concluir" }));
 
     expect(screen.getByLabelText("Avisar Ana")).toBeOnTheScreen();
-    expect(screen.queryByLabelText("Avisar Carla")).toBeNull();
+    expect(screen.getByLabelText("Avisar Carla")).toBeDisabled();
     expect(screen.getByText("Sino riscado = sem aviso automático. Você ainda pode lembrar à mão.")).toBeOnTheScreen();
   });
 
@@ -499,7 +499,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(await screen.findByRole("checkbox", { name: "Carla" }));
     await fireEvent.press(screen.getByRole("button", { name: "Concluir" }));
 
-    expect(screen.queryByLabelText("Avisar Carla")).toBeNull();
+    expect(screen.getByLabelText("Avisar Carla")).toBeDisabled();
     expect(screen.queryByText("Sino riscado = sem aviso automático. Você ainda pode lembrar à mão.")).toBeNull();
   });
 
@@ -518,7 +518,7 @@ describe("BillingFormScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Divisão" }));
 
     expect(await screen.findByRole("header", { name: "Divisão" })).toBeOnTheScreen();
-    expect(screen.queryByLabelText(/^Avisar/)).toBeNull();
+    expect(screen.getByLabelText("Avisar Carla")).toBeDisabled();
 
     await fireEvent.press(screen.getByRole("button", { name: "Pronto" }));
     await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
@@ -1823,7 +1823,7 @@ describe("BillingFormScreen", () => {
       await fireEvent.press(screen.getByRole("button", { name: "Creche Pet" }));
 
       expect(screen.getByText("O aviso vai pelo grupo Creche Pet. Todos no grupo veem o valor de cada pessoa.")).toBeOnTheScreen();
-      expect(screen.queryByLabelText("Avisar Ana")).toBeNull();
+      expect(screen.getByLabelText("Avisar Ana")).toBeDisabled();
 
       await toReview();
 

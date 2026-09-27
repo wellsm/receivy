@@ -272,7 +272,7 @@ export function ProfileScreen({
   useTabHeader({ title: "Perfil" });
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-canvas" edges={["top", "bottom"]}>
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
         <View className="gap-[18px] px-5 pt-3">
           {notice ? (

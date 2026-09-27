@@ -166,7 +166,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
   const filter = STATE_FILTERS.find((option) => option.value === stateFilter) ?? STATE_FILTERS[0]!;
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-canvas" edges={["top", "bottom"]}>
       <View className="gap-3 pb-2 pt-3">
         <View className="mx-5 h-11 flex-row items-center gap-2 rounded-xl border border-outline bg-surface px-3">
           <Image source={searchMark} tintColor={colors.muted} style={{ width: 16, height: 16 }} />

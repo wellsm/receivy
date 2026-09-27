@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
-import type { ComponentType, ReactElement } from "react";
+import type { ReactElement } from "react";
 import { Alert } from "react-native";
 import {
   BillingKind,
@@ -18,49 +18,11 @@ import {
 } from "@receivy/common";
 import { FeedScreen } from "@/components/screens/feed-screen";
 
-/** Declared outside the factory: babel-jest rejects any identifier inside it, type parameters included, unless prefixed `mock`. */
-type MockShow = (node: unknown) => void;
-
-/** The filters button lives in the native header: the mock hands `right` to a slot rendered beside the screen. */
-jest.mock("@/navigation/tab-header", () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest.mock factories cannot close over module imports
-  const react = require("react");
-  const slots = new Set<MockShow>();
-  let current: unknown = null;
-
-  return {
-    useTabHeader: ({ right }: { right?: unknown }) => {
-      react.useEffect(() => {
-        current = right ?? null;
-        slots.forEach((show) => show(current));
-      }, [right]);
-    },
-    HeaderSlot: () => {
-      const [node, setNode] = react.useState(null);
-
-      react.useEffect(() => {
-        slots.add(setNode);
-        setNode(current);
-
-        return () => {
-          slots.delete(setNode);
-        };
-      }, []);
-
-      return node;
-    },
-  };
-});
-
-const { HeaderSlot } = jest.requireMock("@/navigation/tab-header") as { HeaderSlot: ComponentType };
+/** The tabs show no header: the hook only names the back button of pushed screens. */
+jest.mock("@/navigation/tab-header", () => ({ useTabHeader: () => {} }));
 
 function renderFeed(ui: ReactElement) {
-  return render(
-    <>
-      {ui}
-      <HeaderSlot />
-    </>,
-  );
+  return render(ui);
 }
 
 jest.mock("expo-router", () => {

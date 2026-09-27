@@ -1,16 +1,14 @@
-import { Image } from "expo-image";
 import { Stack } from "expo-router";
 import { useHeaderOptions } from "@/navigation/header";
 import { ProfileGuard } from "@/components/app/profile-guard";
 import { SessionGate } from "@/components/app/session-gate";
 
-const logoMark = require("../../../assets/icons/ios-light.png");
-
 /**
  * Everything below needs a session: the gate restores it before the stack mounts.
  * The tabs sit at the bottom of this stack, so every pushed screen hides the tab bar
- * and gets a native header. The tabs share one header that shows only the logo: the
- * selected tab already names the screen. Its title and actions come from `useTabHeader`.
+ * and gets a native header with the back button. The tabs themselves show no header:
+ * the selected tab already names the screen. Their title still comes from `useTabHeader`,
+ * because iOS labels the back button of a pushed screen with it.
  */
 export default function ProtectedLayout() {
   const header = useHeaderOptions();
@@ -19,14 +17,7 @@ export default function ProtectedLayout() {
     <SessionGate>
       <ProfileGuard />
       <Stack screenOptions={header}>
-        <Stack.Screen
-          name="(tabs)"
-          options={{
-            title: "Feed",
-            headerTitleAlign: "center",
-            headerTitle: () => <Image source={logoMark} style={{ width: 32, height: 32, borderRadius: 9 }} />,
-          }}
-        />
+        <Stack.Screen name="(tabs)" options={{ title: "Feed", headerShown: false }} />
         <Stack.Screen name="contacts" options={{ title: "Meus Contatos" }} />
         <Stack.Screen name="contacts/new" options={{ title: "Novo contato" }} />
         <Stack.Screen name="contacts/[id]/edit" options={{ title: "Editar contato" }} />

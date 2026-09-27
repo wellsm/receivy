@@ -80,7 +80,7 @@ function MonthTabsBar({ month, onSelect }: { month: string; onSelect: (value: st
   const tabs = monthTabs(month);
 
   return (
-    <View className="mx-[18px] flex-row border-b border-outline">
+    <View className="flex-1 flex-row border-b border-outline">
       {tabs.map((tab) => (
         <Pressable
           key={tab.value}
@@ -437,25 +437,7 @@ export function FeedScreen({
   const summary = visible ? chargeTotals(visible) : undefined;
   const changedFilters = activeFeedFilterCount(filters);
 
-  // Memoized so the shared native header is only updated when the badge changes.
-  const filtersButton = useMemo(
-    () => (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Filtros"
-        onPress={() => setFiltersOpen(true)}
-        className={`h-[34px] w-[34px] items-center justify-center rounded-xl ${changedFilters ? "bg-primary-soft" : "bg-surface-muted"}`}
-      >
-        <Image source={slidersMark} tintColor={changedFilters ? colors.primaryStrong : colors.ink} style={{ width: 17, height: 17 }} />
-        {changedFilters > 0 && (
-          <Text className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-center font-sans text-[10px] font-bold text-on-primary">{changedFilters}</Text>
-        )}
-      </Pressable>
-    ),
-    [changedFilters, colors.ink, colors.primaryStrong],
-  );
-
-  useTabHeader({ title: "Feed", right: filtersButton });
+  useTabHeader({ title: "Feed" });
 
   function row(item: ListChargeItem) {
     const charge = chargeSummaryOf(item);
@@ -476,7 +458,7 @@ export function FeedScreen({
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
+    <SafeAreaView className="flex-1 bg-canvas" edges={["top", "bottom"]}>
       <ScrollView
         testID="feed-list"
         className="flex-1"
@@ -485,7 +467,21 @@ export function FeedScreen({
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={colors.primaryStrong} />}
       >
         <View className="gap-3 pt-3">
-          <MonthTabsBar month={month} onSelect={selectMonth} />
+          {/* No header on the tabs: the filters sit beside the month tabs. */}
+          <View className="mx-[18px] flex-row items-center gap-2.5">
+            <MonthTabsBar month={month} onSelect={selectMonth} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Filtros"
+              onPress={() => setFiltersOpen(true)}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-xl ${changedFilters ? "bg-primary-soft" : "bg-surface-muted"}`}
+            >
+              <Image source={slidersMark} tintColor={changedFilters ? colors.primaryStrong : colors.ink} style={{ width: 17, height: 17 }} />
+              {changedFilters > 0 && (
+                <Text className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-center font-sans text-[10px] font-bold text-on-primary">{changedFilters}</Text>
+              )}
+            </Pressable>
+          </View>
 
           <SummaryBox summary={summary} />
 

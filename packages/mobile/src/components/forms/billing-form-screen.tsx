@@ -519,9 +519,6 @@ export function BillingFormScreen({
     setPicker(false);
   }
 
-  function clearSeat() {
-    update(payable ? { payee: "" } : { selected: [] });
-  }
 
   /**
    * Each direction is paid through other keys: a conta a pagar through the seated
@@ -926,7 +923,6 @@ export function BillingFormScreen({
           locked={seatLocked}
           disabled={locked || frozen}
           onPick={() => setPicker(true)}
-          onClear={clearSeat}
         />
       );
     }
@@ -1131,10 +1127,10 @@ export function BillingFormScreen({
         )}
         {/* A registro stays one: the switch shows locked, so the screen still says what this conta is. */}
         {settled && (
-          <View className="flex-row items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-1.5">
+          <View className="min-h-[56px] flex-row items-center justify-between gap-3 rounded-2xl border border-outline/30 bg-surface px-3.5 py-2.5">
             <View className="flex-1">
-              <Text className="text-xs font-semibold text-ink">{SETTLED_LABELS[draft.direction]}</Text>
-              <Text className="text-[11px] text-muted">{SETTLED_LOCKED}</Text>
+              <Text className="text-[13.5px] font-semibold text-ink">{SETTLED_LABELS[draft.direction]}</Text>
+              <Text className="text-[12px] text-muted">{SETTLED_LOCKED}</Text>
             </View>
             <Switch accessibilityLabel={SETTLED_LABELS[draft.direction]} accessibilityState={{ disabled: true }} disabled value trackColor={{ true: colors.primary }} />
           </View>
@@ -1188,8 +1184,8 @@ export function BillingFormScreen({
       return (
         <>
           <Segmented name="Direção" options={DIRECTIONS} value={draft.direction} disabled={locked} onChange={pickDirection} />
-          <View className="flex-row items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-1.5">
-            <Text className="text-xs font-semibold text-ink">{SETTLED_LABELS[draft.direction]}</Text>
+          <View className="min-h-[52px] flex-row items-center justify-between gap-3 rounded-2xl border border-outline/30 bg-surface px-3.5 py-2">
+            <Text className="text-[13.5px] font-semibold text-ink">{SETTLED_LABELS[draft.direction]}</Text>
             <Switch
               accessibilityLabel={SETTLED_LABELS[draft.direction]}
               accessibilityState={{ disabled: locked }}

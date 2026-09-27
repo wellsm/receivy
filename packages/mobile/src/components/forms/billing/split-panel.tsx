@@ -305,31 +305,15 @@ type SeatPanelProps = {
   locked: boolean;
   disabled: boolean;
   onPick: () => void;
-  onClear: () => void;
 };
 
-/** The other side of a conta a pagar or a registro: one contact, picked from the agenda. */
-export function SeatPanel({ label, hint, seated, locked, disabled, onPick, onClear }: SeatPanelProps) {
+/** The other side of a conta a pagar or a registro: one contact, picked from the agenda. Once seated it is only swapped, never emptied. */
+export function SeatPanel({ label, hint, seated, locked, disabled, onPick }: SeatPanelProps) {
   const colors = useThemeColors();
 
   return (
     <View className="gap-3">
-      <View className="flex-row items-center justify-between">
-        <Text className="font-sans text-[11px] font-semibold uppercase tracking-[0.88px] text-muted">{label}</Text>
-        {!locked && seated && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Escolher contato"
-            accessibilityState={{ disabled }}
-            disabled={disabled}
-            onPress={onPick}
-            className="min-h-10 flex-row items-center gap-1 px-1"
-          >
-            <Image source={plusMark} tintColor={colors.primaryStrong} style={{ width: 14, height: 14 }} />
-            <Text className="text-xs font-semibold text-primary">Trocar</Text>
-          </Pressable>
-        )}
-      </View>
+      <Text className="font-sans text-[11px] font-semibold uppercase tracking-[0.88px] text-muted">{label}</Text>
 
       {seated ? (
         <View className="min-h-[60px] flex-row items-center gap-2.5 rounded-[18px] border border-outline bg-surface px-3 py-2">
@@ -340,14 +324,13 @@ export function SeatPanel({ label, hint, seated, locked, disabled, onPick, onCle
           {!locked && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={seated.displayName}
-              accessibilityHint="Remove da conta"
-              accessibilityState={{ selected: true, disabled }}
+              accessibilityLabel="Escolher contato"
+              accessibilityState={{ disabled }}
               disabled={disabled}
-              onPress={onClear}
-              className="h-9 w-7 items-center justify-center"
+              onPress={onPick}
+              className="min-h-9 justify-center px-1"
             >
-              <Image source={plusMark} tintColor={colors.muted} style={{ width: 14, height: 14, transform: [{ rotate: "45deg" }] }} />
+              <Text className="font-sans text-[13px] font-bold text-primary">Trocar</Text>
             </Pressable>
           )}
         </View>

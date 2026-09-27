@@ -1621,16 +1621,12 @@ describe("BillingFormScreen", () => {
     expect(input.paymentMethodId).toBeUndefined();
   });
 
-  it("refuses a conta a pagar whose receiving contact was removed", async () => {
+  it("refuses a conta a pagar with nobody to receive it", async () => {
     const { client } = await quickForm();
 
     await chooseToPay();
     await fillStep1("10000", "Aluguel");
     await toStep2();
-    await seatAna();
-    await fireEvent.press(await screen.findByRole("button", { name: "Ana" }));
-
-    expect(screen.queryByText("Ana")).toBeNull();
 
     await fireEvent.press(screen.getByRole("button", { name: "Continuar · revisar" }));
 

@@ -341,3 +341,22 @@ describe('registro draft', () => {
     expect(buildBillingInput(monthly).startDate).toBe('2026-01-31');
   });
 });
+
+describe('buildBillingInput WhatsApp group', () => {
+  const draft = { ...EMPTY_BILLING_DRAFT('America/Sao_Paulo', '2026-09-25'), selected: ['u1'], amount: '100,00', description: 'Creche' };
+  const group = { jid: '120363000000000002@g.us', name: ' Creche Pet ' };
+
+  it('sends the group of a conta a receber, trimmed', () => {
+    expect(buildBillingInput({ ...draft, whatsappGroup: group }).whatsappGroup).toEqual({ jid: group.jid, name: 'Creche Pet' });
+    expect(buildBillingInput(draft).whatsappGroup).toBeUndefined();
+  });
+
+  it('refuses a group id that is not a group', () => {
+    expect(() => buildBillingInput({ ...draft, whatsappGroup: { jid: '5511999999999@s.whatsapp.net', name: 'Ana' } })).toThrow('Grupo de WhatsApp inválido.');
+  });
+
+  it('never sends a group on a conta a pagar or a registro', () => {
+    expect(buildBillingInput({ ...draft, direction: Direction.Payable, payee: 'c1', whatsappGroup: group }).whatsappGroup).toBeUndefined();
+    expect(buildBillingInput({ ...draft, settled: true, whatsappGroup: group }).whatsappGroup).toBeUndefined();
+  });
+});

@@ -4,6 +4,7 @@ import {
   BillingKind,
   type BillingInput,
   BillingRecurrence,
+  type BillingWhatsappGroup,
   MAX_FINITE_OCCURRENCES,
   type NormalizedBillingInput,
   SplitPartKind
@@ -12,6 +13,7 @@ import { Direction, SplitMode } from './contracts';
 import { calendarDate } from './financial-form';
 import { type ReminderRule, validateReminderRules } from './reminders';
 import { type BillingSplit, resolveBillingSplit } from './split';
+import { isWhatsappGroupJid } from './whatsapp';
 
 export type BillingCalendarRule = { frequency: BillingFrequency; startDate: string; endDate?: string; dueRule?: BillingDueRule };
 
@@ -224,6 +226,12 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     throw new RangeError('Registro não tem avisos nem Pix.');
   }
 
+  const whatsappGroup = input.whatsappGroup ? normalizeWhatsappGroup(input.whatsappGroup) : undefined;
+
+  if (whatsappGroup && (settled || direction === Direction.Payable)) {
+    throw new RangeError('Só conta a receber avisa num grupo.');
+  }
+
   if (settled && now && input.recurrence !== BillingRecurrence.Once && input.startDate < calendarDate(now, input.timezone)) {
     throw new RangeError('Registro recorrente começa hoje ou depois.');
   }
@@ -258,8 +266,22 @@ export function normalizeBillingInput(input: BillingInput, now?: Date): Normaliz
     category: input.category,
     type: direction,
     contactId,
-    kind: settled ? BillingKind.Record : undefined
+    kind: settled ? BillingKind.Record : undefined,
+    ...(whatsappGroup ? { whatsappGroup } : {})
   };
+}
+
+/** A group id (`…@g.us`) and a name to show; the name is trimmed and falls back to a neutral one. */
+export function normalizeWhatsappGroup(group: BillingWhatsappGroup): BillingWhatsappGroup {
+  const jid = group.jid?.trim() ?? '';
+
+  if (!isWhatsappGroupJid(jid)) {
+    throw new RangeError('Grupo de WhatsApp inválido.');
+  }
+
+  const name = group.name?.normalize('NFC').trim().slice(0, 200) || 'Grupo';
+
+  return { jid, name };
 }
 
 /** A conta a receber always names who pays: at least one contact beside the owner. */

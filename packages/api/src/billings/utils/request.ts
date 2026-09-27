@@ -21,7 +21,9 @@ export function billingRequestFingerprint(input: NormalizedBillingInput): string
       direction: input.type,
       contactId: input.contactId ?? null,
       // Only a registro adds its field, so replays of older requests keep their fingerprint.
-      ...(input.kind === BillingKind.Record ? { settled: true } : {})
+      ...(input.kind === BillingKind.Record ? { settled: true } : {}),
+      // Only a group adds its field, so replays of older requests keep their fingerprint.
+      ...(input.whatsappGroup ? { whatsappGroup: input.whatsappGroup } : {})
     },
     (_key, value: unknown) =>
       value && typeof value === 'object' && !Array.isArray(value)

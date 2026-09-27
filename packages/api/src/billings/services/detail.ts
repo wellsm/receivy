@@ -194,6 +194,8 @@ export async function billingDetail(db: DbClient, row: BillingRow, now: Date, li
     invite: link ? await activeInvite(db, row.id, link.secret, link.webOrigin, now) : null,
     guests: await waitingGuests(db, row.id),
     linkableContacts: await ContactRepository.linkable(db, row.owner_id),
+    whatsappGroup: row.whatsapp_group_jid ? { jid: row.whatsapp_group_jid, name: row.whatsapp_group_name ?? 'Grupo' } : null,
+    whatsappGroupFailing: Boolean(row.whatsapp_group_jid && row.whatsapp_group_failed_at),
     updatedAt: row.updated_at,
     timezone: row.timezone,
     paymentMethodId: row.payment_method_id,

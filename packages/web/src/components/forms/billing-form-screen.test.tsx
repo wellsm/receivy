@@ -1692,3 +1692,87 @@ it("keeps the footer flush with the page background, like every other screen's S
   expect(footer.className).toContain("bg-canvas/95");
   expect(footer.className).not.toContain("bg-surface/95");
 });
+
+const GROUPS = [
+  { jid: "120363000000000002@g.us", name: "Creche Pet", size: 3, suggested: true },
+  { jid: "120363000000000001@g.us", name: "Zeladoria", size: 40, suggested: false },
+];
+
+/** The owner's own number connected, and two groups on it. */
+function connectedApi(extra: (path: string, init: RequestInit) => Response | undefined = () => undefined) {
+  return api((path, init) => {
+    if (path === "/api/financial/whatsapp") {
+      return Response.json({ available: true, ownAvailable: true, sender: "own", instance: { state: "open" }, quota: null });
+    }
+
+    if (path.startsWith("/api/financial/whatsapp/groups")) {
+      return Response.json({ groups: GROUPS });
+    }
+
+    return extra(path, init);
+  });
+}
+
+it("hides the group option while the owner's number is not connected", async () => {
+  api();
+
+  const { user } = renderForm();
+
+  await pickAna(user);
+
+  expect(screen.queryByText("Avisar no grupo")).not.toBeInTheDocument();
+});
+
+it("picks a group for the notices, quiets the bells and creates the billing with it", async () => {
+  const sent = connectedApi((_path, init) => (init.method === "POST" ? Response.json({ id: "b1", charges: [] }, { status: 201 }) : undefined));
+  const { user } = renderForm();
+
+  await pickAna(user);
+
+  expect(await screen.findByText("Cada pessoa no privado")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Escolher grupo" }));
+
+  const dialog = screen.getByRole("dialog", { name: "Avisar no grupo" });
+
+  expect(await within(dialog).findByText("Sugerido")).toBeInTheDocument();
+  expect(sent.some((entry) => entry.path === "/api/financial/whatsapp/groups?participants=u1")).toBe(true);
+
+  await user.type(within(dialog).getByLabelText("Buscar grupos"), "creche");
+
+  expect(within(dialog).queryByText("Zeladoria")).not.toBeInTheDocument();
+
+  await user.click(within(dialog).getByRole("button", { name: /Creche Pet/ }));
+
+  expect(screen.getByText("O aviso vai pelo grupo Creche Pet. Todos no grupo veem o valor de cada pessoa.")).toBeInTheDocument();
+  expect(screen.queryByRole("switch", { name: "Avisar Ana" })).not.toBeInTheDocument();
+
+  await user.type(screen.getByLabelText("Valor total"), "100,00");
+
+  expect(screen.getByText(/^O grupo Creche Pet recebe o primeiro aviso em/)).toBeInTheDocument();
+
+  await user.click(createButton());
+
+  const post = sent.find((entry) => entry.init.method === "POST");
+
+  expect(JSON.parse(String(post?.init.body)).whatsappGroup).toEqual({ jid: "120363000000000002@g.us", name: "Creche Pet" });
+});
+
+it("drops the group of an edit and warns when the last group notice failed", async () => {
+  const grouped: BillingDetail = { ...indefiniteBilling, whatsappGroup: { jid: "120363000000000002@g.us", name: "Creche Pet" }, whatsappGroupFailing: true };
+  const sent = connectedApi((_path, init) => (init.method === "PATCH" ? Response.json(grouped) : undefined));
+  const { user } = renderForm(grouped);
+
+  expect(await screen.findByText(/Não foi possível avisar no grupo Creche Pet/)).toBeInTheDocument();
+
+  const dialog = await openRow(user, "Divisão");
+
+  await user.click(within(dialog).getByRole("button", { name: "Avisar cada pessoa" }));
+  await user.click(within(dialog).getByRole("button", { name: "Pronto" }));
+  await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  const body = JSON.parse(String(sent.find((entry) => entry.init.method === "PATCH")?.init.body));
+
+  expect(body).toMatchObject({ clearWhatsappGroup: true });
+  expect(body.whatsappGroup).toBeUndefined();
+});

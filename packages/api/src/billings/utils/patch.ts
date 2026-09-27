@@ -31,7 +31,9 @@ export function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPat
     patch.contactId !== undefined ||
     patch.reminders !== undefined ||
     patch.clearReminders !== undefined ||
-    patch.clearPaymentMethod !== undefined;
+    patch.clearPaymentMethod !== undefined ||
+    patch.whatsappGroup !== undefined ||
+    patch.clearWhatsappGroup !== undefined;
 
   if (settled && crowded) {
     throw new SettledLockedError();
@@ -56,6 +58,11 @@ export function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPat
   // A conta a pagar has no split: whoever receives it is a contact, never a participant.
   if (payable && patch.split !== undefined) {
     throw new PayableHasNoSplitError();
+  }
+
+  // A conta a pagar is the owner's own bill: there is nobody to warn in a group.
+  if (payable && patch.whatsappGroup !== undefined) {
+    throw new RangeError('Só conta a receber avisa num grupo.');
   }
 
   // A conta a receber already charges other people: it never turns into the owner's own bill.

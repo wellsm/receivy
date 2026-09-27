@@ -40,6 +40,12 @@ export declare class ReminderBody {
   channels: ChannelSetBody;
 }
 
+export declare class WhatsappGroupBody implements Http.JsonBody {
+  /** The group id Evolution sends to, ending in `@g.us`. */
+  jid: String.Max<80>;
+  name: String.Max<200>;
+}
+
 export declare class BillingBody implements Http.JsonBody {
   recurrence: BillingRecurrence;
   frequency?: BillingFrequency;
@@ -58,6 +64,8 @@ export declare class BillingBody implements Http.JsonBody {
   category?: BillingCategory;
   /** Registro: already received or paid; the owner alone, no Pix or reminders. */
   kind?: BillingKind;
+  /** Conta a receber: notify this WhatsApp group of the owner's own number instead of each person. */
+  whatsappGroup?: WhatsappGroupBody;
 }
 
 export declare class PatchBody implements Http.JsonBody {
@@ -78,4 +86,7 @@ export declare class PatchBody implements Http.JsonBody {
   applyTo?: EditScope;
   category?: BillingCategory;
   kind?: BillingKind;
+  whatsappGroup?: WhatsappGroupBody;
+  /** Back to notifying each person. */
+  clearWhatsappGroup?: boolean;
 }

@@ -34,6 +34,9 @@ export namespace BillingRepository {
     payment_method_id?: string;
     contact_id?: string;
     reminders?: string;
+    whatsapp_group_jid?: string;
+    whatsapp_group_name?: string;
+    whatsapp_group_failed_at?: string;
     state: BillingState;
     /** Null only until the block 3 backfill runs; reads as 'equal'. */
     split_mode?: SplitMode;
@@ -65,6 +68,7 @@ export namespace BillingRepository {
     paymentMethodId?: string;
     contactId?: string;
     reminders?: string;
+    whatsappGroup?: { jid: string; name: string };
     splitMode: SplitMode;
     lastOccurrenceDate?: string;
     idempotencyKey: string;
@@ -80,6 +84,10 @@ export namespace BillingRepository {
     paymentMethodId?: string | null;
     contactId?: string | null;
     reminders?: string;
+    /** `null` stops notifying the group; absent keeps it. A new group clears the failure mark. */
+    whatsappGroup?: { jid: string; name: string } | null;
+    /** Marks (a date) or clears (`null`) a failed group notice. */
+    whatsappGroupFailedAt?: string | null;
     splitMode?: SplitMode;
     state?: BillingState;
     startDate?: string;
@@ -102,6 +110,9 @@ export namespace BillingRepository {
         end_date: true,
         due_rule: true,
         payment_method_id: true,
+        whatsapp_group_jid: true,
+        whatsapp_group_name: true,
+        whatsapp_group_failed_at: true,
         contact_id: true,
         reminders: true,
         state: true,
@@ -135,6 +146,9 @@ export namespace BillingRepository {
         end_date: true,
         due_rule: true,
         payment_method_id: true,
+        whatsapp_group_jid: true,
+        whatsapp_group_name: true,
+        whatsapp_group_failed_at: true,
         contact_id: true,
         reminders: true,
         state: true,
@@ -215,6 +229,9 @@ export namespace BillingRepository {
         end_date: true,
         due_rule: true,
         payment_method_id: true,
+        whatsapp_group_jid: true,
+        whatsapp_group_name: true,
+        whatsapp_group_failed_at: true,
         contact_id: true,
         reminders: true,
         state: true,
@@ -301,6 +318,9 @@ export namespace BillingRepository {
         end_date: true,
         due_rule: true,
         payment_method_id: true,
+        whatsapp_group_jid: true,
+        whatsapp_group_name: true,
+        whatsapp_group_failed_at: true,
         contact_id: true,
         reminders: true,
         state: true,
@@ -326,6 +346,8 @@ export namespace BillingRepository {
         ...(input.paymentMethodId ? { payment_method: { id: input.paymentMethodId } } : {}),
         ...(input.contactId ? { contact: { id: input.contactId } } : {}),
         reminders: input.reminders ?? sqlNull,
+        whatsapp_group_jid: input.whatsappGroup?.jid ?? sqlNull,
+        whatsapp_group_name: input.whatsappGroup?.name ?? sqlNull,
         state: 'active' as BillingState,
         split_mode: input.splitMode,
         last_occurrence_date: input.lastOccurrenceDate ?? sqlNull,
@@ -347,6 +369,10 @@ export namespace BillingRepository {
         ...(input.paymentMethodId !== undefined ? { payment_method: { id: input.paymentMethodId ?? sqlNull } } : {}),
         ...(input.contactId !== undefined ? { contact: { id: input.contactId ?? sqlNull } } : {}),
         ...(input.reminders !== undefined ? { reminders: input.reminders } : {}),
+        ...(input.whatsappGroup !== undefined
+          ? { whatsapp_group_jid: input.whatsappGroup?.jid ?? sqlNull, whatsapp_group_name: input.whatsappGroup?.name ?? sqlNull, whatsapp_group_failed_at: sqlNull }
+          : {}),
+        ...(input.whatsappGroupFailedAt !== undefined ? { whatsapp_group_failed_at: input.whatsappGroupFailedAt ?? sqlNull } : {}),
         ...(input.splitMode !== undefined ? { split_mode: input.splitMode } : {}),
         ...(input.state !== undefined ? { state: input.state } : {}),
         ...(input.startDate !== undefined ? { start_date: input.startDate } : {}),

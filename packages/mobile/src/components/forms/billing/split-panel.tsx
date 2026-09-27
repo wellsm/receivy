@@ -1,4 +1,4 @@
-import { type BillingDraft, type Contact, formatMoney, SplitMode, splitModeBadge, type UserAvatar } from "@receivy/common";
+import { type BillingDraft, type Contact, formatMoney, groupNoticeNote, SplitMode, splitModeBadge, type UserAvatar } from "@receivy/common";
 import { Image } from "expo-image";
 import { Pressable, Switch, Text, TextInput, View } from "react-native";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
@@ -6,6 +6,7 @@ import { useThemeColors } from "@/theme/colors";
 
 const bellMark = require("../../../../assets/images/auth/bell.svg");
 const plusMark = require("../../../../assets/images/auth/plus.svg");
+const groupMark = require("../../../../assets/images/auth/group.svg");
 
 /** The segmented control shows the short label; the accessible name keeps the full one. */
 export const SPLIT_MODES: { value: SplitMode; label: string; name: string }[] = [
@@ -104,10 +105,45 @@ type SplitPanelProps = {
   onRemove: (key: string) => void;
   onOwner: (participates: boolean) => void;
   onAdd: () => void;
+  /** Present when the owner's own WhatsApp is connected: the notices can go to a group instead. */
+  group?: {
+    current: { name: string } | null;
+    onPick: () => void;
+    onClear: () => void;
+  };
 };
 
+/** "Avisar no grupo": off, it offers the picker; on, it names the group and lets it go. */
+function GroupRow({ group, disabled }: { group: NonNullable<SplitPanelProps["group"]>; disabled: boolean }) {
+  const colors = useThemeColors();
+
+  return (
+    <View className="flex-row items-center gap-3 rounded-[18px] border border-outline bg-surface px-3 py-2.5">
+      <View className="h-9 w-9 items-center justify-center rounded-xl bg-success-soft">
+        <Image source={groupMark} tintColor={colors.success} style={{ width: 17, height: 17 }} />
+      </View>
+      <View className="flex-1">
+        <Text className="font-sans text-[11.5px] text-muted">Avisar no grupo</Text>
+        <Text className="font-sans text-[14px] font-bold text-ink" numberOfLines={1}>
+          {group.current ? group.current.name : "Cada pessoa no privado"}
+        </Text>
+      </View>
+      {group.current && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Avisar cada pessoa" accessibilityState={{ disabled }} disabled={disabled} onPress={group.onClear} className="h-9 w-7 items-center justify-center">
+          <Image source={plusMark} tintColor={colors.muted} style={{ width: 14, height: 14, transform: [{ rotate: "45deg" }] }} />
+        </Pressable>
+      )}
+      <Pressable accessibilityRole="button" accessibilityLabel="Escolher grupo" accessibilityState={{ disabled }} disabled={disabled} onPress={group.onPick} className="min-h-9 justify-center px-1">
+        <Text className="font-sans text-[13px] font-bold text-primary">{group.current ? "Trocar" : "Escolher"}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 /** Step 2 of the creation and the Divisão sheet of the edit: the mode tabs, one row per person, Eu with its switch. */
-export function SplitPanel({ draft, people, hint, footer, totalCents, disabled, onMode, onValue, onNotify, onRemove, onOwner, onAdd }: SplitPanelProps) {
+export function SplitPanel({ draft, people, hint, footer, totalCents, disabled, onMode, onValue, onNotify, onRemove, onOwner, onAdd, group }: SplitPanelProps) {
+  // A group carries the notice: the bells say nothing while it does.
+  const grouped = Boolean(group?.current);
   const colors = useThemeColors();
   const keys = people.filter((person) => !person.owner || draft.owner).map((person) => person.key);
   const badge = splitModeBadge(draft, keys);
@@ -187,7 +223,7 @@ export function SplitPanel({ draft, people, hint, footer, totalCents, disabled, 
                 </View>
               ) : (
                 <>
-                  {person.notifiable && <Bell name={person.name} on={person.notify} disabled={disabled} onToggle={() => onNotify(person.key, !person.notify)} />}
+                  {person.notifiable && !grouped && <Bell name={person.name} on={person.notify} disabled={disabled} onToggle={() => onNotify(person.key, !person.notify)} />}
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Remover ${person.name}`}
@@ -232,7 +268,13 @@ export function SplitPanel({ draft, people, hint, footer, totalCents, disabled, 
         </View>
       )}
 
-      {people.some((person) => !person.owner && person.notifiable) && (
+      {group && <GroupRow group={group} disabled={disabled} />}
+
+      {group?.current ? (
+        <Text className="px-0.5 font-sans text-[12px] leading-4 text-muted">{groupNoticeNote(group.current.name)}</Text>
+      ) : null}
+
+      {!grouped && people.some((person) => !person.owner && person.notifiable) && (
         <View className="flex-row items-start gap-2 px-0.5">
           <Image source={bellMark} tintColor={colors.muted} style={{ width: 14, height: 14, marginTop: 2 }} />
           <Text className="flex-1 font-sans text-[12px] leading-4 text-muted">{BELL_NOTE}</Text>

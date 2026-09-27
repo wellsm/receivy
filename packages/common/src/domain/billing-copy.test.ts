@@ -5,6 +5,9 @@ import {
   directionLine,
   firstNoticeDate,
   firstNoticeSentence,
+  groupFirstNoticeSentence,
+  groupNoticeNote,
+  groupSizeLabel,
   joinNames,
   receiptSentence,
   reminderRowLabel,
@@ -139,4 +142,13 @@ describe('billing copy', () => {
     expect(reminderRowLabel(true, [rule, { ...rule, offsetDays: -3 }, { ...rule, offsetDays: 2 }], 'x')).toBe('Padrão · 3 avisos');
     expect(reminderRowLabel(false, [rule], 'x')).toBe('Personalizado · 1 aviso');
   });
+
+  it('explains a billing notified in a group', () => {
+    expect(groupNoticeNote('Creche Pet')).toBe('O aviso vai pelo grupo Creche Pet. Todos no grupo veem o valor de cada pessoa.');
+    expect(groupFirstNoticeSentence('Creche Pet', '2026-09-22')).toBe('O grupo Creche Pet recebe o primeiro aviso em 22/set, com o link de cada pessoa.');
+    expect(groupFirstNoticeSentence('Creche Pet', null)).toBe('');
+    expect(groupSizeLabel(1)).toBe('1 participante');
+    expect(groupSizeLabel(3)).toBe('3 participantes');
+  });
 });
+

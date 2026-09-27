@@ -1777,4 +1777,83 @@ describe("BillingFormScreen", () => {
     expect(screen.getByText("2 pessoas · iguais")).toBeOnTheScreen();
     expect(screen.getByText("Você recebe R$ 45,00 de Ana todo dia 20. Sua parte, R$ 45,00, fica com você.")).toBeOnTheScreen();
   });
+
+  describe("WhatsApp group", () => {
+    const groups = [
+      { jid: "120363000000000002@g.us", name: "Creche Pet", size: 3, suggested: true },
+      { jid: "120363000000000001@g.us", name: "Zeladoria", size: 40, suggested: false },
+    ];
+
+    function connected() {
+      return {
+        reminders: jest.fn().mockResolvedValue({ config: { reminders: [{ offsetDays: -3, enabled: true, channels: { email: true, whatsapp: false } }], manual: { email: true, whatsapp: true } }, inherited: true, whatsappAvailable: false }),
+        whatsapp: jest.fn().mockResolvedValue({ available: true, ownAvailable: true, sender: "own", instance: { state: "open" }, quota: null }),
+        whatsappGroups: jest.fn().mockResolvedValue(groups),
+      };
+    }
+
+    it("hides the group option while the owner's number is not connected", async () => {
+      await quickForm();
+      await fillStep1();
+      await toStep2();
+
+      expect(screen.queryByText("Avisar no grupo")).toBeNull();
+    });
+
+    it("picks a group for the notices, quiets the bells and creates the billing with it", async () => {
+      const account = connected();
+      const { client } = await quickForm(financialApi(), contactsApi(), { account });
+
+      await fillStep1();
+      await toStep2();
+      await pickAna();
+
+      expect(await screen.findByText("Cada pessoa no privado")).toBeOnTheScreen();
+      expect(screen.getByLabelText("Avisar Ana")).toBeOnTheScreen();
+
+      await fireEvent.press(screen.getByRole("button", { name: "Escolher grupo" }));
+
+      expect(await screen.findByText("Sugerido")).toBeOnTheScreen();
+      expect(account.whatsappGroups).toHaveBeenCalledWith(["u1"]);
+
+      await fireEvent.changeText(screen.getByLabelText("Buscar grupos"), "creche");
+
+      expect(screen.queryByRole("button", { name: "Zeladoria" })).toBeNull();
+
+      await fireEvent.press(screen.getByRole("button", { name: "Creche Pet" }));
+
+      expect(screen.getByText("O aviso vai pelo grupo Creche Pet. Todos no grupo veem o valor de cada pessoa.")).toBeOnTheScreen();
+      expect(screen.queryByLabelText("Avisar Ana")).toBeNull();
+
+      await toReview();
+
+      expect(screen.getByText(/^O grupo Creche Pet recebe o primeiro aviso em/)).toBeOnTheScreen();
+
+      await fireEvent.press(createButton());
+      await waitFor(() => expect(client.createBilling).toHaveBeenCalled());
+
+      expect(client.createBilling.mock.calls[0][0].whatsappGroup).toEqual({ jid: "120363000000000002@g.us", name: "Creche Pet" });
+    });
+
+    it("drops the group of an edit and warns when the last group notice failed", async () => {
+      const grouped: BillingDetail = { ...recurringWithCharge, whatsappGroup: { jid: "120363000000000002@g.us", name: "Creche Pet" }, whatsappGroupFailing: true };
+      const patchBilling = jest.fn().mockResolvedValue(grouped);
+      const onSaved = jest.fn();
+
+      await render(<BillingFormScreen client={financialApi({ patchBilling }) as never} contacts={contactsApi()} account={connected()} billing={grouped} onSaved={onSaved} onBack={jest.fn()} />);
+      await screen.findByText("Editar conta");
+
+      expect(screen.getByText(/Não foi possível avisar no grupo Creche Pet/)).toBeOnTheScreen();
+
+      await fireEvent.press(screen.getByRole("button", { name: "Divisão" }));
+      await fireEvent.press(await screen.findByRole("button", { name: "Avisar cada pessoa" }));
+      await fireEvent.press(screen.getByRole("button", { name: "Pronto" }));
+      await fireEvent.press(screen.getByRole("button", { name: "Salvar conta" }));
+      await waitFor(() => expect(patchBilling).toHaveBeenCalled());
+
+      expect(patchBilling.mock.calls[0][1]).toMatchObject({ clearWhatsappGroup: true });
+      expect(patchBilling.mock.calls[0][1].whatsappGroup).toBeUndefined();
+    });
+  });
 });
+

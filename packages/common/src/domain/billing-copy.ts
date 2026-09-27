@@ -283,3 +283,22 @@ export function reminderRowLabel(inherited: boolean, rules: ReminderRule[], summ
 
   return enabled <= 1 ? `Padrão · ${summary}` : `Padrão · ${enabled} avisos`;
 }
+
+/** Under the split when a group is picked: why the bells went quiet and who sees what. */
+export function groupNoticeNote(name: string): string {
+  return `O aviso vai pelo grupo ${name}. Todos no grupo veem o valor de cada pessoa.`;
+}
+
+/** The review line of a billing notified in a group. */
+export function groupFirstNoticeSentence(name: string, noticeDate: string | null): string {
+  if (!noticeDate) {
+    return '';
+  }
+
+  return `O grupo ${name} recebe o primeiro aviso em ${dayMonth(noticeDate)}, com o link de cada pessoa.`;
+}
+
+/** The subtitle of a group in the picker. */
+export function groupSizeLabel(size: number): string {
+  return `${size} participante${size === 1 ? '' : 's'}`;
+}

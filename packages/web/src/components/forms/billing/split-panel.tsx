@@ -1,7 +1,7 @@
 "use client";
 
-import { type BillingDraft, type Contact, formatMoney, SplitMode, splitModeBadge, type UserAvatar } from "@receivy/common";
-import { Bell, BellOff, Plus, X } from "lucide-react";
+import { type BillingDraft, type Contact, formatMoney, groupNoticeNote, SplitMode, splitModeBadge, type UserAvatar } from "@receivy/common";
+import { Bell, BellOff, Plus, Users, X } from "lucide-react";
 import type { RefObject } from "react";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
@@ -77,13 +77,46 @@ type SplitPanelProps = {
   onRemove: (key: string) => void;
   onOwner: (participates: boolean) => void;
   onAdd: () => void;
+  /** The "Escolher grupo" button, so the group dialog gives the focus back to it. */
+  groupRef?: RefObject<HTMLButtonElement | null>;
+  /** Present when the owner's own WhatsApp is connected: the notices can go to a group instead. */
+  group?: {
+    current: { name: string } | null;
+    onPick: () => void;
+    onClear: () => void;
+  };
 };
 
+/** "Avisar no grupo": off, it offers the picker; on, it names the group and lets it go. */
+function GroupRow({ group, pickRef, disabled }: { group: NonNullable<SplitPanelProps["group"]>; pickRef?: RefObject<HTMLButtonElement | null>; disabled: boolean }) {
+  return (
+    <div className="flex items-center gap-3 rounded-[18px] border border-outline bg-surface px-3 py-2.5">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success-soft text-success">
+        <Users size={17} aria-hidden="true" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-[11.5px] text-muted">Avisar no grupo</span>
+        <span className="truncate text-[14px] font-bold text-ink">{group.current ? group.current.name : "Cada pessoa no privado"}</span>
+      </span>
+      {group.current && (
+        <button type="button" aria-label="Avisar cada pessoa" disabled={disabled} onClick={group.onClear} className="flex h-9 w-7 items-center justify-center bg-transparent text-muted disabled:opacity-50">
+          <X size={14} aria-hidden="true" />
+        </button>
+      )}
+      <button ref={pickRef} type="button" aria-label="Escolher grupo" disabled={disabled} onClick={group.onPick} className="min-h-9 bg-transparent px-1 text-[13px] font-bold text-primary disabled:opacity-50">
+        {group.current ? "Trocar" : "Escolher"}
+      </button>
+    </div>
+  );
+}
+
 /** The second column of the creation and the Divisão dialog of the edit: the mode tabs, one row per person, Eu with its switch. */
-export function SplitPanel({ draft, people, hint, footer, disabled, addRef, onMode, onValue, onNotify, onRemove, onOwner, onAdd }: SplitPanelProps) {
+export function SplitPanel({ draft, people, hint, footer, disabled, addRef, onMode, onValue, onNotify, onRemove, onOwner, onAdd, groupRef, group }: SplitPanelProps) {
+  // A group carries the notice: the bells say nothing while it does.
+  const grouped = Boolean(group?.current);
   const keys = people.filter((person) => !person.owner || draft.owner).map((person) => person.key);
   const badge = splitModeBadge(draft, keys);
-  const bells = people.some((person) => !person.owner && person.notifiable);
+  const bells = !grouped && people.some((person) => !person.owner && person.notifiable);
 
   return (
     <div className="flex flex-col gap-3">
@@ -148,7 +181,7 @@ export function SplitPanel({ draft, people, hint, footer, disabled, addRef, onMo
                   </label>
                 ) : (
                   <>
-                    {person.notifiable && (
+                    {person.notifiable && !grouped && (
                       <button
                         type="button"
                         role="switch"
@@ -178,6 +211,9 @@ export function SplitPanel({ draft, people, hint, footer, disabled, addRef, onMo
           Adicionar pessoa
         </button>
       </div>
+
+      {group && <GroupRow group={group} pickRef={groupRef} disabled={disabled} />}
+      {group?.current && <p className="m-0 text-[12px] leading-4 text-muted">{groupNoticeNote(group.current.name)}</p>}
 
       {hint && <p className="m-0 rounded-xl bg-danger-soft px-3 py-2.5 text-[12.5px] font-semibold text-danger">{hint}</p>}
 

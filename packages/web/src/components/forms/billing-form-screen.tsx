@@ -10,6 +10,7 @@ import {
   EMPTY_BILLING_DRAFT,
   EMPTY_SPLIT_VALUES,
   firstNoticeDate,
+  groupFirstNoticeSentence,
   formatMoney,
   parseBRLCents,
   planErrorOf,
@@ -24,6 +25,7 @@ import {
   splitParties,
   splitPartyKey,
   UserStatus,
+  WhatsappInstanceState,
   BillingDueRule,
   BillingFrequency,
   BillingKind,
@@ -48,6 +50,8 @@ import {
   type ReminderSettings,
   type SplitLine,
   type SplitValues,
+  type WhatsappGroup,
+  type WhatsappSettings,
 } from "@receivy/common";
 import { Bell, CalendarClock, CalendarDays, Check, KeyRound, Loader2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -62,6 +66,7 @@ import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
 import { PlanPaywall } from "@/components/app/plan-paywall";
 import { ReminderEditor, ReminderPreview } from "@/components/app/reminder-editor";
 import { ScopeDialog } from "@/components/app/scope-dialog";
+import { WhatsappGroupDialog } from "@/components/app/whatsapp-group-dialog";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { ProviderIcon } from "@/components/ui/provider-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
@@ -71,7 +76,7 @@ import { SeatPanel, SplitPanel, type SplitPerson } from "./billing/split-panel";
 
 type Attempt = { input: BillingInput; key: string; uncertain: boolean; applyTo?: EditScope };
 /** Which panel is lifted over the screen: the edit opens every row in one, the creation the two defaults. */
-type Panel = "repeat" | "split" | "reminders" | "pix" | null;
+type Panel = "repeat" | "split" | "reminders" | "pix" | "group" | null;
 
 type BillingFormScreenProps = {
   billing: BillingDetail | null;
@@ -203,6 +208,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     reminders: billing.reminders ? billing.reminders.map((reminder) => ({ ...reminder, offsetDays: String(reminder.offsetDays) })) : null,
     notify: notifyFromBilling(billing),
     settled: billing.kind === BillingKind.Record,
+    whatsappGroup: billing.whatsappGroup ?? null,
   };
 }
 
@@ -278,6 +284,32 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   const splitRow = useRef<HTMLButtonElement>(null);
   const remindersRow = useRef<HTMLButtonElement>(null);
   const pixRow = useRef<HTMLButtonElement>(null);
+  const groupRow = useRef<HTMLButtonElement>(null);
+  // Groups go through the owner's own number: the option only shows while it is connected.
+  const [groupsReady, setGroupsReady] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+
+    request<WhatsappSettings>("/api/financial/whatsapp")
+      .then((settings) => {
+        if (live) {
+          setGroupsReady(settings.ownAvailable && settings.instance?.state === WhatsappInstanceState.Open);
+        }
+      })
+      .catch(() => {
+        // No settings, no group option: each person is notified as before.
+      });
+
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const loadGroups = useCallback(
+    (participants: string[]) => request<{ groups: WhatsappGroup[] }>(`/api/financial/whatsapp/groups?participants=${encodeURIComponent(participants.join(","))}`).then((body) => body.groups),
+    [],
+  );
 
   const editing = Boolean(billing);
   const locked = Boolean(attempt);
@@ -533,6 +565,17 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   }
 
   /** The receiving contact travels only when the seat actually moved: resending it is a no-op the API still validates. */
+  /** The group travels only when it changed: a new one, or none where there was one. */
+  function groupPatch(input: BillingInput): Pick<BillingPatch, "whatsappGroup" | "clearWhatsappGroup"> {
+    const before = billing?.whatsappGroup ?? null;
+
+    if (input.whatsappGroup && input.whatsappGroup.jid !== before?.jid) {
+      return { whatsappGroup: input.whatsappGroup };
+    }
+
+    return !input.whatsappGroup && before ? { clearWhatsappGroup: true } : {};
+  }
+
   function seatPatch(input: BillingInput): Pick<BillingPatch, "contactId"> {
     return input.contactId && input.contactId !== billing?.contact?.id ? { contactId: input.contactId } : {};
   }
@@ -556,6 +599,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       clearPaymentMethod: !input.paymentMethodId,
       ...(toPayable ? seatPatch(input) : {}),
       ...(input.reminders ? { reminders: input.reminders } : billing?.reminders ? { clearReminders: true } : {}),
+      ...groupPatch(input),
       category: input.category,
     };
 
@@ -745,7 +789,8 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
   const remindersValue = reminderRowLabel(draft.reminders === null, activeReminders, reminderSummary(visibleEffective));
   // Who gets an automatic notice: reachable participants whose bell is on.
   const noticed = notifiable.filter((contact) => draft.notify?.[contact.userId] !== false);
-  const noticeDate = !payable && !settled && noticed.length ? firstNoticeDate(draft.start, activeReminders) : null;
+  const group = !payable && !settled ? (draft.whatsappGroup ?? null) : null;
+  const noticeDate = !payable && !settled && (group || noticed.length) ? firstNoticeDate(draft.start, activeReminders) : null;
   const counterpart = seated?.displayName ?? billing?.counterpart?.name ?? null;
   const summary = receiptSentence(draft, lines, counterpart);
   const action = editing ? "Salvar conta" : "Criar conta";
@@ -790,6 +835,8 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
         onRemove={toggle}
         onOwner={(owner) => update({ owner })}
         onAdd={() => setPicker(true)}
+        groupRef={groupRow}
+        group={groupsReady || group ? { current: group, onPick: () => setPanel("group"), onClear: () => update({ whatsappGroup: null }) } : undefined}
       />
     );
   }
@@ -907,6 +954,7 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
       <div className="flex flex-col gap-3 rounded-2xl bg-primary-soft/60 px-4 py-3.5" role="status">
         {!editing && <span className={LABEL_CLASS}>Resumo</span>}
         <p className="m-0 text-[13.5px] leading-5 text-primary-strong">{summary}</p>
+        {!editing && group && noticeDate && <p className="m-0 text-[12.5px] leading-5 text-primary-strong">{groupFirstNoticeSentence(group.name, noticeDate)}</p>}
         {!editing && !payable && !settled && (
           <dl className="m-0 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-primary/15 pt-3 text-[12.5px] text-primary-strong">
             <dt className="m-0">{perOccurrence}</dt>
@@ -968,6 +1016,11 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
     return (
       <div className="mx-auto flex w-full max-w-md min-w-0 flex-col gap-4">
         {frozen && <p className="m-0 rounded-2xl bg-primary-soft/50 p-4 text-sm text-primary-strong">{FROZEN_NOTE}</p>}
+        {billing?.whatsappGroupFailing && group && (
+          <p role="alert" className="m-0 rounded-2xl bg-warning-soft p-4 text-sm text-warning">
+            Não foi possível avisar no grupo {group.name}. Os avisos foram para cada pessoa. Confira se seu número ainda está no grupo, ou troque o grupo.
+          </p>
+        )}
         {/* A registro stays one: the switch shows locked, so the screen still says what this conta is. */}
         {settled && (
           <label className="flex items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface p-3">
@@ -1120,6 +1173,21 @@ export function BillingFormScreen({ billing, onSaved }: BillingFormScreenProps) 
         <BillingDialog title="Lembretes" returnFocusTo={remindersRow} onClose={() => setPanel(null)}>
           {renderReminders()}
         </BillingDialog>
+      )}
+
+      {panel === "group" && (
+        <WhatsappGroupDialog
+          participants={draft.selected}
+          selected={group?.jid ?? null}
+          load={loadGroups}
+          returnFocusTo={groupRow}
+          onPick={(picked) => {
+            update({ whatsappGroup: { jid: picked.jid, name: picked.name } });
+            // The edit picks it from the Divisão dialog: back there, not all the way out.
+            setPanel(editing ? "split" : null);
+          }}
+          onClose={() => setPanel(editing ? "split" : null)}
+        />
       )}
 
       {panel === "pix" && (

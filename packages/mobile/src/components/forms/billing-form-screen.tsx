@@ -13,6 +13,7 @@ import {
   EMPTY_SPLIT_VALUES,
   firstNoticeDate,
   firstNoticeSentence,
+  groupFirstNoticeSentence,
   formatMoney,
   parseBRLCents,
   previewBillingSplit,
@@ -28,6 +29,7 @@ import {
   splitSummaryLine,
   untilInstallmentPreview,
   UserStatus,
+  WhatsappInstanceState,
   type BillingDetail,
   type BillingDraft,
   BillingDueRule,
@@ -58,6 +60,7 @@ import { BottomSheet } from "@/components/app/bottom-sheet";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
 import { ReminderEditor, ReminderPreview } from "@/components/app/reminder-editor";
 import { ScopeModal } from "@/components/app/scope-modal";
+import { WhatsappGroupSheet } from "@/components/app/whatsapp-group-sheet";
 import { CategoryIcon } from "@/components/ui/category-icon";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
@@ -106,13 +109,13 @@ type Client = Pick<FinancialClient, "paymentMethods" | "profile" | "createBillin
 type Attempt = { input: BillingInput; key: string; uncertain: boolean; applyTo?: EditScope };
 type Step = 1 | 2 | 3;
 /** Which panel is lifted over the screen: the edit opens every row in one, the review opens the two defaults. */
-type Sheet = "repeat" | "split" | "reminders" | "pix" | null;
+type Sheet = "repeat" | "split" | "reminders" | "pix" | "group" | null;
 
 type BillingFormScreenProps = {
   client?: Client;
   contacts?: Pick<typeof contactsClient, "list">;
   /** The owner's reminder default: only read on a brand-new billing, to seed `effective`. */
-  account?: Pick<AccountClient, "reminders">;
+  account?: Pick<AccountClient, "reminders"> & Partial<Pick<AccountClient, "whatsapp" | "whatsappGroups">>;
   billing?: BillingDetail | null;
   onSaved: (billing: BillingDetail) => void;
   /** Where × goes; absent, the screen pops itself. */
@@ -222,6 +225,7 @@ function draftFromBilling(billing: BillingDetail): BillingDraft {
     reminders: billing.reminders ? billing.reminders.map((reminder) => ({ ...reminder, offsetDays: String(reminder.offsetDays) })) : null,
     notify: notifyFromBilling(billing),
     settled: billing.kind === BillingKind.Record,
+    whatsappGroup: billing.whatsappGroup ?? null,
   };
 }
 
@@ -344,6 +348,22 @@ export function BillingFormScreen({
       live = false;
     };
   }, [account, billing]);
+
+  // Groups go through the owner's own number: the option only shows while it is connected.
+  const [groupsReady, setGroupsReady] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+
+    account.whatsapp?.().then(
+      (settings) => live && setGroupsReady(settings.ownAvailable && settings.instance?.state === WhatsappInstanceState.Open),
+      () => undefined,
+    );
+
+    return () => {
+      live = false;
+    };
+  }, [account]);
 
   const editing = Boolean(billing);
   const locked = Boolean(attempt);
@@ -548,6 +568,17 @@ export function BillingFormScreen({
     update({ values: { ...draft.values, [draft.mode]: { ...draft.values[draft.mode], [key]: value } } });
   }
 
+  /** The group travels only when it changed: a new one, or none where there was one. */
+  function groupPatch(input: BillingInput): Pick<BillingPatch, "whatsappGroup" | "clearWhatsappGroup"> {
+    const before = billing?.whatsappGroup ?? null;
+
+    if (input.whatsappGroup && input.whatsappGroup.jid !== before?.jid) {
+      return { whatsappGroup: input.whatsappGroup };
+    }
+
+    return !input.whatsappGroup && before ? { clearWhatsappGroup: true } : {};
+  }
+
   /** The receiving contact travels only when the seat actually moved: resending it is a no-op the API still validates. */
   function seatPatch(input: BillingInput): Pick<BillingPatch, "contactId"> {
     return input.contactId && input.contactId !== billing?.contact?.id ? { contactId: input.contactId } : {};
@@ -572,6 +603,7 @@ export function BillingFormScreen({
       clearPaymentMethod: !input.paymentMethodId,
       ...(toPayable ? seatPatch(input) : {}),
       ...(input.reminders ? { reminders: input.reminders } : billing?.reminders ? { clearReminders: true } : {}),
+      ...groupPatch(input),
       category: input.category,
     };
 
@@ -810,7 +842,8 @@ export function BillingFormScreen({
   const remindersValue = reminderRowLabel(draft.reminders === null, activeReminders, reminderSummary(visibleEffective));
   // Who gets an automatic notice: reachable participants whose bell is on.
   const noticed = notifiable.filter((contact) => draft.notify?.[contact.userId] !== false).map((contact) => contact.displayName);
-  const noticeDate = !payable && !settled && noticed.length ? firstNoticeDate(draft.start, activeReminders) : null;
+  const group = !payable && !settled ? (draft.whatsappGroup ?? null) : null;
+  const noticeDate = !payable && !settled && (group || noticed.length) ? firstNoticeDate(draft.start, activeReminders) : null;
   const retry = editing ? "Tentar salvar novamente" : "Tentar criar novamente";
 
   /** What still blocks leaving the current step, phrased like the shared builder does. */
@@ -912,6 +945,11 @@ export function BillingFormScreen({
         onRemove={toggle}
         onOwner={(owner) => update({ owner })}
         onAdd={() => setPicker(true)}
+        group={
+          groupsReady || group
+            ? { current: group, onPick: () => setSheet("group"), onClear: () => update({ whatsappGroup: null }) }
+            : undefined
+        }
       />
     );
   }
@@ -1071,7 +1109,7 @@ export function BillingFormScreen({
 
         {noticeDate && (
           <View className="rounded-2xl bg-primary-soft/60 px-4 py-3">
-            <Text className="font-sans text-[13px] leading-5 text-primary-strong">{firstNoticeSentence(noticed, noticeDate, Boolean(selectedPix))}</Text>
+            <Text className="font-sans text-[13px] leading-5 text-primary-strong">{group ? groupFirstNoticeSentence(group.name, noticeDate) : firstNoticeSentence(noticed, noticeDate, Boolean(selectedPix))}</Text>
           </View>
         )}
       </>
@@ -1086,6 +1124,11 @@ export function BillingFormScreen({
     return (
       <>
         {frozen && <Text className="rounded-2xl bg-primary-soft/50 p-4 text-sm text-primary-strong">{FROZEN_NOTE}</Text>}
+        {billing?.whatsappGroupFailing && group && (
+          <Text accessibilityRole="alert" className="rounded-2xl bg-warning-soft p-4 text-sm text-warning">
+            Não foi possível avisar no grupo {group.name}. Os avisos foram para cada pessoa. Confira se seu número ainda está no grupo, ou troque o grupo.
+          </Text>
+        )}
         {/* A registro stays one: the switch shows locked, so the screen still says what this conta is. */}
         {settled && (
           <View className="flex-row items-center justify-between gap-3 rounded-xl border border-outline/30 bg-surface px-3 py-1.5">
@@ -1288,6 +1331,20 @@ export function BillingFormScreen({
         <BottomSheet title="Lembretes" onClose={() => setSheet(null)}>
           {renderReminders()}
         </BottomSheet>
+      )}
+
+      {sheet === "group" && account.whatsappGroups && (
+        <WhatsappGroupSheet
+          participants={draft.selected}
+          selected={group?.jid ?? null}
+          load={account.whatsappGroups}
+          onPick={(picked) => {
+            update({ whatsappGroup: { jid: picked.jid, name: picked.name } });
+            // The edit picks it from the Divisão sheet: back there, not all the way out.
+            setSheet(editing ? "split" : null);
+          }}
+          onClose={() => setSheet(null)}
+        />
       )}
 
       {sheet === "pix" && (

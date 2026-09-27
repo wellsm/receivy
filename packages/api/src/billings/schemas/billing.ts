@@ -30,6 +30,12 @@ export interface BillingSchema extends Database.Schema {
   contact_id?: String.UUID;
   /** JSON array of { offsetDays, enabled }; null falls back to the owner's notification preferences. */
   reminders?: String.Max<2000>;
+  /** Conta a receber only: the notices go to this WhatsApp group (`…@g.us`) of the owner's own number. */
+  whatsapp_group_jid?: String.Max<80>;
+  /** The group's name when it was picked, to show it without asking Evolution. */
+  whatsapp_group_name?: String.Max<200>;
+  /** Set when the last group notice failed and fell back to each person; cleared on the next success or a new group. */
+  whatsapp_group_failed_at?: String.DateTime;
   state: BillingState;
   /** The one split mode of the billing; every allocation used to carry its own copy. */
   split_mode?: SplitMode;

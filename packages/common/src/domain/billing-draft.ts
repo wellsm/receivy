@@ -3,6 +3,7 @@ import {
   BillingFrequency,
   BillingKind,
   type BillingInput,
+  type BillingWhatsappGroup,
   type NormalizedBillingInput,
   BillingRecurrence,
   MAX_FINITE_OCCURRENCES,
@@ -67,6 +68,8 @@ export type BillingDraft = {
   notify?: Record<string, boolean>;
   /** "Já recebi" / "Já paguei": the draft is a registro. Absent on drafts stored before registros existed. */
   settled?: boolean;
+  /** Conta a receber: notify this WhatsApp group instead of each person. Absent or null notifies each person. */
+  whatsappGroup?: BillingWhatsappGroup | null;
 };
 
 /** Fresh draft for a new billing form. Returns a new object on every call. */
@@ -336,7 +339,8 @@ export function buildBillingInput(draft: BillingDraft, now?: Date): BillingInput
       {
         ...base,
         paymentMethodId: draft.pix || undefined,
-        split: buildSplit(draft, parties)
+        split: buildSplit(draft, parties),
+        ...(draft.whatsappGroup ? { whatsappGroup: draft.whatsappGroup } : {})
       },
       now
     )

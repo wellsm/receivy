@@ -22,8 +22,10 @@ import {
   EditScope,
   endOfMonth,
   normalizeBillingInput,
+  normalizeWhatsappGroup,
   PendingChargesAction,
-  planBillingCharges
+  planBillingCharges,
+  WhatsappInstanceState
 } from '@receivy/common';
 import { SilenceUnavailableError } from '../../charges/errors';
 import { ChargeRepository } from '../../charges/repositories/charge';
@@ -36,6 +38,8 @@ import { ContactRepository } from '../../contacts/repositories/contact';
 import type { Db, DbClient } from '../../database';
 import type { InviteLinkContext } from '../../invites/services/links';
 import type { ChargeNotifyScheduler } from '../../notifications/schedulers/charge-notify';
+import { WhatsappGroupsRequireInstanceError } from '../../notifications/errors';
+import { WhatsappInstanceRepository } from '../../notifications/repositories/whatsapp-instance';
 import { noticeContext } from '../../notifications/services/context';
 import { announceCharges, type NoticeContext } from '../../notifications/services/send';
 import { PaymentMethodRepository } from '../../payment-methods/repositories/payment-method';
@@ -327,6 +331,10 @@ export async function createBilling(
       await assertCanCreateIndefinite(tx, ownerId, now);
     }
 
+    if (input.whatsappGroup) {
+      await assertGroupSender(tx, ownerId);
+    }
+
     // A conta a pagar names its receiving contact outside the split; the key it points at is filed under that contact.
     const contact = input.contactId ? await ContactRepository.user(tx, ownerId, input.contactId) : undefined;
     const payable: PayableMaterialization | undefined = contact ? { payer: ChargePayer.Owner, contactId: contact.contactId } : undefined;
@@ -356,6 +364,7 @@ export async function createBilling(
       paymentMethodId,
       contactId: contact?.contactId,
       reminders: input.reminders ? JSON.stringify(input.reminders) : undefined,
+      whatsappGroup: input.whatsappGroup,
       splitMode: input.split.mode,
       lastOccurrenceDate: input.recurrence === BillingRecurrence.Indefinite ? addCalendarDays(today, -1) : undefined,
       idempotencyKey: key,
@@ -449,6 +458,15 @@ export async function setParticipantNotify(
   });
 }
 
+/** A group is notified through the owner's own number: it has to be connected when the group is picked. */
+async function assertGroupSender(tx: DbClient, ownerId: string): Promise<void> {
+  const instance = await WhatsappInstanceRepository.byOwner(tx, ownerId);
+
+  if (!instance || instance.state !== WhatsappInstanceState.Open) {
+    throw new WhatsappGroupsRequireInstanceError();
+  }
+}
+
 export async function patchBilling(
   db: DbClient,
   ownerId: string,
@@ -466,6 +484,12 @@ export async function patchBilling(
     const row = await loadBilling(tx, ownerId, id, true);
 
     assertPatchAllowed(row, patch);
+
+    const whatsappGroup = patch.whatsappGroup ? normalizeWhatsappGroup(patch.whatsappGroup) : undefined;
+
+    if (whatsappGroup) {
+      await assertGroupSender(tx, ownerId);
+    }
 
     const instant = now.toISOString();
     const today = calendarDate(now, row.timezone);
@@ -545,6 +569,7 @@ export async function patchBilling(
         paymentMethodId: paymentMethodId ?? null,
         contactId: contactId ?? null,
         ...(patch.clearReminders ? { reminders: sqlNull } : patch.reminders !== undefined ? { reminders: JSON.stringify(reminders) } : {}),
+        ...(whatsappGroup ? { whatsappGroup } : patch.clearWhatsappGroup ? { whatsappGroup: null } : {}),
         ...(patch.split !== undefined || (payable && contactPatched) ? { splitMode: stored.mode } : {}),
         ...(patch.state ? { state: patch.state } : {}),
         ...(resumed ? { lastOccurrenceDate: (row.last_occurrence_date ?? boundary) > boundary ? row.last_occurrence_date : boundary } : {}),

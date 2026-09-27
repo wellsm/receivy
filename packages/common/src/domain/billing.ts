@@ -74,7 +74,12 @@ export type BillingInput = {
   contactId?: string;
   /** 'record' is a registro: the owner already received or paid it, every charge settles on its due date and nobody is notified. */
   kind?: BillingKind;
+  /** Conta a receber only: the notices go to this WhatsApp group of the owner's own number instead of each person. */
+  whatsappGroup?: BillingWhatsappGroup;
 };
+
+/** The WhatsApp group a conta a receber notifies: its id (`…@g.us`) and the name it had when picked. */
+export type BillingWhatsappGroup = { jid: string; name: string };
 
 export type NormalizedBillingInput = BillingInput & { description: string; split: BillingSplit; type: Direction };
 
@@ -101,6 +106,10 @@ export type BillingPatch = {
   category?: BillingCategory;
   /** Never changes after creation: a value other than the stored one answers 409 SETTLED_LOCKED. */
   kind?: BillingKind;
+  /** Notify this group from now on. */
+  whatsappGroup?: BillingWhatsappGroup;
+  /** Back to notifying each person. */
+  clearWhatsappGroup?: boolean;
 };
 
 /** Who receives a conta a pagar, as the owner knows them. */
@@ -205,6 +214,10 @@ export type BillingDetail = {
   guests: BillingGuest[];
   /** Owner's contacts without an e-mail: the only ones a guest can be linked to. */
   linkableContacts: LinkableContact[];
+  /** The WhatsApp group the notices go to; null when each person is notified. Always sent by the API. */
+  whatsappGroup?: BillingWhatsappGroup | null;
+  /** The last group notice failed and went to each person instead; the owner should fix or drop the group. */
+  whatsappGroupFailing?: boolean;
 };
 
 export type BillingGuest = { id: string; userId: string; name: string; email: string; createdAt: string; avatar?: UserAvatar | null };

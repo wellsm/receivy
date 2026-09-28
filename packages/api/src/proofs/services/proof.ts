@@ -31,6 +31,7 @@ import { actorHash, actorUserId, assertPending, awaitsKey, declarationSlot, live
 import { bucketProofStorage } from './bucket-storage';
 import type { ProofStorage } from './storage';
 import { MAX_PROOF_BYTES, validateProof } from './validation';
+import { closeWhenSettled } from '../../billings/services/settlement';
 
 const KEY = /^proofs\/([0-9a-f-]{36})\/([0-9a-f-]{36})$/;
 
@@ -443,6 +444,7 @@ export async function reviewProof(
 
     if (accepted) {
       await record(tx, id, 'charge.paid', actorId, stamp, { via: declaration ? 'declaration' : 'proof' });
+      await closeWhenSettled(tx, row.billing_id, stamp);
     }
 
     return ChargeRepository.dto(tx, row, actorId);

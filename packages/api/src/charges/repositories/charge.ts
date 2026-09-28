@@ -527,6 +527,14 @@ export namespace ChargeRepository {
     return records.map((row) => row.id).sort((a, b) => a.localeCompare(b));
   }
 
+  /** How many of the billing's charges still wait for money, and how many were paid. */
+  export async function tally(db: DbClient, billingId: string): Promise<{ pending: number; paid: number }> {
+    const pending = await db.charges.count({ where: { billing_id: billingId, state: ChargeState.Pending } });
+    const paid = await db.charges.count({ where: { billing_id: billingId, state: ChargeState.Paid } });
+
+    return { pending, paid };
+  }
+
   export async function hasAny(db: DbClient, billingId: string): Promise<boolean> {
     return !!(await db.charges.count({ where: { billing_id: billingId } }));
   }

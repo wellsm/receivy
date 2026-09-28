@@ -29,6 +29,7 @@ function dbWith(charge: Record<string, unknown>) {
       })
     },
     proofs: { findMany: vi.fn(async () => ({ records: [] })) },
+    billings: { findOne: vi.fn(async () => null) },
     events: { insertOne: vi.fn(async ({ data }: { data: Record<string, unknown> }) => events.push(data)), findMany: vi.fn(async () => ({ records: [] })) },
     users: { findOne: vi.fn(async () => ({ id: 'payer', name: 'Ana Silva' })) },
     device_tokens: { findMany: vi.fn(async () => ({ records: [] })) }
@@ -70,6 +71,7 @@ describe('settleByProvider', () => {
         findOne: vi.fn(async () => base),
         updateOne: vi.fn(async () => base)
       },
+      billings: { findOne: vi.fn(async () => null) },
       proofs: {
         findMany: vi.fn(async () => ({ records: [proof] })),
         updateOne: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -173,6 +175,7 @@ describe('settleByProvider', () => {
       transaction: async (fn: (tx: DbClient) => Promise<unknown>) => fn(db),
       charges: { findOne: vi.fn(async () => pagBase), updateOne: vi.fn(async () => pagBase) },
       proofs: { findMany: vi.fn(async () => ({ records: [] })) },
+    billings: { findOne: vi.fn(async () => null) },
       events: { insertOne: vi.fn(async ({ data }: { data: Record<string, unknown> }) => events.push(data)), findMany: vi.fn(async () => ({ records: [] })) },
       users: { findOne: vi.fn(async () => ({ id: 'payer', name: 'Ana Silva' })) },
       device_tokens: { findMany: vi.fn(async () => ({ records: [{ id: 'd1', token: 'ExpoPushToken[x]' }] })) }

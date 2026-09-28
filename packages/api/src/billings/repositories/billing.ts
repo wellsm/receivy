@@ -38,6 +38,8 @@ export namespace BillingRepository {
     whatsapp_group_name?: string;
     whatsapp_group_failed_at?: string;
     state: BillingState;
+    /** Set when the billing ended on its own; see `billings/services/settlement.ts`. */
+    auto_ended_at?: string;
     /** Null only until the block 3 backfill runs; reads as 'equal'. */
     split_mode?: SplitMode;
     last_occurrence_date?: string;
@@ -116,6 +118,7 @@ export namespace BillingRepository {
         contact_id: true,
         reminders: true,
         state: true,
+        auto_ended_at: true,
         split_mode: true,
         last_occurrence_date: true,
         request_hash: true,
@@ -357,6 +360,21 @@ export namespace BillingRepository {
         updated_at: input.now
       }
     });
+  }
+
+  /** What deciding an automatic end needs; `lock` holds the row so two charges settling at once see each other. */
+  export async function settlement(db: DbClient, id: string, lock = false): Promise<{ recurrence: BillingRecurrence; state: BillingState; auto_ended_at?: string } | null> {
+    const row = await db.billings.findOne({ select: { recurrence: true, state: true, auto_ended_at: true }, where: { id }, lock });
+
+    return row ?? null;
+  }
+
+  export async function markSettled(db: DbClient, id: string, now: string): Promise<void> {
+    await db.billings.updateOne({ where: { id }, data: { state: BillingStateEnum.Ended, auto_ended_at: now, updated_at: now } });
+  }
+
+  export async function clearSettled(db: DbClient, id: string, now: string): Promise<void> {
+    await db.billings.updateOne({ where: { id }, data: { state: BillingStateEnum.Active, auto_ended_at: sqlNull, updated_at: now } });
   }
 
   export async function update(db: DbClient, id: string, input: Update, now: string): Promise<void> {

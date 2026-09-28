@@ -187,6 +187,7 @@ export async function billingDetail(db: DbClient, row: BillingRow, now: Date, li
     endDate: row.end_date,
     dueRule: row.due_rule,
     state: row.state,
+    autoEnded: Boolean(row.auto_ended_at),
     installmentCount: installmentCountFor(row),
     nextDueDate: earliest?.due_date ?? previews[0]?.occurrenceDate ?? null,
     createdAt: row.created_at,

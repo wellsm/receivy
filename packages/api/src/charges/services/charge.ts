@@ -12,6 +12,7 @@ import { ChargeRepository } from '../repositories/charge';
 import { StoredProofState } from '../schemas/charge';
 import { ownerOf, ownerPays, owns } from '../utils/columns';
 import { chargeForActor, confirmationRequired } from './access';
+import { closeWhenSettled, reopenWhenUnsettled } from '../../billings/services/settlement';
 
 export type ChargeClient = {
   /** The detail as `actorId` sees it; owner, creditor and debtor may read, anyone else is refused. */
@@ -54,6 +55,7 @@ function record(tx: DbClient, chargeId: string, actorId: string, type: string, n
 export async function markRegistered(tx: DbClient, row: ChargeRepository.Row, timezone: string, now: string): Promise<ChargeRepository.Row> {
   await ChargeRepository.markPaid(tx, row.id, zonedInstant(row.due_date, '00:00', timezone), now);
   await record(tx, row.id, ownerOf(row), 'charge.paid', now, { via: 'registered' });
+  await closeWhenSettled(tx, row.billing_id, now);
 
   const updated = await ChargeRepository.get(tx, row.id);
 
@@ -96,6 +98,7 @@ async function pay(db: DbClient, actorId: string, id: string, now: Date): Promis
     }
 
     await record(tx, id, actorId, 'charge.paid', stamp, { via: answering ? (declaration ? 'declaration' : 'proof') : 'manual' });
+    await closeWhenSettled(tx, row.billing_id, stamp);
 
     return ChargeRepository.dto(tx, row, actorId);
   });
@@ -121,6 +124,7 @@ async function cancel(db: DbClient, actorId: string, id: string): Promise<Charge
 
     await ChargeRepository.markCancelled(tx, id, now);
     await record(tx, id, actorId, 'charge.cancelled', now);
+    await closeWhenSettled(tx, row.billing_id, now);
 
     return ChargeRepository.dto(tx, row, actorId);
   });
@@ -148,6 +152,7 @@ async function reopen(db: DbClient, actorId: string, id: string): Promise<Charge
 
     await ChargeRepository.markPending(tx, id, now);
     await record(tx, id, actorId, 'charge.reopened', now);
+    await reopenWhenUnsettled(tx, row.billing_id, now);
 
     return ChargeRepository.dto(tx, row, actorId);
   });

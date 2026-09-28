@@ -49,6 +49,7 @@ function dbWith(chargeRow: Record<string, unknown> | null) {
       })
     },
     proofs: { findMany: vi.fn(async () => ({ records: [] })) },
+    billings: { findOne: vi.fn(async () => null) },
     events: { insertOne: vi.fn(async () => undefined), findMany: vi.fn(async () => ({ records: [] })) },
     users: { findOne: vi.fn(async () => ({ id: 'payer', name: 'Ana Silva' })) },
     device_tokens: { findMany: vi.fn(async () => ({ records: [] })) }

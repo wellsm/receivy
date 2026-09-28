@@ -58,6 +58,7 @@ function dbWith(chargeRow: Record<string, unknown> | null, integrationRow: Recor
     },
     integrations: { findOne: vi.fn(async () => integrationRow) },
     proofs: { findMany: vi.fn(async () => ({ records: [] })) },
+    billings: { findOne: vi.fn(async () => null) },
     events: { insertOne: vi.fn(async ({ data }: { data: Record<string, unknown> }) => events.push(data)), findMany: vi.fn(async () => ({ records: [] })) },
     users: { findOne: vi.fn(async () => ({ id: 'payer', name: 'Ana Silva' })) },
     device_tokens: { findMany: vi.fn(async () => ({ records: [] })) }

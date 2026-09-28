@@ -13,7 +13,9 @@ import type { BillingRepository } from '../repositories/billing';
 import { billingDirection, billingRecurrence, billingRegistered } from './columns';
 
 export function assertPatchAllowed(row: BillingRepository.Row, patch: BillingPatch): void {
-  if (row.state === BillingState.Ended) {
+  // A billing ended by hand is closed for good. One that ended on its own because everything was paid still takes
+  // edits to what it is, just not a move back to active or paused.
+  if (row.state === BillingState.Ended && (!row.auto_ended_at || patch.state !== undefined)) {
     throw new BillingEndedError();
   }
 

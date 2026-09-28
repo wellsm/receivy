@@ -10,6 +10,7 @@ import { ChargeRepository } from '../repositories/charge';
 import { StoredProofState } from '../schemas/charge';
 import { creditorOf, debtorOf, ownerOf, paymentOf } from '../utils/columns';
 import { checkoutProviderOf } from './payment-link';
+import { closeWhenSettled } from '../../billings/services/settlement';
 
 export type SettleOutcome = 'settled' | 'replayed' | 'ignored' | 'rejected' | 'mismatch' | 'unavailable';
 
@@ -157,6 +158,7 @@ export async function settleByProvider(db: DbClient, clients: CheckoutClients, n
       { via: 'provider', provider, transactionNsu: input.transactionNsu, paidAmountCents: check.paidAmountCents, captureMethod: check.captureMethod, receiptUrl },
       stamp
     );
+    await closeWhenSettled(tx, locked.billing_id, stamp);
 
     return {
       outcome: 'settled' as const,

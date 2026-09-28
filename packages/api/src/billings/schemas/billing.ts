@@ -37,6 +37,11 @@ export interface BillingSchema extends Database.Schema {
   /** Set when the last group notice failed and fell back to each person; cleared on the next success or a new group. */
   whatsapp_group_failed_at?: String.DateTime;
   state: BillingState;
+  /**
+   * Set when the billing ended on its own: an única or parcelada with nothing left pending and something paid.
+   * A charge reopened afterwards clears it and brings the billing back; a billing ended by hand never carries it.
+   */
+  auto_ended_at?: String.DateTime;
   /** The one split mode of the billing; every allocation used to carry its own copy. */
   split_mode?: SplitMode;
   /** Recorrente only: the last occurrence already materialized; null before the first one. */

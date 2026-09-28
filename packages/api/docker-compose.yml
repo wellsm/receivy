@@ -50,7 +50,7 @@ services:
     container_name: receivy-whap
     restart: unless-stopped
     environment:
-      WEBHOOK_URL: http://host.docker.internal:3735/local-receivy-api/webhooks/whatsapp/meta
+      WEBHOOK_URL: http://host.docker.internal:3735/dev-receivy-api/webhooks/whatsapp/meta
       WEBHOOK_SECRET: whatsapp_app_secret_local
     ports:
       # 3011 on the host so this can run next to another project's whap on 3010.

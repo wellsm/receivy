@@ -119,6 +119,31 @@ describe("apiFetch", () => {
 
     expect(new Headers((fetchMock.mock.calls[0]?.[1] as RequestInit).headers).get("idempotency-key")).toBe("k1");
   });
+
+  it("keeps the session when the refresh call fails on the network", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockRejectedValueOnce(new TypeError("fetch failed"));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiFetch("auth/me")).rejects.toBeInstanceOf(TypeError);
+    expect(getAccessToken()).toBe("a1");
+    expect(localStorage.getItem("receivy.session")).toContain("r1");
+  });
+
+  it("gives up after two stale rounds", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(new Response(null, { status: 409 }));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiFetch("charges")).rejects.toBeInstanceOf(SessionExpiredError);
+    expect(getAccessToken()).toBeNull();
+    expect(localStorage.getItem("receivy.session")).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe("apiJson", () => {

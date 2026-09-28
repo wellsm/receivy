@@ -51,6 +51,7 @@ async function refreshOnce(): Promise<boolean> {
       return false;
     }
 
+    // A network failure here propagates untouched: the session survives an outage; apiJson reports it as unavailable.
     const response = await send("auth/refresh", { auth: false, method: "POST", body: JSON.stringify({ refreshToken }) });
 
     if (response.ok) {

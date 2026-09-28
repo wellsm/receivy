@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /pay/
+Disallow: /p/
+Disallow: /o/
+Disallow: /join/
+Disallow: /opt-out/

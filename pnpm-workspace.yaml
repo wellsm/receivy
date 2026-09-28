@@ -2,17 +2,25 @@ packages:
   - "packages/*"
 
 catalog:
+  "@eslint/js": "^10.0.1"
+  "@tailwindcss/vite": "^4.3.3"
+  "@tanstack/react-router": "^1.170.40"
+  "@tanstack/router-plugin": "^1.168.41"
   "@types/node": "^24.10.0"
   "@types/react": "^19.2.0"
   "@types/react-dom": "^19.2.0"
   "@vitejs/plugin-react": "^5.2.0"
   "clsx": "^2.1.1"
+  "eslint-plugin-react-hooks": "^7.1.1"
+  "eslint-plugin-react-refresh": "^0.5.7"
   "lucide-react": "^0.544.0"
   "react": "19.2.3"
   "react-dom": "19.2.3"
   "tailwind-merge": "^3.3.1"
   "tailwindcss": "^4.1.14"
   "typescript": "~6.0.3"
+  "typescript-eslint": "^8.71.0"
+  "vite": "^7.3.6"
   "vitest": "^3.2.4"
   "zod": "^4.1.12"
 
@@ -63,3 +71,14 @@ minimumReleaseAgeExclude:
   - '@ez4/transform@0.53.0'
   - '@ez4/utils@0.53.0'
   - '@ez4/validator@0.53.0'
+  - '@typescript-eslint/eslint-plugin@8.71.0'
+  - '@typescript-eslint/parser@8.71.0'
+  - '@typescript-eslint/project-service@8.71.0'
+  - '@typescript-eslint/scope-manager@8.71.0'
+  - '@typescript-eslint/tsconfig-utils@8.71.0'
+  - '@typescript-eslint/type-utils@8.71.0'
+  - '@typescript-eslint/types@8.71.0'
+  - '@typescript-eslint/typescript-estree@8.71.0'
+  - '@typescript-eslint/utils@8.71.0'
+  - '@typescript-eslint/visitor-keys@8.71.0'
+  - typescript-eslint@8.71.0

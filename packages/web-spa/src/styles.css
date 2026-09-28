@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+/* Design tokens shared with the mobile app (packages/mobile/src/global.css): the same utility names on both.
+   Dark values live below, keyed off :root[data-theme="dark"] and the prefers-color-scheme fallback. */
+@theme {
+  --font-sans: "Public Sans Variable", system-ui, sans-serif;
+  --font-display: "Space Grotesk Variable", "Public Sans Variable", system-ui, sans-serif;
+
+  --color-canvas: #f7f6fb;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f2f1f8;
+  --color-primary: #4b3fd6;
+  --color-primary-strong: #2e2497;
+  --color-primary-soft: #eae7ff;
+  --color-accent: #9b8dff;
+  --color-ink: #17162b;
+  --color-muted: #5b5a72;
+  --color-outline: #dcdae8;
+  --color-on-primary: #ffffff;
+  --color-on-danger: #ffffff;
+  --color-danger: #b03a26;
+  --color-danger-soft: #fde8e4;
+  --color-danger-solid: #c4321c;
+  --color-warning: #78350f;
+  --color-warning-soft: #fffbeb;
+  --color-info: #2e2497;
+  --color-info-soft: #eae7ff;
+  --color-success: #0e7a50;
+  --color-success-soft: #e9f6f0;
+  --color-payable: #e0533e;
+  --color-payable-soft: #fde8e4;
+  --color-scrim: rgba(23, 22, 43, 0.55);
+}
+
+/* Rare dark-only tweaks; colors themselves always come from the tokens below. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Dark values of the same tokens. The inline script in layout.tsx stamps data-theme before first paint. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #121212;
+  --color-surface: #222222;
+  --color-surface-muted: #343434;
+  --color-primary: #9b8dff;
+  --color-primary-strong: #c9bfff;
+  --color-primary-soft: #2a2550;
+  --color-accent: #9b8dff;
+  --color-ink: #eceaf7;
+  --color-muted: #9a97b8;
+  --color-outline: #2e2c48;
+  --color-on-primary: #121122;
+  --color-on-danger: #ffffff;
+  --color-danger: #ff9a85;
+  --color-danger-soft: #3a1a18;
+  --color-danger-solid: #c4321c;
+  --color-warning: #f2c274;
+  --color-warning-soft: #33260e;
+  --color-info: #c9bfff;
+  --color-info-soft: #2a2550;
+  --color-success: #4ed39b;
+  --color-success-soft: #12332a;
+  --color-payable: #ff8a70;
+  --color-payable-soft: #3a1a18;
+  --color-scrim: rgba(0, 0, 0, 0.6);
+}
+
+/* Before the script runs, or without JavaScript, the OS preference decides. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-canvas: #121122;
+    --color-surface: #1b1a2e;
+    --color-surface-muted: #252338;
+    --color-primary: #9b8dff;
+    --color-primary-strong: #c9bfff;
+    --color-primary-soft: #2a2550;
+    --color-accent: #9b8dff;
+    --color-ink: #eceaf7;
+    --color-muted: #9a97b8;
+    --color-outline: #2e2c48;
+    --color-on-primary: #121122;
+    --color-on-danger: #ffffff;
+    --color-danger: #ff9a85;
+    --color-danger-soft: #3a1a18;
+    --color-danger-solid: #c4321c;
+    --color-warning: #f2c274;
+    --color-warning-soft: #33260e;
+    --color-info: #c9bfff;
+    --color-info-soft: #2a2550;
+    --color-success: #4ed39b;
+    --color-success-soft: #12332a;
+    --color-payable: #ff8a70;
+    --color-payable-soft: #3a1a18;
+    --color-scrim: rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Element resets only: every component carries its own Tailwind classes, exactly like the mobile app. */
+:root {
+  color-scheme: light;
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+button,
+a {
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  text-decoration: none;
+}
+
+/* Layered so a utility (e.g. `outline-none` on an input inside a focus-within wrapper) can override it. */
+@layer base {
+  :focus-visible {
+    outline: 3px solid var(--color-primary); /* accent scored 2.5:1 on canvas; WCAG 2.4.11 needs 3:1 */
+    outline-offset: 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

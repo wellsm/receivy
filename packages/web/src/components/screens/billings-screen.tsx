@@ -1,6 +1,6 @@
 "use client";
 
-import { BillingState, billingShareAction, calendarDate, Direction, type BillingSummary, type BillingsPage, type PlanSummary } from "@receivy/common";
+import { BillingState, billingShareAction, calendarDate, Direction, type BillingSummary, type BillingsPage, type PlanSummary, type PublicLink } from "@receivy/common";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
 import { loadPlanSummary } from "@/lib/plan-summary";
+import { publicLinkUrl } from "@/lib/public-link-url";
 import { BILLING_ROW_COLUMNS, BillingCard } from "@/components/ui/billing-card";
 
 const LIST_ERROR = "Não foi possível carregar suas cobranças.";
@@ -143,9 +144,9 @@ export function BillingsScreen() {
       return;
     }
 
-    const link = (await response.json()) as { token: string };
+    const link = (await response.json()) as PublicLink;
 
-    await copy(`${window.location.origin}/pay/${link.token}`);
+    await copy(publicLinkUrl(window.location.origin, link));
   }
 
   const visible = page?.billings.filter((billing) => billing.state === stateFilter) ?? [];

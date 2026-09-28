@@ -304,6 +304,17 @@ describe("BillingDetailScreen", () => {
     await waitFor(() => expect(client.publicLink).toHaveBeenCalledWith("c4"));
   });
 
+  it("keeps only Editar on a billing that ended on its own, and nothing on one ended by hand", async () => {
+    await open(makeClient(billing({ state: BillingState.Ended, autoEnded: true })));
+
+    expect(screen.getByRole("button", { name: "Editar" })).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Encerrar" })).toBeNull();
+
+    await open(makeClient(billing({ state: BillingState.Ended })));
+
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+  });
+
   it("opens the charge and the edit form from the actions", async () => {
     const onOpenCharge = jest.fn();
     const onEdit = jest.fn();

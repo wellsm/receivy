@@ -604,7 +604,8 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
           </View>
         </View>
 
-        {!ended && (
+        {/* A conta encerrada sozinha (tudo pago) ainda edita, e nada mais. */}
+        {(!ended || billing.autoEnded) && (
           <View className="gap-2.5">
             <View className="flex-row gap-2">
               <ActionTile
@@ -626,7 +627,7 @@ export function BillingDetailScreen({ id, client = financialClient, onOpenCharge
                   onPress={() => (billing.state === "active" ? pause(billing) : void transition(billing, BillingState.Active))}
                 />
               )}
-              <ActionTile label="Encerrar" icon={ICONS.stop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onPress={() => end(billing)} />
+              {!ended && <ActionTile label="Encerrar" icon={ICONS.stop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onPress={() => end(billing)} />}
             </View>
             {!payable && !settled && invite && billing.state === "active" && (
               <View className="flex-row items-center justify-between px-1">

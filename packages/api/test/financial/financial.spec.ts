@@ -289,6 +289,9 @@ describe('financial repositories on PostgreSQL', () => {
     equal(second?.type, Direction.Receivable);
     equal(second?.billing.recurrence, BillingRecurrence.Until);
     equal(second?.ownedByViewer, true);
+    equal(second?.participantCount, 1);
+    equal(second?.billing.splitMode, SplitMode.Fixed);
+    equal(second?.billing.category, 'other');
     equal(chargeTotals(feed).receivable.pending.amountCents >= 3_000, true);
 
     const ledger = await contactLedger(db, OWNER, person.id);

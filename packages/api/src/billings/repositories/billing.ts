@@ -260,6 +260,27 @@ export namespace BillingRepository {
     return records;
   }
 
+  /** How many billings of the owner sit in each state under the same side and search the list applies. */
+  export async function countByState(db: DbClient, ownerId: string, filters: Omit<Filters, 'cursor'>): Promise<Record<BillingState, number>> {
+    const query = searchTerm(filters.search ?? '', SEARCH_LIMIT);
+    const count = (state: BillingState) =>
+      db.billings.count({
+        where: {
+          AND: [
+            { owner_id: ownerId, state },
+            ...(filters.type ? [filters.type === DirectionEnum.Payable ? { contact_id: { isNull: false } } : { contact_id: { isNull: true } }] : []),
+            ...(query ? [{ description: { contains: query, insensitive: true } }] : [])
+          ]
+        }
+      });
+
+    return {
+      [BillingStateEnum.Active]: await count(BillingStateEnum.Active),
+      [BillingStateEnum.Paused]: await count(BillingStateEnum.Paused),
+      [BillingStateEnum.Ended]: await count(BillingStateEnum.Ended)
+    };
+  }
+
   /** Every active assinatura, for the daily sweep. */
   export async function activeIndefiniteIds(db: DbClient, recurrence: BillingRecurrence, state: BillingState): Promise<string[]> {
     const { records } = await db.billings.findMany({ select: { id: true }, where: { recurrence, state }, order: { id: Order.Asc } });

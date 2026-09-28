@@ -13,9 +13,11 @@ import {
   billingDates,
   calendarDate,
   Direction,
+  endOfMonth,
   PaymentProvider,
   resolveBillingSplit,
   SplitPartKind,
+  startOfMonth,
   UserStatus
 } from '@receivy/common';
 import { ChargeRepository } from '../../charges/repositories/charge';
@@ -232,5 +234,10 @@ export async function listBillings(db: DbClient, ownerId: string, filters: { typ
     billings.push(billingSummary(row, nextDueDate, counters, contact, await counterpartOf(db, row, contact)));
   }
 
-  return { billings, nextCursor: last ? encodeListCursor({ createdAt: last.created_at, id: last.id }) : null };
+  const states = await BillingRepository.countByState(db, ownerId, { type: filters.type, search: filters.search });
+  const month = calendarDate(now, timezone).slice(0, 7);
+  const monthCharges = await ChargeRepository.countDueBetween(db, ownerId, startOfMonth(month), endOfMonth(month));
+  const counts = { active: states[BillingState.Active], paused: states[BillingState.Paused], ended: states[BillingState.Ended], monthCharges };
+
+  return { billings, nextCursor: last ? encodeListCursor({ createdAt: last.created_at, id: last.id }) : null, counts };
 }

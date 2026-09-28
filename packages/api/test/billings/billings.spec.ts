@@ -362,7 +362,7 @@ describe('billings on native PostgreSQL', () => {
     const page = await listBillings(db, OWNER);
 
     ok(page.billings.length >= 2);
-    deepEqual(await listBillings(db, OTHER), { billings: [], nextCursor: null });
+    deepEqual(await listBillings(db, OTHER), { billings: [], nextCursor: null, counts: { active: 0, paused: 0, ended: 0, monthCharges: 0 } });
   });
 
   it('persists a category and a shares split with one charge per quota', async () => {
@@ -433,6 +433,7 @@ describe('billings on native PostgreSQL', () => {
     const before = await summaryOf(sharesId);
 
     equal(before.participantCount, 4);
+    equal(before.splitMode, SplitMode.Shares);
     equal(before.chargeCount, 4);
     equal(before.paidCount, 0);
     equal(before.proofsPending, 0);
@@ -488,6 +489,10 @@ describe('billings on native PostgreSQL', () => {
       [sharesId]
     );
     equal((await listBillings(db, OWNER, { search: 'churrasco do sábado' })).billings.length, 1);
+    // The per-state counts follow the same search as the page.
+    const { active, paused, ended } = (await listBillings(db, OWNER, { search: 'churrasco' })).counts;
+
+    deepEqual({ active, paused, ended }, { active: 1, paused: 0, ended: 0 });
     equal((await listBillings(db, OWNER, { search: 'nada-que-exista' })).billings.length, 0);
     equal((await listBillings(db, OTHER, { search: 'churr' })).billings.length, 0);
     // A date-like term must stay a text parameter instead of being sniffed into a `date` variable.

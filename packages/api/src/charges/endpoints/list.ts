@@ -2,6 +2,7 @@ import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import type { String } from '@ez4/schema';
 import { Direction, type ListCharge, ProofKind, UserStatus } from '@receivy/common';
+import { AllocationRepository } from '../../billings/repositories/allocation';
 import type { SessionIdentity } from '../../common/authorizers/session';
 import type { ChargeProvider } from '../provider';
 import { ChargeRepository } from '../repositories/charge';
@@ -34,14 +35,19 @@ export async function listChargesHandler(
   const { month } = query;
 
   const charges = await ChargeRepository.list(db, userId, { month });
+  const allocations = await AllocationRepository.byBillings(db, [...new Set(charges.map((charge) => charge.billing_id))]);
 
   const body = charges.map(({ billing, creditor, debtor, proofs, ...charge }) => {
-    const { owner_id, contact, ...rest } = billing;
+    const { owner_id, contact_id, contact, recurrence, kind, category, split_mode } = billing;
     const ownedByViewer = owner_id === userId;
     const ownerPays = !!charge.debtor_id && charge.debtor_id === owner_id;
     const counterpart = ownerPays ? creditor : debtor;
     const proof = proofs?.[0];
     const proofState = visibleProofState(proof ?? null);
+    // A conta a pagar names who receives outside its split, so only a conta a receber counts people.
+    const participants = contact_id
+      ? new Set<string>()
+      : new Set(allocations.filter((allocation) => allocation.billing_id === charge.billing_id && allocation.user_id !== owner_id).map((allocation) => allocation.user_id));
 
     return {
       id: charge.id,
@@ -58,8 +64,15 @@ export async function listChargesHandler(
       notify: !ownedByViewer || charge.notify,
       counterpartReachable: reachable(counterpart),
       confirmationRequired: !ownerPays || creditor?.status === UserStatus.Active,
+      participantCount: participants.size,
       proof: proof && proofState ? { state: proofState, kind: proof.kind ?? ProofKind.File } : null,
-      billing: { ...rest, contact: ownedByViewer ? (contact ?? null) : null },
+      billing: {
+        recurrence,
+        kind,
+        category,
+        splitMode: split_mode ?? undefined,
+        contact: ownedByViewer ? (contact ?? null) : null
+      },
       creditor: creditor ? { name: creditor.name } : undefined,
       debtor: debtor ? { name: debtor.name } : undefined
     };

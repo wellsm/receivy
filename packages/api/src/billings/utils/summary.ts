@@ -91,6 +91,7 @@ export function billingSummary(
     nextDueDate,
     createdAt: row.created_at,
     category: row.category,
+    splitMode: row.split_mode,
     ...counters
   };
 }

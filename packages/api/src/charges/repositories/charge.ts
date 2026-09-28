@@ -382,6 +382,9 @@ export namespace ChargeRepository {
           owner_id: true,
           recurrence: true,
           kind: true,
+          category: true,
+          split_mode: true,
+          contact_id: true,
           contact: { id: true, nickname: true, user: { name: true } }
         },
         creditor: { name: true, email: true, phone: true, status: true },
@@ -394,6 +397,11 @@ export namespace ChargeRepository {
     });
 
     return records;
+  }
+
+  /** The charges of the owner's billings due between two dates, cancelled ones left out. */
+  export async function countDueBetween(db: DbClient, ownerId: string, from: string, to: string): Promise<number> {
+    return db.charges.count({ where: { owner_id: ownerId, state: { not: ChargeState.Cancelled }, due_date: { gte: from, lte: to } } });
   }
 
   export async function insert(

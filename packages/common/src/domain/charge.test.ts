@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BillingKind, BillingRecurrence } from './billing';
-import { chargeSummaryOf, chargeTotals, counterpartName, groupChargesByDay, openChargesTotal, type ListCharge } from './charge';
-import { ChargeState, Direction, ProofKind, ProofState } from './contracts';
+import { BillingCategory } from './billing-category';
+import { chargeFeedLine, chargeSummaryOf, chargeTotals, counterpartName, groupChargesByDay, type ListCharge, openChargesTotal, searchCharges } from './charge';
+import { ChargeState, Direction, ProofKind, ProofState, SplitMode } from './contracts';
+import { BadgeTone } from './feed';
 
 function charge(overrides: Partial<ListCharge[number]> = {}): ListCharge[number] {
   return {
@@ -17,8 +19,9 @@ function charge(overrides: Partial<ListCharge[number]> = {}): ListCharge[number]
     notify: true,
     counterpartReachable: true,
     confirmationRequired: true,
+    participantCount: 1,
     proof: null,
-    billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, contact: null },
+    billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, category: BillingCategory.Housing, contact: null },
     debtor: { name: 'Bruno' },
     ...overrides
   };
@@ -30,7 +33,7 @@ describe('counterpart name', () => {
   it('names the counterpart from the contact when the viewer pays, from the debtor when they receive', () => {
     const paying = charge({
       ...MINE,
-      billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, contact: { id: 'c1', nickname: 'Padaria da esquina', user: { name: 'Padaria' } } }
+      billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, category: BillingCategory.Other, contact: { id: 'c1', nickname: 'Padaria da esquina', user: { name: 'Padaria' } } }
     });
     const receiving = charge({ debtor: { name: 'Bruno' } });
 
@@ -148,5 +151,47 @@ describe('charge totals', () => {
     expect(openChargesTotal(open)).toEqual({ amountCents: 300, currency: 'BRL' });
     expect(openChargesTotal([charge({ state: ChargeState.Paid })])).toBeNull();
     expect(openChargesTotal([])).toBeNull();
+  });
+});
+
+describe('chargeFeedLine', () => {
+  const today = '2026-09-10';
+
+  it('says how late a pending charge is', () => {
+    expect(chargeFeedLine(charge({ dueDate: '2026-09-06' }), today)).toEqual({ text: 'atrasado 4 dias', tone: BadgeTone.Danger });
+    expect(chargeFeedLine(charge({ dueDate: '2026-09-09' }), today)).toEqual({ text: 'atrasado 1 dia', tone: BadgeTone.Danger });
+  });
+
+  it('names the side and the recurrence of what the viewer pays', () => {
+    const billing = { recurrence: BillingRecurrence.Indefinite, kind: BillingKind.Live, category: BillingCategory.Subscription, contact: null };
+
+    expect(chargeFeedLine(charge({ ...MINE, billing }), today)).toEqual({ text: 'a pagar · recorrente', tone: BadgeTone.Warning });
+  });
+
+  it('counts the people and names the split of a shared billing', () => {
+    const billing = { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, category: BillingCategory.Groceries, splitMode: SplitMode.Shares, contact: null };
+
+    expect(chargeFeedLine(charge({ participantCount: 3, billing }), today).text).toBe('3 pessoas · cotas');
+  });
+
+  it('names the installment of a single-person receivable', () => {
+    expect(chargeFeedLine(charge({ installment: 3, installmentCount: 12 }), today).text).toBe('parcela 3/12 · a receber');
+    expect(chargeFeedLine(charge(), today).text).toBe('à vista · a receber');
+  });
+
+  it('reports a pending proof and a settled charge before anything else', () => {
+    expect(chargeFeedLine(charge({ dueDate: '2026-09-01', proof: { state: ProofState.Pending, kind: ProofKind.Declaration } }), today).text).toBe('pagamento informado');
+    expect(chargeFeedLine(charge({ state: ChargeState.Paid }), today)).toEqual({ text: 'paga', tone: BadgeTone.Success });
+    expect(chargeFeedLine(charge({ state: ChargeState.Cancelled }), today).text).toBe('cancelada');
+  });
+});
+
+describe('searchCharges', () => {
+  it('matches the description or the other side, ignoring case and accents', () => {
+    const rows = [charge({ id: 'a', description: 'Pão de açúcar' }), charge({ id: 'b', description: 'Aluguel', debtor: { name: 'Márcia' } })];
+
+    expect(searchCharges(rows, 'ACUCAR').map((row) => row.id)).toEqual(['a']);
+    expect(searchCharges(rows, 'marcia').map((row) => row.id)).toEqual(['b']);
+    expect(searchCharges(rows, '  ')).toHaveLength(2);
   });
 });

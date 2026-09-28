@@ -167,6 +167,8 @@ export type BillingSummary = {
   proofsPending: number;
   /** The single pending charge when there is exactly one participant; null otherwise. */
   shareChargeId: string | null;
+  /** Absent on billings created before the column existed. */
+  splitMode?: SplitMode;
 };
 
 export type BillingDetail = {
@@ -229,7 +231,15 @@ export type LinkableContact = { contactId: string; displayName: string; avatar?:
 /** What the owner decides about a waiting guest. */
 export type BillingGuestAction = { action: 'link'; contactId: string } | { action: 'add' } | { action: 'dismiss' };
 
-export type BillingsPage = { billings: BillingSummary[]; nextCursor: string | null };
+/** The owner's billings per state under the same type and search, and the charges due in the owner's current month. */
+export type BillingCounts = {
+  active: number;
+  paused: number;
+  ended: number;
+  monthCharges: number;
+};
+
+export type BillingsPage = { billings: BillingSummary[]; nextCursor: string | null; counts: BillingCounts };
 
 export type BillingInvite = { url: string; expiresAt: string };
 

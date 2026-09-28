@@ -1,5 +1,9 @@
-import type { BillingKind, BillingRecurrence } from './billing';
-import { type ChargeSummary, ChargeState, Direction, type Money, type ProofKind, type ProofState } from './contracts';
+import { type BillingKind, BillingRecurrence } from './billing';
+import { splitModeLabel } from './billing-card';
+import type { BillingCategory } from './billing-category';
+import { dayDiff } from './calendar-labels';
+import { type ChargeSummary, ChargeState, Direction, type Money, ProofKind, ProofState, type SplitMode } from './contracts';
+import { BadgeTone } from './feed';
 
 /** One charge of the month as `GET /charges` answers it: the row plus what its joins say, nothing read per row. */
 export type ListChargeItem = {
@@ -23,6 +27,8 @@ export type ListChargeItem = {
   counterpartReachable: boolean;
   /** A payment declared by the paying side waits for the other side to confirm it; false settles at once. */
   confirmationRequired: boolean;
+  /** Everyone the billing charges besides its owner; 0 on a conta a pagar, which names who receives instead. */
+  participantCount: number;
   proof: {
     state: ProofState;
     kind: ProofKind;
@@ -30,6 +36,9 @@ export type ListChargeItem = {
   billing: {
     recurrence: BillingRecurrence;
     kind: BillingKind;
+    category: BillingCategory;
+    /** Absent on billings created before the column existed. */
+    splitMode?: SplitMode;
     /** The owner's agenda entry for the person who receives; null unless the viewer owns a conta a pagar. */
     contact: {
       id: string;
@@ -146,4 +155,67 @@ export function openChargesTotal(charges: ListCharge): Money | null {
   }
 
   return money(pending.reduce((total, charge) => total + charge.amountCents, 0));
+}
+
+export type ChargeFeedLine = { text: string; tone: BadgeTone };
+
+function recurrenceText(charge: ListChargeItem): string {
+  if (charge.billing.recurrence === BillingRecurrence.Indefinite) {
+    return 'recorrente';
+  }
+
+  if (charge.installment && charge.installmentCount && charge.installmentCount > 1) {
+    return `parcela ${charge.installment}/${charge.installmentCount}`;
+  }
+
+  return 'à vista';
+}
+
+/**
+ * The second line of a feed row: what happened to the charge once it left the pending state, what is
+ * late, and otherwise the side, the people and how it repeats ("3 pessoas · igual", "a pagar · recorrente").
+ */
+export function chargeFeedLine(charge: ListChargeItem, today: string): ChargeFeedLine {
+  if (charge.state === ChargeState.Cancelled) {
+    return { text: 'cancelada', tone: BadgeTone.Neutral };
+  }
+
+  if (charge.state === ChargeState.Paid) {
+    return { text: charge.proof?.state === ProofState.Accepted ? 'validada' : 'paga', tone: BadgeTone.Success };
+  }
+
+  if (charge.proof?.state === ProofState.Pending) {
+    return { text: charge.proof.kind === ProofKind.Declaration ? 'pagamento informado' : 'comprovante enviado', tone: BadgeTone.Info };
+  }
+
+  if (charge.dueDate < today) {
+    const days = dayDiff(charge.dueDate, today);
+
+    return { text: `atrasado ${days} dia${days === 1 ? '' : 's'}`, tone: BadgeTone.Danger };
+  }
+
+  if (charge.type === Direction.Payable) {
+    return { text: `a pagar · ${recurrenceText(charge)}`, tone: BadgeTone.Warning };
+  }
+
+  if (charge.participantCount > 1 && charge.billing.splitMode) {
+    return { text: `${charge.participantCount} pessoas · ${splitModeLabel(charge.billing.splitMode).toLowerCase()}`, tone: BadgeTone.Neutral };
+  }
+
+  return { text: `${recurrenceText(charge)} · a receber`, tone: BadgeTone.Neutral };
+}
+
+function folded(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+/** The charges whose description or other side contain the search term, ignoring case and accents. */
+export function searchCharges(charges: ListCharge, term: string): ListCharge {
+  const query = folded(term.trim());
+
+  if (!query) {
+    return charges;
+  }
+
+  return charges.filter((charge) => folded(charge.description).includes(query) || folded(counterpartName(charge)).includes(query));
 }

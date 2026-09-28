@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { BillingFrequency, BillingKind, BillingState, type BillingSummary, BillingRecurrence } from './billing';
-import { billingBadges, billingDueLabel, billingShareAction, billingSummaryLine } from './billing-card';
+import {
+  billingBadges,
+  billingCardSubtitle,
+  billingChips,
+  billingDueLabel,
+  billingNextLabel,
+  billingShareAction,
+  billingSummaryLine,
+  DEFAULT_BILLING_LIST_FILTERS,
+  filterBillings
+} from './billing-card';
 import { BillingCategory } from './billing-category';
 import { Direction, SplitMode } from './contracts';
+import { BadgeTone } from './feed';
 
 const base: BillingSummary = {
   id: 'b1',
@@ -222,5 +233,45 @@ describe('billingBadges on a registro', () => {
         (badge) => badge.label
       )
     ).toEqual(['Única', 'Registro', 'A pagar', 'Clínica Sorriso']);
+  });
+});
+
+describe('billing card 8b', () => {
+  const today = '2026-09-28';
+
+  it('reads the category and the side under the title', () => {
+    expect(billingCardSubtitle(base)).toBe('Moradia · a receber');
+    expect(billingCardSubtitle({ ...base, type: Direction.Payable, category: BillingCategory.Subscription })).toBe('Assinatura · a pagar');
+  });
+
+  it('shows the next due date, or that it is late', () => {
+    expect(billingNextLabel({ ...base, nextDueDate: '2026-10-20' }, today)).toEqual({ label: 'próx. 20/out', tone: BadgeTone.Neutral });
+    expect(billingNextLabel({ ...base, nextDueDate: '2026-09-24' }, today)).toEqual({ label: 'atrasada', tone: BadgeTone.Danger });
+  });
+
+  it('chips the next installment and the split of a shared billing', () => {
+    const billing = { ...base, recurrence: BillingRecurrence.Until, installmentCount: 12, paidCount: 2, splitMode: SplitMode.Shares, nextDueDate: '2026-10-20' };
+
+    expect(billingChips(billing, today).map((chip) => chip.label)).toEqual(['Parcelado 3/12', 'Cotas']);
+  });
+
+  it('chips the days late first and leaves the split out for a single person', () => {
+    const billing = { ...base, participantCount: 1, splitMode: SplitMode.Equal, nextDueDate: '2026-09-24' };
+
+    expect(billingChips(billing, today).map((chip) => chip.label)).toEqual(['4 dias de atraso', 'À vista']);
+  });
+
+  it('filters the loaded billings by state, side, recurrence and category', () => {
+    const rows = [
+      { ...base, id: 'a' },
+      { ...base, id: 'b', state: BillingState.Paused },
+      { ...base, id: 'c', type: Direction.Payable },
+      { ...base, id: 'd', recurrence: BillingRecurrence.Indefinite, category: BillingCategory.Subscription }
+    ];
+
+    expect(filterBillings(rows, BillingState.Active, DEFAULT_BILLING_LIST_FILTERS).map((row) => row.id)).toEqual(['a', 'c', 'd']);
+    expect(filterBillings(rows, BillingState.Active, { ...DEFAULT_BILLING_LIST_FILTERS, type: Direction.Payable }).map((row) => row.id)).toEqual(['c']);
+    expect(filterBillings(rows, BillingState.Active, { ...DEFAULT_BILLING_LIST_FILTERS, recurrence: BillingRecurrence.Indefinite }).map((row) => row.id)).toEqual(['d']);
+    expect(filterBillings(rows, BillingState.Active, { ...DEFAULT_BILLING_LIST_FILTERS, category: BillingCategory.Housing }).map((row) => row.id)).toEqual(['a', 'c']);
   });
 });

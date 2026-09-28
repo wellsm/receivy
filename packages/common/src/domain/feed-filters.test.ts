@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BillingKind, BillingRecurrence } from './billing';
+import { BillingCategory } from './billing-category';
 import type { ListChargeItem } from './charge';
 import { ChargeState, Direction } from './contracts';
 import {
@@ -83,8 +84,9 @@ describe('feed filters over a month of charges', () => {
     notify: true,
     counterpartReachable: true,
     confirmationRequired: true,
+    participantCount: 1,
     proof: null,
-    billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, contact: null },
+    billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, category: BillingCategory.Other, contact: null },
     debtor: { name: 'Bruno' },
     ...overrides
   });
@@ -110,7 +112,7 @@ describe('feed filters over a month of charges', () => {
       charge({ id: 'open-in' }),
       charge({ id: 'paid-in', state: ChargeState.Paid }),
       charge({ id: 'open-out', type: Direction.Payable }),
-      charge({ id: 'until-in', billing: { recurrence: BillingRecurrence.Until, kind: BillingKind.Live, contact: null } }),
+      charge({ id: 'until-in', billing: { recurrence: BillingRecurrence.Until, kind: BillingKind.Live, category: BillingCategory.Other, contact: null } }),
       charge({ id: 'late-in', dueDate: '2026-09-01' })
     ];
     const ids = (filters: Partial<FeedFilters>) =>

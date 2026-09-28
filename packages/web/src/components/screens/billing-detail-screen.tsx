@@ -583,8 +583,8 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
             </div>
           </article>
 
-          {/* Ações rápidas */}
-          {!ended && (
+          {/* Ações rápidas: a conta encerrada sozinha (tudo pago) ainda edita, e nada mais */}
+          {(!ended || billing.autoEnded) && (
             <div className="flex flex-col gap-2.5">
               <div className="flex gap-2">
                 <ActionTile
@@ -606,7 +606,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                     onClick={() => (billing.state === "active" ? pause(billing) : void transition(billing, "active"))}
                   />
                 )}
-                <ActionTile label="Encerrar" icon={CircleStop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onClick={() => end(billing)} />
+                {!ended && <ActionTile label="Encerrar" icon={CircleStop} tone="danger" hint="Cancela as pendentes e impede novas ocorrências" disabled={busy} onClick={() => end(billing)} />}
               </div>
               {invite && billing.state === "active" && !payable && !settled && (
                 <div className="flex items-center justify-between px-1">

@@ -441,6 +441,20 @@ it("names the Pix key from the wallet while no charge has been generated", async
   expect(screen.queryByText("Sem meio de pagamento vinculado")).not.toBeInTheDocument();
 });
 
+it("keeps only Editar on a billing that ended on its own, and nothing on one ended by hand", async () => {
+  await open(billing({ state: BillingState.Ended, autoEnded: true }));
+
+  expect(await screen.findByText("Encerrada")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Editar" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Encerrar" })).not.toBeInTheDocument();
+
+  cleanup();
+  await open(billing({ state: BillingState.Ended }));
+
+  expect(await screen.findByText("Encerrada")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
+});
+
 it("ends cancelling the pending charges, revokes the invite and hides the actions", async () => {
   const calls = await open(billing({ invite: { url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" } }));
   const user = setup();

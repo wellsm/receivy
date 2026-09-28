@@ -61,13 +61,21 @@ describe("requestEmailCode", () => {
 
 describe("confirmEmailCode", () => {
   it("stores the session and returns the user", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ accessToken: "a1", refreshToken: "r1", expiresIn: 900, user })));
+    const fetchMock = vi.fn().mockResolvedValue(json({ accessToken: "a1", refreshToken: "r1", expiresIn: 900, user }));
+
+    vi.stubGlobal("fetch", fetchMock);
 
     const result = await confirmEmailCode({ email: "a@b.com", code: "123456" });
 
     expect(result).toEqual(user);
     expect(getAccessToken()).toBe("a1");
     expect(loadRefreshToken()).toBe("r1");
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe("https://api.test/s/auth/email/confirm");
+    expect(JSON.parse(init.body as string)).toEqual({ email: "a@b.com", code: "123456", deviceName: "Web" });
+    expect(new Headers(init.headers).has("authorization")).toBe(false);
   });
 
   it("maps an invalid code to a 401 with the specific message", async () => {
@@ -111,16 +119,23 @@ describe("startOauth", () => {
     expect(body.provider).toBe("google");
     expect(body.clientChallenge).toHaveLength(43);
     expect(body.destination).toBe(`${window.location.origin}/auth/oauth/callback`);
+    expect(new Headers(init.headers).has("authorization")).toBe(false);
     expect(popOauthVerifier()).not.toBeNull();
   });
 
   it("fails with the generic message when the API answers a foreign url", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ authorizationUrl: "https://evil.example/steal" })));
+    const fetchMock = vi.fn().mockResolvedValue(json({ authorizationUrl: "https://evil.example/steal" }));
+
+    vi.stubGlobal("fetch", fetchMock);
 
     await expect(startOauth("google")).rejects.toMatchObject({
       status: 503,
       message: "Não foi possível iniciar o login. Tente novamente.",
     });
+
+    const [requestUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(requestUrl).toBe("https://api.test/s/auth/oauth/start");
   });
 });
 
@@ -137,9 +152,11 @@ describe("completeOauth", () => {
     expect(result).toEqual(user);
     expect(getAccessToken()).toBe("a2");
 
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
 
+    expect(url).toBe("https://api.test/s/auth/oauth/exchange");
     expect(JSON.parse(init.body as string)).toEqual({ code: "grant-code", codeVerifier: "verifier-1", deviceName: "Web" });
+    expect(new Headers(init.headers).has("authorization")).toBe(false);
   });
 
   it("answers null without calling the API when there is no pending verifier", async () => {
@@ -166,6 +183,7 @@ describe("logout", () => {
 
     expect(url).toBe("https://api.test/s/auth/logout");
     expect(JSON.parse(init.body as string)).toEqual({ refreshToken: "r1" });
+    expect(new Headers(init.headers).has("authorization")).toBe(false);
     expect(getAccessToken()).toBeNull();
     expect(loadRefreshToken()).toBeNull();
   });
@@ -185,9 +203,17 @@ describe("logout", () => {
 describe("currentUser", () => {
   it("returns the user on success", async () => {
     storeSession({ accessToken: "a1", refreshToken: "r1", expiresIn: 900 });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ user })));
+
+    const fetchMock = vi.fn().mockResolvedValue(json({ user }));
+
+    vi.stubGlobal("fetch", fetchMock);
 
     await expect(currentUser()).resolves.toEqual(user);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe("https://api.test/s/auth/me");
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer a1");
   });
 
   it("answers null on any failure, including a dead session", async () => {
@@ -199,9 +225,16 @@ describe("currentUser", () => {
 
 describe("oauthProviders", () => {
   it("returns the providers the API reports", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ google: true, apple: false })));
+    const fetchMock = vi.fn().mockResolvedValue(json({ google: true, apple: false }));
+
+    vi.stubGlobal("fetch", fetchMock);
 
     await expect(oauthProviders()).resolves.toEqual({ google: true, apple: false });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe("https://api.test/s/auth/oauth/providers");
+    expect(new Headers(init.headers).has("authorization")).toBe(false);
   });
 
   it("answers both false on failure", async () => {

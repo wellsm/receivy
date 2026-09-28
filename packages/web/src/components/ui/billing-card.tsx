@@ -1,6 +1,17 @@
 "use client";
 
-import { billingBadges, billingCategoryColor, billingCategoryLabel, billingDueLabel, billingShareAction, formatMoney, type BadgeTone, type BillingSummary } from "@receivy/common";
+import {
+  billingBadges,
+  billingCardSubtitle,
+  billingCategoryColor,
+  billingChips,
+  billingDueLabel,
+  billingNextLabel,
+  billingShareAction,
+  formatMoney,
+  type BadgeTone,
+  type BillingSummary,
+} from "@receivy/common";
 import { ChevronRight, Share2 } from "lucide-react";
 import { CategoryIcon } from "@/components/ui/category-icon";
 
@@ -10,6 +21,17 @@ const BADGE_CLASS: Record<BadgeTone, string> = {
   warning: "bg-warning-soft text-warning",
   success: "bg-success-soft text-success",
   neutral: "bg-surface-muted text-muted",
+};
+
+/** The chips of the narrow card (design 8b) read the brand tint for `info`, like the app. */
+const CHIP_CLASS: Record<BadgeTone, string> = { ...BADGE_CLASS, info: "bg-primary-soft text-primary-strong" };
+
+const NEXT_CLASS: Record<BadgeTone, string> = {
+  danger: "text-danger",
+  info: "text-primary",
+  warning: "text-warning",
+  success: "text-success",
+  neutral: "text-muted",
 };
 
 /** From `md` the card is a table row: the list's header row shares these columns. */
@@ -46,21 +68,23 @@ type BillingCardProps = {
 };
 
 /**
- * One billing on the list: category, description, badges, due label, amount and the share action. Mirrors the mobile card;
- * from `md` the same cells line up as a table row (the wrappers turn into `display: contents`).
+ * One billing on the list. Below `md` it is the two-line card of design 8b (chips, next due date, no share: that lives on
+ * the detail); from `md` the same cells line up as a table row with badges, due label and the share action.
  */
 export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProps) {
   const dueLabel = billingDueLabel(billing, today);
   const overdue = dueLabel.startsWith("Atrasado");
   const badges = billingBadges(billing);
   const occurrence = occurrenceLine(billing);
+  const next = billingNextLabel(billing, today);
+  const chips = billingChips(billing, today);
   const canShare = billingShareAction(billing) !== null;
   // A conta a pagar has no link to share: its action opens the billing.
   const payable = billing.type === "payable";
 
   return (
     <article
-      className={`flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-4 md:grid ${BILLING_ROW_COLUMNS} md:items-center md:gap-5 md:rounded-none md:border-0 md:border-b md:border-outline/60 md:px-[22px] md:py-4 md:last:border-b-0`}
+      className={`flex flex-col gap-2.5 rounded-[18px] border border-outline bg-surface p-3.5 md:grid ${BILLING_ROW_COLUMNS} md:items-center md:gap-5 md:rounded-none md:border-0 md:border-b md:border-outline/60 md:px-[22px] md:py-4 md:last:border-b-0`}
       aria-label={`Cobrança ${billing.description}`}
     >
       <div className="flex items-center gap-3 md:contents">
@@ -74,19 +98,30 @@ export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProp
 
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-[15px] font-semibold text-ink md:text-[14.5px]">{billing.description}</span>
-            <span className="mt-0.5 truncate text-xs text-muted md:text-[11.5px]">
-              {billingCategoryLabel(billing.category)} · {payable ? "a pagar" : "a receber"}
-            </span>
+            <span className="mt-0.5 truncate text-xs text-muted md:text-[11.5px]">{billingCardSubtitle(billing)}</span>
           </span>
         </button>
 
-        <strong className={`shrink-0 font-display text-[17px] font-bold tabular-nums md:col-start-4 md:row-start-1 md:text-right md:text-[15.5px] ${payable ? "text-payable" : "text-ink"}`}>
-          {formatMoney(billing.total)}
-        </strong>
+        <span className="flex shrink-0 flex-col items-end md:contents">
+          <strong className={`font-display text-base font-bold tabular-nums md:col-start-4 md:row-start-1 md:text-right md:text-[15.5px] ${payable ? "text-payable" : "text-ink"}`}>
+            {formatMoney(billing.total)}
+          </strong>
+          <span className={`mt-0.5 text-[11px] font-medium md:hidden ${NEXT_CLASS[next.tone]}`}>{next.label}</span>
+        </span>
       </div>
 
+      {chips.length > 0 && (
+        <span className="flex flex-wrap gap-1.5 md:hidden">
+          {chips.map((chip) => (
+            <span key={chip.label} className={`inline-flex h-6 items-center rounded-lg px-2 text-[11px] font-semibold ${CHIP_CLASS[chip.tone]}`}>
+              {chip.label}
+            </span>
+          ))}
+        </span>
+      )}
+
       {badges.length > 0 && (
-        <span className="flex flex-wrap gap-1.5 md:col-start-2 md:row-start-1">
+        <span className="hidden flex-wrap gap-1.5 md:col-start-2 md:row-start-1 md:flex">
           {badges.map((badge) => (
             <span key={badge.label} className={`inline-flex h-6 items-center rounded-lg px-[9px] text-[11px] font-semibold ${BADGE_CLASS[badge.tone]}`}>
               {badge.label}
@@ -95,7 +130,7 @@ export function BillingCard({ billing, today, onShare, onOpen }: BillingCardProp
         </span>
       )}
 
-      <div className="flex items-center justify-between gap-3 border-t border-outline/60 pt-3 md:contents">
+      <div className="hidden md:contents">
         <div className="flex flex-col md:col-start-3 md:row-start-1">
           <span className={`text-xs font-semibold md:text-[12.5px] md:font-medium ${overdue ? "text-danger" : "text-muted"}`}>{dueLabel}</span>
           {occurrence && <span className="text-[11px] text-muted">{occurrence}</span>}

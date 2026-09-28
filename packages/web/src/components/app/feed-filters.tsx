@@ -15,7 +15,7 @@ import {
   type FeedFilters,
   type FeedPeriod,
 } from "@receivy/common";
-import { Check, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
 type Option<T extends string> = { value: T; label: string };
@@ -184,7 +184,7 @@ type FeedFiltersSheetProps = {
 };
 
 /** The narrow-screen shape: one bottom sheet holding every group; nothing loads until `Aplicar`. */
-function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetProps) {
+export function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetProps) {
   const [draft, setDraft] = useState<FeedFilters>(value);
 
   return (
@@ -259,33 +259,13 @@ type FeedFiltersBarProps = {
   counts?: { receivable?: number; payable?: number };
 };
 
-/**
- * Two shapes, split by CSS: one bottom sheet with every group up to `sm`, and from `sm` on
- * the four groups as dropdowns laid two per row.
- */
+/** The wide shape: the four groups as dropdowns. Below `md` the Feed opens `FeedFiltersSheet` from its footer instead. */
 export function FeedFiltersBar({ value, onChange, counts }: FeedFiltersBarProps) {
-  const [sheetOpen, setSheetOpen] = useState(false);
   const changed = activeFeedFilterCount(value);
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setSheetOpen(true)}
-        className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold sm:hidden ${
-          changed ? "border-primary bg-primary-soft/50 text-primary-strong" : "border-outline bg-surface text-ink"
-        }`}
-      >
-        <SlidersHorizontal size={16} aria-hidden="true" />
-        Filtros
-        {changed > 0 && (
-          <span aria-hidden="true" className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-on-primary">
-            {changed}
-          </span>
-        )}
-      </button>
-
-      <div className="hidden gap-2 sm:grid sm:grid-cols-2 md:grid-cols-1">
+      <div className="grid grid-cols-1 gap-2">
         <FilterDropdown
           group="Direção"
           summary={feedDirectionLabel(value)}
@@ -324,23 +304,13 @@ export function FeedFiltersBar({ value, onChange, counts }: FeedFiltersBarProps)
           <button
             type="button"
             onClick={() => onChange(DEFAULT_FEED_FILTERS)}
-            className="col-span-2 min-h-10 justify-self-start md:col-span-1 rounded-full border border-outline bg-transparent px-4 text-sm font-semibold text-muted"
+            className="min-h-10 justify-self-start rounded-full border border-outline bg-transparent px-4 text-sm font-semibold text-muted"
           >
             Limpar
           </button>
         )}
       </div>
 
-      {sheetOpen && (
-        <FeedFiltersSheet
-          value={value}
-          onClose={() => setSheetOpen(false)}
-          onApply={next => {
-            setSheetOpen(false);
-            onChange(next);
-          }}
-        />
-      )}
     </>
   );
 }

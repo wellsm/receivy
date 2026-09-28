@@ -21,8 +21,8 @@ export function FeedSummaryBox({ summary }: { summary: ChargeTotals }) {
       className="overflow-hidden rounded-[18px] border border-outline bg-surface md:flex md:flex-col md:gap-4 md:overflow-visible md:rounded-none md:border-0 md:bg-transparent"
     >
       <div className="flex md:flex-col md:gap-4">
-        <FeedTotalCard type={Direction.Receivable} value={summary.receivable.pending} count={summary.receivable.count} />
-        <FeedTotalCard type={Direction.Payable} value={summary.payable.pending} count={summary.payable.count} />
+        <FeedTotalCard type={Direction.Receivable} value={summary.receivable.pending} count={summary.receivable.count} paid={summary.receivable.paid} />
+        <FeedTotalCard type={Direction.Payable} value={summary.payable.pending} count={summary.payable.count} paid={summary.payable.paid} />
       </div>
 
       <div aria-hidden="true" className={`flex h-[5px] md:hidden ${total ? "bg-payable" : "bg-outline"}`}>

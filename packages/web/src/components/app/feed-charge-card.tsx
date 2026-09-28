@@ -1,10 +1,13 @@
 "use client";
 
 import {
+  type BadgeTone,
+  billingCategoryColor,
   ChargeActionKind,
   ChargeState,
   chargeAction,
   chargeBadges,
+  chargeFeedLine,
   chargeStateLabel,
   chargeSummaryOf,
   counterpartName,
@@ -19,6 +22,15 @@ import { useState } from "react";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { InitialsAvatar } from "../ui/initials-avatar";
 import { StatusTag } from "../ui/status-tag";
+
+/** The narrow row's second line is tinted text; `warning` is what the viewer pays, in the payable red. */
+const LINE_CLASS: Record<BadgeTone, string> = {
+  danger: "text-payable",
+  info: "text-primary",
+  warning: "text-payable",
+  success: "text-success",
+  neutral: "text-muted",
+};
 
 type ChargeCardProps = {
   charge: ListChargeItem;
@@ -41,6 +53,7 @@ export function FeedChargeCard({ charge, direction, today, reminded, onRemind, o
   const settled = charge.state !== ChargeState.Pending;
   const amountClass = settled ? "text-muted" : direction === Direction.Receivable ? "text-ink" : "text-payable";
   const counterpart = counterpartName(charge);
+  const line = chargeFeedLine(charge, today);
 
   // The whole row opens the charge through one stretched link. Nesting the action inside it would
   // not be accessible, so the link is a sibling overlay and the action is raised above it.
@@ -54,16 +67,19 @@ export function FeedChargeCard({ charge, direction, today, reminded, onRemind, o
         className="absolute inset-0 focus-visible:outline-[3px] focus-visible:outline-primary focus-visible:-outline-offset-2 md:rounded-[18px]"
       />
 
+      <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full md:hidden" style={{ backgroundColor: billingCategoryColor(charge.billing.category) }} />
+
       <span className="hidden md:block">
         <InitialsAvatar name={counterpart} size={44} />
       </span>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="m-0 truncate text-[13.5px] font-bold text-ink md:text-[15.5px] md:font-semibold">
+        <p className="m-0 truncate text-[14px] font-semibold text-ink md:text-[15.5px]">
           {charge.description} · <span className="font-semibold text-muted md:font-normal">{counterpart}</span>
         </p>
+        <p className={`m-0 truncate text-[11.5px] font-medium md:hidden ${LINE_CLASS[line.tone]}`}>{line.text}</p>
         {badges.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="hidden flex-wrap gap-1.5 md:flex">
             {badges.map((badge) => (
               <StatusTag key={badge.label} label={badge.label} tone={badge.tone} />
             ))}
@@ -72,8 +88,8 @@ export function FeedChargeCard({ charge, direction, today, reminded, onRemind, o
       </div>
 
       <div className="flex shrink-0 flex-col items-end md:w-[120px]">
-        <strong className={`font-display text-sm font-bold tabular-nums md:text-[19px] ${amountClass}`}>{formatMoney(summary.amount)}</strong>
-        <span className="text-[11px] text-muted md:text-[11.5px]">{chargeStateLabel(summary, direction)}</span>
+        <strong className={`font-display text-[15px] font-bold tabular-nums md:text-[19px] ${amountClass}`}>{formatMoney(summary.amount)}</strong>
+        <span className="hidden text-[11.5px] text-muted md:inline">{chargeStateLabel(summary, direction)}</span>
       </div>
 
       {action?.kind === ChargeActionKind.Remind && (

@@ -67,6 +67,11 @@ function isList(path: string): boolean {
   return path === "/api/financial/billings" || path.startsWith("/api/financial/billings?");
 }
 
+/** A recorded call (`GET /api/...`) that listed billings. */
+function isListCall(call: string): boolean {
+  return isList(call.replace(/^[A-Z]+ /, ""));
+}
+
 /** Well under the 80% threshold, so no test that ignores the plan ever trips the usage pill. */
 const defaultPlan: PlanSummary = { plan: PlanTier.Free, status: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, usage: { indefinite: { used: 0, limit: 5 } }, checkoutLinks: false, card: null };
 
@@ -92,8 +97,10 @@ function mockApi(handler: Handler): string[] {
   return calls;
 }
 
+const COUNTS = { active: 7, paused: 1, ended: 4, monthCharges: 23 };
+
 function listOnly(billings: unknown[], nextCursor: string | null = null): string[] {
-  return mockApi((path) => (isList(path) ? Response.json({ billings, nextCursor }) : undefined));
+  return mockApi((path) => (isList(path) ? Response.json({ billings, nextCursor, counts: COUNTS }) : undefined));
 }
 
 it("renders one card per billing with badges, relative due date, amount and next due date", async () => {
@@ -238,8 +245,8 @@ it("opens the billing detail route when there is no single charge to share, and 
   expect(router.push).toHaveBeenLastCalledWith("/billings/b1");
 });
 
-it("asks the API for one direction when the filter changes", async () => {
-  const calls = listOnly([summary()]);
+it("filters one direction on the loaded list without asking the API again", async () => {
+  const calls = listOnly([summary(), summary({ id: "b2", description: "Streaming", type: "payable", contact: ana, counterpart: ana })]);
 
   render(<BillingsScreen />);
 
@@ -248,15 +255,55 @@ it("asks the API for one direction when the filter changes", async () => {
   await screen.findByRole("article", { name: "Cobrança Churrasco" });
 
   expect(screen.getByRole("radio", { name: "Todas" })).toHaveAttribute("aria-checked", "true");
-  expect(calls[0]).not.toContain("type=");
 
   await user.click(screen.getByRole("radio", { name: "A pagar" }));
 
-  await vi.waitFor(() => expect(calls.some((call) => call.includes("type=payable"))).toBe(true));
+  expect(screen.getByRole("article", { name: "Cobrança Streaming" })).toBeInTheDocument();
+  expect(screen.queryByRole("article", { name: "Cobrança Churrasco" })).not.toBeInTheDocument();
+  expect(calls.filter(isListCall).every((call) => !call.includes("type="))).toBe(true);
+  expect(calls.filter(isListCall)).toHaveLength(1);
+});
 
-  await user.click(screen.getByRole("radio", { name: "A receber" }));
+it("reads the API counts in the narrow header and on the state tabs", async () => {
+  listOnly([summary()]);
 
-  await vi.waitFor(() => expect(calls.some((call) => call.includes("type=receivable"))).toBe(true));
+  render(<BillingsScreen user={{ name: "Wellington Silva", avatar: null }} />);
+
+  expect(await screen.findByText("7 ativas · 23 cobranças no mês")).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Pausadas (1)" })).toHaveAttribute("aria-selected", "false");
+  expect(screen.getByRole("tab", { name: "Ativas (7)" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("link", { name: "Voltar para o Feed" })).toHaveAttribute("href", "/feed");
+  expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/settings");
+});
+
+it("filters by frequency and category from the footer sheet", async () => {
+  listOnly([summary(), summary({ id: "b2", description: "Youtube", recurrence: "indefinite", category: "subscription" })]);
+
+  render(<BillingsScreen />);
+
+  const user = setup();
+
+  await screen.findByRole("article", { name: "Cobrança Churrasco" });
+  await user.click(screen.getByRole("button", { name: "Filtros" }));
+  await user.click(screen.getByRole("button", { name: "Frequência Recorrente" }));
+  await user.click(screen.getByRole("button", { name: "Categoria Assinatura" }));
+  await user.click(screen.getByRole("button", { name: "Aplicar" }));
+
+  expect(screen.getByRole("article", { name: "Cobrança Youtube" })).toBeInTheDocument();
+  expect(screen.queryByRole("article", { name: "Cobrança Churrasco" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Filtros, 2 ativos" })).toBeInTheDocument();
+});
+
+it("shows the narrow card chips and next due date", async () => {
+  listOnly([summary({ recurrence: "until", installmentCount: 12, paidCount: 2, chargeCount: 12, splitMode: "shares" })]);
+
+  render(<BillingsScreen />);
+
+  const card = await screen.findByRole("article", { name: "Cobrança Churrasco" });
+
+  expect(within(card).getByText("Parcelado 3/12")).toBeInTheDocument();
+  expect(within(card).getByText("Cotas")).toBeInTheDocument();
+  expect(within(card).getByText("Alimentação · a receber")).toBeInTheDocument();
 });
 
 it("opens a conta a pagar from its card action instead of sharing a link", async () => {
@@ -278,7 +325,7 @@ it("opens a conta a pagar from its card action instead of sharing a link", async
   expect(calls.some((call) => call.includes("public-link"))).toBe(false);
 });
 
-it("shows the empty state and keeps the sticky button to create a billing", async () => {
+it("shows the empty state and keeps the + of the footer to create a billing", async () => {
   listOnly([]);
 
   render(<BillingsScreen />);
@@ -288,8 +335,12 @@ it("shows the empty state and keeps the sticky button to create a billing", asyn
   const links = screen.getAllByRole("link", { name: "Nova conta" });
 
   expect(links.length).toBeGreaterThan(1);
-  expect(links.at(-1)).toHaveAttribute("href", "/billings/new");
-  expect(links.at(-1)).toHaveTextContent("Cadastrar Nova Conta");
+
+  for (const link of links) {
+    expect(link).toHaveAttribute("href", "/billings/new");
+  }
+
+  expect(screen.getByRole("searchbox", { name: "Buscar conta" })).toBeInTheDocument();
 });
 
 it("loads the next page when asked", async () => {

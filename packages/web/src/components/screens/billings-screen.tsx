@@ -1,7 +1,21 @@
 "use client";
 
-import { BillingState, billingShareAction, calendarDate, Direction, type BillingSummary, type BillingsPage, type PlanSummary, type PublicLink } from "@receivy/common";
-import { Plus, Search } from "lucide-react";
+import {
+  activeBillingFilterCount,
+  type AuthUser,
+  type BillingListFilters,
+  BillingState,
+  billingShareAction,
+  BILLING_TYPE_FILTERS,
+  calendarDate,
+  DEFAULT_BILLING_LIST_FILTERS,
+  filterBillings,
+  type BillingSummary,
+  type BillingsPage,
+  type PlanSummary,
+  type PublicLink,
+} from "@receivy/common";
+import { ChevronLeft, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -9,7 +23,10 @@ import { browserFetch } from "@/lib/auth/browser-fetch";
 import { responseMessage } from "@/lib/financial-response";
 import { loadPlanSummary } from "@/lib/plan-summary";
 import { publicLinkUrl } from "@/lib/public-link-url";
+import { BillingFiltersSheet } from "@/components/app/billing-filters-sheet";
+import { SearchFooter } from "@/components/app/search-footer";
 import { BILLING_ROW_COLUMNS, BillingCard } from "@/components/ui/billing-card";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 const LIST_ERROR = "Não foi possível carregar suas cobranças.";
 
@@ -18,13 +35,6 @@ const STATE_FILTERS: { value: BillingState; label: string; empty: string }[] = [
   { value: BillingState.Active, label: "Ativas", empty: "Nenhuma conta ativa." },
   { value: BillingState.Paused, label: "Pausadas", empty: "Nenhuma conta pausada." },
   { value: BillingState.Ended, label: "Encerradas", empty: "Nenhuma conta encerrada." },
-];
-
-/** Server-side direction filter: the API only returns the side asked for. */
-const DIRECTION_FILTERS: { value: Direction | ""; label: string }[] = [
-  { value: "", label: "Todas" },
-  { value: Direction.Receivable, label: "A receber" },
-  { value: Direction.Payable, label: "A pagar" },
 ];
 
 function pillClass(selected: boolean): string {
@@ -41,16 +51,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-/** No state filter on the request: active, paused and ended billings all come back and the chips split them here. */
-function listQuery(search: string, direction: Direction | "", cursor?: string): string {
+/** Only the search goes to the API: state, side, frequency and category split the loaded pages here. */
+function listQuery(search: string, cursor?: string): string {
   const query = new URLSearchParams();
 
   if (search) {
     query.set("search", search);
-  }
-
-  if (direction) {
-    query.set("type", direction);
   }
 
   if (cursor) {
@@ -62,13 +68,19 @@ function listQuery(search: string, direction: Direction | "", cursor?: string): 
   return `/api/financial/billings${encoded ? `?${encoded}` : ""}`;
 }
 
-export function BillingsScreen() {
+type BillingsScreenProps = {
+  /** Who is signed in, for the avatar of the narrow header. */
+  user?: Pick<AuthUser, "name" | "avatar"> | null;
+};
+
+export function BillingsScreen({ user }: BillingsScreenProps = {}) {
   const router = useRouter();
   const [page, setPage] = useState<BillingsPage | null>(null);
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<BillingState>(BillingState.Active);
-  const [direction, setDirection] = useState<Direction | "">("");
+  const [filters, setFilters] = useState<BillingListFilters>(DEFAULT_BILLING_LIST_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [plan, setPlan] = useState<PlanSummary | null>(null);
@@ -79,7 +91,7 @@ export function BillingsScreen() {
     (cursor?: string) => {
       const generation = cursor ? requests.current : ++requests.current;
 
-      return request<BillingsPage>(listQuery(search, direction, cursor))
+      return request<BillingsPage>(listQuery(search, cursor))
         .then((next) => {
           if (generation !== requests.current) {
             return;
@@ -94,7 +106,7 @@ export function BillingsScreen() {
           }
         });
     },
-    [search, direction],
+    [search],
   );
 
   useEffect(() => {
@@ -149,14 +161,57 @@ export function BillingsScreen() {
     await copy(publicLinkUrl(window.location.origin, link));
   }
 
-  const visible = page?.billings.filter((billing) => billing.state === stateFilter) ?? [];
+  const visible = page ? filterBillings(page.billings, stateFilter, filters) : [];
   const filter = STATE_FILTERS.find((option) => option.value === stateFilter) ?? STATE_FILTERS[0]!;
+  const counts = page?.counts;
 
   return (
     <section className="flex min-h-full flex-col gap-3.5 pb-24 md:gap-[18px] md:pb-0">
+      {/* Design 8b, below `md`: back to the Feed, the counts, and the avatar that opens Perfil. */}
+      <header className="flex items-center gap-3 md:hidden">
+        <Link href="/feed" aria-label="Voltar para o Feed" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-ink">
+          <ChevronLeft size={18} aria-hidden="true" />
+        </Link>
+
+        <div className="min-w-0 flex-1">
+          {counts && (
+            <p className="m-0 truncate text-xs text-muted">
+              {counts.active} {counts.active === 1 ? "ativa" : "ativas"} · {counts.monthCharges} {counts.monthCharges === 1 ? "cobrança" : "cobranças"} no mês
+            </p>
+          )}
+          <h1 className="m-0 font-display text-[22px] font-bold text-ink">Contas</h1>
+        </div>
+
+        <Link href="/settings" aria-label="Perfil" className="shrink-0 rounded-full">
+          <InitialsAvatar name={user?.name?.trim() || "R"} size={40} avatar={user?.avatar} />
+        </Link>
+      </header>
+
+      <div role="tablist" aria-label="Estado" className="-mx-5 flex border-b border-outline md:hidden">
+        {STATE_FILTERS.map((option) => {
+          const selected = option.value === stateFilter;
+          const count = counts?.[option.value];
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              aria-label={count === undefined ? option.label : `${option.label} (${count})`}
+              onClick={() => setStateFilter(option.value)}
+              className={`flex flex-1 flex-col items-center border-b-[2.5px] py-[7px] ${selected ? "border-primary" : "border-transparent"}`}
+            >
+              <span className={selected ? "text-[13.5px] font-extrabold text-ink" : "text-xs font-bold text-muted"}>{option.label}</span>
+              {count !== undefined && <span className={`text-[11px] font-semibold ${selected ? "text-primary" : "text-muted"}`}>{count}</span>}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex flex-col gap-3.5">
         <div className="flex gap-3">
-          <label className="flex min-h-[42px] min-w-0 flex-1 items-center gap-[9px] rounded-xl border border-outline bg-surface px-[13px] focus-within:border-primary md:max-w-[280px]">
+          <label className="hidden min-h-[42px] min-w-0 flex-1 items-center md:flex gap-[9px] rounded-xl border border-outline bg-surface px-[13px] focus-within:border-primary md:max-w-[280px]">
             <Search size={16} aria-hidden="true" className="shrink-0 text-muted" />
             <input
               className="min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none placeholder:text-muted"
@@ -181,7 +236,7 @@ export function BillingsScreen() {
             Nova conta
           </Link>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="hidden flex-wrap items-center gap-2 md:flex">
           <div role="radiogroup" aria-label="Estado" className="flex gap-2">
             {STATE_FILTERS.map((option) => {
               const selected = option.value === stateFilter;
@@ -195,11 +250,18 @@ export function BillingsScreen() {
           </div>
           <span aria-hidden="true" className="mx-1.5 hidden h-6 w-px bg-outline md:block" />
           <div role="radiogroup" aria-label="Direção" className="flex gap-2">
-            {DIRECTION_FILTERS.map((option) => {
-              const selected = option.value === direction;
+            {BILLING_TYPE_FILTERS.map((option) => {
+              const selected = option.value === filters.type;
 
               return (
-                <button key={option.value || "all"} type="button" role="radio" aria-checked={selected} onClick={() => setDirection(option.value)} className={pillClass(selected)}>
+                <button
+                  key={option.value || "all"}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setFilters({ ...filters, type: option.value })}
+                  className={pillClass(selected)}
+                >
                   {option.label}
                 </button>
               );
@@ -270,13 +332,19 @@ export function BillingsScreen() {
         </button>
       )}
 
-      {/* Narrow viewports keep the CTA pinned above the tab bar; wide ones show it beside the search. */}
-      <div className="fixed inset-x-0 bottom-[72px] z-[5] bg-canvas/95 px-5 pb-2.5 pt-3.5 backdrop-blur-md md:hidden">
-        <Link className="flex h-[54px] items-center justify-center gap-[9px] rounded-2xl bg-primary text-base font-bold text-on-primary" href="/billings/new" aria-label="Nova conta">
-          <Plus size={20} aria-hidden="true" className="text-on-primary" />
-          <span className="text-[15.5px] font-bold text-on-primary">Cadastrar Nova Conta</span>
-        </Link>
-      </div>
+      {/* Narrow viewports search, filter and create from the footer; wide ones keep the bar above the list. */}
+      <SearchFooter placeholder="Buscar conta" value={term} onChange={setTerm} filterCount={activeBillingFilterCount(filters)} onFilter={() => setFiltersOpen(true)} />
+
+      {filtersOpen && (
+        <BillingFiltersSheet
+          value={filters}
+          onClose={() => setFiltersOpen(false)}
+          onApply={(next) => {
+            setFiltersOpen(false);
+            setFilters(next);
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -4,16 +4,23 @@ type TotalCardProps = {
   type: Direction;
   value: Money;
   count: number;
+  /** Already settled this month; the narrow box shows it beside the label (design 8a). */
+  paid: Money;
 };
 
 /** One side of the month: a column of the narrow box (design 1b) or a solid card on wide screens (design 2a). */
-export function FeedTotalCard({ type, value, count }: TotalCardProps) {
+export function FeedTotalCard({ type, value, count, paid }: TotalCardProps) {
   const receivable = type === "receivable";
 
   return (
     <article className={`flex flex-1 flex-col px-3.5 py-[11px] md:rounded-[20px] md:p-5 ${receivable ? "border-r border-outline md:border-r-0 md:bg-primary" : "md:bg-payable"}`}>
       <div className="flex items-baseline justify-between gap-1.5">
         <span className="text-[10.5px] font-bold tracking-[0.1em] text-muted md:text-[11px] md:font-semibold md:text-on-primary/75">{receivable ? "A RECEBER" : "A PAGAR"}</span>
+        {paid.amountCents > 0 && (
+          <span className="text-[10.5px] font-bold text-success tabular-nums md:hidden">
+            {formatMoney(paid).replace(/^R\$\s*/, "")} {receivable ? "recebido" : "pago"}
+          </span>
+        )}
         <span className="hidden text-[11.5px] font-semibold text-on-primary/75 md:inline">{count === 1 ? "1 cobrança" : `${count} cobranças`}</span>
       </div>
 

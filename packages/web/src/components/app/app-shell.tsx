@@ -4,11 +4,15 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { BackButton } from "@/components/app/back-button";
 
-const navigation = [
+/**
+ * The sidebar links. Below `md` there is no tab bar (design 8a/8b): Feed and Contas draw their own
+ * header, and Perfil gets a back button to the Feed (`narrowBack`).
+ */
+const navigation: { href: string; label: string; icon: typeof Rows3; narrowBack?: string }[] = [
   { href: "/feed", label: "Feed", icon: Rows3 },
   { href: "/billings", label: "Contas", icon: ReceiptText },
-  { href: "/settings", label: "Perfil", icon: UserRound },
-] as const;
+  { href: "/settings", label: "Perfil", icon: UserRound, narrowBack: "/feed" },
+];
 
 type AppShellProps = {
   children: ReactNode;
@@ -24,12 +28,6 @@ const HEADER_BAR = "sticky top-0 z-10 grid min-h-14 items-center border-b border
 
 const DESKTOP_LINK = "flex min-h-[46px] items-center gap-[11px] rounded-[13px] px-3.5 text-sm font-semibold text-muted";
 const DESKTOP_LINK_ACTIVE = `${DESKTOP_LINK} bg-primary-soft font-bold text-primary-strong`;
-
-const MOBILE_LINK = "flex min-h-12 flex-col items-center justify-center gap-[3px] py-1.5 text-[11px] font-bold text-muted";
-const MOBILE_LINK_ACTIVE = `${MOBILE_LINK} text-primary`;
-
-const MOBILE_ICON = "h-[30px] w-14 rounded-full py-1";
-const MOBILE_ICON_ACTIVE = `${MOBILE_ICON} bg-primary-soft`;
 
 function Brand() {
   return (
@@ -49,20 +47,15 @@ function HeaderBell({ badge = false }: { badge?: boolean }) {
   );
 }
 
-function Navigation({ mobile = false, activePath = "/" }: { mobile?: boolean; activePath?: string }) {
-  const [link, activeLink, icon, activeIcon] = mobile ? [MOBILE_LINK, MOBILE_LINK_ACTIVE, MOBILE_ICON, MOBILE_ICON_ACTIVE] : [DESKTOP_LINK, DESKTOP_LINK_ACTIVE, undefined, undefined];
-
+function Navigation({ activePath = "/" }: { activePath?: string }) {
   return (
-    <nav
-      className={mobile ? "fixed inset-x-0 bottom-0 z-[15] grid min-h-[72px] grid-cols-3 border-t border-outline bg-surface/95 backdrop-blur-lg md:hidden" : "grid content-start gap-1.5"}
-      aria-label={mobile ? "Navegação principal móvel" : "Navegação principal"}
-    >
+    <nav className="grid content-start gap-1.5" aria-label="Navegação principal">
       {navigation.map(({ href, label, icon: Icon }) => {
         const active = href === activePath;
 
         return (
-          <Link className={active ? activeLink : link} href={href} key={href} aria-current={active ? "page" : undefined}>
-            <Icon aria-hidden="true" size={21} strokeWidth={1.8} className={active ? activeIcon : icon} />
+          <Link className={active ? DESKTOP_LINK_ACTIVE : DESKTOP_LINK} href={href} key={href} aria-current={active ? "page" : undefined}>
+            <Icon aria-hidden="true" size={21} strokeWidth={1.8} />
             <span>{label}</span>
           </Link>
         );
@@ -71,24 +64,13 @@ function Navigation({ mobile = false, activePath = "/" }: { mobile?: boolean; ac
   );
 }
 
-/**
- * Mirrors the mobile app's chrome: tab roots get no header, sub screens get a back
- * button and a centered title, and the three tabs sit at the bottom.
- * On wide viewports the sidebar takes over: tab roots get a title bar, sub screens keep their header.
- */
-function ScreenHeader({ title, back, activePath }: { title?: string; back?: string; activePath: string }) {
-  if (!back) {
-    const tab = navigation.find(({ href }) => href === activePath);
-
-    // Like the app, the tab roots show no header on narrow viewports: the bottom tabs already name
-    // the screen. Wide viewports keep the title bar, since the sidebar replaces the tabs there.
-    if (!tab) {
-      return null;
-    }
-
+function BackHeader({ title, back, narrowOnly = false }: { title?: string; back: string; narrowOnly?: boolean }) {
+  if (narrowOnly) {
     return (
-      <header className="hidden border-b border-outline/60 bg-surface px-8 py-[22px] md:block xl:px-10">
-        <h1 className="m-0 font-display text-[26px] font-bold tracking-[-0.02em] text-ink">{tab.label}</h1>
+      <header className={`${HEADER_BAR} grid-cols-[minmax(64px,1fr)_auto_minmax(64px,1fr)] md:hidden`}>
+        <BackButton fallback={back} className="inline-flex min-h-11 items-center gap-1.5 justify-self-start px-2 text-[17px] font-bold text-primary" />
+        <h1 className="m-0 text-center font-display text-[17px] font-bold tracking-[-0.01em] text-ink">{title}</h1>
+        <span aria-hidden="true" />
       </header>
     );
   }
@@ -99,6 +81,32 @@ function ScreenHeader({ title, back, activePath }: { title?: string; back?: stri
       <h1 className="m-0 text-center font-display text-[17px] font-bold tracking-[-0.01em] text-ink md:text-left md:text-2xl">{title}</h1>
       <span className="md:hidden" aria-hidden="true" />
     </header>
+  );
+}
+
+/**
+ * Mirrors the mobile app's chrome: Feed and Contas draw their own header, Perfil and sub screens
+ * get a back button and a centered title. On wide viewports the sidebar takes over: the three
+ * roots get a title bar, sub screens keep their header.
+ */
+function ScreenHeader({ title, back, activePath }: { title?: string; back?: string; activePath: string }) {
+  if (back) {
+    return <BackHeader title={title} back={back} />;
+  }
+
+  const tab = navigation.find(({ href }) => href === activePath);
+
+  if (!tab) {
+    return null;
+  }
+
+  return (
+    <>
+      {tab.narrowBack && <BackHeader title={tab.label} back={tab.narrowBack} narrowOnly />}
+      <header className="hidden border-b border-outline/60 bg-surface px-8 py-[22px] md:block xl:px-10">
+        <h1 className="m-0 font-display text-[26px] font-bold tracking-[-0.02em] text-ink">{tab.label}</h1>
+      </header>
+    </>
   );
 }
 
@@ -117,12 +125,10 @@ export function AppShell({ children, activePath = "/", notificationsBadge = fals
         </div>
       </aside>
 
-      <div className="min-h-screen pb-23.5 md:pb-0">
+      <div className="min-h-screen">
         <ScreenHeader title={title} back={back} activePath={activePath} />
 
         <main className={`mx-auto w-full max-w-270 px-5 pb-24 md:px-8 md:pt-7 md:pb-22.5 xl:px-10 ${back ? "pt-4" : "pt-[max(1rem,env(safe-area-inset-top))]"}`}>{children}</main>
-
-        <Navigation mobile activePath={activePath} />
       </div>
     </div>
   );

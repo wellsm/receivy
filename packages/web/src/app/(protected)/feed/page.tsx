@@ -1,6 +1,7 @@
 import { calendarDate, currentMonth, feedFiltersFromQuery, filterCharges, isMonth, type ListCharge } from "@receivy/common";
 import { AppShell } from "@/components/app/app-shell";
 import { FeedScreen } from "@/components/screens/feed-screen";
+import { currentUser } from "@/lib/auth/current-user";
 import { sessionApiFetch } from "@/lib/auth/session-fetch";
 
 type FeedPageProps = {
@@ -18,6 +19,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
   const today = calendarDate();
   const filters = feedFiltersFromQuery(params, today);
   const charges = await listCharges(month);
+  const user = await currentUser();
 
   return (
     <AppShell activePath="/feed">
@@ -26,6 +28,7 @@ export default async function FeedPage({ searchParams }: FeedPageProps) {
         filters={filters}
         month={month}
         today={today}
+        user={user}
       />
     </AppShell>
   );

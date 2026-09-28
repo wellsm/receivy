@@ -1,4 +1,5 @@
 import {
+  BillingCategory,
   BillingKind,
   BillingRecurrence,
   DEFAULT_FEED_FILTERS,
@@ -10,6 +11,7 @@ import {
   formatMoney,
   monthLabel,
   type ListChargeItem,
+  SplitMode,
 } from "@receivy/common";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -45,8 +47,9 @@ function charge(overrides: Partial<ListChargeItem> = {}): ListChargeItem {
     notify: true,
     counterpartReachable: true,
     confirmationRequired: true,
+    participantCount: 1,
     proof: null,
-    billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, contact: null },
+    billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, category: BillingCategory.Housing, contact: null },
     debtor: { name: "Ana Prado" },
     ...overrides,
   };
@@ -126,13 +129,14 @@ describe("FeedScreen", () => {
             billing: {
               recurrence: BillingRecurrence.Once,
               kind: BillingKind.Live,
+              category: BillingCategory.Food,
               contact: { id: "c1", nickname: "Padaria da esquina", user: { name: "Padaria" } },
             },
           }),
           charge({
             description: "Aluguel",
             debtor: { name: "Bruno" },
-            billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, contact: null },
+            billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, category: BillingCategory.Housing, contact: null },
           }),
         ]}
       />,
@@ -256,5 +260,67 @@ describe("FeedScreen", () => {
     expect(browserFetch).toHaveBeenCalledWith("/api/financial/charges/own/proof/declaration", { method: "POST" });
     expect(await screen.findByRole("alert")).toHaveTextContent("Cobrança já liquidada.");
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("greets the viewer in the narrow header, linking Perfil and Contas", () => {
+    render(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} user={{ name: "Wellington Silva", avatar: null }} />);
+
+    expect(screen.getByText("Olá, Wellington")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "Contas" })).toHaveAttribute("href", "/billings");
+    expect(screen.getByRole("link", { name: "Nova conta" })).toHaveAttribute("href", "/billings/new");
+  });
+
+  it("searches the month from the footer, leaving the summary on the whole month", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <FeedScreen
+        month={MONTH}
+        filters={DEFAULT_FEED_FILTERS}
+        today={TODAY}
+        charges={[charge({ description: "Aluguel", debtor: { name: "Marina" } }), charge({ description: "Uber", debtor: { name: "Rafa" } })]}
+      />,
+    );
+
+    await user.type(screen.getByRole("searchbox", { name: "Buscar cobrança" }), "marina");
+
+    expect(screen.getByRole("link", { name: "Abrir cobrança Aluguel" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Abrir cobrança Uber" })).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "Buscar cobrança" }));
+    await user.type(screen.getByRole("searchbox", { name: "Buscar cobrança" }), "nada");
+
+    expect(screen.getByText("Nenhuma cobrança encontrada.")).toBeInTheDocument();
+  });
+
+  it("reads the second line of a narrow row: people and split of a shared billing", () => {
+    render(
+      <FeedScreen
+        month={MONTH}
+        filters={DEFAULT_FEED_FILTERS}
+        today="2026-09-01"
+        charges={[
+          charge({
+            participantCount: 3,
+            billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, category: BillingCategory.Groceries, splitMode: SplitMode.Equal, contact: null },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("3 pessoas · igual")).toBeInTheDocument();
+  });
+
+  it("opens the filters from the footer and moves the choice to the URL", async () => {
+    const user = userEvent.setup();
+
+    render(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[charge()]} />);
+
+    await user.click(screen.getByRole("button", { name: "Filtros" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Filtros" })).getByRole("button", { name: "Direção A pagar" }));
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+
+    expect(replace).toHaveBeenCalledWith(expect.stringContaining("direction=payable"), { scroll: false });
   });
 });

@@ -1,6 +1,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/app/app-shell";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn() }) }));
 
 afterEach(() => {
   cleanup();
@@ -45,5 +47,24 @@ describe("AppShell", () => {
     );
 
     expect(screen.getAllByTestId("header-bell-dot").length).toBeGreaterThan(0);
+  });
+
+  it("has no bottom navigation: Feed and Contas draw their own header, Perfil goes back to the Feed", () => {
+    const { rerender } = render(
+      <AppShell activePath="/feed">
+        <p>Conteúdo</p>
+      </AppShell>,
+    );
+
+    expect(screen.getAllByRole("navigation")).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: /Voltar/ })).not.toBeInTheDocument();
+
+    rerender(
+      <AppShell activePath="/settings">
+        <p>Conteúdo</p>
+      </AppShell>,
+    );
+
+    expect(screen.getByRole("link", { name: /Voltar/ })).toHaveAttribute("href", "/feed");
   });
 });

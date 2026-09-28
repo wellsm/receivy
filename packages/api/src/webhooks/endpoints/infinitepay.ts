@@ -1,10 +1,11 @@
 import type { Service } from '@ez4/common';
 import type { Http } from '@ez4/gateway';
 import { HttpBadRequestError } from '@ez4/gateway';
-import type { String } from '@ez4/schema';
+import type { Object, String } from '@ez4/schema';
 import { PaymentProvider } from '@receivy/common';
 import { checkoutClients } from '../../charges/services/payment-link';
 import { settleByProvider } from '../../charges/services/settle';
+import { Logger } from '../../common/services/logger';
 import { notificationTransport } from '../../notifications/services/transport';
 import { PublicTokenPurpose, verifyPublicChargeToken } from '../../public/services/capability';
 import type { WebhookProvider } from '../provider';
@@ -23,7 +24,8 @@ declare class InfinitePayWebhookBody implements Http.JsonBody {
 
 declare class WebhookRequest implements Http.Request {
   parameters: { token: String.Max<300> };
-  body: InfinitePayWebhookBody;
+  /** `Extends`: fields we never declared (`items`, whatever comes next) pass through instead of a 400. */
+  body: Object.Extends<InfinitePayWebhookBody>;
 }
 
 declare class WebhookResponse implements Http.Response {
@@ -58,7 +60,7 @@ export async function infinitePayWebhookHandler({ parameters, body }: WebhookReq
     { provider: PaymentProvider.InfinitePay, chargeId, transactionNsu: body.transaction_nsu, slug: body.invoice_slug, receiptUrl: body.receipt_url }
   );
 
-  console.info('InfinitePay webhook', { chargeId, outcome });
+  Logger.debug('InfinitePay webhook', { chargeId, outcome });
 
   if (outcome === 'unavailable') {
     throw new HttpBadRequestError('Payment check unavailable');

@@ -195,6 +195,8 @@ export type BillingDetail = {
   /** Always sent by the API; absent on older payloads, read as 'fixed'. */
   dueRule?: BillingDueRule;
   state: BillingState;
+  /** Ended on its own once nothing was left pending: still editable, never reactivated. */
+  autoEnded?: boolean;
   installmentCount?: number;
   nextDueDate: string | null;
   createdAt: string;

@@ -144,6 +144,16 @@ describe("apiFetch", () => {
     expect(localStorage.getItem("receivy.session")).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it("apiJson reports a refresh network failure as unavailable and keeps the session", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockRejectedValueOnce(new TypeError("fetch failed"));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiJson("auth/me")).rejects.toMatchObject({ status: 503, message: "Serviço indisponível. Tente novamente." });
+    expect(getAccessToken()).toBe("a1");
+    expect(localStorage.getItem("receivy.session")).toContain("r1");
+  });
 });
 
 describe("apiJson", () => {

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import type { ReactElement } from "react";
 import { Alert } from "react-native";
 import {
+  BillingCategory,
   BillingKind,
   BillingRecurrence,
   calendarDate,
@@ -15,11 +16,11 @@ import {
   ProofKind,
   ProofState,
   shiftMonth,
+  SplitMode,
 } from "@receivy/common";
 import { FeedScreen } from "@/components/screens/feed-screen";
 
-/** The tabs show no header: the hook only names the back button of pushed screens. */
-jest.mock("@/navigation/tab-header", () => ({ useTabHeader: () => {} }));
+jest.mock("@/account/profile", () => ({ profileStore: { load: () => Promise.resolve({ name: "Wellington Silva", avatar: null }) } }));
 
 function renderFeed(ui: ReactElement) {
   return render(ui);
@@ -50,8 +51,9 @@ function charge(overrides: Partial<ListChargeItem> & { id: string }): ListCharge
     notify: true,
     counterpartReachable: true,
     confirmationRequired: true,
+    participantCount: 1,
     proof: null,
-    billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, contact: null },
+    billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, category: BillingCategory.Groceries, contact: null },
     debtor: { name: "Maria" },
     installment: 1,
     installmentCount: 1,
@@ -74,7 +76,7 @@ const deferred = () => {
 };
 
 async function pickDirection(label: string) {
-  await fireEvent.press(screen.getByRole("button", { name: "Filtros" }));
+  await fireEvent.press(screen.getByRole("button", { name: /^Filtros/ }));
   await fireEvent.press(screen.getByRole("button", { name: `Direção ${label}` }));
   await fireEvent.press(screen.getByRole("button", { name: "Aplicar" }));
 }
@@ -84,7 +86,7 @@ describe("FeedScreen", () => {
     const charges = jest.fn().mockResolvedValue([
       charge({ id: "c1", proof: { state: ProofState.Pending, kind: ProofKind.File } }),
       charge({ id: "c2", description: "Netflix", type: Direction.Payable, ownedByViewer: false, creditor: { name: "Netflix" }, amountCents: 2790 }),
-      charge({ id: "c3", description: "Claude Team", debtor: { name: "João" }, dueDate: "2020-01-01", billing: { recurrence: BillingRecurrence.Indefinite, kind: BillingKind.Live, contact: null }, installment: undefined, installmentCount: undefined }),
+      charge({ id: "c3", description: "Claude Team", debtor: { name: "João" }, dueDate: "2020-01-01", billing: { recurrence: BillingRecurrence.Indefinite, kind: BillingKind.Live, category: BillingCategory.Subscription, contact: null }, installment: undefined, installmentCount: undefined }),
       charge({ id: "c4", description: "Internet", debtor: { name: "Pedro" }, dueDate: "2099-01-01", counterpartReachable: false }),
       charge({ id: "c5", description: "Consultoria", amountCents: 20000, state: ChargeState.Paid }),
       charge({ id: "c6", description: "Luz", type: Direction.Payable, ownedByViewer: false, amountCents: 5000, state: ChargeState.Paid }),
@@ -103,11 +105,13 @@ describe("FeedScreen", () => {
     expect(charges).toHaveBeenCalledWith(CURRENT_MONTH);
     expect(screen.getAllByText("Hoje").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("1 de janeiro de 2020")).toBeOnTheScreen();
-    expect(screen.getByText("Comprovante enviado")).toBeOnTheScreen();
-    expect(screen.getAllByText("Vence hoje").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Atrasado")).toBeOnTheScreen();
-    expect(screen.getByText("Recorrente")).toBeOnTheScreen();
-    expect(screen.getAllByText("Liquidado")).toHaveLength(2);
+    expect(screen.getByText("comprovante enviado")).toBeOnTheScreen();
+    expect(screen.getByText("a pagar · à vista")).toBeOnTheScreen();
+    expect(screen.getByText(/^atrasado \d+ dias$/)).toBeOnTheScreen();
+    expect(screen.getByText("à vista · a receber")).toBeOnTheScreen();
+    expect(screen.getAllByText("paga")).toHaveLength(2);
+    expect(screen.getByText("200,00 recebido")).toBeOnTheScreen();
+    expect(screen.getByText("50,00 pago")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Pagar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ver cobrança" })).toBeNull();
 
@@ -183,7 +187,7 @@ describe("FeedScreen", () => {
 
     expect(Alert.alert).toHaveBeenCalledWith("Marcar como paga?", expect.stringContaining("pagamento integral"), expect.any(Array));
     expect(pay).toHaveBeenCalledWith("own");
-    expect(await screen.findByText("Liquidado")).toBeOnTheScreen();
+    expect(await screen.findByText("paga")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Marcar pago" })).toBeNull();
     expect(charges).toHaveBeenCalledTimes(2);
   });
@@ -206,7 +210,7 @@ describe("FeedScreen", () => {
     expect(declarePayment).toHaveBeenCalledWith("own");
     expect(pay).not.toHaveBeenCalled();
     // The quiet reload shows the charge sitting em análise, and the action is gone until it is confirmed.
-    expect(await screen.findByText("Em análise")).toBeOnTheScreen();
+    expect(await screen.findByText("pagamento informado")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Marcar pago" })).toBeNull();
   });
 
@@ -338,5 +342,60 @@ describe("FeedScreen", () => {
     expect(screen.getByRole("tab", { name: monthLabel(NEXT_MONTH) })).toBeSelected();
     expect(screen.getByRole("tab", { name: monthLabel(CURRENT_MONTH) })).toBeOnTheScreen();
     expect(screen.queryByRole("tab", { name: monthLabel(PREV_MONTH) })).toBeNull();
+  });
+
+  it("greets the viewer and opens Perfil, Contas and a new billing from the header and the footer", async () => {
+    const onOpenProfile = jest.fn();
+    const onOpenBillings = jest.fn();
+    const onCreate = jest.fn();
+
+    await renderFeed(
+      <FeedScreen client={{ charges: jest.fn().mockResolvedValue([]) }} onOpenProfile={onOpenProfile} onOpenBillings={onOpenBillings} onCreate={onCreate} />,
+    );
+
+    expect(await screen.findByText("Olá, Wellington")).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByRole("button", { name: "Perfil" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Contas" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Nova conta" }));
+
+    expect(onOpenProfile).toHaveBeenCalled();
+    expect(onOpenBillings).toHaveBeenCalled();
+    expect(onCreate).toHaveBeenCalled();
+  });
+
+  it("searches the month by description or the other side, leaving the summary alone", async () => {
+    const charges = jest.fn().mockResolvedValue([
+      charge({ id: "c1", description: "Aluguel", debtor: { name: "Marina" } }),
+      charge({ id: "c2", description: "Uber do aeroporto", debtor: { name: "Rafa" } }),
+    ]);
+
+    await renderFeed(<FeedScreen client={{ charges }} />);
+    await screen.findByRole("button", { name: "Abrir cobrança Aluguel" });
+    await fireEvent.changeText(screen.getByLabelText("Buscar cobrança"), "marina");
+
+    expect(screen.getByRole("button", { name: "Abrir cobrança Aluguel" })).toBeOnTheScreen();
+    expect(screen.queryByRole("button", { name: "Abrir cobrança Uber do aeroporto" })).toBeNull();
+    // A receber and Previsto still read both charges.
+    expect(screen.getAllByText(/174,84/)).toHaveLength(2);
+
+    await fireEvent.changeText(screen.getByLabelText("Buscar cobrança"), "nada");
+
+    expect(screen.getByText("Nenhuma cobrança encontrada.")).toBeOnTheScreen();
+    expect(charges).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the people and the split of a shared billing on the second line", async () => {
+    const charges = jest.fn().mockResolvedValue([
+      charge({
+        id: "c1",
+        participantCount: 3,
+        billing: { recurrence: BillingRecurrence.Once, kind: BillingKind.Live, category: BillingCategory.Groceries, splitMode: SplitMode.Equal, contact: null },
+      }),
+    ]);
+
+    await renderFeed(<FeedScreen client={{ charges }} />);
+
+    expect(await screen.findByText("3 pessoas · igual")).toBeOnTheScreen();
   });
 });

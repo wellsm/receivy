@@ -3,7 +3,9 @@
 # index 1. Tapping a section title dismisses the keyboard (the form's ScrollView
 # uses keyboardShouldPersistTaps="handled"), which keeps the fixed footer
 # reachable. Sub-screens now run under the native stack header, so "back" is a
-# tap on the previous screen's title in the header ("Perfil", "Contas").
+# tap on the previous screen's title in the header ("Feed", "Perfil", "Contas").
+# There is no tab bar: the Feed avatar ("Perfil") and its "Contas" button open
+# the other roots, and Contas goes back through "Voltar para o Feed".
 # Methods and contacts are registered on their own screens, reached from the FABs
 # of their lists; a save pops back to the list, so the list's own FAB label
 # ("Cadastrar novo meio" — the FAB's accessibilityLabel, lowercase, which is what
@@ -77,6 +79,10 @@ appId: dev.receivy.local
 - extendedWaitUntil:
     visible: "Gerenciar contatos"
     timeout: 15000
+- tapOn: "Feed"
+- extendedWaitUntil:
+    visible: "A RECEBER"
+    timeout: 15000
 - tapOn: "Contas"
 - extendedWaitUntil:
     visible: "Nova conta"
@@ -136,7 +142,7 @@ appId: dev.receivy.local
 - extendedWaitUntil:
     visible: "Nova conta"
     timeout: 15000
-- tapOn: "Feed"
+- tapOn: "Voltar para o Feed"
 - extendedWaitUntil:
     visible: 'R\$.50,00'
     timeout: 20000

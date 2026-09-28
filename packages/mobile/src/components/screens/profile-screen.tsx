@@ -9,7 +9,6 @@ import { financialClient, type FinancialClient } from "@/financial/client";
 import { profileStore, type ProfileStore } from "@/account/profile";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
-import { useTabHeader } from "@/navigation/tab-header";
 import { LegalSheet, type LegalKind } from "@/components/app/legal-sheet";
 import { useThemeColors, type ThemeColors } from "@/theme/colors";
 import { useThemePreference } from "@/theme/preference";
@@ -269,10 +268,8 @@ export function ProfileScreen({
     setConfirmation("");
   }
 
-  useTabHeader({ title: "Perfil" });
-
   return (
-    <SafeAreaView className="flex-1 bg-canvas" edges={["top", "bottom"]}>
+    <SafeAreaView className="flex-1 bg-canvas" edges={["bottom"]}>
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
         <View className="gap-[18px] px-5 pt-3">
           {notice ? (

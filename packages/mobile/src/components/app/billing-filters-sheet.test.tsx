@@ -1,23 +1,31 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
-import { Direction } from "@receivy/common";
-import { activeBillingChips, BillingFiltersSheet, DEFAULT_BILLING_FILTERS } from "@/components/app/billing-filters-sheet";
+import { BillingCategory, BillingRecurrence, DEFAULT_BILLING_LIST_FILTERS, Direction } from "@receivy/common";
+import { BillingFiltersSheet } from "@/components/app/billing-filters-sheet";
 
 describe("BillingFiltersSheet", () => {
-  it("applies the chosen direction with the other filters", async () => {
+  it("applies the chosen type, frequency and category together", async () => {
     const onApply = jest.fn();
 
-    await render(<BillingFiltersSheet value={DEFAULT_BILLING_FILTERS} onApply={onApply} onClose={jest.fn()} />);
+    await render(<BillingFiltersSheet value={DEFAULT_BILLING_LIST_FILTERS} onApply={onApply} onClose={jest.fn()} />);
 
-    expect(screen.getByRole("button", { name: "Direção Todas" })).toBeSelected();
+    expect(screen.getByRole("button", { name: "Tipo Todas" })).toBeSelected();
 
-    await fireEvent.press(screen.getByRole("button", { name: "Direção A pagar" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Tipo A pagar" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Frequência Recorrente" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Categoria Moradia" }));
     await fireEvent.press(screen.getByRole("button", { name: "Aplicar" }));
 
-    expect(onApply).toHaveBeenCalledWith({ ...DEFAULT_BILLING_FILTERS, type: "payable" });
+    expect(onApply).toHaveBeenCalledWith({ type: Direction.Payable, recurrence: BillingRecurrence.Indefinite, category: BillingCategory.Housing });
   });
 
-  it("lists the direction as a removable chip only when it narrows the list", () => {
-    expect(activeBillingChips(DEFAULT_BILLING_FILTERS)).toEqual([]);
-    expect(activeBillingChips({ ...DEFAULT_BILLING_FILTERS, type: Direction.Receivable })).toEqual([{ key: "type", label: "A receber" }]);
+  it("clears every group back to the default", async () => {
+    const onApply = jest.fn();
+
+    await render(<BillingFiltersSheet value={{ ...DEFAULT_BILLING_LIST_FILTERS, type: Direction.Receivable }} onApply={onApply} onClose={jest.fn()} />);
+
+    await fireEvent.press(screen.getByRole("button", { name: "Limpar" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Aplicar" }));
+
+    expect(onApply).toHaveBeenCalledWith(DEFAULT_BILLING_LIST_FILTERS);
   });
 });

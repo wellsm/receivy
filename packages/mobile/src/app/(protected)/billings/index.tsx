@@ -6,9 +6,10 @@ export default function BillingsRoute() {
 
   return (
     <BillingsScreen
+      onBack={() => (router.canGoBack() ? router.back() : router.replace("/"))}
       onCreate={() => router.push("/billings/new")}
       onOpenBilling={(id) => router.push({ pathname: "/billings/[id]", params: { id } })}
-      onOpenCharge={(id) => router.push({ pathname: "/charges/[id]", params: { id } })}
+      onOpenProfile={() => router.push("/settings")}
     />
   );
 }

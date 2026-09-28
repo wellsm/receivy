@@ -1,9 +1,11 @@
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import {
+  type AuthUser,
   type BadgeTone,
+  billingCategoryColor,
   ChargeActionKind,
   ChargeState,
   type ChargeTotals,
@@ -13,8 +15,8 @@ import {
   activeFeedFilterCount,
   calendarDate,
   chargeAction,
-  chargeBadges,
-  chargeStateLabel,
+  chargeFeedLine,
+  type ChargeFeedLine,
   chargeSummaryOf,
   chargeTotals,
   type ChargeSummary,
@@ -28,11 +30,14 @@ import {
   type ManualReminderResult,
   monthTabs,
   openChargesTotal,
+  searchCharges,
 } from "@receivy/common";
+import { profileStore, type ProfileStore } from "@/account/profile";
 import { FeedFiltersSheet } from "@/components/app/feed-filters-sheet";
 import { RemindSheet } from "@/components/app/remind-sheet";
+import { SearchFooter } from "@/components/app/search-footer";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
-import { useTabHeader } from "@/navigation/tab-header";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { notificationClient } from "@/notifications/client";
 import { useThemeColors } from "@/theme/colors";
@@ -40,18 +45,22 @@ import { useThemeColors } from "@/theme/colors";
 type FeedScreenProps = {
   client?: Pick<FinancialClient, "charges"> & Partial<Pick<FinancialClient, "pay" | "declarePayment">>;
   notifications?: Pick<typeof notificationClient, "remind"> & Partial<Pick<typeof notificationClient, "remindPreview">>;
+  profile?: Pick<ProfileStore, "load">;
   onOpenCharge?: (id: string) => void;
+  onOpenBillings?: () => void;
+  onOpenProfile?: () => void;
+  onCreate?: () => void;
 };
 
-const slidersMark = require("../../../assets/images/auth/sliders.svg");
+const billingsMark = require("../../../assets/images/auth/tab-billings.svg");
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
-/** In the dense row a badge is only tinted text beside the state label. */
-const TONE_CLASS: Record<BadgeTone, string> = {
+/** The second line of a row is tinted text; `warning` is what the viewer pays, in the payable red. */
+const LINE_CLASS: Record<BadgeTone, string> = {
   danger: "text-payable",
   info: "text-primary",
-  warning: "text-warning",
+  warning: "text-payable",
   success: "text-success",
   neutral: "text-muted",
 };
@@ -80,7 +89,7 @@ function MonthTabsBar({ month, onSelect }: { month: string; onSelect: (value: st
   const tabs = monthTabs(month);
 
   return (
-    <View className="flex-1 flex-row border-b border-outline">
+    <View className="mx-[18px] flex-row border-b border-outline">
       {tabs.map((tab) => (
         <Pressable
           key={tab.value}
@@ -114,6 +123,7 @@ function SummaryBox({ summary }: { summary?: ChargeTotals }) {
         <View className="flex-1 border-r border-outline px-3.5 py-2.75">
           <View className="flex-row items-baseline justify-between gap-1.5">
             <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A RECEBER</Text>
+            {received > 0 && <Text className="font-sans text-[10.5px] font-bold text-success">{withoutCurrency(formatMoney({ amountCents: received, currency: "BRL" }))} recebido</Text>}
           </View>
           <Text className="mt-1 font-display text-[20px] font-bold text-primary" style={TABULAR}>
             {summary ? formatMoney(summary.receivable.pending) : "—"}
@@ -123,6 +133,7 @@ function SummaryBox({ summary }: { summary?: ChargeTotals }) {
         <View className="flex-1 px-3.5 py-2.75">
           <View className="flex-row items-baseline justify-between gap-1.5">
             <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A PAGAR</Text>
+            {paid > 0 && <Text className="font-sans text-[10.5px] font-bold text-success">{withoutCurrency(formatMoney({ amountCents: paid, currency: "BRL" }))} pago</Text>}
           </View>
           <Text className="mt-1 font-display text-[20px] font-bold text-payable" style={TABULAR}>
             {summary ? formatMoney(summary.payable.pending) : "—"}
@@ -181,7 +192,9 @@ function DayBar({ date, today, charges }: { date: string; today: string; charges
 type ChargeRowProps = {
   charge: ChargeSummary;
   direction: Direction;
-  today: string;
+  line: ChargeFeedLine;
+  /** The billing's category tint, on the dot that opens the row. */
+  color: string;
   reminded: string | null;
   onOpen: () => void;
   onRemind: () => void;
@@ -189,13 +202,11 @@ type ChargeRowProps = {
   onDeclare: () => void;
 };
 
-function ChargeRow({ charge, direction, today, reminded, onOpen, onRemind, onMarkPaid, onDeclare }: ChargeRowProps) {
-  const badges = chargeBadges(charge, today, direction);
+function ChargeRow({ charge, direction, line, color, reminded, onOpen, onRemind, onMarkPaid, onDeclare }: ChargeRowProps) {
   const action = chargeAction(charge, direction);
   const settled = charge.state !== ChargeState.Pending;
   const payable = direction === Direction.Payable;
   const amountClass = settled ? "text-muted" : payable ? "text-payable" : "text-ink";
-  const stateClass = settled ? "text-success" : payable ? "text-payable" : "text-muted";
 
   return (
     <Pressable
@@ -204,23 +215,18 @@ function ChargeRow({ charge, direction, today, reminded, onOpen, onRemind, onMar
       onPress={onOpen}
       className={`flex-row items-center gap-3 border-b border-outline/60 bg-surface px-[18px] py-3 ${settled ? "opacity-60" : ""}`}
     >
+      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+
       <View className="min-w-0 flex-1 gap-0.5">
-        <Text className="font-sans text-[13.5px] font-bold text-ink" numberOfLines={1}>
+        <Text className="font-sans text-[14px] font-semibold text-ink" numberOfLines={1}>
           {charge.description} · {charge.counterpartName}
         </Text>
-
-        <View className="flex-row flex-wrap items-center">
-          <Text className={`font-sans text-[11.5px] font-medium ${stateClass}`}>{chargeStateLabel(charge, direction)}</Text>
-          {badges.map((badge) => (
-            <Fragment key={badge.label}>
-              <Text className="font-sans text-[11.5px] text-muted"> · </Text>
-              <Text className={`font-sans text-[11.5px] font-medium ${TONE_CLASS[badge.tone]}`}>{badge.label}</Text>
-            </Fragment>
-          ))}
-        </View>
+        <Text className={`font-sans text-[11.5px] font-medium ${LINE_CLASS[line.tone]}`} numberOfLines={1}>
+          {line.text}
+        </Text>
       </View>
 
-      <Text className={`font-display text-sm font-bold ${amountClass}`}>{withoutCurrency(formatMoney(charge.amount))}</Text>
+      <Text className={`font-display text-[15px] font-bold ${amountClass}`}>{withoutCurrency(formatMoney(charge.amount))}</Text>
 
       {action?.kind === ChargeActionKind.Remind && (
         <Pressable
@@ -259,10 +265,49 @@ function ChargeRow({ charge, direction, today, reminded, onOpen, onRemind, onMar
   );
 }
 
+/** Design 8a: the avatar opens Perfil, the greeting and title sit beside it, and Contas is one tap away. */
+function FeedHeader({ user, onOpenProfile, onOpenBillings }: { user: AuthUser | null; onOpenProfile?: () => void; onOpenBillings?: () => void }) {
+  const colors = useThemeColors();
+  const name = user?.name?.trim() || "";
+
+  return (
+    <View className="mx-[18px] flex-row items-center gap-3">
+      <Pressable accessibilityRole="button" accessibilityLabel="Perfil" onPress={onOpenProfile}>
+        <InitialsAvatar name={name || "R"} size={40} avatar={user?.avatar} />
+      </Pressable>
+
+      <View className="min-w-0 flex-1">
+        {name ? (
+          <Text className="font-sans text-xs text-muted" numberOfLines={1}>
+            Olá, {name.split(/\s+/)[0]}
+          </Text>
+        ) : null}
+        <Text accessibilityRole="header" className="font-display text-[22px] font-bold text-ink">
+          Feed
+        </Text>
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Contas"
+        onPress={onOpenBillings}
+        className="h-10 flex-row items-center gap-1.5 rounded-xl bg-surface-muted px-3.5"
+      >
+        <Image source={billingsMark} tintColor={colors.ink} style={{ width: 16, height: 16 }} />
+        <Text className="font-sans text-[13px] font-bold text-ink">Contas</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export function FeedScreen({
   client = financialClient,
   notifications = notificationClient,
+  profile = profileStore,
   onOpenCharge,
+  onOpenBillings,
+  onOpenProfile,
+  onCreate,
 }: FeedScreenProps) {
   const colors = useThemeColors();
   // The whole month, as the API answered it; the filters narrow it down on screen.
@@ -272,6 +317,8 @@ export function FeedScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [term, setTerm] = useState("");
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [remindTarget, setRemindTarget] = useState<ChargeSummary | null>(null);
   const [remindPreview, setRemindPreview] = useState<ManualReminderResult | null>(null);
   const [remindLoading, setRemindLoading] = useState(false);
@@ -283,6 +330,13 @@ export function FeedScreen({
   // Bumped on every open and close, so a preview response only lands when it still answers the latest ask.
   const remindToken = useRef(0);
   const today = calendarDate();
+
+  useEffect(() => {
+    profile
+      .load()
+      .then(setUser)
+      .catch(() => undefined);
+  }, [profile]);
 
   const load = useCallback(
     async (nextMonth = monthRef.current, quiet = false) => {
@@ -433,11 +487,11 @@ export function FeedScreen({
     await load(undefined, true);
   }
 
-  const visible = useMemo(() => (charges ? filterCharges(charges, filters, today) : null), [charges, filters, today]);
-  const summary = visible ? chargeTotals(visible) : undefined;
+  const filtered = useMemo(() => (charges ? filterCharges(charges, filters, today) : null), [charges, filters, today]);
+  // The search narrows the list only; the summary keeps reading the filtered month.
+  const visible = useMemo(() => (filtered ? searchCharges(filtered, term) : null), [filtered, term]);
+  const summary = filtered ? chargeTotals(filtered) : undefined;
   const changedFilters = activeFeedFilterCount(filters);
-
-  useTabHeader({ title: "Feed" });
 
   function row(item: ListChargeItem) {
     const charge = chargeSummaryOf(item);
@@ -447,7 +501,8 @@ export function FeedScreen({
         key={item.id}
         charge={charge}
         direction={item.type}
-        today={today}
+        line={chargeFeedLine(item, today)}
+        color={billingCategoryColor(item.billing.category)}
         reminded={reminded[item.id] ?? null}
         onOpen={() => onOpenCharge?.(item.id)}
         onRemind={() => openRemind(charge)}
@@ -467,21 +522,8 @@ export function FeedScreen({
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={colors.primaryStrong} />}
       >
         <View className="gap-3 pt-3">
-          {/* No header on the tabs: the filters sit beside the month tabs. */}
-          <View className="mx-[18px] flex-row items-center gap-2.5">
-            <MonthTabsBar month={month} onSelect={selectMonth} />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Filtros"
-              onPress={() => setFiltersOpen(true)}
-              className={`h-[34px] w-[34px] items-center justify-center rounded-xl ${changedFilters ? "bg-primary-soft" : "bg-surface-muted"}`}
-            >
-              <Image source={slidersMark} tintColor={changedFilters ? colors.primaryStrong : colors.ink} style={{ width: 17, height: 17 }} />
-              {changedFilters > 0 && (
-                <Text className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-center font-sans text-[10px] font-bold text-on-primary">{changedFilters}</Text>
-              )}
-            </Pressable>
-          </View>
+          <FeedHeader user={user} onOpenProfile={onOpenProfile} onOpenBillings={onOpenBillings} />
+          <MonthTabsBar month={month} onSelect={selectMonth} />
 
           <SummaryBox summary={summary} />
 
@@ -497,11 +539,15 @@ export function FeedScreen({
             </View>
           ) : null}
 
-          {!loading && !error && visible?.length === 0 && (
+          {!loading && !error && filtered?.length === 0 && (
             <View className="mx-[18px] gap-2 rounded-[18px] border border-outline bg-surface p-5">
               <Text className="font-display text-2xl font-bold text-ink">Sua timeline começa aqui</Text>
-              <Text className="font-sans text-sm leading-6 text-muted">Crie uma conta na aba Contas ou entre com o e-mail em que recebeu uma.</Text>
+              <Text className="font-sans text-sm leading-6 text-muted">Crie uma conta no + ou entre com o e-mail em que recebeu uma.</Text>
             </View>
+          )}
+
+          {!loading && !error && !!filtered?.length && visible?.length === 0 && (
+            <Text className="py-6 text-center font-sans text-sm text-muted">Nenhuma cobrança encontrada.</Text>
           )}
 
           <View>
@@ -514,6 +560,15 @@ export function FeedScreen({
           </View>
         </View>
       </ScrollView>
+
+      <SearchFooter
+        placeholder="Buscar cobrança"
+        value={term}
+        onChangeText={setTerm}
+        filterCount={changedFilters}
+        onFilter={() => setFiltersOpen(true)}
+        onCreate={() => onCreate?.()}
+      />
 
       {filtersOpen && (
         <FeedFiltersSheet

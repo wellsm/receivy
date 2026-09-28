@@ -1,64 +1,52 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, Text, TextInput, View } from "react-native";
-import { BillingState, type BillingSummary, type BillingsPage, Direction, billingShareAction, calendarDate } from "@receivy/common";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import {
+  activeBillingFilterCount,
+  type AuthUser,
+  type BillingListFilters,
+  BillingState,
+  type BillingsPage,
+  calendarDate,
+  DEFAULT_BILLING_LIST_FILTERS,
+  filterBillings,
+} from "@receivy/common";
+import { profileStore, type ProfileStore } from "@/account/profile";
+import { BillingFiltersSheet } from "@/components/app/billing-filters-sheet";
+import { SearchFooter } from "@/components/app/search-footer";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { SafeAreaView } from "@/components/ui/safe-area-view";
-import { useTabHeader } from "@/navigation/tab-header";
 import { financialClient, type FinancialClient } from "@/financial/client";
 import { BillingCard } from "@/components/ui/billing-card";
 import { useThemeColors } from "@/theme/colors";
 
-type Client = Pick<
-  FinancialClient,
-  | "billings"
-  | "billing"
-  | "patchBilling"
-  | "paymentMethods"
-  | "profile"
-  | "createBilling"
-  | "publicLink"
-  | "publicChargeUrl"
-  | "invite"
-  | "revokeInvite"
->;
-
 type BillingsScreenProps = {
-  client?: Client;
+  client?: Pick<FinancialClient, "billings">;
+  profile?: Pick<ProfileStore, "load">;
+  onBack?: () => void;
   onCreate?: () => void;
   onOpenBilling?: (id: string) => void;
-  onOpenCharge?: (id: string) => void;
+  onOpenProfile?: () => void;
 };
 
 const LIST_ERROR = "Não foi possível carregar suas contas.";
 
-/** Client-side state filter over the loaded pages; ended billings stay out of the way by default. */
-const STATE_FILTERS: { value: BillingState; label: string; empty: string }[] = [
+/** Client-side state tabs over the loaded pages; the counts beside them come from the API. */
+const STATE_TABS: { value: BillingState; label: string; empty: string }[] = [
   { value: BillingState.Active, label: "Ativas", empty: "Nenhuma conta ativa." },
   { value: BillingState.Paused, label: "Pausadas", empty: "Nenhuma conta pausada." },
   { value: BillingState.Ended, label: "Encerradas", empty: "Nenhuma conta encerrada." },
 ];
 
-/** Server-side direction filter: the API lists both sides unless asked for one. */
-const DIRECTION_FILTERS: { value: Direction | ""; label: string }[] = [
-  { value: "", label: "Todas" },
-  { value: Direction.Receivable, label: "A receber" },
-  { value: Direction.Payable, label: "A pagar" },
-];
+const chevronMark = require("../../../assets/images/auth/chevron.svg");
 
-const plusMark = require("../../../assets/images/auth/plus.svg");
-const searchMark = require("../../../assets/images/auth/search.svg");
-
-/** No state filter for now: active, paused and ended billings all show on the list. */
-function listQuery(search: string, direction: Direction | "", cursor?: string): string {
+/** Only the search goes to the API; type, frequency and category filter the loaded pages. */
+function listQuery(search: string, cursor?: string): string {
   const parts: string[] = [];
 
   if (search) {
     parts.push(`search=${encodeURIComponent(search)}`);
-  }
-
-  if (direction) {
-    parts.push(`type=${direction}`);
   }
 
   if (cursor) {
@@ -68,38 +56,33 @@ function listQuery(search: string, direction: Direction | "", cursor?: string): 
   return parts.join("&");
 }
 
-function Pill({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityLabel={label}
-      accessibilityState={{ checked: selected }}
-      onPress={onPress}
-      className={`h-[34px] justify-center rounded-full px-3.5 ${selected ? "bg-ink" : "border border-outline bg-surface"}`}
-    >
-      <Text className={`font-sans text-[12.5px] ${selected ? "font-bold text-surface" : "font-semibold text-muted"}`}>{label}</Text>
-    </Pressable>
-  );
-}
-
-export function BillingsScreen({ client = financialClient, onCreate, onOpenBilling, onOpenCharge }: BillingsScreenProps) {
+export function BillingsScreen({ client = financialClient, profile = profileStore, onBack, onCreate, onOpenBilling, onOpenProfile }: BillingsScreenProps) {
   const colors = useThemeColors();
   const [page, setPage] = useState<BillingsPage | null>(null);
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<BillingState>(BillingState.Active);
-  const [direction, setDirection] = useState<Direction | "">("");
+  const [filters, setFilters] = useState<BillingListFilters>(DEFAULT_BILLING_LIST_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const requests = useRef(0);
   const today = calendarDate();
+
+  useEffect(() => {
+    profile
+      .load()
+      .then(setUser)
+      .catch(() => undefined);
+  }, [profile]);
 
   const load = useCallback(
     (cursor?: string) => {
       const generation = cursor ? requests.current : ++requests.current;
 
       return client
-        .billings(listQuery(search, direction, cursor))
+        .billings(listQuery(search, cursor))
         .then((next) => {
           if (generation !== requests.current) {
             return;
@@ -114,7 +97,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
           }
         });
     },
-    [client, direction, search],
+    [client, search],
   );
 
   useEffect(() => {
@@ -123,7 +106,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
     return () => clearTimeout(timer);
   }, [term]);
 
-  // The detail routes sit on top of the tabs: an ended or edited billing must be gone when the list comes back.
+  // The detail routes sit on top of the list: an ended or edited billing must be gone when the list comes back.
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -138,64 +121,55 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
     setRefreshing(false);
   }, [load]);
 
-  async function share(billing: BillingSummary) {
-    setError("");
-
-    const chargeId = billing.shareChargeId;
-
-    // A conta a pagar has no public link: its card opens the detail instead.
-    if (billing.type === "payable" || billingShareAction(billing) !== "share" || !chargeId) {
-      onOpenBilling?.(billing.id);
-
-      return;
-    }
-
-    try {
-      const link = await client.publicLink(chargeId);
-      const url = client.publicChargeUrl(link);
-
-      await Share.share({ title: "Cobrança Receivy", message: url, url });
-    } catch {
-      onOpenCharge?.(chargeId);
-    }
-  }
-
-  useTabHeader({ title: "Contas" });
-
-  const visible = page?.billings.filter((billing) => billing.state === stateFilter) ?? [];
-  const filter = STATE_FILTERS.find((option) => option.value === stateFilter) ?? STATE_FILTERS[0]!;
+  const visible = page ? filterBillings(page.billings, stateFilter, filters) : [];
+  const tab = STATE_TABS.find((option) => option.value === stateFilter) ?? STATE_TABS[0]!;
+  const counts = page?.counts;
+  const name = user?.name?.trim() || "R";
 
   return (
     <SafeAreaView className="flex-1 bg-canvas" edges={["top", "bottom"]}>
-      <View className="gap-3 pb-2 pt-3">
-        <View className="mx-5 h-11 flex-row items-center gap-2 rounded-xl border border-outline bg-surface px-3">
-          <Image source={searchMark} tintColor={colors.muted} style={{ width: 16, height: 16 }} />
-          <TextInput
-            accessibilityLabel="Buscar por título ou descrição"
-            placeholder="Buscar por título ou descrição…"
-            placeholderTextColor={colors.muted}
-            value={term}
-            onChangeText={setTerm}
-            textAlignVertical="center"
-            className="h-full flex-1 py-0 font-sans text-[16px] tracking-normal text-ink"
-          />
+      <View className="gap-3 pt-3">
+        <View className="mx-[18px] flex-row items-center gap-3">
+          <Pressable accessibilityRole="button" accessibilityLabel="Voltar para o Feed" onPress={onBack} className="h-10 w-10 items-center justify-center rounded-xl bg-surface-muted">
+            <Image source={chevronMark} tintColor={colors.ink} style={{ width: 18, height: 18, transform: [{ rotate: "180deg" }] }} />
+          </Pressable>
+
+          <View className="min-w-0 flex-1">
+            {counts ? (
+              <Text className="font-sans text-xs text-muted" numberOfLines={1}>
+                {counts.active} {counts.active === 1 ? "ativa" : "ativas"} · {counts.monthCharges} {counts.monthCharges === 1 ? "cobrança" : "cobranças"} no mês
+              </Text>
+            ) : null}
+            <Text accessibilityRole="header" className="font-display text-[22px] font-bold text-ink">
+              Contas
+            </Text>
+          </View>
+
+          <Pressable accessibilityRole="button" accessibilityLabel="Perfil" onPress={onOpenProfile}>
+            <InitialsAvatar name={name} size={40} avatar={user?.avatar} />
+          </Pressable>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="items-center gap-2 px-5">
-          <View accessibilityRole="radiogroup" accessibilityLabel="Estado" className="flex-row gap-2">
-            {STATE_FILTERS.map((option) => (
-              <Pill key={option.value} label={option.label} selected={option.value === stateFilter} onPress={() => setStateFilter(option.value)} />
-            ))}
-          </View>
+        <View accessibilityRole="tablist" className="mx-[18px] flex-row border-b border-outline">
+          {STATE_TABS.map((option) => {
+            const selected = option.value === stateFilter;
+            const count = counts?.[option.value];
 
-          <View className="mx-1 h-6 w-px bg-outline" />
-
-          <View accessibilityRole="radiogroup" accessibilityLabel="Direção" className="flex-row gap-2">
-            {DIRECTION_FILTERS.map((option) => (
-              <Pill key={option.label} label={option.label} selected={option.value === direction} onPress={() => setDirection(option.value)} />
-            ))}
-          </View>
-        </ScrollView>
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="tab"
+                accessibilityLabel={option.label}
+                accessibilityState={{ selected }}
+                onPress={() => setStateFilter(option.value)}
+                className={`flex-1 items-center pb-[7px] pt-[7px] ${selected ? "border-b-[2.5px] border-primary" : ""}`}
+              >
+                <Text className={`font-sans ${selected ? "text-[13.5px] font-extrabold text-ink" : "text-xs font-bold text-muted"}`}>{option.label}</Text>
+                {count !== undefined && <Text className={`font-sans text-[11px] font-semibold ${selected ? "text-primary" : "text-muted"}`}>{count}</Text>}
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <ScrollView
@@ -205,7 +179,7 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={colors.primaryStrong} />}
       >
-        <View className="gap-3 px-5 pt-2">
+        <View className="gap-2.5 px-[18px] pt-3">
           {!page && !error && <ActivityIndicator accessibilityLabel="Carregando contas" className="my-6" color={colors.primaryStrong} />}
 
           {error ? (
@@ -219,31 +193,17 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
             </View>
           ) : null}
 
-          {page && !page.billings.length && (
-            <View className="gap-3 rounded-[20px] border border-outline bg-surface p-5">
+          {page && !page.billings.length && !search && (
+            <View className="gap-2 rounded-[20px] border border-outline bg-surface p-5">
               <Text className="font-display text-2xl font-bold text-ink">Nenhuma conta ainda</Text>
-              <Text className="font-sans text-sm leading-6 text-muted">Crie a primeira para acompanhar os vencimentos.</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Nova conta"
-                onPress={() => onCreate?.()}
-                className="h-12 items-center justify-center rounded-2xl bg-primary"
-              >
-                <Text className="font-sans font-bold text-on-primary">Nova conta</Text>
-              </Pressable>
+              <Text className="font-sans text-sm leading-6 text-muted">Toque no + para criar a primeira e acompanhar os vencimentos.</Text>
             </View>
           )}
 
-          {page && page.billings.length > 0 && !visible.length && <Text className="py-6 text-center font-sans text-sm text-muted">{filter.empty}</Text>}
+          {page && (page.billings.length > 0 || !!search) && !visible.length && <Text className="py-6 text-center font-sans text-sm text-muted">{tab.empty}</Text>}
 
           {visible.map((billing) => (
-            <BillingCard
-              key={billing.id}
-              billing={billing}
-              today={today}
-              onShare={(target) => void share(target)}
-              onOpen={(target) => onOpenBilling?.(target.id)}
-            />
+            <BillingCard key={billing.id} billing={billing} today={today} onOpen={(target) => onOpenBilling?.(target.id)} />
           ))}
 
           {page?.nextCursor && (
@@ -259,18 +219,25 @@ export function BillingsScreen({ client = financialClient, onCreate, onOpenBilli
         </View>
       </ScrollView>
 
-      {/* Sits in the flow, not absolute: the safe-area bottom edge keeps it above the tab bar on both platforms. */}
-      <View className="bg-canvas px-5 pb-2.5 pt-3.5">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Nova conta"
-          onPress={() => onCreate?.()}
-          className="h-[54px] flex-row items-center justify-center gap-2 rounded-2xl bg-primary"
-        >
-          <Image source={plusMark} tintColor={colors.onPrimary} style={{ width: 20, height: 20 }} />
-          <Text className="font-sans text-[15.5px] font-bold text-on-primary">Nova conta</Text>
-        </Pressable>
-      </View>
+      <SearchFooter
+        placeholder="Buscar conta"
+        value={term}
+        onChangeText={setTerm}
+        filterCount={activeBillingFilterCount(filters)}
+        onFilter={() => setFiltersOpen(true)}
+        onCreate={() => onCreate?.()}
+      />
+
+      {filtersOpen && (
+        <BillingFiltersSheet
+          value={filters}
+          onClose={() => setFiltersOpen(false)}
+          onApply={(next) => {
+            setFiltersOpen(false);
+            setFilters(next);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

@@ -7,6 +7,9 @@ export default function FeedRoute() {
   return (
     <FeedScreen
       onOpenCharge={(id) => router.push({ pathname: "/charges/[id]", params: { id } })}
+      onOpenBillings={() => router.push("/billings")}
+      onOpenProfile={() => router.push("/settings")}
+      onCreate={() => router.push("/billings/new")}
     />
   );
 }

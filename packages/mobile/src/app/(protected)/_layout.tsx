@@ -5,10 +5,9 @@ import { SessionGate } from "@/components/app/session-gate";
 
 /**
  * Everything below needs a session: the gate restores it before the stack mounts.
- * The tabs sit at the bottom of this stack, so every pushed screen hides the tab bar
- * and gets a native header with the back button. The tabs themselves show no header:
- * the selected tab already names the screen. Their title still comes from `useTabHeader`,
- * because iOS labels the back button of a pushed screen with it.
+ * There is no tab bar (design 8a/8b): the Feed is the root, its header opens Contas and
+ * the avatar opens Perfil. Feed and Contas draw their own header; every other screen gets
+ * the native one, whose iOS back button reads the previous screen's title.
  */
 export default function ProtectedLayout() {
   const header = useHeaderOptions();
@@ -17,7 +16,9 @@ export default function ProtectedLayout() {
     <SessionGate>
       <ProfileGuard />
       <Stack screenOptions={header}>
-        <Stack.Screen name="(tabs)" options={{ title: "Feed", headerShown: false }} />
+        <Stack.Screen name="index" options={{ title: "Feed", headerShown: false }} />
+        <Stack.Screen name="billings/index" options={{ title: "Contas", headerShown: false }} />
+        <Stack.Screen name="settings/index" options={{ title: "Perfil" }} />
         <Stack.Screen name="contacts" options={{ title: "Meus Contatos" }} />
         <Stack.Screen name="contacts/new" options={{ title: "Novo contato" }} />
         <Stack.Screen name="contacts/[id]/edit" options={{ title: "Editar contato" }} />

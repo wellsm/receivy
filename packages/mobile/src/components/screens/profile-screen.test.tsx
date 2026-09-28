@@ -3,7 +3,6 @@ import { ACCOUNT_DELETED, PlanTier, SubscriptionStatus, WhatsappSender } from "@
 import { ProfileScreen } from "@/components/screens/profile-screen";
 import { financialClient } from "@/financial/client";
 
-jest.mock("@/navigation/tab-header", () => ({ useTabHeader: () => {} }));
 jest.mock("@/account/avatar", () => ({ pickAndUploadAvatar: jest.fn(async () => ({ url: "https://bucket.test/new", version: "v2" })) }));
 
 const user = {

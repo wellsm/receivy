@@ -1,60 +1,8 @@
 import { useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
-import { BILLING_CATEGORIES, type BillingCategory, BillingState, BillingRecurrence, Direction } from "@receivy/common";
-
-export type BillingFiltersValue = {
-  state: BillingState;
-  recurrence: BillingRecurrence | "";
-  category: BillingCategory | "";
-  /** Empty lists both sides; otherwise it becomes `type=` on the list query. */
-  type: Direction | "";
-};
-
-export const DEFAULT_BILLING_FILTERS: BillingFiltersValue = { state: BillingState.Active, recurrence: "", category: "", type: "" };
-
-const STATES: { value: BillingState; label: string }[] = [
-  { value: BillingState.Active, label: "Ativas" },
-  { value: BillingState.Paused, label: "Pausadas" },
-  { value: BillingState.Ended, label: "Encerradas" },
-];
-
-const TYPES: { value: BillingRecurrence | ""; label: string }[] = [
-  { value: "", label: "Todas" },
-  { value: BillingRecurrence.Once, label: "Única" },
-  { value: BillingRecurrence.Until, label: "Parcelada" },
-  { value: BillingRecurrence.Indefinite, label: "Sem fim" },
-];
+import { BILLING_CATEGORIES, BILLING_RECURRENCE_FILTERS, BILLING_TYPE_FILTERS, type BillingCategory, type BillingListFilters, DEFAULT_BILLING_LIST_FILTERS } from "@receivy/common";
 
 const CATEGORIES: { value: BillingCategory | ""; label: string }[] = [{ value: "", label: "Todas" }, ...BILLING_CATEGORIES];
-
-const DIRECTIONS: { value: Direction | ""; label: string }[] = [
-  { value: "", label: "Todas" },
-  { value: Direction.Receivable, label: "A receber" },
-  { value: Direction.Payable, label: "A pagar" },
-];
-
-/** The filters that differ from the default, as removable chips under the search field. */
-export function activeBillingChips(value: BillingFiltersValue): { key: keyof BillingFiltersValue; label: string }[] {
-  const chips: { key: keyof BillingFiltersValue; label: string }[] = [];
-
-  if (value.state !== DEFAULT_BILLING_FILTERS.state) {
-    chips.push({ key: "state", label: STATES.find((option) => option.value === value.state)?.label ?? value.state });
-  }
-
-  if (value.recurrence) {
-    chips.push({ key: "recurrence", label: TYPES.find((option) => option.value === value.recurrence)?.label ?? value.recurrence });
-  }
-
-  if (value.category) {
-    chips.push({ key: "category", label: CATEGORIES.find((option) => option.value === value.category)?.label ?? value.category });
-  }
-
-  if (value.type) {
-    chips.push({ key: "type", label: DIRECTIONS.find((option) => option.value === value.type)?.label ?? value.type });
-  }
-
-  return chips;
-}
 
 type ChipGroupProps<T extends string> = {
   group: string;
@@ -91,14 +39,14 @@ function ChipGroup<T extends string>({ group, options, selected, onSelect }: Chi
 }
 
 type BillingFiltersSheetProps = {
-  value: BillingFiltersValue;
-  onApply: (value: BillingFiltersValue) => void;
+  value: BillingListFilters;
+  onApply: (value: BillingListFilters) => void;
   onClose: () => void;
 };
 
-/** Bottom sheet with the four filter groups; nothing reaches the list until `Aplicar`. */
+/** Design 8b: the Contas footer filter, with Tipo, Frequência and Categoria; nothing reaches the list until `Aplicar`. */
 export function BillingFiltersSheet({ value, onApply, onClose }: BillingFiltersSheetProps) {
-  const [draft, setDraft] = useState<BillingFiltersValue>(value);
+  const [draft, setDraft] = useState<BillingListFilters>(value);
 
   return (
     <Modal transparent animationType="slide" visible onRequestClose={onClose}>
@@ -110,11 +58,14 @@ export function BillingFiltersSheet({ value, onApply, onClose }: BillingFiltersS
         </Text>
 
         <ScrollView contentContainerClassName="gap-5" showsVerticalScrollIndicator={false}>
-          <ChipGroup group="Direção" options={DIRECTIONS} selected={draft.type} onSelect={(type) => setDraft({ ...draft, type })} />
-          <ChipGroup group="Estado" options={STATES} selected={draft.state} onSelect={(state) => setDraft({ ...draft, state })} />
-          <ChipGroup group="Tipo" options={TYPES} selected={draft.recurrence} onSelect={(recurrence) => setDraft({ ...draft, recurrence })} />
+          <ChipGroup group="Tipo" options={BILLING_TYPE_FILTERS} selected={draft.type} onSelect={(type) => setDraft({ ...draft, type })} />
+          <ChipGroup group="Frequência" options={BILLING_RECURRENCE_FILTERS} selected={draft.recurrence} onSelect={(recurrence) => setDraft({ ...draft, recurrence })} />
           <ChipGroup group="Categoria" options={CATEGORIES} selected={draft.category} onSelect={(category) => setDraft({ ...draft, category })} />
         </ScrollView>
+
+        <Pressable accessibilityRole="button" accessibilityLabel="Limpar" onPress={() => setDraft(DEFAULT_BILLING_LIST_FILTERS)} className="min-h-10 items-center justify-center">
+          <Text className="font-bold text-primary">Limpar</Text>
+        </Pressable>
 
         <Pressable
           accessibilityRole="button"

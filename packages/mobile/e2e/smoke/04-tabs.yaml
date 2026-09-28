@@ -24,11 +24,16 @@ appId: dev.receivy.local
 - extendedWaitUntil:
     visible: "Gerenciar contatos"
     timeout: 15000
+# Perfil sits on top of the Feed: its back button carries "Feed".
+- tapOn: "Feed"
+- extendedWaitUntil:
+    visible: "A RECEBER"
+    timeout: 15000
 - tapOn: "Contas"
 - extendedWaitUntil:
     visible: "Nova conta"
     timeout: 15000
-- tapOn: "Feed"
+- tapOn: "Voltar para o Feed"
 - extendedWaitUntil:
     visible: "A RECEBER"
     timeout: 15000

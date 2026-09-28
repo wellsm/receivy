@@ -107,7 +107,7 @@ function MonthTabsBar({ month, onSelect }: { month: string; onSelect: (value: st
 }
 
 /**
- * Design 1b: both open totals with what was already settled this month, a bar split by their weight,
+ * Design 1b: both open totals, a bar split by their weight,
  * and the month's Previsto (everything due, open or settled) beside its Realizado (only what was settled).
  */
 function SummaryBox({ summary }: { summary?: ChargeTotals }) {
@@ -123,7 +123,6 @@ function SummaryBox({ summary }: { summary?: ChargeTotals }) {
         <View className="flex-1 border-r border-outline px-3.5 py-2.75">
           <View className="flex-row items-baseline justify-between gap-1.5">
             <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A RECEBER</Text>
-            {received > 0 && <Text className="font-sans text-[10.5px] font-bold text-success">{withoutCurrency(formatMoney({ amountCents: received, currency: "BRL" }))} recebido</Text>}
           </View>
           <Text className="mt-1 font-display text-[20px] font-bold text-primary" style={TABULAR}>
             {summary ? formatMoney(summary.receivable.pending) : "—"}
@@ -133,7 +132,6 @@ function SummaryBox({ summary }: { summary?: ChargeTotals }) {
         <View className="flex-1 px-3.5 py-2.75">
           <View className="flex-row items-baseline justify-between gap-1.5">
             <Text className="font-sans text-[10.5px] font-bold tracking-[1px] text-muted">A PAGAR</Text>
-            {paid > 0 && <Text className="font-sans text-[10.5px] font-bold text-success">{withoutCurrency(formatMoney({ amountCents: paid, currency: "BRL" }))} pago</Text>}
           </View>
           <Text className="mt-1 font-display text-[20px] font-bold text-payable" style={TABULAR}>
             {summary ? formatMoney(summary.payable.pending) : "—"}
@@ -551,7 +549,7 @@ export function FeedScreen({
           )}
 
           <View>
-            {groupChargesByDay(visible ?? []).map(([date, items]) => (
+            {groupChargesByDay(visible ?? [], today).map(([date, items]) => (
               <View key={date}>
                 <DayBar date={date} today={today} charges={items} />
                 {items.map(row)}

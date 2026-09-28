@@ -132,17 +132,27 @@ describe('charge totals', () => {
     expect(totals.payable.count).toBe(0);
   });
 
-  it('groups the month by due date, keeping the order the API answered with', () => {
+  it('groups the month by due date, in date order', () => {
     const groups = groupChargesByDay([
-      charge({ id: 'a', dueDate: '2026-09-10' }),
-      charge({ id: 'b', dueDate: '2026-09-11' }),
-      charge({ id: 'c', dueDate: '2026-09-10' })
-    ]);
+      charge({ id: 'a', dueDate: '2026-09-11' }),
+      charge({ id: 'b', dueDate: '2026-09-10' }),
+      charge({ id: 'c', dueDate: '2026-09-11' })
+    ], '2026-10-01');
 
     expect(groups.map(([date, items]) => [date, items.map((item) => item.id)])).toEqual([
-      ['2026-09-10', ['a', 'c']],
-      ['2026-09-11', ['b']]
+      ['2026-09-10', ['b']],
+      ['2026-09-11', ['a', 'c']]
     ]);
+  });
+
+  it('puts today first, whatever the API answered with', () => {
+    const groups = groupChargesByDay([
+      charge({ id: 'a', dueDate: '2026-09-05' }),
+      charge({ id: 'b', dueDate: '2026-09-20' }),
+      charge({ id: 'c', dueDate: '2026-09-12' })
+    ], '2026-09-12');
+
+    expect(groups.map(([date]) => date)).toEqual(['2026-09-12', '2026-09-05', '2026-09-20']);
   });
 
   it('totals what a day still has open, and answers null once the day is closed', () => {

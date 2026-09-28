@@ -135,15 +135,21 @@ export function chargeTotals(charges: ListCharge): ChargeTotals {
   };
 }
 
-/** The month split into days, in the order the API answered with: one entry per due date. */
-export function groupChargesByDay(charges: ListCharge): [string, ListCharge][] {
+/** The month split into days, one entry per due date: today leads, every other day follows in date order. */
+export function groupChargesByDay(charges: ListCharge, today: string): [string, ListCharge][] {
   const groups = new Map<string, ListCharge>();
 
   for (const charge of charges) {
     groups.set(charge.dueDate, [...(groups.get(charge.dueDate) ?? []), charge]);
   }
 
-  return [...groups];
+  return [...groups].sort(([a], [b]) => {
+    if (a === today || b === today) {
+      return Number(b === today) - Number(a === today);
+    }
+
+    return a.localeCompare(b);
+  });
 }
 
 /** What a day still owes, or null once every charge of the day is closed. */

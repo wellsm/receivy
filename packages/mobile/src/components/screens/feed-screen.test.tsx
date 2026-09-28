@@ -110,8 +110,8 @@ describe("FeedScreen", () => {
     expect(screen.getByText(/^atrasado \d+ dias$/)).toBeOnTheScreen();
     expect(screen.getByText("à vista · a receber")).toBeOnTheScreen();
     expect(screen.getAllByText("paga")).toHaveLength(2);
-    expect(screen.getByText("200,00 recebido")).toBeOnTheScreen();
-    expect(screen.getByText("50,00 pago")).toBeOnTheScreen();
+    expect(screen.queryByText("200,00 recebido")).toBeNull();
+    expect(screen.queryByText("50,00 pago")).toBeNull();
     expect(screen.queryByRole("button", { name: "Pagar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ver cobrança" })).toBeNull();
 

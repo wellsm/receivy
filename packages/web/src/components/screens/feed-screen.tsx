@@ -81,7 +81,7 @@ export function FeedScreen({ charges, filters, month, today, user }: Props) {
   const [term, setTerm] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   // The search narrows the list only; the summary keeps reading the filtered month.
-  const groups = groupChargesByDay(searchCharges(charges, term));
+  const groups = groupChargesByDay(searchCharges(charges, term), today);
   const totals = chargeTotals(charges);
 
   // Every knob of the feed lives in the URL, so changing one re-runs the server render.

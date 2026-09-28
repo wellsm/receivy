@@ -37,4 +37,13 @@ export default defineConfig([
       "react-refresh/only-export-components": "off",
     },
   },
+  {
+    // These components intentionally colocate a small helper or a lookup table with the
+    // component that uses it (`initialOf`, `shortDate`, `PIX_TYPE_LABELS`): Fast Refresh
+    // warnings are noise here too.
+    files: ["src/components/ui/**/*.tsx", "src/components/app/**/*.tsx"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
 ]);

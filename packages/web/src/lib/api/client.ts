@@ -16,6 +16,7 @@ export type ApiInit = RequestInit & {
 /** Two rounds cover a sibling tab that rotated first (409); past that the session is left alone and the call answers unavailable. */
 const MAX_REFRESH_ROUNDS = 2;
 const STALE_SESSION = 409;
+const TOO_MANY_REQUESTS = 429;
 /** How long a 409 waits for the sibling tab to store the rotated pair. */
 const ROTATION_WAIT_MS = 3000;
 const REFRESH_LOCK = "receivy.session.refresh";
@@ -123,8 +124,9 @@ async function refreshOnce(): Promise<RefreshOutcome> {
 
     const response = await send("auth/refresh", { auth: false, method: "POST", body: JSON.stringify({ refreshToken }) });
 
-    // The session survives an outage: nothing is cleared, and the caller answers unavailable.
-    if (isUnavailable(response)) {
+    // The session survives an outage: nothing is cleared, and the caller answers unavailable. A 5xx or a 429 is
+    // the API failing or throttling, not the API refusing this refresh token.
+    if (isUnavailable(response) || response.status >= 500 || response.status === TOO_MANY_REQUESTS) {
       return RefreshOutcome.Unavailable;
     }
 

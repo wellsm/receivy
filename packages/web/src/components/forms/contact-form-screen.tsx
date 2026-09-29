@@ -183,7 +183,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     setBusy(true);
 
     try {
-      const saved = await apiJson<Contact>(contactId ? `contacts/${contactId}` : "contacts", {
+      const saved = await apiJson<Contact>(contactId ? `contacts/${encodeURIComponent(contactId)}` : "contacts", {
         method: contactId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(input),

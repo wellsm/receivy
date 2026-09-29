@@ -138,6 +138,18 @@ describe("apiFetch", () => {
     expect(localStorage.getItem("receivy.session")).toContain("r1");
   });
 
+  it.each([500, 502, 503, 429])("keeps the session when the refresh is answered %i", async (status) => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockResolvedValueOnce(json({ message: "busy" }, status));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiFetch("auth/me");
+
+    expect(isUnavailable(response)).toBe(true);
+    expect(getAccessToken()).toBe("a1");
+    expect(localStorage.getItem("receivy.session")).toContain("r1");
+  });
+
   it("resolves an unavailable response when the request itself fails on the network", async () => {
     const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("fetch failed"));
 

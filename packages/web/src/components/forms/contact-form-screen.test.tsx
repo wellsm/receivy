@@ -185,6 +185,20 @@ it("loads a contact for editing and returns to its ledger", async () => {
   expect(sent.find(entry => entry.init.method === "PATCH")?.path).toBe(`${API}/contacts/c1`);
 });
 
+it("encodes the contact id in the path it saves to", async () => {
+  const sent = api();
+
+  render(<ContactFormScreen contactId="a b/c" />);
+
+  await waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveValue("Ana Souza"));
+
+  await userEvent.setup().click(screen.getByRole("button", { name: "Salvar contato" }));
+
+  await waitFor(() => expect(navigate).toHaveBeenCalled());
+
+  expect(sent.find(entry => entry.init.method === "PATCH")?.path).toBe(`${API}/contacts/a%20b%2Fc`);
+});
+
 it("locks every field but the nickname on a contact with an active account", async () => {
   api({ ...ana, status: UserStatus.Active });
   render(<ContactFormScreen contactId="c1" />);

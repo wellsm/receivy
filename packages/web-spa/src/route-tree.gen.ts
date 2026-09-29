@@ -11,10 +11,17 @@
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as ProtectedRouteImport } from "./routes/_protected";
 import { Route as OnboardingRouteImport } from "./routes/onboarding";
+import { Route as PrivacyRouteImport } from "./routes/privacy";
+import { Route as TermsRouteImport } from "./routes/terms";
 import { Route as ProtectedIndexRouteImport } from "./routes/_protected/index";
 import { Route as ProtectedFeedRouteImport } from "./routes/_protected/feed";
+import { Route as JoinTokenRouteImport } from "./routes/join/$token";
 import { Route as LoginIndexRouteImport } from "./routes/login/index";
 import { Route as LoginCodeRouteImport } from "./routes/login/code";
+import { Route as OCodeRouteImport } from "./routes/o/$code";
+import { Route as OptOutTokenRouteImport } from "./routes/opt-out/$token";
+import { Route as PCodeRouteImport } from "./routes/p/$code";
+import { Route as PayTokenRouteImport } from "./routes/pay/$token";
 import { Route as ProtectedBillingsIndexRouteImport } from "./routes/_protected/billings/index";
 import { Route as ProtectedBillingsNewRouteImport } from "./routes/_protected/billings/new";
 import { Route as ProtectedContactsIndexRouteImport } from "./routes/_protected/contacts/index";
@@ -34,6 +41,7 @@ import { Route as ProtectedSettingsPaymentMethodsIndexRouteImport } from "./rout
 import { Route as ProtectedSettingsPaymentMethodsNewRouteImport } from "./routes/_protected/settings/payment-methods/new";
 import { Route as ProtectedSettingsPixIndexRouteImport } from "./routes/_protected/settings/pix/index";
 import { Route as ProtectedSettingsPixNewRouteImport } from "./routes/_protected/settings/pix/new";
+import { Route as DevCheckoutProviderOrderNsuPayRouteImport } from "./routes/dev/checkout/$provider/$orderNsu/pay";
 
 const ProtectedRoute = ProtectedRouteImport.update({
   id: "/_protected",
@@ -42,6 +50,16 @@ const ProtectedRoute = ProtectedRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: "/onboarding",
   path: "/onboarding",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: "/privacy",
+  path: "/privacy",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const TermsRoute = TermsRouteImport.update({
+  id: "/terms",
+  path: "/terms",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ProtectedIndexRoute = ProtectedIndexRouteImport.update({
@@ -54,6 +72,11 @@ const ProtectedFeedRoute = ProtectedFeedRouteImport.update({
   path: "/feed",
   getParentRoute: () => ProtectedRoute,
 } as any);
+const JoinTokenRoute = JoinTokenRouteImport.update({
+  id: "/join/$token",
+  path: "/join/$token",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const LoginIndexRoute = LoginIndexRouteImport.update({
   id: "/login/",
   path: "/login/",
@@ -62,6 +85,26 @@ const LoginIndexRoute = LoginIndexRouteImport.update({
 const LoginCodeRoute = LoginCodeRouteImport.update({
   id: "/login/code",
   path: "/login/code",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const OCodeRoute = OCodeRouteImport.update({
+  id: "/o/$code",
+  path: "/o/$code",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const OptOutTokenRoute = OptOutTokenRouteImport.update({
+  id: "/opt-out/$token",
+  path: "/opt-out/$token",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PCodeRoute = PCodeRouteImport.update({
+  id: "/p/$code",
+  path: "/p/$code",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PayTokenRoute = PayTokenRouteImport.update({
+  id: "/pay/$token",
+  path: "/pay/$token",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ProtectedBillingsIndexRoute = ProtectedBillingsIndexRouteImport.update({
@@ -166,12 +209,25 @@ const ProtectedSettingsPixNewRoute = ProtectedSettingsPixNewRouteImport.update({
   path: "/settings/pix/new",
   getParentRoute: () => ProtectedRoute,
 } as any);
+const DevCheckoutProviderOrderNsuPayRoute =
+  DevCheckoutProviderOrderNsuPayRouteImport.update({
+    id: "/dev/checkout/$provider/$orderNsu/pay",
+    path: "/dev/checkout/$provider/$orderNsu/pay",
+    getParentRoute: () => rootRouteImport,
+  } as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof ProtectedIndexRoute;
   "/onboarding": typeof OnboardingRoute;
+  "/privacy": typeof PrivacyRoute;
+  "/terms": typeof TermsRoute;
   "/feed": typeof ProtectedFeedRoute;
+  "/join/$token": typeof JoinTokenRoute;
   "/login/code": typeof LoginCodeRoute;
+  "/o/$code": typeof OCodeRoute;
+  "/opt-out/$token": typeof OptOutTokenRoute;
+  "/p/$code": typeof PCodeRoute;
+  "/pay/$token": typeof PayTokenRoute;
   "/login/": typeof LoginIndexRoute;
   "/billings/new": typeof ProtectedBillingsNewRoute;
   "/contacts/new": typeof ProtectedContactsNewRoute;
@@ -192,11 +248,19 @@ export interface FileRoutesByFullPath {
   "/contacts/$id/": typeof ProtectedContactsIdIndexRoute;
   "/settings/payment-methods/": typeof ProtectedSettingsPaymentMethodsIndexRoute;
   "/settings/pix/": typeof ProtectedSettingsPixIndexRoute;
+  "/dev/checkout/$provider/$orderNsu/pay": typeof DevCheckoutProviderOrderNsuPayRoute;
 }
 export interface FileRoutesByTo {
   "/onboarding": typeof OnboardingRoute;
+  "/privacy": typeof PrivacyRoute;
+  "/terms": typeof TermsRoute;
   "/feed": typeof ProtectedFeedRoute;
+  "/join/$token": typeof JoinTokenRoute;
   "/login/code": typeof LoginCodeRoute;
+  "/o/$code": typeof OCodeRoute;
+  "/opt-out/$token": typeof OptOutTokenRoute;
+  "/p/$code": typeof PCodeRoute;
+  "/pay/$token": typeof PayTokenRoute;
   "/": typeof ProtectedIndexRoute;
   "/login": typeof LoginIndexRoute;
   "/billings/new": typeof ProtectedBillingsNewRoute;
@@ -218,13 +282,21 @@ export interface FileRoutesByTo {
   "/contacts/$id": typeof ProtectedContactsIdIndexRoute;
   "/settings/payment-methods": typeof ProtectedSettingsPaymentMethodsIndexRoute;
   "/settings/pix": typeof ProtectedSettingsPixIndexRoute;
+  "/dev/checkout/$provider/$orderNsu/pay": typeof DevCheckoutProviderOrderNsuPayRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/_protected": typeof ProtectedRouteWithChildren;
   "/onboarding": typeof OnboardingRoute;
+  "/privacy": typeof PrivacyRoute;
+  "/terms": typeof TermsRoute;
   "/_protected/feed": typeof ProtectedFeedRoute;
+  "/join/$token": typeof JoinTokenRoute;
   "/login/code": typeof LoginCodeRoute;
+  "/o/$code": typeof OCodeRoute;
+  "/opt-out/$token": typeof OptOutTokenRoute;
+  "/p/$code": typeof PCodeRoute;
+  "/pay/$token": typeof PayTokenRoute;
   "/_protected/": typeof ProtectedIndexRoute;
   "/login/": typeof LoginIndexRoute;
   "/_protected/billings/new": typeof ProtectedBillingsNewRoute;
@@ -246,14 +318,22 @@ export interface FileRoutesById {
   "/_protected/contacts/$id/": typeof ProtectedContactsIdIndexRoute;
   "/_protected/settings/payment-methods/": typeof ProtectedSettingsPaymentMethodsIndexRoute;
   "/_protected/settings/pix/": typeof ProtectedSettingsPixIndexRoute;
+  "/dev/checkout/$provider/$orderNsu/pay": typeof DevCheckoutProviderOrderNsuPayRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | "/"
     | "/onboarding"
+    | "/privacy"
+    | "/terms"
     | "/feed"
+    | "/join/$token"
     | "/login/code"
+    | "/o/$code"
+    | "/opt-out/$token"
+    | "/p/$code"
+    | "/pay/$token"
     | "/login/"
     | "/billings/new"
     | "/contacts/new"
@@ -273,12 +353,20 @@ export interface FileRouteTypes {
     | "/charges/$id/"
     | "/contacts/$id/"
     | "/settings/payment-methods/"
-    | "/settings/pix/";
+    | "/settings/pix/"
+    | "/dev/checkout/$provider/$orderNsu/pay";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/onboarding"
+    | "/privacy"
+    | "/terms"
     | "/feed"
+    | "/join/$token"
     | "/login/code"
+    | "/o/$code"
+    | "/opt-out/$token"
+    | "/p/$code"
+    | "/pay/$token"
     | "/"
     | "/login"
     | "/billings/new"
@@ -299,13 +387,21 @@ export interface FileRouteTypes {
     | "/charges/$id"
     | "/contacts/$id"
     | "/settings/payment-methods"
-    | "/settings/pix";
+    | "/settings/pix"
+    | "/dev/checkout/$provider/$orderNsu/pay";
   id:
     | "__root__"
     | "/_protected"
     | "/onboarding"
+    | "/privacy"
+    | "/terms"
     | "/_protected/feed"
+    | "/join/$token"
     | "/login/code"
+    | "/o/$code"
+    | "/opt-out/$token"
+    | "/p/$code"
+    | "/pay/$token"
     | "/_protected/"
     | "/login/"
     | "/_protected/billings/new"
@@ -326,15 +422,24 @@ export interface FileRouteTypes {
     | "/_protected/charges/$id/"
     | "/_protected/contacts/$id/"
     | "/_protected/settings/payment-methods/"
-    | "/_protected/settings/pix/";
+    | "/_protected/settings/pix/"
+    | "/dev/checkout/$provider/$orderNsu/pay";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
   ProtectedRoute: typeof ProtectedRouteWithChildren;
   OnboardingRoute: typeof OnboardingRoute;
+  PrivacyRoute: typeof PrivacyRoute;
+  TermsRoute: typeof TermsRoute;
+  JoinTokenRoute: typeof JoinTokenRoute;
   LoginCodeRoute: typeof LoginCodeRoute;
+  OCodeRoute: typeof OCodeRoute;
+  OptOutTokenRoute: typeof OptOutTokenRoute;
+  PCodeRoute: typeof PCodeRoute;
+  PayTokenRoute: typeof PayTokenRoute;
   LoginIndexRoute: typeof LoginIndexRoute;
   AuthOauthCallbackRoute: typeof AuthOauthCallbackRoute;
+  DevCheckoutProviderOrderNsuPayRoute: typeof DevCheckoutProviderOrderNsuPayRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -353,6 +458,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof OnboardingRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/privacy": {
+      id: "/privacy";
+      path: "/privacy";
+      fullPath: "/privacy";
+      preLoaderRoute: typeof PrivacyRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/terms": {
+      id: "/terms";
+      path: "/terms";
+      fullPath: "/terms";
+      preLoaderRoute: typeof TermsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/_protected/": {
       id: "/_protected/";
       path: "/";
@@ -367,6 +486,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ProtectedFeedRouteImport;
       parentRoute: typeof ProtectedRoute;
     };
+    "/join/$token": {
+      id: "/join/$token";
+      path: "/join/$token";
+      fullPath: "/join/$token";
+      preLoaderRoute: typeof JoinTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/login/": {
       id: "/login/";
       path: "/login";
@@ -379,6 +505,34 @@ declare module "@tanstack/react-router" {
       path: "/login/code";
       fullPath: "/login/code";
       preLoaderRoute: typeof LoginCodeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/o/$code": {
+      id: "/o/$code";
+      path: "/o/$code";
+      fullPath: "/o/$code";
+      preLoaderRoute: typeof OCodeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/opt-out/$token": {
+      id: "/opt-out/$token";
+      path: "/opt-out/$token";
+      fullPath: "/opt-out/$token";
+      preLoaderRoute: typeof OptOutTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/p/$code": {
+      id: "/p/$code";
+      path: "/p/$code";
+      fullPath: "/p/$code";
+      preLoaderRoute: typeof PCodeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/pay/$token": {
+      id: "/pay/$token";
+      path: "/pay/$token";
+      fullPath: "/pay/$token";
+      preLoaderRoute: typeof PayTokenRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/_protected/billings/": {
@@ -514,6 +668,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ProtectedSettingsPixNewRouteImport;
       parentRoute: typeof ProtectedRoute;
     };
+    "/dev/checkout/$provider/$orderNsu/pay": {
+      id: "/dev/checkout/$provider/$orderNsu/pay";
+      path: "/dev/checkout/$provider/$orderNsu/pay";
+      fullPath: "/dev/checkout/$provider/$orderNsu/pay";
+      preLoaderRoute: typeof DevCheckoutProviderOrderNsuPayRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
@@ -572,9 +733,17 @@ const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   ProtectedRoute: ProtectedRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
+  PrivacyRoute: PrivacyRoute,
+  TermsRoute: TermsRoute,
+  JoinTokenRoute: JoinTokenRoute,
   LoginCodeRoute: LoginCodeRoute,
+  OCodeRoute: OCodeRoute,
+  OptOutTokenRoute: OptOutTokenRoute,
+  PCodeRoute: PCodeRoute,
+  PayTokenRoute: PayTokenRoute,
   LoginIndexRoute: LoginIndexRoute,
   AuthOauthCallbackRoute: AuthOauthCallbackRoute,
+  DevCheckoutProviderOrderNsuPayRoute: DevCheckoutProviderOrderNsuPayRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

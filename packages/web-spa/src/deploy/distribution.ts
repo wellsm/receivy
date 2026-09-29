@@ -1,6 +1,6 @@
 import type { Environment } from "@ez4/common";
 import type { Cdn } from "@ez4/distribution";
-import type { ApiDomain, ApiLocation } from "@stage";
+import type { ApiDomain, ApiLocation, WebAliases } from "@stage";
 import type { WebFiles } from "./storage";
 
 /**
@@ -12,7 +12,9 @@ import type { WebFiles } from "./storage";
 export declare class WebCdn extends Cdn.Service {
   defaultIndex: "index.html";
 
-  aliases: [];
+  // Per stage (src/deploy/stage/<stage>.ts). A domain alias needs a certificate: when a stage gets its first alias, add
+  // `certificate: Cdn.UseCertificate<{ domain: WebCertificateDomain }>;` here (EZ4 0.53 cannot leave it out per stage).
+  aliases: WebAliases;
 
   defaultOrigin: Cdn.UseDefaultOrigin<{
     bucket: Environment.Service<WebFiles>;
@@ -37,5 +39,6 @@ export declare class WebCdn extends Cdn.Service {
     }>,
   ];
 
-  invalidations: ["/index.html"];
+  // The viewer-request rewrite turns every client route into "/", which is what CloudFront caches: invalidate everything.
+  invalidations: ["/*"];
 }

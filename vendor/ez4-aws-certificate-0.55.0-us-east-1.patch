@@ -1,4 +1,5 @@
-diff -ruN a/providers/aws/aws-certificate/src/utils/deploy.ts b/providers/aws/aws-certificate/src/utils/deploy.ts
+diff --git a/providers/aws/aws-certificate/src/utils/deploy.ts b/providers/aws/aws-certificate/src/utils/deploy.ts
+index 0b0483f5..52f8224d 100644
 --- a/providers/aws/aws-certificate/src/utils/deploy.ts
 +++ b/providers/aws/aws-certificate/src/utils/deploy.ts
 @@ -1,8 +1,17 @@

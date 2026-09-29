@@ -1,4 +1,17 @@
-import type { Client, Database, Index } from '@ez4/database';
+import type {
+  Client,
+  Database,
+  Index,
+  InsensitiveMode,
+  LockMode,
+  OrderMode,
+  PaginationMode,
+  ParametersMode,
+  RelationMode,
+  StreamMode,
+  TransactionMode,
+  UndefinedMode
+} from '@ez4/database';
 import type { PostgresEngine } from '@ez4/raw-pg/client';
 import type {
   AllocationSchema,
@@ -25,7 +38,27 @@ import type { RefreshTokenSchema } from './users/schemas/refresh-token';
 import type { SessionFamilySchema } from './users/schemas/session-family';
 import type { UserSchema } from './users/schemas/user';
 
-export declare class Db extends Database.Service<PostgresEngine> {
+/**
+ * The `PostgresEngine` of `@ez4/raw-pg`, written out to change one mode. Since EZ4 0.54 that engine declares
+ * `UndefinedMode.Unsupported`, which types every optional column of a read as `T | null`. The rows here are typed
+ * `T | undefined`, as the schemas declare them, so the engine keeps the typing those reads had in 0.53.
+ * Only types change: the mode is never read at runtime, and a NULL column still arrives as `null`.
+ */
+type Engine = {
+  parametersMode: ParametersMode.NameAndIndex;
+  transactionMode: TransactionMode.Interactive;
+  insensitiveMode: InsensitiveMode.Enabled;
+  undefinedMode: UndefinedMode.Supported;
+  paginationMode: PaginationMode.Offset;
+  relationMode: RelationMode.Supported;
+  orderMode: OrderMode.AnyColumns;
+  streamMode: StreamMode.Unsupported;
+  lockMode: LockMode.Supported;
+  options: PostgresEngine['options'];
+  name: 'raw-pg';
+};
+
+export declare class Db extends Database.Service<Engine> {
   client: Client<Db>;
 
   tables: [

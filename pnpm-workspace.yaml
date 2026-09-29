@@ -24,27 +24,21 @@ catalog:
   "vitest": "^3.2.4"
   "zod": "^4.1.12"
 
-# @ez4/aws-cloudfront, rebuilt on the 0.53.0 tag with two changes; the source diff against
-# upstream is vendor/ez4-aws-cloudfront-0.53.0-cdn-output.patch:
-# 1. prints the distribution URL (and aliases) after deploy / `ez4 output` via
-#    `deploy:resourceOutput`, labelled with the service's `@description` (the generated
-#    distribution name when there is none). Source: branch feat/cdn-resource-output in
-#    ~/Projects/ez4 (worktree ~/Projects/ez4-cdn-output).
-# 2. `ez4 destroy` works for a distribution with a rewrite rule or a certificate: the
-#    request that disables the distribution before deleting it keeps the function and
-#    certificate ARNs. Upstream omits them and CloudFront rejects the request.
+# EZ4 providers built from ~/Projects/ez4 (0.55.0 plus changes not published yet); the recipe and
+# what each one changes are in docs/ez4-vendor-patches.md, the source diffs in vendor/*.patch.
+# - @ez4/aws-cloudfront: prints the site URL after deploy / `ez4 output`, and `ez4 destroy` works
+#   for a distribution with a rewrite rule or a certificate.
+# - @ez4/aws-certificate: ACM is always addressed in us-east-1, the only region CloudFront accepts
+#   certificates from; the deploy itself stays in sa-east-1, where the EZ4 state bucket lives.
+# - @ez4/reflection: accepts a class merged with an interface of the same name. 0.55 reads types
+#   without the DOM library, so `URL` and `URLSearchParams` come from @types/node, where they are
+#   both; upstream stops with "Source identity 'URLSearchParams' has a naming collision".
 # pnpm trusts the hash in the lockfile and never re-reads a tarball under the same name: a
-# rebuilt tarball gets a new suffix (-2, -3, ...). Remove the entry once upstream ships both.
-#
-# @ez4/aws-certificate, rebuilt on the 0.53.0 tag with one change; the source diff against
-# upstream is vendor/ez4-aws-certificate-0.53.0-us-east-1.patch: ACM is always addressed in
-# us-east-1, the only region CloudFront accepts certificates from. Upstream uses AWS_REGION,
-# and the deploy cannot move to us-east-1 because the EZ4 state bucket lives in sa-east-1.
+# rebuilt tarball gets a new suffix (-2, -3, ...). Remove an entry once upstream ships the change.
 overrides:
-  "@ez4/aws-certificate": "file:./vendor/ez4-aws-certificate-0.53.0-us-east-1.tgz"
-  "@ez4/aws-cloudfront": "file:./vendor/ez4-aws-cloudfront-0.53.0-cdn-output-3.tgz"
-  "@ez4/aws-common": "file:./vendor/ez4-aws-common-0.53.0.tgz"
-  "@ez4/raw-pg": "file:./vendor/ez4-raw-pg-0.53.0.tgz"
+  "@ez4/aws-certificate": "file:./vendor/ez4-aws-certificate-0.55.0-us-east-1.tgz"
+  "@ez4/aws-cloudfront": "file:./vendor/ez4-aws-cloudfront-0.55.0-cdn-output.tgz"
+  "@ez4/reflection": "file:./vendor/ez4-reflection-0.55.0-class-merging.tgz"
 
 allowBuilds:
   esbuild: true
@@ -52,43 +46,43 @@ allowBuilds:
   unrs-resolver: true
 
 minimumReleaseAgeExclude:
-  - '@ez4/aws-bucket@0.53.0'
-  - '@ez4/aws-common@0.53.0'
-  - '@ez4/aws-function@0.53.0'
-  - '@ez4/aws-gateway@0.53.0'
-  - '@ez4/aws-identity@0.53.0'
-  - '@ez4/aws-logs@0.53.0'
-  - '@ez4/aws-queue@0.53.0'
-  - '@ez4/aws-scheduler@0.53.0'
-  - '@ez4/aws-vpc@0.53.0'
-  - '@ez4/common@0.53.0'
-  - '@ez4/database@0.53.0'
-  - '@ez4/docs-gateway-ui@0.53.0'
-  - '@ez4/docs-gateway@0.53.0'
-  - '@ez4/factory@0.53.0'
-  - '@ez4/gateway@0.53.0'
-  - '@ez4/http@0.53.0'
-  - '@ez4/local-common@0.53.0'
-  - '@ez4/local-database@0.53.0'
-  - '@ez4/local-gateway@0.53.0'
-  - '@ez4/local-queue@0.53.0'
-  - '@ez4/local-scheduler@0.53.0'
-  - '@ez4/local-storage@0.53.0'
-  - '@ez4/logger@0.53.0'
-  - '@ez4/pgclient@0.53.0'
-  - '@ez4/pgmigration@0.53.0'
-  - '@ez4/pgsql@0.53.0'
-  - '@ez4/project@0.53.0'
-  - '@ez4/queue@0.53.0'
-  - '@ez4/raw-pg@0.53.0'
-  - '@ez4/reflection@0.53.0'
-  - '@ez4/scheduler@0.53.0'
-  - '@ez4/schema@0.53.0'
-  - '@ez4/state@0.53.0'
-  - '@ez4/storage@0.53.0'
-  - '@ez4/transform@0.53.0'
-  - '@ez4/utils@0.53.0'
-  - '@ez4/validator@0.53.0'
+  - '@ez4/aws-bucket@0.55.0'
+  - '@ez4/aws-common@0.55.0'
+  - '@ez4/aws-function@0.55.0'
+  - '@ez4/aws-gateway@0.55.0'
+  - '@ez4/aws-identity@0.55.0'
+  - '@ez4/aws-logs@0.55.0'
+  - '@ez4/aws-queue@0.55.0'
+  - '@ez4/aws-scheduler@0.55.0'
+  - '@ez4/aws-vpc@0.55.0'
+  - '@ez4/common@0.55.0'
+  - '@ez4/database@0.55.0'
+  - '@ez4/docs-gateway-ui@0.55.0'
+  - '@ez4/docs-gateway@0.55.0'
+  - '@ez4/factory@0.55.0'
+  - '@ez4/gateway@0.55.0'
+  - '@ez4/http@0.55.0'
+  - '@ez4/local-common@0.55.0'
+  - '@ez4/local-database@0.55.0'
+  - '@ez4/local-gateway@0.55.0'
+  - '@ez4/local-queue@0.55.0'
+  - '@ez4/local-scheduler@0.55.0'
+  - '@ez4/local-storage@0.55.0'
+  - '@ez4/logger@0.55.0'
+  - '@ez4/pgclient@0.55.0'
+  - '@ez4/pgmigration@0.55.0'
+  - '@ez4/pgsql@0.55.0'
+  - '@ez4/project@0.55.0'
+  - '@ez4/queue@0.55.0'
+  - '@ez4/raw-pg@0.55.0'
+  - '@ez4/reflection@0.55.0'
+  - '@ez4/scheduler@0.55.0'
+  - '@ez4/schema@0.55.0'
+  - '@ez4/state@0.55.0'
+  - '@ez4/storage@0.55.0'
+  - '@ez4/transform@0.55.0'
+  - '@ez4/utils@0.55.0'
+  - '@ez4/validator@0.55.0'
   - '@typescript-eslint/eslint-plugin@8.71.0'
   - '@typescript-eslint/parser@8.71.0'
   - '@typescript-eslint/project-service@8.71.0'
@@ -100,3 +94,4 @@ minimumReleaseAgeExclude:
   - '@typescript-eslint/utils@8.71.0'
   - '@typescript-eslint/visitor-keys@8.71.0'
   - typescript-eslint@8.71.0
+  - '@ez4/distribution@0.55.0'

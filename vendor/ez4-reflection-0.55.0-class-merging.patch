@@ -1,0 +1,190 @@
+diff --git a/foundation/reflection/src/resolver/source.ts b/foundation/reflection/src/resolver/source.ts
+index 523bd9d3..e7ad7dcd 100644
+--- a/foundation/reflection/src/resolver/source.ts
++++ b/foundation/reflection/src/resolver/source.ts
+@@ -4,7 +4,7 @@ import type { Context } from './common';
+ 
+ import { getNodeIdentity } from '../helpers/node';
+ import { hasModifierExport } from '../helpers/modifier';
+-import { isTypeInterface, mergeTypeInterface } from '../types';
++import { isTypeClass, isTypeInterface, mergeTypeClass, mergeTypeInterface } from '../types';
+ import { tryTypeFunction } from './type-function';
+ import { tryTypeInterface } from './type-interface';
+ import { tryTypeClass } from './type-class';
+@@ -32,11 +32,22 @@ export const trySource = (node: SourceFile, context: Context) => {
+         return;
+       }
+ 
+-      if (!isTypeInterface(current) || !isTypeInterface(resultType)) {
+-        throw new Error(`Source identity '${resultType.name}' has a naming collision.`);
++      if (isTypeInterface(current) && isTypeInterface(resultType)) {
++        reflection[identity] = mergeTypeInterface(resultType, current);
++        return;
++      }
++
++      if (isTypeClass(current) && isTypeInterface(resultType)) {
++        reflection[identity] = mergeTypeClass(resultType, current);
++        return;
++      }
++
++      if (isTypeInterface(current) && isTypeClass(resultType)) {
++        reflection[identity] = mergeTypeClass(current, resultType);
++        return;
+       }
+ 
+-      reflection[identity] = mergeTypeInterface(resultType, current);
++      throw new Error(`Source identity '${resultType.name}' has a naming collision.`);
+     }
+   };
+ 
+diff --git a/foundation/reflection/src/types/type-class.ts b/foundation/reflection/src/types/type-class.ts
+index 050ca52e..d724527c 100644
+--- a/foundation/reflection/src/types/type-class.ts
++++ b/foundation/reflection/src/types/type-class.ts
+@@ -1,6 +1,7 @@
+ import type { AllType, TypePosition, TypeTag } from './common';
+ import type { EveryMemberType } from './model-members';
+ import type { ModelHeritage } from './model-heritage';
++import type { TypeInterface } from './type-interface';
+ 
+ import { TypeName } from './common';
+ 
+@@ -31,3 +32,42 @@ export type TypeClass = {
+ export const isTypeClass = (type: AllType): type is TypeClass => {
+   return type.type === TypeName.Class;
+ };
++
++/**
++ * Merge the given `source` interface within the given `target` class to create a new class containing
++ * everything from the `target`, the `target`'s or `source`'s description, and heritage and members from
++ * both of them. It's the declaration merging between a class and an interface sharing the same name.
++ *
++ * @param source Source interface.
++ * @param target Target class.
++ * @returns Returns the new class containing the merge result.
++ */
++export const mergeTypeClass = (source: TypeInterface, target: TypeClass): TypeClass => {
++  const description = target.description ?? source.description;
++
++  const heritage: ModelHeritage[] = [];
++  const members: EveryMemberType[] = [];
++
++  if (target.heritage) {
++    heritage.push(...target.heritage);
++  }
++
++  if (source.heritage) {
++    heritage.push(...source.heritage);
++  }
++
++  if (target.members) {
++    members.push(...target.members);
++  }
++
++  if (source.members) {
++    members.push(...source.members);
++  }
++
++  return {
++    ...target,
++    ...(description && { description }),
++    ...(heritage.length && { heritage }),
++    ...(members.length && { members })
++  };
++};
+diff --git a/foundation/reflection/test/types.spec.ts b/foundation/reflection/test/types.spec.ts
+index 5381fb9a..847c854d 100644
+--- a/foundation/reflection/test/types.spec.ts
++++ b/foundation/reflection/test/types.spec.ts
+@@ -45,4 +45,5 @@ describe('reflection types', () => {
+   it('assert :: type', () => testFile('type'));
+   it('assert :: comments', () => testFile('comments'));
+   it('assert :: internal', () => testFile('internal'));
++  it('assert :: merging', () => testFile('merging'));
+ });
+diff --git a/foundation/reflection/test/types/merging.ts b/foundation/reflection/test/types/merging.ts
+new file mode 100644
+index 00000000..4cf1a14e
+--- /dev/null
++++ b/foundation/reflection/test/types/merging.ts
+@@ -0,0 +1,21 @@
++/**
++ * Declaration merging between two interfaces.
++ */
++export interface Settings {
++  first: string;
++}
++
++export interface Settings {
++  second: number;
++}
++
++/**
++ * Declaration merging between a class and an interface, as `URL` and `URLSearchParams` in `@types/node`.
++ */
++export class Address {
++  host!: string;
++}
++
++export interface Address {
++  port: number;
++}
+diff --git a/foundation/reflection/test/results/merging.json b/foundation/reflection/test/results/merging.json
+new file mode 100644
+index 00000000..e02e51aa
+--- /dev/null
++++ b/foundation/reflection/test/results/merging.json
+@@ -0,0 +1,52 @@
++{
++  "912b75199c3b1dd3324623ab2f3fc02c:Settings": {
++    "type": "interface",
++    "name": "Settings",
++    "description": "Declaration merging between two interfaces.",
++    "members": [
++      {
++        "type": "property",
++        "name": "first",
++        "value": {
++          "type": "string"
++        }
++      },
++      {
++        "type": "property",
++        "name": "second",
++        "value": {
++          "type": "number"
++        }
++      }
++    ]
++  },
++  "912b75199c3b1dd3324623ab2f3fc02c:Address": {
++    "type": "class",
++    "name": "Address",
++    "file": "test/types/merging.ts",
++    "position": {
++      "line": 15,
++      "character": 1
++    },
++    "description": "Declaration merging between a class and an interface, as `URL` and `URLSearchParams` in `@types/node`.",
++    "modifiers": {
++      "export": true
++    },
++    "members": [
++      {
++        "type": "property",
++        "name": "host",
++        "value": {
++          "type": "string"
++        }
++      },
++      {
++        "type": "property",
++        "name": "port",
++        "value": {
++          "type": "number"
++        }
++      }
++    ]
++  }
++}
+\ No newline at end of file

@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 
 type BillingDialogProps = {

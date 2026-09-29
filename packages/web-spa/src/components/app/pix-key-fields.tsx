@@ -1,5 +1,3 @@
-"use client";
-
 import { pixKeyField, PixKeyType } from "@receivy/common";
 import { X } from "lucide-react";
 import { useRef } from "react";

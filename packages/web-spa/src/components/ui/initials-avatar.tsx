@@ -1,5 +1,3 @@
-"use client";
-
 import type { UserAvatar } from "@receivy/common";
 import { useState } from "react";
 

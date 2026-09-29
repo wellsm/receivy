@@ -1,5 +1,3 @@
-"use client";
-
 import {
   REMINDER_MAX_OFFSET,
   REMINDER_MAX_RULES,

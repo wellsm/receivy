@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 
 export const CODE_LENGTH = 6;

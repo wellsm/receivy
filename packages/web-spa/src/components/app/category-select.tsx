@@ -1,5 +1,3 @@
-"use client";
-
 import { BILLING_CATEGORIES, billingCategoryColor, billingCategoryLabel, type BillingCategory } from "@receivy/common";
 import { Check, ChevronDown } from "lucide-react";
 import { useId, useRef, useState } from "react";

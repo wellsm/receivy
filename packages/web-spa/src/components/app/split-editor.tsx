@@ -1,5 +1,3 @@
-"use client";
-
 import type { SplitMode, UserAvatar } from "@receivy/common";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 

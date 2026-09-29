@@ -1,5 +1,3 @@
-"use client";
-
 import { groupSizeLabel, type WhatsappGroup } from "@receivy/common";
 import { Check, Loader2 } from "lucide-react";
 import { useEffect, useState, type RefObject } from "react";

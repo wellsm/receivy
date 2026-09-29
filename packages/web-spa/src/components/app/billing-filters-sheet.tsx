@@ -1,5 +1,3 @@
-"use client";
-
 import { BILLING_CATEGORIES, BILLING_RECURRENCE_FILTERS, BILLING_TYPE_FILTERS, type BillingCategory, type BillingListFilters, DEFAULT_BILLING_LIST_FILTERS } from "@receivy/common";
 import { useState } from "react";
 

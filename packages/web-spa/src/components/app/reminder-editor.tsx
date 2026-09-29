@@ -1,5 +1,3 @@
-"use client";
-
 import {
   CHANNEL_SET_OPTIONS,
   channelSetLabel,

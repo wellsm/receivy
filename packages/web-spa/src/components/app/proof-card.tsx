@@ -1,5 +1,3 @@
-"use client";
-
 import { canAcceptProof, canDeclarePayment, canMarkPaid, canUploadProof, canWithdrawProof, fileSizeText, momentText, proofNote, proofStateLabel, ProofKind, ProofState, type ChargeDetail } from "@receivy/common";
 import { Check, CloudUpload, Eye, FileText, Image as ImageIcon, Loader2, Receipt } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

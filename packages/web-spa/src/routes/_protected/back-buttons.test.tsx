@@ -1,8 +1,51 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { currentUser } from "@/lib/auth/flows";
 import { clearSession, storeSession } from "@/lib/auth/session";
 import { createAppRouter } from "@/router";
+
+const ana = {
+  id: "ana",
+  userId: "user-ana",
+  name: "Ana Souza",
+  nickname: null,
+  displayName: "Ana Souza",
+  email: "ana@example.com",
+  phone: null,
+  phoneSource: null,
+  whatsappConsentAt: null,
+  archivedAt: null,
+  createdAt: "2026-09-01",
+  status: "active",
+  lastBilledAt: null,
+  activeCharges: 0,
+};
+
+// Every request the screens make on mount, answered with the shape the API sends.
+function api(url: string): Response {
+  const path = new URL(url).pathname;
+
+  if (path === "/contacts/ana/ledger") {
+    return Response.json({
+      contactId: "ana",
+      contact: ana,
+      receivable: { amountCents: 0, currency: "BRL" },
+      payable: { amountCents: 0, currency: "BRL" },
+      charges: [],
+      nextCursor: null,
+    });
+  }
+
+  if (path === "/contacts/ana") {
+    return Response.json(ana);
+  }
+
+  if (path.startsWith("/payment-methods")) {
+    return Response.json({ paymentMethods: [] });
+  }
+
+  return Response.json({ contacts: [], nextCursor: null, charges: [] });
+}
 
 vi.mock("@/lib/auth/flows", () => ({ currentUser: vi.fn(), oauthProviders: vi.fn() }));
 
@@ -13,18 +56,19 @@ async function backHref(path: string): Promise<string | null> {
 
   render(<RouterProvider router={router} />);
 
-  return (await screen.findByRole("link", { name: "← Voltar" })).getAttribute("href");
+  const href = (await screen.findByRole("link", { name: "← Voltar" })).getAttribute("href");
+
+  // Let the screen's own loading settle: a crash would swap the page for the root error boundary.
+  await waitFor(() => expect(screen.queryByText(/carregando/i)).toBeNull());
+  expect(screen.queryByText("Algo deu errado")).toBeNull();
+
+  return href;
 }
 
 describe("back button destinations", () => {
   beforeEach(() => {
     vi.stubEnv("VITE_API_URL", "https://api.test");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) =>
-        url.includes("payment-methods") ? Response.json({ paymentMethods: [] }) : Response.json({ contacts: [], nextCursor: null, charges: [] }),
-      ),
-    );
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => api(url)));
     clearSession();
     storeSession({ accessToken: "a", refreshToken: "r", user: { id: "u1" } } as never);
     vi.mocked(currentUser).mockResolvedValue({ id: "u1", name: "Ana", status: "active" } as never);

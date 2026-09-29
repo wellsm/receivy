@@ -1,6 +1,6 @@
 import type { Environment } from "@ez4/common";
 import type { Cdn } from "@ez4/distribution";
-import type { ApiDomain, ApiLocation, WebAliases } from "@stage";
+import type { ApiDomain, ApiLocation, WebAliases, WebCertificateDomain } from "@stage";
 import type { WebFiles } from "./storage";
 
 /**
@@ -17,9 +17,12 @@ import type { WebFiles } from "./storage";
 export declare class WebCdn extends Cdn.Service {
   defaultIndex: "index.html";
 
-  // Per stage (src/deploy/stage/<stage>.ts). A domain alias needs a certificate: when a stage gets its first alias, add
-  // `certificate: Cdn.UseCertificate<{ domain: WebCertificateDomain }>;` here (EZ4 0.53 cannot leave it out per stage).
+  // Per stage (src/deploy/stage/<stage>.ts). EZ4 0.53 cannot leave the certificate out for one stage only, so every
+  // stage that deploys needs a real domain in its stage file.
   aliases: WebAliases;
+
+  // Requested in ACM with DNS validation: the deploy waits (up to an hour) until the validation CNAME exists in the DNS.
+  certificate: Cdn.UseCertificate<{ domain: WebCertificateDomain }>;
 
   defaultOrigin: Cdn.UseDefaultOrigin<{
     bucket: Environment.Service<WebFiles>;

@@ -16,7 +16,9 @@
     "deploy:dev": "pnpm run check-types && pnpm run build:dev && APP_STAGE=dev ez4 deploy -e dev.env",
     "deploy:prd": "pnpm run check-types && pnpm run build:prd && APP_STAGE=prd ez4 deploy -e prd.env",
     "output:dev": "APP_STAGE=dev ez4 output -e dev.env",
-    "output:prd": "APP_STAGE=prd ez4 output -e prd.env"
+    "output:prd": "APP_STAGE=prd ez4 output -e prd.env",
+    "destroy:dev": "APP_STAGE=dev ez4 destroy -e dev.env",
+    "destroy:prd": "APP_STAGE=prd ez4 destroy -e prd.env"
   },
   "dependencies": {
     "@fontsource-variable/public-sans": "^5.3.0",

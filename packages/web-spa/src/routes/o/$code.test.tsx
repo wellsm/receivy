@@ -41,7 +41,7 @@ describe("short opt-out link", () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/opt-out/zzzzzz"));
 
-    expect(await screen.findByText("Este link não é válido ou expirou. Abra o link de um e-mail mais recente.")).toBeInTheDocument();
+    expect(await screen.findByText("Página não encontrada")).toBeInTheDocument();
     expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
 
@@ -62,7 +62,7 @@ describe("short opt-out link", () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/opt-out/K7m2xQ"));
 
-    expect(await screen.findByText("Este link não é válido ou expirou. Abra o link de um e-mail mais recente.")).toBeInTheDocument();
+    expect(await screen.findByText("Página não encontrada")).toBeInTheDocument();
     expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
 });

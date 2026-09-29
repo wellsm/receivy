@@ -9,27 +9,194 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
+import { Route as ProtectedRouteImport } from "./routes/_protected";
+import { Route as LoginRouteImport } from "./routes/login";
+import { Route as OnboardingRouteImport } from "./routes/onboarding";
+import { Route as ProtectedIndexRouteImport } from "./routes/_protected/index";
+import { Route as ProtectedFeedRouteImport } from "./routes/_protected/feed";
+import { Route as LoginCodeRouteImport } from "./routes/login/code";
+import { Route as AuthOauthCallbackRouteImport } from "./routes/auth/oauth/callback";
 
-export interface FileRoutesByFullPath {}
-export interface FileRoutesByTo {}
+const ProtectedRoute = ProtectedRouteImport.update({
+  id: "/_protected",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const LoginRoute = LoginRouteImport.update({
+  id: "/login",
+  path: "/login",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: "/onboarding",
+  path: "/onboarding",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ProtectedIndexRoute = ProtectedIndexRouteImport.update({
+  id: "/",
+  path: "/",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedFeedRoute = ProtectedFeedRouteImport.update({
+  id: "/feed",
+  path: "/feed",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const LoginCodeRoute = LoginCodeRouteImport.update({
+  id: "/code",
+  path: "/code",
+  getParentRoute: () => LoginRoute,
+} as any);
+const AuthOauthCallbackRoute = AuthOauthCallbackRouteImport.update({
+  id: "/auth/oauth/callback",
+  path: "/auth/oauth/callback",
+  getParentRoute: () => rootRouteImport,
+} as any);
+
+export interface FileRoutesByFullPath {
+  "/": typeof ProtectedIndexRoute;
+  "/login": typeof LoginRouteWithChildren;
+  "/onboarding": typeof OnboardingRoute;
+  "/feed": typeof ProtectedFeedRoute;
+  "/login/code": typeof LoginCodeRoute;
+  "/auth/oauth/callback": typeof AuthOauthCallbackRoute;
+}
+export interface FileRoutesByTo {
+  "/login": typeof LoginRouteWithChildren;
+  "/onboarding": typeof OnboardingRoute;
+  "/feed": typeof ProtectedFeedRoute;
+  "/login/code": typeof LoginCodeRoute;
+  "/": typeof ProtectedIndexRoute;
+  "/auth/oauth/callback": typeof AuthOauthCallbackRoute;
+}
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
+  "/_protected": typeof ProtectedRouteWithChildren;
+  "/login": typeof LoginRouteWithChildren;
+  "/onboarding": typeof OnboardingRoute;
+  "/_protected/feed": typeof ProtectedFeedRoute;
+  "/login/code": typeof LoginCodeRoute;
+  "/_protected/": typeof ProtectedIndexRoute;
+  "/auth/oauth/callback": typeof AuthOauthCallbackRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
-  fullPaths: never;
+  fullPaths:
+    | "/"
+    | "/login"
+    | "/onboarding"
+    | "/feed"
+    | "/login/code"
+    | "/auth/oauth/callback";
   fileRoutesByTo: FileRoutesByTo;
-  to: never;
-  id: "__root__";
+  to:
+    | "/login"
+    | "/onboarding"
+    | "/feed"
+    | "/login/code"
+    | "/"
+    | "/auth/oauth/callback";
+  id:
+    | "__root__"
+    | "/_protected"
+    | "/login"
+    | "/onboarding"
+    | "/_protected/feed"
+    | "/login/code"
+    | "/_protected/"
+    | "/auth/oauth/callback";
   fileRoutesById: FileRoutesById;
 }
-export interface RootRouteChildren {}
-
-declare module "@tanstack/react-router" {
-  interface FileRoutesByPath {}
+export interface RootRouteChildren {
+  ProtectedRoute: typeof ProtectedRouteWithChildren;
+  LoginRoute: typeof LoginRouteWithChildren;
+  OnboardingRoute: typeof OnboardingRoute;
+  AuthOauthCallbackRoute: typeof AuthOauthCallbackRoute;
 }
 
-const rootRouteChildren: RootRouteChildren = {};
+declare module "@tanstack/react-router" {
+  interface FileRoutesByPath {
+    "/_protected": {
+      id: "/_protected";
+      path: "";
+      fullPath: "/";
+      preLoaderRoute: typeof ProtectedRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/login": {
+      id: "/login";
+      path: "/login";
+      fullPath: "/login";
+      preLoaderRoute: typeof LoginRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/onboarding": {
+      id: "/onboarding";
+      path: "/onboarding";
+      fullPath: "/onboarding";
+      preLoaderRoute: typeof OnboardingRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/_protected/": {
+      id: "/_protected/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof ProtectedIndexRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/feed": {
+      id: "/_protected/feed";
+      path: "/feed";
+      fullPath: "/feed";
+      preLoaderRoute: typeof ProtectedFeedRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/login/code": {
+      id: "/login/code";
+      path: "/code";
+      fullPath: "/login/code";
+      preLoaderRoute: typeof LoginCodeRouteImport;
+      parentRoute: typeof LoginRoute;
+    };
+    "/auth/oauth/callback": {
+      id: "/auth/oauth/callback";
+      path: "/auth/oauth/callback";
+      fullPath: "/auth/oauth/callback";
+      preLoaderRoute: typeof AuthOauthCallbackRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+  }
+}
+
+interface ProtectedRouteChildren {
+  ProtectedFeedRoute: typeof ProtectedFeedRoute;
+  ProtectedIndexRoute: typeof ProtectedIndexRoute;
+}
+
+const ProtectedRouteChildren: ProtectedRouteChildren = {
+  ProtectedFeedRoute: ProtectedFeedRoute,
+  ProtectedIndexRoute: ProtectedIndexRoute,
+};
+
+const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
+  ProtectedRouteChildren,
+);
+
+interface LoginRouteChildren {
+  LoginCodeRoute: typeof LoginCodeRoute;
+}
+
+const LoginRouteChildren: LoginRouteChildren = {
+  LoginCodeRoute: LoginCodeRoute,
+};
+
+const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren);
+
+const rootRouteChildren: RootRouteChildren = {
+  ProtectedRoute: ProtectedRouteWithChildren,
+  LoginRoute: LoginRouteWithChildren,
+  OnboardingRoute: OnboardingRoute,
+  AuthOauthCallbackRoute: AuthOauthCallbackRoute,
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>();

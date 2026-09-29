@@ -1,5 +1,3 @@
-"use client";
-
 import { type BillingDraft, type Contact, formatMoney, groupNoticeNote, SplitMode, splitModeBadge, type UserAvatar } from "@receivy/common";
 import { Bell, BellOff, Plus, Users, X } from "lucide-react";
 import type { RefObject } from "react";

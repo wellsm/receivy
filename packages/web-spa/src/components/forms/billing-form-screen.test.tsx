@@ -1,5 +1,5 @@
 import { addCalendarDays, BillingCategory, BillingFrequency, BillingKind, BillingState, BillingRecurrence, calendarDate, ChargeState, dayMonth, Direction, EMPTY_BILLING_DRAFT, endOfMonth, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, type BillingDetail, type BillingPatch, type ChargeDetail, type ReminderRule } from "@receivy/common";
-import { cleanup, screen, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -1371,13 +1371,22 @@ it("clears the key of a conta a pagar whose contact has none left", async () => 
   });
   const { user } = renderForm(payableBilling);
 
+  // The mount's own `Promise.all` (agenda, wallet) settles independently of the payee-keys fetch
+  // below and has no ordering guarantee against it; waiting for its one visible consequence first
+  // (the loading line clears once `ready` flips) keeps it from resolving after this test ends.
+  await waitFor(() => expect(screen.queryByText("Carregando dados…")).not.toBeInTheDocument());
   await vi.waitFor(() => expect(screen.getByRole("button", { name: "Pagar via Pix" })).toHaveTextContent("Sem chave no contato"));
 
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
 
-  await vi.waitFor(() =>
-    expect(JSON.parse(String(sent.find((entry) => entry.init.method === "PATCH")?.init.body))).toMatchObject({ clearPaymentMethod: true }),
-  );
+  // The category field locks while the save is in flight and unlocks once the response lands and
+  // `attempt` clears: waiting for it back (through testing-library's own `act`-wrapped `waitFor`,
+  // not `vi.waitFor`, which does not wrap React updates) gives the render the PATCH response
+  // actually produced, instead of a check on `sent` that is already true the instant the request
+  // goes out (apiFetch adds one more `await` hop than the old `browserFetch` before it resolves).
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Categoria" })).toBeEnabled());
+
+  expect(JSON.parse(String(sent.find((entry) => entry.init.method === "PATCH")?.init.body))).toMatchObject({ clearPaymentMethod: true });
 });
 
 it("asks for the scope when the key of a recorrente conta a pagar moves to another of the contact's", async () => {
@@ -1395,6 +1404,10 @@ it("asks for the scope when the key of a recorrente conta a pagar moves to anoth
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(recurringPayable) : undefined));
   const { user } = renderForm(recurringPayable);
 
+  // The mount's own `Promise.all` (agenda, wallet) settles independently of the payee-keys fetch
+  // below and has no ordering guarantee against it; waiting for its one visible consequence first
+  // (the loading line clears once `ready` flips) keeps it from resolving after this test ends.
+  await waitFor(() => expect(screen.queryByText("Carregando dados…")).not.toBeInTheDocument());
   await vi.waitFor(() => expect(screen.getByRole("button", { name: "Pagar via Pix" })).toHaveTextContent("CPF · 529.982.247-25"));
 
   const panel = await openRow(user, "Pagar via Pix");
@@ -1408,9 +1421,11 @@ it("asks for the scope when the key of a recorrente conta a pagar moves to anoth
 
   await user.click(within(dialog).getByRole("button", { name: "Aplicar também às deste mês" }));
 
-  await vi.waitFor(() =>
-    expect(JSON.parse(String(sent.find((entry) => entry.init.method === "PATCH")?.init.body))).toMatchObject({ paymentMethodId: "pix-ana", applyTo: "current_month" }),
-  );
+  // Same signal as the plain save: the category field re-enables once `attempt` clears after the
+  // PATCH response lands, through testing-library's `act`-wrapped `waitFor` (not `vi.waitFor`).
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Categoria" })).toBeEnabled());
+
+  expect(JSON.parse(String(sent.find((entry) => entry.init.method === "PATCH")?.init.body))).toMatchObject({ paymentMethodId: "pix-ana", applyTo: "current_month" });
 });
 
 it("names the seated contact from the loaded billing when the agenda no longer lists them", async () => {

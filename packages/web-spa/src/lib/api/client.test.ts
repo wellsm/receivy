@@ -1,5 +1,5 @@
 import { clearSession, getAccessToken, storeSession } from "@/lib/auth/session";
-import { apiFetch, apiJson, isUnavailable, NetworkError, SessionExpiredError } from "./client";
+import { apiFetch, apiJson, isUnavailable, NetworkError, onSessionExpired, SessionExpiredError } from "./client";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -174,6 +174,46 @@ describe("apiFetch", () => {
     await expect(failure).rejects.toBeInstanceOf(NetworkError);
     expect(getAccessToken()).toBe("a1");
     expect(localStorage.getItem("receivy.session")).toContain("r1");
+  });
+});
+
+describe("onSessionExpired", () => {
+  afterEach(() => {
+    onSessionExpired(null);
+  });
+
+  it("calls the handler once when the refresh is refused", async () => {
+    const handler = vi.fn();
+
+    onSessionExpired(handler);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockResolvedValueOnce(new Response(null, { status: 401 })));
+
+    await expect(apiFetch("auth/me")).rejects.toBeInstanceOf(SessionExpiredError);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays quiet when the refresh fails on the network", async () => {
+    const handler = vi.fn();
+
+    onSessionExpired(handler);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockRejectedValueOnce(new TypeError("fetch failed")));
+
+    const response = await apiFetch("auth/me");
+
+    expect(isUnavailable(response)).toBe(true);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet on success", async () => {
+    const handler = vi.fn();
+
+    onSessionExpired(handler);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ ok: true })));
+
+    await apiFetch("auth/me");
+
+    expect(handler).not.toHaveBeenCalled();
   });
 });
 

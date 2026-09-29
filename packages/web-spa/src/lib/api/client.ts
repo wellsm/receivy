@@ -15,6 +15,13 @@ export type ApiInit = RequestInit & {
 const MAX_REFRESH_ROUNDS = 2;
 const STALE_SESSION = 409;
 
+let sessionExpiredHandler: (() => void) | null = null;
+
+/** The app registers what happens to this tab when the session is dead (the login redirect). */
+export function onSessionExpired(handler: (() => void) | null): void {
+  sessionExpiredHandler = handler;
+}
+
 let refreshInFlight: Promise<RefreshOutcome> | null = null;
 
 const unavailable = new WeakSet<Response>();
@@ -123,6 +130,8 @@ export async function apiFetch(path: string, init: ApiInit = {}): Promise<Respon
   const outcome = await refreshSession();
 
   if (outcome === RefreshOutcome.Expired) {
+    sessionExpiredHandler?.();
+
     throw new SessionExpiredError();
   }
 

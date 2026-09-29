@@ -3,11 +3,16 @@ import "@fontsource-variable/space-grotesk";
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createAppRouter } from "@/router";
+import { onSessionExpired } from "@/lib/api/client";
+import { createAppRouter, redirectToLogin } from "@/router";
 import { watchSessionRemoval } from "@/lib/auth/session";
 import "@/styles.css";
 
 export const router = createAppRouter();
+
+onSessionExpired(() => {
+  redirectToLogin(router);
+});
 
 watchSessionRemoval(() => {
   if (window.location.pathname !== "/login") {

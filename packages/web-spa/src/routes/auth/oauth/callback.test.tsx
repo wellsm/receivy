@@ -1,9 +1,9 @@
-import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
+import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { completeOauth } from "@/lib/auth/flows";
 import { clearSession, storeSession } from "@/lib/auth/session";
-import { routeTree } from "@/route-tree.gen";
+import { createAppRouter } from "@/router";
 
 vi.mock("@/lib/auth/flows", () => ({
   oauthProviders: vi.fn().mockResolvedValue({ google: true, apple: false }),
@@ -14,7 +14,7 @@ vi.mock("@/lib/auth/flows", () => ({
 vi.mock("@/components/screens/login-screen", () => ({ LoginScreen: () => <div>login</div> }));
 
 function renderAt(path: string) {
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [path] }) });
+  const router = createAppRouter({ history: createMemoryHistory({ initialEntries: [path] }) });
 
   render(
     <StrictMode>

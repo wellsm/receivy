@@ -1,6 +1,7 @@
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { parseSearch, stringifySearch } from "@/lib/router-search";
 
 type RenderWithRouterOptions = {
   path?: string;
@@ -37,6 +38,8 @@ export function renderWithRouter(ui: ReactNode, options: RenderWithRouterOptions
 
   const router = createRouter({
     routeTree: rootRoute.addChildren([catchAllRoute]),
+    parseSearch,
+    stringifySearch,
     history: createMemoryHistory({ initialEntries: [withSearch(options.path ?? "/", options.search)] }),
   });
 

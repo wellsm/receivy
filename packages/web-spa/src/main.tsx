@@ -1,19 +1,13 @@
 import "@fontsource-variable/public-sans";
 import "@fontsource-variable/space-grotesk";
-import { createRouter, RouterProvider } from "@tanstack/react-router";
+import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { routeTree } from "@/route-tree.gen";
+import { createAppRouter } from "@/router";
 import { watchSessionRemoval } from "@/lib/auth/session";
 import "@/styles.css";
 
-export const router = createRouter({ routeTree, defaultPreload: "intent", scrollRestoration: true });
-
-declare module "@tanstack/react-router" {
-  interface Register {
-    router: typeof router;
-  }
-}
+export const router = createAppRouter();
 
 watchSessionRemoval(() => {
   if (window.location.pathname !== "/login") {

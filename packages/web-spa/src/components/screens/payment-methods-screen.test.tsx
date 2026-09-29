@@ -180,7 +180,7 @@ it("carries the return path and the required flag into the key form", async () =
   expect(await screen.findByText("Você precisa de um meio de pagamento para criar cobranças.")).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: "Cadastrar novo meio" })[0]).toHaveAttribute(
     "href",
-    "/settings/payment-methods/new?returnTo=%2Fbillings%2Fnew&required=%221%22",
+    "/settings/payment-methods/new?returnTo=%2Fbillings%2Fnew&required=1",
   );
 });
 

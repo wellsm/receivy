@@ -1,0 +1,77 @@
+diff -ruN a/providers/aws/aws-cloudfront/src/distribution/handler.ts b/providers/aws/aws-cloudfront/src/distribution/handler.ts
+--- a/providers/aws/aws-cloudfront/src/distribution/handler.ts
++++ b/providers/aws/aws-cloudfront/src/distribution/handler.ts
+@@ -180,17 +180,21 @@
+ 
+   if (result) {
+     return OperationLogger.logExecution(DistributionServiceName, distributionName, 'deletion', async (logger) => {
+-      const { distributionId, originAccessId } = result;
++      const { distributionId, originAccessId, rewriteFunctionArn, certificateArn } = result;
+ 
+       // Only disabled distributions can be deleted.
+       if (parameters.enabled) {
+         const originsData = [result.defaultOrigin, ...result.origins];
+         const allOrigins = bindOriginsData(parameters, originsData);
+ 
++        // The disable request is a full configuration: it needs the same function and certificate the distribution
++        // was created with, otherwise a rewrite rule or an alias makes CloudFront reject it.
+         await updateDistribution(logger, distributionId, {
+           ...parameters,
+           ...allOrigins,
+           originAccessId,
++          rewriteFunctionArn,
++          certificateArn,
+           enabled: false
+         });
+       }
+diff -ruN a/providers/aws/aws-cloudfront/src/triggers/output.ts b/providers/aws/aws-cloudfront/src/triggers/output.ts
+--- a/providers/aws/aws-cloudfront/src/triggers/output.ts
++++ b/providers/aws/aws-cloudfront/src/triggers/output.ts
+@@ -0,0 +1,26 @@
++import type { ResourceOutputEvent } from '@ez4/project/library';
++
++import { isDistributionState } from '../distribution/utils';
++
++export const resourceOutput = (event: ResourceOutputEvent) => {
++  const { service } = event;
++
++  if (!isDistributionState(service)) {
++    return null;
++  }
++
++  const { parameters, result } = service;
++
++  if (!result) {
++    return null;
++  }
++
++  const { distributionName, description, aliases } = parameters;
++
++  const domains = [result.endpoint, ...(aliases ?? [])];
++
++  return {
++    label: description ?? distributionName,
++    value: domains.map((domain) => `https://${domain}`).join(' - ')
++  };
++};
+diff -ruN a/providers/aws/aws-cloudfront/src/triggers/register.ts b/providers/aws/aws-cloudfront/src/triggers/register.ts
+--- a/providers/aws/aws-cloudfront/src/triggers/register.ts
++++ b/providers/aws/aws-cloudfront/src/triggers/register.ts
+@@ -13,6 +13,7 @@
+ import { registerInvalidationProvider } from '../invalidation/provider';
+ import { registerFunctionProvider } from '../function/provider';
+ import { prepareCdnServices, connectCdnServices } from './service';
++import { resourceOutput } from './output';
+ 
+ export const registerTriggers = () => {
+   registerAwsTriggers();
+@@ -23,7 +24,8 @@
+ 
+   tryCreateTrigger('@ez4/aws-cloudfront', {
+     'deploy:prepareResources': prepareCdnServices,
+-    'deploy:connectResources': connectCdnServices
++    'deploy:connectResources': connectCdnServices,
++    'deploy:resourceOutput': resourceOutput
+   });
+ 
+   registerCachePolicyProvider();

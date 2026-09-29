@@ -68,6 +68,7 @@ catalogs:
       version: 3.2.7
 
 overrides:
+  '@ez4/aws-certificate': file:./vendor/ez4-aws-certificate-0.53.0-us-east-1.tgz
   '@ez4/aws-cloudfront': file:./vendor/ez4-aws-cloudfront-0.53.0-cdn-output-3.tgz
   '@ez4/aws-common': file:./vendor/ez4-aws-common-0.53.0.tgz
   '@ez4/raw-pg': file:./vendor/ez4-raw-pg-0.53.0.tgz
@@ -1765,8 +1766,9 @@ packages:
     resolution: {integrity: sha512-fN/gTHFiy45Z7Qf6sJKT3Cdnt/gfMRALV8Iwby5OHPzzx/vGjJkz1dUZwbyqjbS58ygc7/d5nerq+wUa9hgP2g==}
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-certificate@0.53.0':
-    resolution: {integrity: sha512-JfYQaAx0RgpmPk2+Bh51m+Vi+W4UYKa2M5XIe8oxQ5X7x3zPE/OIEFECAPAOQcD56IqQbk6/fAkbzuyjaDvZeA==}
+  '@ez4/aws-certificate@file:vendor/ez4-aws-certificate-0.53.0-us-east-1.tgz':
+    resolution: {integrity: sha512-D24K7qaHIBBR1MZTfS8w5Um+uYJCYzH4nxPots+S7aMihc56wg7/to40j+N8B6aq2Gn4ZLITU2+VrBEFpkovlA==, tarball: file:vendor/ez4-aws-certificate-0.53.0-us-east-1.tgz}
+    version: 0.53.0
     engines: {node: '>=22.7'}
 
   '@ez4/aws-cloudfront@file:vendor/ez4-aws-cloudfront-0.53.0-cdn-output-3.tgz':
@@ -9553,7 +9555,7 @@ snapshots:
       '@ez4/utils': 0.53.0
       mime: 3.0.0
 
-  '@ez4/aws-certificate@0.53.0':
+  '@ez4/aws-certificate@file:vendor/ez4-aws-certificate-0.53.0-us-east-1.tgz':
     dependencies:
       '@aws-sdk/client-acm': 3.1141.0
       '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
@@ -9565,7 +9567,7 @@ snapshots:
     dependencies:
       '@aws-sdk/client-cloudfront': 3.1141.0
       '@ez4/aws-bucket': 0.53.0
-      '@ez4/aws-certificate': 0.53.0
+      '@ez4/aws-certificate': file:vendor/ez4-aws-certificate-0.53.0-us-east-1.tgz
       '@ez4/aws-common': file:vendor/ez4-aws-common-0.53.0.tgz
       '@ez4/aws-identity': 0.53.0
       '@ez4/distribution': 0.53.0

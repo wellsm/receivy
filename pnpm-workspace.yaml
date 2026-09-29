@@ -35,7 +35,13 @@ catalog:
 #    certificate ARNs. Upstream omits them and CloudFront rejects the request.
 # pnpm trusts the hash in the lockfile and never re-reads a tarball under the same name: a
 # rebuilt tarball gets a new suffix (-2, -3, ...). Remove the entry once upstream ships both.
+#
+# @ez4/aws-certificate, rebuilt on the 0.53.0 tag with one change; the source diff against
+# upstream is vendor/ez4-aws-certificate-0.53.0-us-east-1.patch: ACM is always addressed in
+# us-east-1, the only region CloudFront accepts certificates from. Upstream uses AWS_REGION,
+# and the deploy cannot move to us-east-1 because the EZ4 state bucket lives in sa-east-1.
 overrides:
+  "@ez4/aws-certificate": "file:./vendor/ez4-aws-certificate-0.53.0-us-east-1.tgz"
   "@ez4/aws-cloudfront": "file:./vendor/ez4-aws-cloudfront-0.53.0-cdn-output-3.tgz"
   "@ez4/aws-common": "file:./vendor/ez4-aws-common-0.53.0.tgz"
   "@ez4/raw-pg": "file:./vendor/ez4-raw-pg-0.53.0.tgz"

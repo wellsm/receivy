@@ -12,7 +12,7 @@ export type ApiLocation = "/dev-receivy-api";
  */
 export type WebAliases = ["receivy.wellsm.dev"];
 /**
- * Domain of the dev certificate. EZ4 requests it in ACM in the region of `AWS_REGION`, and CloudFront only accepts
- * certificates from us-east-1: the web stage deploys with `AWS_REGION=us-east-1`, whatever the region of the API.
+ * Domain of the dev certificate. CloudFront only accepts certificates from us-east-1, and the vendored
+ * `@ez4/aws-certificate` requests it there whatever the region of the deploy: `AWS_REGION` stays `sa-east-1`.
  */
 export type WebCertificateDomain = "receivy.wellsm.dev";

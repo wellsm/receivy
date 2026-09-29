@@ -1,7 +1,9 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { act, render, waitFor } from "@testing-library/react";
-import { clearSession } from "@/lib/auth/session";
-import { createAppRouter, redirectToLogin } from "./router";
+import type { ReactNode } from "react";
+import { clearSession, storeSession } from "@/lib/auth/session";
+import { stubApi } from "@/test/stub-api";
+import { createAppRouter, leaveProtected, redirectToLogin } from "./router";
 
 vi.mock("@/lib/auth/flows", () => ({
   oauthProviders: vi.fn().mockResolvedValue({ google: true, apple: false }),
@@ -9,6 +11,10 @@ vi.mock("@/lib/auth/flows", () => ({
 }));
 
 vi.mock("@/components/screens/login-screen", () => ({ LoginScreen: () => <div>login</div> }));
+// The code screen sends a visitor without a pending e-mail back to the login by itself.
+vi.mock("@/components/screens/code-screen", () => ({ CodeScreen: () => <div>code</div> }));
+vi.mock("@/components/screens/billings-screen", () => ({ BillingsScreen: () => <div>billings</div> }));
+vi.mock("@/components/app/app-shell", () => ({ AppShell: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 
 async function mountAt(path: string) {
   const router = createAppRouter({ history: createMemoryHistory({ initialEntries: [path] }) });
@@ -52,5 +58,54 @@ describe("redirectToLogin", () => {
     expect(navigate).not.toHaveBeenCalled();
     expect(router.state.location.pathname).toBe("/login");
     expect(router.state.location.search).toEqual({ next: "/feed" });
+  });
+
+  it("does not take a path that only starts with /login for the login", async () => {
+    const router = await mountAt("/loginx");
+
+    await act(async () => {
+      redirectToLogin(router);
+    });
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
+
+    expect(router.state.location.search).toEqual({ next: "/loginx" });
+  });
+});
+
+describe("leaveProtected", () => {
+  beforeEach(() => {
+    clearSession();
+    stubApi({});
+  });
+
+  it("sends a protected page to the login, keeping where it was", async () => {
+    storeSession({ accessToken: "a1", refreshToken: "r1", expiresIn: 900 });
+
+    const router = await mountAt("/billings");
+
+    expect(router.state.location.pathname).toBe("/billings");
+
+    clearSession();
+
+    await act(async () => {
+      leaveProtected(router);
+    });
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
+
+    expect(router.state.location.search).toEqual({ next: "/billings" });
+  });
+
+  it.each(["/pay/tok", "/join/tok", "/opt-out/tok", "/privacy", "/login/code"])("leaves the visitor of %s where they are", async (path) => {
+    const router = await mountAt(path);
+    const navigate = vi.spyOn(router, "navigate");
+
+    await act(async () => {
+      leaveProtected(router);
+    });
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe(path);
   });
 });

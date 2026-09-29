@@ -108,6 +108,16 @@ function mockApi(page: ContactLedger, handler: Handler = () => undefined): strin
 }
 
 describe("ContactLedgerScreen", () => {
+  it("encodes the id from the URL into the API path", async () => {
+    const page = ledger();
+    const calls = mockApi(page, (path) => (path === `${API}/contacts/a%2Fb/ledger` ? Response.json(page) : undefined));
+
+    renderWithRouter(<ContactLedgerScreen id="a/b" />);
+
+    expect(await screen.findByRole("heading", { level: 2, name: "Ana Paula Souza" })).toBeInTheDocument();
+    expect(calls).toContain(`GET ${API}/contacts/a%2Fb/ledger`);
+  });
+
   it("shows the profile card with the two-letter avatar, the full name and the formatted phone", async () => {
     mockApi(ledger({ nickname: "Aninha", displayName: "Aninha", phone: "+5511987654321", email: "ana@example.com" }));
 

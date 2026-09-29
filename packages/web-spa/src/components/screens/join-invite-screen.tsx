@@ -109,7 +109,7 @@ export function JoinInviteScreen({ token, view, authenticated }: JoinInviteScree
           </dl>
 
           {!authenticated && (
-            <Link className={PRIMARY_BUTTON} to="/login" search={{ next: `/join/${token}` }}>
+            <Link className={PRIMARY_BUTTON} to="/login" search={{ next: `/join/${encodeURIComponent(token)}` }}>
               Entrar para participar
             </Link>
           )}

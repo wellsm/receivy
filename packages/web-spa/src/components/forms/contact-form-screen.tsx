@@ -62,7 +62,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       return Promise.resolve();
     }
 
-    return apiFetch(`payment-methods?contactId=${contactId}`)
+    return apiFetch(`payment-methods?contactId=${encodeURIComponent(contactId)}`)
       .then(async response => {
         if (!response.ok) {
           throw new Error(await responseMessage(response, KEYS_ERROR));
@@ -86,7 +86,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
 
     let live = true;
 
-    void apiJson<Contact>(`contacts/${contactId}`)
+    void apiJson<Contact>(`contacts/${encodeURIComponent(contactId)}`)
       .then((contact) => {
         if (!live) {
           return;

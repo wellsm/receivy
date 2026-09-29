@@ -99,6 +99,16 @@ function serve(detail: ChargeDetail, extra: Record<string, (init?: RequestInit) 
 }
 
 describe("ProofViewerScreen", () => {
+  it("encodes the charge id from the URL into the API path", async () => {
+    const { calls } = serve(charge());
+
+    renderWithRouter(<ProofViewerScreen chargeId="a/b" />);
+
+    expect(await screen.findByRole("heading", { name: "comprovante.png" })).toBeInTheDocument();
+    expect(calls[0]?.[0]).toBe("charges/a%2Fb");
+    expect(calls.some(([path]) => path.startsWith("charges/a/b"))).toBe(false);
+  });
+
   it("shows the proof and lets the creditor accept it", async () => {
     const review = vi.fn(() => Response.json(charge({ state: ChargeState.Paid, proofState: ProofState.Accepted, proof: proof({ state: ProofState.Accepted }) })));
 

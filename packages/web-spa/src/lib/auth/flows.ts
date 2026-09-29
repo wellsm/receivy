@@ -3,7 +3,7 @@ import { apiJson } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import { clearSession, loadRefreshToken, storeSession } from "@/lib/auth/session";
 import type { LoginProviders } from "./login-providers";
-import { isProviderAuthorizationUrl } from "./oauth";
+import { isProviderAuthorizationUrl, type OAuthProvider } from "./oauth";
 import { createPkcePair, popOauthVerifier, saveOauthVerifier } from "./pkce";
 
 const DEVICE_NAME = "Web";
@@ -48,7 +48,7 @@ export async function confirmEmailCode(body: ConfirmEmailCodeBody): Promise<Auth
   }
 }
 
-export async function startOauth(provider: "google" | "apple"): Promise<string> {
+export async function startOauth(provider: OAuthProvider): Promise<string> {
   try {
     const { verifier, challenge } = await createPkcePair();
 

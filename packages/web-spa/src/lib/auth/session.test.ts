@@ -59,4 +59,17 @@ describe("session", () => {
 
     expect(onRemoved).toHaveBeenCalledTimes(1);
   });
+
+  it("notifies when another tab clears the whole storage", () => {
+    storeSession(tokens);
+
+    const onRemoved = vi.fn();
+    const stop = watchSessionRemoval(onRemoved);
+
+    window.dispatchEvent(new StorageEvent("storage", { key: null, newValue: null }));
+    stop();
+
+    expect(onRemoved).toHaveBeenCalledTimes(1);
+    expect(getAccessToken()).toBeNull();
+  });
 });

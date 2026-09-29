@@ -222,7 +222,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
     let live = true;
 
     // The wallet only names the key of a billing that has no charge yet; losing it must not hide the billing.
-    Promise.all([request<BillingDetail>(`billings/${id}`), request<{ paymentMethods: PaymentMethod[] }>("payment-methods").catch(() => ({ paymentMethods: [] }))])
+    Promise.all([request<BillingDetail>(`billings/${encodeURIComponent(id)}`), request<{ paymentMethods: PaymentMethod[] }>("payment-methods").catch(() => ({ paymentMethods: [] }))])
       .then(([detail, wallet]) => {
         if (!live) {
           return;

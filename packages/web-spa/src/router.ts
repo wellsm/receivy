@@ -21,11 +21,26 @@ declare module "@tanstack/react-router" {
   }
 }
 
+function isLoginPath(pathname: string): boolean {
+  return pathname === "/login" || pathname.startsWith("/login/");
+}
+
 /** A dead session sends this tab to the login, remembering where it was. */
 export function redirectToLogin(router: AppRouter): void {
-  if (router.state.location.pathname.startsWith("/login")) {
+  if (isLoginPath(router.state.location.pathname)) {
     return;
   }
 
   void router.navigate({ to: "/login", search: { next: router.state.location.href }, replace: true });
+}
+
+/** Logout in another tab: only a page that needs the session leaves; public pages stay where they are. */
+export function leaveProtected(router: AppRouter): void {
+  const guarded = router.state.matches.some((match) => match.routeId === "/_protected" || match.routeId === "/onboarding");
+
+  if (!guarded) {
+    return;
+  }
+
+  redirectToLogin(router);
 }

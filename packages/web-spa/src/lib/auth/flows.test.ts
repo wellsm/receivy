@@ -11,6 +11,7 @@ import {
   requestEmailCode,
   startOauth,
 } from "./flows";
+import { OAuthProvider } from "./oauth";
 import { popOauthVerifier, saveOauthVerifier } from "./pkce";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -109,7 +110,7 @@ describe("startOauth", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    const url = await startOauth("google");
+    const url = await startOauth(OAuthProvider.Google);
 
     expect(url).toBe("https://accounts.google.com/o/oauth2/v2/auth?x=1");
 
@@ -129,7 +130,7 @@ describe("startOauth", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(startOauth("google")).rejects.toMatchObject({
+    await expect(startOauth(OAuthProvider.Google)).rejects.toMatchObject({
       status: 503,
       message: "Não foi possível iniciar o login. Tente novamente.",
     });

@@ -176,6 +176,15 @@ function patchBodies(): unknown[] {
     .map(([, init]) => JSON.parse(String(init?.body)));
 }
 
+it("encodes the id from the URL into the API path", async () => {
+  const calls = mockApi(billing(), (url, init) => (url === `${API}/billings/a%2Fb` && (init?.method ?? "GET") === "GET" ? Response.json(billing()) : undefined));
+
+  renderWithRouter(<BillingDetailScreen id="a/b" />);
+
+  expect(await screen.findByRole("heading", { name: "Jantar de despedida" })).toBeInTheDocument();
+  expect(calls).toContain(`GET ${API}/billings/a%2Fb`);
+});
+
 it("sums the current cycle in the hero and lists its participants with their status", async () => {
   // Pinned before the second cycle's due date (2026-11-15) so Carlos's charge reads "Pendente", not
   // "Vence hoje"/"Atrasado" once the real clock catches up to it.

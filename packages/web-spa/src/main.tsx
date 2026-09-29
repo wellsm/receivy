@@ -4,7 +4,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { onSessionExpired } from "@/lib/api/client";
-import { createAppRouter, redirectToLogin } from "@/router";
+import { createAppRouter, leaveProtected, redirectToLogin } from "@/router";
 import { watchSessionRemoval } from "@/lib/auth/session";
 import "@/styles.css";
 
@@ -15,9 +15,7 @@ onSessionExpired(() => {
 });
 
 watchSessionRemoval(() => {
-  if (window.location.pathname !== "/login") {
-    window.location.assign("/login");
-  }
+  leaveProtected(router);
 });
 
 const rootElement = document.getElementById("root");

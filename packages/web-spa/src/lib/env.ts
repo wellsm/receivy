@@ -1,6 +1,7 @@
 export type AppEnv = {
   apiUrl: string;
   proofUploadOrigin: string | null;
+  avatarOrigin: string | null;
   operatorContact: string;
   stripePublishableKey: string;
   planBasicPriceCents: number | null;
@@ -24,6 +25,7 @@ export function readEnv(): AppEnv {
   return {
     apiUrl,
     proofUploadOrigin: import.meta.env.VITE_PROOF_UPLOAD_ORIGIN?.trim() || null,
+    avatarOrigin: import.meta.env.VITE_AVATAR_ORIGIN?.trim() || null,
     operatorContact: import.meta.env.VITE_OPERATOR_CONTACT ?? "",
     stripePublishableKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? "",
     planBasicPriceCents: Number.isInteger(price) && price > 0 ? price : null,

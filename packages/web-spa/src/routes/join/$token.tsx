@@ -19,7 +19,7 @@ export const Route = createFileRoute("/join/$token")({
 
     // The invite names the guest by their profile name: a fresh account finishes onboarding first and comes back here.
     if (user && needsOnboarding(user)) {
-      throw redirect({ to: "/onboarding", search: { next: `/join/${params.token}` } });
+      throw redirect({ to: "/onboarding", search: { next: `/join/${encodeURIComponent(params.token)}` } });
     }
 
     return { view, authenticated: user !== null };

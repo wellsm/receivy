@@ -1,5 +1,5 @@
 import type { SessionTokens } from "@receivy/common";
-import { clearSession, getAccessToken, loadRefreshToken, storeSession } from "@/lib/auth/session";
+import { clearSession, getAccessToken, loadRefreshToken, SESSION_STORAGE_KEY, storeSession } from "@/lib/auth/session";
 import { readEnv } from "@/lib/env";
 import { ApiError, NetworkError, SessionExpiredError, UNAVAILABLE_MESSAGE } from "./errors";
 
@@ -13,9 +13,12 @@ export type ApiInit = RequestInit & {
   quietExpiry?: boolean;
 };
 
-/** Two rounds cover a sibling tab that rotated first (409); more than that is a dead session. */
+/** Two rounds cover a sibling tab that rotated first (409); past that the session is left alone and the call answers unavailable. */
 const MAX_REFRESH_ROUNDS = 2;
 const STALE_SESSION = 409;
+/** How long a 409 waits for the sibling tab to store the rotated pair. */
+const ROTATION_WAIT_MS = 3000;
+const REFRESH_LOCK = "receivy.session.refresh";
 
 let sessionExpiredHandler: (() => void) | null = null;
 
@@ -76,9 +79,40 @@ const enum RefreshOutcome {
   Unavailable = "unavailable",
 }
 
+/** Resolves once the stored refresh token is no longer `previous` (a sibling tab stored its rotated pair), or after the timeout. */
+function waitForRotation(previous: string): Promise<void> {
+  if (loadRefreshToken() !== previous) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      window.removeEventListener("storage", listener);
+
+      resolve();
+    };
+
+    const listener = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== SESSION_STORAGE_KEY) {
+        return;
+      }
+
+      if (loadRefreshToken() !== previous) {
+        done();
+      }
+    };
+
+    const timer = setTimeout(done, ROTATION_WAIT_MS);
+
+    window.addEventListener("storage", listener);
+  });
+}
+
 async function refreshOnce(): Promise<RefreshOutcome> {
   for (let round = 0; round < MAX_REFRESH_ROUNDS; round++) {
-    // Read only now: another tab may have rotated the token while this one waited.
+    // Read only now, inside the lock: a sibling tab that rotated first left its pair in storage, and this tab
+    // (whose access token lives only in its memory) sends that one.
     const refreshToken = loadRefreshToken();
 
     if (!refreshToken) {
@@ -100,23 +134,37 @@ async function refreshOnce(): Promise<RefreshOutcome> {
       return RefreshOutcome.Refreshed;
     }
 
-    // 409: another tab consumed this refresh token moments ago and stored the rotated pair. Retry with it.
     if (response.status !== STALE_SESSION) {
       clearSession();
 
       return RefreshOutcome.Expired;
     }
+
+    // 409: a sibling tab consumed this refresh token and may not have stored the rotated pair yet. Never clear
+    // here: that would wipe the pair it is about to store. Wait for it, then retry.
+    if (round < MAX_REFRESH_ROUNDS - 1) {
+      await waitForRotation(refreshToken);
+    }
   }
 
-  clearSession();
+  return RefreshOutcome.Unavailable;
+}
 
-  return RefreshOutcome.Expired;
+/** Serializes the refresh across tabs where the browser has Web Locks; elsewhere the in-tab single flight is all there is. */
+function withRefreshLock(task: () => Promise<RefreshOutcome>): Promise<RefreshOutcome> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+
+  if (!locks) {
+    return task();
+  }
+
+  return locks.request(REFRESH_LOCK, task);
 }
 
 /** One refresh at a time per tab; callers share the promise and its outcome. */
 export function refreshSession(): Promise<RefreshOutcome> {
   if (!refreshInFlight) {
-    refreshInFlight = refreshOnce().finally(() => {
+    refreshInFlight = withRefreshLock(refreshOnce).finally(() => {
       refreshInFlight = null;
     });
   }

@@ -128,7 +128,7 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
 
-  const base = `charges/${id}`;
+  const base = `charges/${encodeURIComponent(id)}`;
 
   const load = useCallback(() => {
     let live = true;

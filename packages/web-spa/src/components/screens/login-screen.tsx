@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { useState } from "react";
 import { GoogleMark } from "@/components/app/brand-marks";
 import { requestEmailCode, startOauth } from "@/lib/auth/flows";
+import { OAuthProvider } from "@/lib/auth/oauth";
 import type { LoginProviders } from "@/lib/auth/login-providers";
 import { writePendingLogin } from "@/lib/auth/pending-login";
 import { useAppNavigate } from "@/lib/navigate";
@@ -22,7 +23,7 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(oauthError ? "Não foi possível concluir o login. Tente novamente ou use seu e-mail." : null);
 
-  async function socialLogin(provider: "google" | "apple") {
+  async function socialLogin(provider: OAuthProvider) {
     setBusy(true);
     setError(null);
 
@@ -67,14 +68,14 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
       <div>
         <div className="flex flex-col gap-3 rounded-3xl border border-outline/60 bg-surface p-5 md:p-7">
           {providers.google && (
-            <button type="button" disabled={busy} onClick={() => void socialLogin("google")} className={`${SOCIAL_BUTTON} border border-outline bg-surface text-ink hover:bg-surface-muted`}>
+            <button type="button" disabled={busy} onClick={() => void socialLogin(OAuthProvider.Google)} className={`${SOCIAL_BUTTON} border border-outline bg-surface text-ink hover:bg-surface-muted`}>
               <GoogleMark />
               Continuar com Google
             </button>
           )}
 
           {providers.apple && (
-            <button type="button" disabled={busy} onClick={() => void socialLogin("apple")} className={`${SOCIAL_BUTTON} bg-ink text-surface`}>
+            <button type="button" disabled={busy} onClick={() => void socialLogin(OAuthProvider.Apple)} className={`${SOCIAL_BUTTON} bg-ink text-surface`}>
               <Apple aria-hidden="true" size={20} />
               Continuar com Apple
             </button>

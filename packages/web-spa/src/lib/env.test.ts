@@ -17,4 +17,15 @@ describe("readEnv", () => {
     expect(env.whatsappEnabled).toBe(true);
     expect(env.evolutionEnabled).toBe(false);
   });
+
+  it("reads the avatar bucket origin, empty as null", () => {
+    vi.stubEnv("VITE_API_URL", "http://127.0.0.1:3735/local-receivy-api");
+    vi.stubEnv("VITE_AVATAR_ORIGIN", " https://avatars.s3.sa-east-1.amazonaws.com ");
+
+    expect(readEnv().avatarOrigin).toBe("https://avatars.s3.sa-east-1.amazonaws.com");
+
+    vi.stubEnv("VITE_AVATAR_ORIGIN", "");
+
+    expect(readEnv().avatarOrigin).toBeNull();
+  });
 });

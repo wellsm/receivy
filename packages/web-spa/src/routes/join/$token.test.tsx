@@ -111,4 +111,23 @@ describe("join route", () => {
     expect(await screen.findByTestId("onboarding-screen")).toHaveTextContent("/join/tok-1");
     expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
+  it("keeps an encoded token encoded on the way to onboarding and in the invite request", async () => {
+    const fetchMock = stubApi({ "GET /public/invites/a%2Fb": () => Response.json(view) });
+
+    storeSession({ accessToken: "a", refreshToken: "r", user: { id: "u1", name: null, status: "pending" } } as never);
+    vi.mocked(currentUser).mockResolvedValue({ id: "u1", name: null, status: "pending" } as never);
+
+    const router = open("a%2Fb");
+
+    expect(await screen.findByTestId("onboarding-screen")).toHaveTextContent("/join/a%2Fb");
+    expect(router.state.location.search).toEqual({ next: "/join/a%2Fb" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.test/public/invites/a%2Fb");
+  });
+  it("keeps an encoded token encoded in the login link", async () => {
+    stubApi({ "GET /public/invites/a%2Fb": () => Response.json(view) });
+
+    open("a%2Fb");
+
+    expect(await screen.findByRole("link", { name: "Entrar para participar" })).toHaveAttribute("href", "/login?next=%2Fjoin%2Fa%252Fb");
+  });
 });

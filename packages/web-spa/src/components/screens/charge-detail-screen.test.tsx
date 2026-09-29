@@ -108,6 +108,16 @@ async function confirmMarkPaid() {
 }
 
 describe("ChargeDetailScreen", () => {
+  it("encodes the id from the URL into the API path", async () => {
+    const calls = serve(charge());
+
+    renderWithRouter(<ChargeDetailScreen id="a/b" />);
+
+    expect(await screen.findByRole("heading", { name: "Aluguel" })).toBeInTheDocument();
+    expect(calls[0]?.[0]).toBe("charges/a%2Fb");
+    expect(calls.some(([path]) => path.startsWith("charges/a/b"))).toBe(false);
+  });
+
   it("selects an owned Pix explicitly before first publication", async () => {
     const calls = serve(charge({ direction: Direction.Receivable, payment: null, sharingState: SharingState.PixRequired }), {
       "GET payment-methods": () =>

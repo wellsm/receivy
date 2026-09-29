@@ -54,7 +54,10 @@ export function clearSession(): void {
 /** Logout (or a dead session) in another tab ends this one too. Returns the unsubscribe. */
 export function watchSessionRemoval(onRemoved: () => void): () => void {
   const listener = (event: StorageEvent) => {
-    if (event.key === SESSION_STORAGE_KEY && event.newValue === null) {
+    // A null key is another tab calling localStorage.clear(): the session went with everything else.
+    const removed = event.key === null || (event.key === SESSION_STORAGE_KEY && event.newValue === null);
+
+    if (removed) {
       accessToken = null;
 
       onRemoved();

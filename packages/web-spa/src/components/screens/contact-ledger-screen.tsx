@@ -75,7 +75,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
   const load = useCallback(
     async (cursor?: string) => {
       try {
-        const response = await apiFetch(`contacts/${id}/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
+        const response = await apiFetch(`contacts/${encodeURIComponent(id)}/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
 
         if (!response.ok) {
           throw new Error(await responseMessage(response, LEDGER_ERROR));
@@ -117,7 +117,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
 
   async function archive() {
     const done = await run(async () => {
-      const response = await apiFetch(`contacts/${id}/archive`, {
+      const response = await apiFetch(`contacts/${encodeURIComponent(id)}/archive`, {
         method: "POST",
       });
 

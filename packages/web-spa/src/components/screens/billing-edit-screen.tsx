@@ -18,7 +18,7 @@ export function BillingEditScreen({ id }: { id: string }) {
   useEffect(() => {
     let live = true;
 
-    apiFetch(`billings/${id}`)
+    apiFetch(`billings/${encodeURIComponent(id)}`)
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(await responseMessage(response, LOAD_ERROR));

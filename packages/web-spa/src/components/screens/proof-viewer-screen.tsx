@@ -33,7 +33,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
   const [confirmAccept, setConfirmAccept] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
 
-  const base = `charges/${chargeId}`;
+  const base = `charges/${encodeURIComponent(chargeId)}`;
 
   const downloadUrl = useCallback(
     async () => (await request<{ url: string }>(`${base}/proof/download`, {}, "Não foi possível baixar o comprovante.")).url,

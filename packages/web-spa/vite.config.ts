@@ -5,13 +5,14 @@ import react from "@vitejs/plugin-react";
 import { loadEnv, type Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 
-import { buildContentSecurityPolicy } from "./src/lib/csp";
+import { buildContentSecurityPolicy, missingBucketOrigins } from "./src/lib/csp";
 import { providerCallbackProxy } from "./src/lib/dev-proxy";
 
 /** Production builds only: the dev server needs inline scripts for React Fast Refresh. */
 function contentSecurityPolicy(): Plugin {
   let apiUrl: string | undefined;
   let proofUploadOrigin: string | undefined;
+  let avatarOrigin: string | undefined;
 
   return {
     name: "receivy-content-security-policy",
@@ -19,6 +20,13 @@ function contentSecurityPolicy(): Plugin {
     configResolved(config) {
       apiUrl = config.env.VITE_API_URL;
       proofUploadOrigin = config.env.VITE_PROOF_UPLOAD_ORIGIN;
+      avatarOrigin = config.env.VITE_AVATAR_ORIGIN;
+
+      const missing = missingBucketOrigins(proofUploadOrigin, avatarOrigin);
+
+      if (missing.length > 0) {
+        config.logger.warn(`CSP: ${missing.join(" and ")} not set, keeping the regional S3 wildcard in connect-src, img-src and frame-src.`);
+      }
     },
     transformIndexHtml() {
       if (!apiUrl) {
@@ -28,7 +36,7 @@ function contentSecurityPolicy(): Plugin {
       return [
         {
           tag: "meta",
-          attrs: { "http-equiv": "Content-Security-Policy", content: buildContentSecurityPolicy(apiUrl, proofUploadOrigin) },
+          attrs: { "http-equiv": "Content-Security-Policy", content: buildContentSecurityPolicy(apiUrl, proofUploadOrigin, avatarOrigin) },
           injectTo: "head-prepend",
         },
       ];

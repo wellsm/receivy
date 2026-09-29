@@ -10,6 +10,10 @@ beforeEach(() => {
   storeSession({ accessToken: "a1", refreshToken: "r1", expiresIn: 900 });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("apiFetch", () => {
   it("sends the bearer and a json content type", async () => {
     const fetchMock = vi.fn().mockResolvedValue(json({ ok: true }));
@@ -148,19 +152,94 @@ describe("apiFetch", () => {
     expect(localStorage.getItem("receivy.session")).toContain("r1");
   });
 
-  it("gives up after two stale rounds", async () => {
+  it("waits for the rotated pair another tab stores after the 409 and retries with it", async () => {
+    vi.useFakeTimers();
+
+    const refreshBodies: string[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/auth/refresh")) {
+        const { refreshToken } = JSON.parse(init?.body as string) as { refreshToken: string };
+
+        refreshBodies.push(refreshToken);
+
+        if (refreshToken === "r1") {
+          setTimeout(() => {
+            const newValue = JSON.stringify({ refreshToken: "r-other" });
+
+            localStorage.setItem("receivy.session", newValue);
+            window.dispatchEvent(new StorageEvent("storage", { key: "receivy.session", newValue }));
+          }, 500);
+
+          return new Response(null, { status: 409 });
+        }
+
+        return json({ accessToken: "a3", refreshToken: "r3", expiresIn: 900 });
+      }
+
+      return getAccessToken() === "a3" ? json({}) : new Response(null, { status: 401 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = apiFetch("charges");
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    const response = await pending;
+
+    vi.useRealTimers();
+
+    expect(response.ok).toBe(true);
+    expect(refreshBodies).toEqual(["r1", "r-other"]);
+    expect(getAccessToken()).toBe("a3");
+    expect(localStorage.getItem("receivy.session")).toContain("r3");
+  });
+
+  it("answers unavailable and keeps the session after two stale rounds", async () => {
+    vi.useFakeTimers();
+
+    const handler = vi.fn();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
       .mockResolvedValueOnce(new Response(null, { status: 409 }))
       .mockResolvedValueOnce(new Response(null, { status: 409 }));
 
+    onSessionExpired(handler);
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(apiFetch("charges")).rejects.toBeInstanceOf(SessionExpiredError);
-    expect(getAccessToken()).toBeNull();
-    expect(localStorage.getItem("receivy.session")).toBeNull();
+    const pending = apiFetch("charges");
+
+    await vi.advanceTimersByTimeAsync(3000);
+
+    const response = await pending;
+
+    vi.useRealTimers();
+    onSessionExpired(null);
+
+    expect(isUnavailable(response)).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(getAccessToken()).toBe("a1");
+    expect(localStorage.getItem("receivy.session")).toContain("r1");
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("serializes the refresh across tabs through a web lock when the browser has one", async () => {
+    const request = vi.fn((_name: string, task: () => Promise<unknown>) => task());
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(json({ accessToken: "a2", refreshToken: "r2", expiresIn: 900 }))
+      .mockResolvedValueOnce(json({ ok: true }));
+
+    vi.stubGlobal("navigator", { ...navigator, locks: { request } });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiFetch("charges");
+
+    expect(response.ok).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]?.[0]).toBe("receivy.session.refresh");
   });
 
   it("apiJson reports a refresh network failure as unavailable and keeps the session", async () => {

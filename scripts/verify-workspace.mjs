@@ -14,7 +14,7 @@ assert.equal(root.packageManager, "pnpm@11.5.3");
 assert.equal(root.engines.node, "24.x");
 assert.match(workspace, /packages:\n\s+- "packages\/\*"/);
 
-for (const name of ["api", "common", "mobile", "web"]) {
+for (const name of ["api", "common", "mobile", "web", "web-spa"]) {
   await access(new URL(`../packages/${name}/`, import.meta.url));
 }
 

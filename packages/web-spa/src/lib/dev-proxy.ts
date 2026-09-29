@@ -1,6 +1,6 @@
 export type CallbackProxy = { target: string; changeOrigin: boolean; rewrite: (path: string) => string };
 
-const CALLBACKS = ["/auth/google/callback", "/auth/apple/callback"];
+const CALLBACKS = ["/api/auth/google/callback", "/api/auth/apple/callback"];
 
 /**
  * Dev-only stand-in for the CloudFront origins that send the provider callbacks to the API.

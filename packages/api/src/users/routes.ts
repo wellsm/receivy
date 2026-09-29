@@ -51,6 +51,17 @@ export type UserRoutes = [
     path: 'POST /auth/apple/callback';
     handler: typeof appleCallbackHandler;
   }>,
+  // The static web forwards the provider callbacks from its own domain through CloudFront, which keeps the request path.
+  Http.UseRoute<{
+    name: 'googleOauthCallbackWeb';
+    path: 'GET /api/auth/google/callback';
+    handler: typeof googleCallbackHandler;
+  }>,
+  Http.UseRoute<{
+    name: 'appleOauthCallbackWeb';
+    path: 'POST /api/auth/apple/callback';
+    handler: typeof appleCallbackHandler;
+  }>,
   Http.UseRoute<{
     name: 'oauthExchange';
     path: 'POST /auth/oauth/exchange';

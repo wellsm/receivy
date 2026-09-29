@@ -1,5 +1,5 @@
 import { clearSession, getAccessToken, storeSession } from "@/lib/auth/session";
-import { apiFetch, apiJson, SessionExpiredError } from "./client";
+import { apiFetch, apiJson, isUnavailable, NetworkError, SessionExpiredError } from "./client";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -125,7 +125,25 @@ describe("apiFetch", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(apiFetch("auth/me")).rejects.toBeInstanceOf(TypeError);
+    const response = await apiFetch("auth/me");
+
+    expect(response.status).toBe(503);
+    expect(isUnavailable(response)).toBe(true);
+    expect(await response.json()).toEqual({ message: "Serviço indisponível. Tente novamente." });
+    expect(getAccessToken()).toBe("a1");
+    expect(localStorage.getItem("receivy.session")).toContain("r1");
+  });
+
+  it("resolves an unavailable response when the request itself fails on the network", async () => {
+    const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("fetch failed"));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiFetch("charges");
+
+    expect(response.status).toBe(503);
+    expect(isUnavailable(response)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(getAccessToken()).toBe("a1");
     expect(localStorage.getItem("receivy.session")).toContain("r1");
   });
@@ -150,7 +168,10 @@ describe("apiFetch", () => {
 
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(apiJson("auth/me")).rejects.toMatchObject({ status: 503, message: "Serviço indisponível. Tente novamente." });
+    const failure = apiJson("auth/me");
+
+    await expect(failure).rejects.toMatchObject({ status: 503, message: "Serviço indisponível. Tente novamente." });
+    await expect(failure).rejects.toBeInstanceOf(NetworkError);
     expect(getAccessToken()).toBe("a1");
     expect(localStorage.getItem("receivy.session")).toContain("r1");
   });
@@ -166,7 +187,10 @@ describe("apiJson", () => {
   it("turns a network failure into the unavailable message", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
 
-    await expect(apiJson("contacts")).rejects.toMatchObject({ status: 503, message: "Serviço indisponível. Tente novamente." });
+    const failure = apiJson("contacts");
+
+    await expect(failure).rejects.toMatchObject({ status: 503, message: "Serviço indisponível. Tente novamente." });
+    await expect(failure).rejects.toBeInstanceOf(NetworkError);
   });
 
   it("returns undefined on 204", async () => {

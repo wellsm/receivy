@@ -155,4 +155,12 @@ describe("RemindersScreen", () => {
 
     expect(screen.getByRole("radio", { name: "whatsapp no lembrete 1" })).toBeInTheDocument();
   });
+
+  it("shows the Portuguese fallback when the settings cannot be reached", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<RemindersScreen />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível carregar seus lembretes.");
+    expect(screen.queryByText(/failed to fetch/i)).toBeNull();
+  });
 });

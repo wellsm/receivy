@@ -337,3 +337,16 @@ it("opens the paywall when the API answers 402 anyway", async () => {
 
   expect(await screen.findByRole("dialog", { name: "Plano Básico" })).toBeInTheDocument();
 });
+
+it("shows the Portuguese fallback when saving cannot reach the API", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+  render(<PaymentMethodFormScreen />);
+
+  const user = await ready();
+
+  await user.type(screen.getByLabelText("E-mail Pix"), "ana@example.com");
+  await user.click(screen.getByRole("button", { name: /Salvar/ }));
+
+  expect(await screen.findByText("Não foi possível salvar o meio de pagamento.")).toBeInTheDocument();
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
+});

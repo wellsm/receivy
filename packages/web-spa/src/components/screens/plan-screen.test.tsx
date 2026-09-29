@@ -128,3 +128,11 @@ it("keeps the subscribe button hidden and shows a persistent message when the po
   expect(await screen.findByText("Ainda confirmando o pagamento. Recarregue a página em instantes ou confira seu e-mail.")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Assinar o Básico" })).not.toBeInTheDocument();
 });
+
+it("shows the Portuguese fallback when the plan cannot be reached", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+  render(<PlanScreen />);
+
+  expect(await screen.findByText("Não foi possível carregar seu plano.")).toBeInTheDocument();
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
+});

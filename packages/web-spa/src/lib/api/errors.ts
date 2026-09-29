@@ -10,6 +10,13 @@ export class ApiError extends Error {
   }
 }
 
+/** The request never got an answer: the API client turns a rejected fetch into this 503. */
+export class NetworkError extends ApiError {
+  constructor() {
+    super(503, UNAVAILABLE_MESSAGE);
+  }
+}
+
 export class SessionExpiredError extends Error {
   constructor() {
     super(SESSION_EXPIRED_MESSAGE);

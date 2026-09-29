@@ -192,3 +192,11 @@ it("links to the plain key form on a direct visit", async () => {
 
   expect(screen.getAllByRole("link", { name: "Cadastrar novo meio" })[0]).toHaveAttribute("href", "/settings/payment-methods/new");
 });
+
+it("shows the Portuguese fallback when the list cannot be reached", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+  renderWithRouter(<PaymentMethodsScreen />);
+
+  expect(await screen.findByText("Não foi possível carregar seus meios de pagamento.")).toBeInTheDocument();
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
+});

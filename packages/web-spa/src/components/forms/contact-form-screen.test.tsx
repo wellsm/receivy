@@ -407,3 +407,30 @@ it("sends the phone and the consent flag, and locks the phone the person typed",
   expect(await screen.findByText("Número informado pela própria pessoa")).toBeInTheDocument();
   expect(screen.getByLabelText("WhatsApp")).toBeDisabled();
 });
+
+it("shows the unavailable message when the contact cannot be loaded on the network", async () => {
+  fetchMock.mockImplementation(async (path: string) => {
+    if (path.includes("payment-methods")) {
+      return Response.json({ paymentMethods: [] });
+    }
+
+    throw new TypeError("Failed to fetch");
+  });
+  render(<ContactFormScreen contactId="c1" />);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Serviço indisponível. Tente novamente.");
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
+});
+
+it("shows the unavailable message when saving fails on the network", async () => {
+  fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+  render(<ContactFormScreen />);
+
+  const user = userEvent.setup();
+
+  await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
+  await user.click(screen.getByRole("button", { name: "Salvar contato" }));
+
+  expect(await screen.findByText("Serviço indisponível. Tente novamente.")).toBeInTheDocument();
+  expect(navigate).not.toHaveBeenCalled();
+});

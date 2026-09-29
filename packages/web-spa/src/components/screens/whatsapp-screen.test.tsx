@@ -244,9 +244,7 @@ describe("WhatsappScreen", () => {
     expect(screen.getByText(/Conectado ao/)).toBeInTheDocument();
 
     await act(async () => {
-
       await vi.advanceTimersByTimeAsync(10000);
-
     });
     expect(polls).toBe(2);
 
@@ -370,9 +368,7 @@ describe("WhatsappScreen", () => {
     render(<WhatsappScreen />);
 
     await act(async () => {
-
       await vi.advanceTimersByTimeAsync(0);
-
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -407,9 +403,7 @@ describe("WhatsappScreen", () => {
     expect(screen.queryByRole("img", { name: "QR code para conectar" })).not.toBeInTheDocument();
 
     await act(async () => {
-
       await vi.advanceTimersByTimeAsync(10000);
-
     });
     expect(pollRequests).toBe(1);
   });
@@ -508,5 +502,13 @@ describe("WhatsappScreen", () => {
 
     resolvePatch?.();
     await waitFor(() => expect(screen.getByRole("radio", { name: /Número do Receivy/ })).toHaveAttribute("aria-checked", "true"));
+  });
+
+  it("shows the Portuguese fallback when the settings cannot be reached", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<WhatsappScreen />);
+
+    expect(await screen.findByText("Não foi possível carregar o WhatsApp.")).toBeInTheDocument();
+    expect(screen.queryByText(/failed to fetch/i)).toBeNull();
   });
 });

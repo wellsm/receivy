@@ -252,4 +252,38 @@ describe("ContactLedgerScreen", () => {
 
     expect(await screen.findByRole("heading", { level: 2, name: "Ana Paula Souza" })).toBeInTheDocument();
   });
+
+  it("shows the contacts conflict text when the archive answers 409", async () => {
+    mockApi(ledger(), (path, init) => (path === `${API}/contacts/c1/archive` && init?.method === "POST" ? Response.json({ message: "outra coisa" }, { status: 409 }) : undefined));
+
+    const user = setup();
+
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
+
+    await user.click(await screen.findByRole("button", { name: "Remover" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remover" }));
+
+    expect(await screen.findByText(/Esse e-mail já está em uso/)).toBeInTheDocument();
+  });
+
+  it("shows the archive fallback for statuses other than 400 and 409", async () => {
+    mockApi(ledger(), (path, init) => (path === `${API}/contacts/c1/archive` && init?.method === "POST" ? Response.json({ message: "Limite" }, { status: 429 }) : undefined));
+
+    const user = setup();
+
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
+
+    await user.click(await screen.findByRole("button", { name: "Remover" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remover" }));
+
+    expect(await screen.findByText("Não foi possível remover o contato.")).toBeInTheDocument();
+  });
+
+  it("shows the Portuguese fallback when the ledger cannot be reached", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
+
+    expect(await screen.findByText("Não foi possível carregar o histórico.")).toBeInTheDocument();
+    expect(screen.queryByText(/failed to fetch/i)).toBeNull();
+  });
 });

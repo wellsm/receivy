@@ -37,7 +37,6 @@ function Field({ id, label, hint, children }: { id: string; label: string; hint?
   );
 }
 
-
 export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProps) {
   const navigate = useAppNavigate();
   const [name, setName] = useState("");

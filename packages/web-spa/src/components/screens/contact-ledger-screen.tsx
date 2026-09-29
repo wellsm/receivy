@@ -7,9 +7,8 @@ import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { Link } from "@/components/ui/link";
 import { StatusTag } from "@/components/ui/status-tag";
 import { apiFetch } from "@/lib/api/client";
-import { ApiError } from "@/lib/api/errors";
 import { saveDraft } from "@/lib/billing-draft";
-import { contactErrorMessage } from "@/lib/contacts-errors";
+import { CONTACT_CONFLICT_MESSAGE } from "@/lib/contacts-errors";
 import { responseMessage } from "@/lib/financial-response";
 import { useAppNavigate } from "@/lib/navigate";
 import { publicLinkUrl } from "@/lib/public-link-url";
@@ -122,13 +121,17 @@ export function ContactLedgerScreen({ id }: { id: string }) {
         method: "POST",
       });
 
-      // The Next proxy answered a conflict with the contacts copy; the other statuses kept the generic mapping.
+      // The old proxy answered a conflict with the contacts copy and flattened every status but 400 into the screen's own text.
       if (response.status === 409) {
-        throw new Error(contactErrorMessage(new ApiError(409, "")));
+        throw new Error(CONTACT_CONFLICT_MESSAGE);
+      }
+
+      if (response.status === 400) {
+        throw new Error(await responseMessage(response, ARCHIVE_ERROR));
       }
 
       if (!response.ok) {
-        throw new Error(await responseMessage(response, ARCHIVE_ERROR));
+        throw new Error(ARCHIVE_ERROR);
       }
 
       await load();

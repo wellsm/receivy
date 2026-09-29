@@ -1,7 +1,7 @@
-import type { Environment } from '@ez4/common';
-import type { Bucket } from '@ez4/storage';
-import type { Db } from './database';
-import type { proofObjectEvent } from './proofs/events/receive-object';
+import type { Environment } from "@ez4/common";
+import type { Bucket } from "@ez4/storage";
+import type { Db } from "./database";
+import type { proofObjectEvent } from "./proofs/events/receive-object";
 
 /**
  * Private per-stage bucket for the retained proofs, and nothing else. It must NOT use bucket-wide
@@ -11,17 +11,21 @@ import type { proofObjectEvent } from './proofs/events/receive-object';
  */
 export declare class ProofFiles extends Bucket.Service {
   cors: Bucket.UseCors<{
-    allowOrigins: ['http://localhost:3000', 'https://receivy.wellsm.dev'];
-    allowMethods: ['PUT'];
-    allowHeaders: ['content-type', 'content-length'];
+    allowOrigins: [
+      "http://localhost:3000",
+      "https://receivy.wellsm.dev",
+      "https://receivy.app",
+    ];
+    allowMethods: ["PUT"];
+    allowHeaders: ["content-type", "content-length"];
     maxAge: 300;
   }>;
 
   events: [
     Bucket.UseEvent<{
-      path: 'proofs/*';
+      path: "proofs/*";
       handler: typeof proofObjectEvent;
-    }>
+    }>,
   ];
 
   services: {
@@ -37,9 +41,13 @@ export declare class ProofFiles extends Bucket.Service {
  */
 export declare class AvatarFiles extends Bucket.Service {
   cors: Bucket.UseCors<{
-    allowOrigins: ['http://localhost:3000', 'https://receivy.wellsm.dev'];
-    allowMethods: ['PUT'];
-    allowHeaders: ['content-type', 'content-length'];
+    allowOrigins: [
+      "http://localhost:3000",
+      "https://receivy.wellsm.dev",
+      "https://receivy.app",
+    ];
+    allowMethods: ["PUT"];
+    allowHeaders: ["content-type", "content-length"];
     maxAge: 300;
   }>;
 }

@@ -1,5 +1,5 @@
-import type { Http } from '@ez4/gateway';
-import type { NamingStyle } from '@ez4/schema';
+import type { Http } from "@ez4/gateway";
+import type { NamingStyle } from "@ez4/schema";
 import type {
   BillingEndedError,
   BillingInactiveError,
@@ -11,55 +11,61 @@ import type {
   PayableHasNoSplitError,
   PendingChargesWithoutStateError,
   ReceivableHasNoPayeeError,
-  SettledLockedError
-} from './billings/errors';
-import type { BillingRoutes } from './billings/routes';
+  SettledLockedError,
+} from "./billings/errors";
+import type { BillingRoutes } from "./billings/routes";
 import type {
   ChargeClosedError,
   ChargeInReviewError,
   ChargeNotPaidError,
   SettledNoRemindersError,
-  SilenceUnavailableError
-} from './charges/errors';
-import type { ChargeRoutes } from './charges/routes';
-import type { TooManyRequestsError } from './common/errors';
-import type { listener } from './common/services/sentry/listener';
-import type { DuplicateContactError, EmailTakenError, LinkedContactError, NotLinkableError, OwnEmailError } from './contacts/errors';
-import type { ContactRoutes } from './contacts/routes';
-import type { HealthRoutes } from './health/routes';
+  SilenceUnavailableError,
+} from "./charges/errors";
+import type { ChargeRoutes } from "./charges/routes";
+import type { TooManyRequestsError } from "./common/errors";
+import type { listener } from "./common/services/sentry/listener";
+import type {
+  DuplicateContactError,
+  EmailTakenError,
+  LinkedContactError,
+  NotLinkableError,
+  OwnEmailError,
+} from "./contacts/errors";
+import type { ContactRoutes } from "./contacts/routes";
+import type { HealthRoutes } from "./health/routes";
 import type {
   InviteBillingInactiveError,
   InviteOwnerError,
   PayableHasNoInviteError,
   SplitClosedError,
-  SplitInProgressError
-} from './invites/errors';
-import type { InviteRoutes } from './invites/routes';
+  SplitInProgressError,
+} from "./invites/errors";
+import type { InviteRoutes } from "./invites/routes";
 import type {
   DeviceOwnedElsewhereError,
   DeviceRegisteredError,
   ReminderQuotaError,
   WhatsappInstanceRequiredError,
   WhatsappInstanceUnavailableError,
-  WhatsappPlanRequiredError
-} from './notifications/errors';
-import type { NotificationRoutes } from './notifications/routes';
+  WhatsappPlanRequiredError,
+} from "./notifications/errors";
+import type { NotificationRoutes } from "./notifications/routes";
 import type {
   InfinitePayCheckoutDisabledError,
   PagSeguroTokenInvalidError,
   PaymentCredentialKeyMissingError,
   PaymentLinkUnavailableError,
-  PaymentMethodTakenError
-} from './payment-methods/errors';
-import type { PaymentMethodRoutes } from './payment-methods/routes';
+  PaymentMethodTakenError,
+} from "./payment-methods/errors";
+import type { PaymentMethodRoutes } from "./payment-methods/routes";
 import type {
   PlanAlreadyActiveError,
   PlanBillingDisabledError,
   PlanLimitReachedError,
   PlanRequiredError,
-  PlanUnavailableError
-} from './plans/errors';
-import type { PlanRoutes } from './plans/routes';
+  PlanUnavailableError,
+} from "./plans/errors";
+import type { PlanRoutes } from "./plans/routes";
 import type {
   ProofDeclarationForbiddenError,
   ProofInvalidFileError,
@@ -70,20 +76,20 @@ import type {
   ProofSizeMismatchError,
   ProofTooLargeError,
   UploadInProgressError,
-  UploadMissingError
-} from './proofs/errors';
-import type { ProofRoutes } from './proofs/routes';
-import type { PixRequiredError, PixSnapshotLockedError } from './public/errors';
-import type { PublicRoutes } from './public/routes';
-import type { TimelineOverflowError } from './timeline/errors';
-import type { TimelineRoutes } from './timeline/routes';
-import type { AvatarInvalidError, StaleSessionError } from './users/errors';
-import type { UserRoutes } from './users/routes';
-import type { WebhookRoutes } from './webhooks/routes';
+  UploadMissingError,
+} from "./proofs/errors";
+import type { ProofRoutes } from "./proofs/routes";
+import type { PixRequiredError, PixSnapshotLockedError } from "./public/errors";
+import type { PublicRoutes } from "./public/routes";
+import type { TimelineOverflowError } from "./timeline/errors";
+import type { TimelineRoutes } from "./timeline/routes";
+import type { AvatarInvalidError, StaleSessionError } from "./users/errors";
+import type { UserRoutes } from "./users/routes";
+import type { WebhookRoutes } from "./webhooks/routes";
 
 /** Receivy HTTP API. */
 export declare class Api extends Http.Service {
-  name: 'Receivy API';
+  name: "Receivy API";
   cache: Http.UseCache<{ authorizerTTL: 0 }>;
 
   defaults: Http.UseDefaults<{
@@ -92,11 +98,15 @@ export declare class Api extends Http.Service {
       namingStyle: NamingStyle.CamelCase;
     };
     httpErrors: {
-      402: [PlanLimitReachedError, PlanRequiredError, WhatsappPlanRequiredError];
+      402: [
+        PlanLimitReachedError,
+        PlanRequiredError,
+        WhatsappPlanRequiredError,
+      ];
       403: [ProofDeclarationForbiddenError];
       409: [
         IdempotencyMismatchError,
-              BillingEndedError,
+        BillingEndedError,
         BillingNotPausableError,
         PayableHasNoSplitError,
         ReceivableHasNoPayeeError,
@@ -131,7 +141,7 @@ export declare class Api extends Http.Service {
         PixSnapshotLockedError,
         StaleSessionError,
         PlanAlreadyActiveError,
-        WhatsappInstanceRequiredError
+        WhatsappInstanceRequiredError,
       ];
       422: [
         AvatarInvalidError,
@@ -143,7 +153,7 @@ export declare class Api extends Http.Service {
         PendingChargesWithoutStateError,
         EditScopeNotRecurringError,
         InfinitePayCheckoutDisabledError,
-        PagSeguroTokenInvalidError
+        PagSeguroTokenInvalidError,
       ];
       429: [TooManyRequestsError, ReminderQuotaError];
       503: [
@@ -151,7 +161,7 @@ export declare class Api extends Http.Service {
         PaymentCredentialKeyMissingError,
         PlanBillingDisabledError,
         PlanUnavailableError,
-        WhatsappInstanceUnavailableError
+        WhatsappInstanceUnavailableError,
       ];
     };
   }>;
@@ -169,15 +179,19 @@ export declare class Api extends Http.Service {
     ...TimelineRoutes,
     ...ProofRoutes,
     ...NotificationRoutes,
-    ...WebhookRoutes
+    ...WebhookRoutes,
   ];
 
   // Browsers reach the API only through the Next BFF; this list matters for tooling and
   // must include the web origin of each published stage (see docs/environments.md).
   cors: Http.UseCors<{
-    allowOrigins: ['http://localhost:3000', 'https://receivy.wellsm.dev'];
-    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
-    allowHeaders: ['content-type', 'authorization', 'idempotency-key'];
+    allowOrigins: [
+      "http://localhost:3000",
+      "https://receivy.wellsm.dev",
+      "https://receivy.app",
+    ];
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE"];
+    allowHeaders: ["content-type", "authorization", "idempotency-key"];
     allowCredentials: true;
   }>;
 }

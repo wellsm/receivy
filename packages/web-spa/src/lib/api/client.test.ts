@@ -177,6 +177,55 @@ describe("apiFetch", () => {
   });
 });
 
+describe("apiFetch failures", () => {
+  it("surfaces a missing VITE_API_URL instead of answering unavailable", async () => {
+    const fetchMock = vi.fn();
+
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("VITE_API_URL", "");
+
+    await expect(apiFetch("charges")).rejects.toThrow("VITE_API_URL");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("propagates a malformed refresh body instead of answering unavailable", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockResolvedValueOnce(new Response("not json", { status: 200 }));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const failure = await apiFetch("charges").then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(SessionExpiredError);
+  });
+
+  it("shares the unavailable outcome between concurrent 401s", async () => {
+    let refreshes = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/auth/refresh")) {
+        refreshes += 1;
+
+        throw new TypeError("fetch failed");
+      }
+
+      return new Response(null, { status: 401 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [first, second] = await Promise.all([apiFetch("a"), apiFetch("b")]);
+
+    expect(isUnavailable(first)).toBe(true);
+    expect(isUnavailable(second)).toBe(true);
+    expect(refreshes).toBe(1);
+    expect(getAccessToken()).toBe("a1");
+    expect(localStorage.getItem("receivy.session")).toContain("r1");
+  });
+});
+
 describe("apiJson", () => {
   it("throws ApiError with the body message", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ message: "Contato não encontrado." }, 404)));

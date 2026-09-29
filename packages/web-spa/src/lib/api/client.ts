@@ -15,7 +15,7 @@ export type ApiInit = RequestInit & {
 const MAX_REFRESH_ROUNDS = 2;
 const STALE_SESSION = 409;
 
-let refreshInFlight: Promise<boolean> | null = null;
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
 
 const unavailable = new WeakSet<Response>();
 
@@ -36,7 +36,7 @@ export function apiUrl(path: string): string {
   return `${readEnv().apiUrl}/${path.replace(/^\//, "")}`;
 }
 
-function send(path: string, init: ApiInit): Promise<Response> {
+async function send(path: string, init: ApiInit): Promise<Response> {
   const { auth = true, idempotencyKey, headers, ...rest } = init;
   const merged = new Headers(headers);
 
@@ -52,10 +52,19 @@ function send(path: string, init: ApiInit): Promise<Response> {
     merged.set("authorization", `Bearer ${accessToken}`);
   }
 
-  return fetch(apiUrl(path), { ...rest, headers: merged, cache: "no-store" });
+  const url = apiUrl(path);
+
+  // Only the request itself failing counts as an outage; anything thrown before it is a bug or a misconfiguration.
+  return fetch(url, { ...rest, headers: merged, cache: "no-store" }).catch(() => unavailableResponse());
 }
 
-async function refreshOnce(): Promise<boolean> {
+const enum RefreshOutcome {
+  Refreshed = "refreshed",
+  Expired = "expired",
+  Unavailable = "unavailable",
+}
+
+async function refreshOnce(): Promise<RefreshOutcome> {
   for (let round = 0; round < MAX_REFRESH_ROUNDS; round++) {
     // Read only now: another tab may have rotated the token while this one waited.
     const refreshToken = loadRefreshToken();
@@ -63,39 +72,37 @@ async function refreshOnce(): Promise<boolean> {
     if (!refreshToken) {
       clearSession();
 
-      return false;
+      return RefreshOutcome.Expired;
     }
 
-    // A network failure here leaves the session alone: it survives an outage, and the caller answers unavailable.
-    let response: Response;
+    const response = await send("auth/refresh", { auth: false, method: "POST", body: JSON.stringify({ refreshToken }) });
 
-    try {
-      response = await send("auth/refresh", { auth: false, method: "POST", body: JSON.stringify({ refreshToken }) });
-    } catch {
-      throw new NetworkError();
+    // The session survives an outage: nothing is cleared, and the caller answers unavailable.
+    if (isUnavailable(response)) {
+      return RefreshOutcome.Unavailable;
     }
 
     if (response.ok) {
       storeSession((await response.json()) as SessionTokens);
 
-      return true;
+      return RefreshOutcome.Refreshed;
     }
 
     // 409: another tab consumed this refresh token moments ago and stored the rotated pair. Retry with it.
     if (response.status !== STALE_SESSION) {
       clearSession();
 
-      return false;
+      return RefreshOutcome.Expired;
     }
   }
 
   clearSession();
 
-  return false;
+  return RefreshOutcome.Expired;
 }
 
-/** One refresh at a time per tab; callers share the promise. */
-export function refreshSession(): Promise<boolean> {
+/** One refresh at a time per tab; callers share the promise and its outcome. */
+export function refreshSession(): Promise<RefreshOutcome> {
   if (!refreshInFlight) {
     refreshInFlight = refreshOnce().finally(() => {
       refreshInFlight = null;
@@ -105,29 +112,25 @@ export function refreshSession(): Promise<boolean> {
   return refreshInFlight;
 }
 
-/** Never rejects on a network failure: it resolves the 503 the old proxy used to answer. */
+/** A network failure resolves the 503 the old proxy used to answer instead of rejecting. */
 export async function apiFetch(path: string, init: ApiInit = {}): Promise<Response> {
-  try {
-    const response = await send(path, init);
+  const response = await send(path, init);
 
-    if (response.status !== 401 || init.auth === false) {
-      return response;
-    }
+  if (response.status !== 401 || init.auth === false) {
+    return response;
+  }
 
-    const refreshed = await refreshSession();
+  const outcome = await refreshSession();
 
-    if (!refreshed) {
-      throw new SessionExpiredError();
-    }
+  if (outcome === RefreshOutcome.Expired) {
+    throw new SessionExpiredError();
+  }
 
-    return await send(path, init);
-  } catch (error) {
-    if (error instanceof SessionExpiredError) {
-      throw error;
-    }
-
+  if (outcome === RefreshOutcome.Unavailable) {
     return unavailableResponse();
   }
+
+  return send(path, init);
 }
 
 async function readMessage(response: Response): Promise<string> {

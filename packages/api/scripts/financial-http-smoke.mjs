@@ -175,6 +175,26 @@ try {
       .status,
     200
   );
+
+  // The body InfinitePay posts in production: `items` was never declared, and a closed body schema answers 400
+  // before the handler runs, so the charge would stay pending.
+  const infinitePayPing = await request('webhooks/infinitepay/not-a-token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      items: [{ price: 1971, quantity: 1, description: 'Fixture', product_reference: null }],
+      amount: 1971,
+      order_nsu: randomUUID(),
+      paid_amount: 1971,
+      receipt_url: 'https://recibo.example/fixture',
+      installments: 1,
+      invoice_slug: 'fixture',
+      capture_method: 'credit_card',
+      transaction_nsu: randomUUID()
+    })
+  });
+
+  assert.equal(infinitePayPing.status, 200, JSON.stringify(infinitePayPing.body));
   assert.equal(
     (
       await request('contacts', {

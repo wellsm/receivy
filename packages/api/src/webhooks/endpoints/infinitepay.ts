@@ -10,22 +10,23 @@ import { notificationTransport } from '../../notifications/services/transport';
 import { PublicTokenPurpose, verifyPublicChargeToken } from '../../public/services/capability';
 import type { WebhookProvider } from '../provider';
 
-/** Every field optional: a body InfinitePay changed tomorrow must still get a 200, never a retry storm. */
-declare class InfinitePayWebhookBody implements Http.JsonBody {
-  invoice_slug?: String.Max<200>;
-  transaction_nsu?: String.Max<200>;
-  order_nsu?: String.Max<200>;
-  receipt_url?: String.Max<500>;
-  amount?: number;
-  paid_amount?: number;
-  installments?: number;
-  capture_method?: String.Max<40>;
-}
-
 declare class WebhookRequest implements Http.Request {
   parameters: { token: String.Max<300> };
-  /** `Extends`: fields we never declared (`items`, whatever comes next) pass through instead of a 400. */
-  body: Object.Extends<InfinitePayWebhookBody>;
+  /**
+   * Every field optional: a body InfinitePay changed tomorrow must still get a 200, never a retry storm.
+   * `Extends`: fields we never declared (`items`, whatever comes next) pass through instead of a 400. The fields
+   * are written inline because the gateway drops `Extends` around a declared class and the body stays closed.
+   */
+  body: Object.Extends<{
+    invoice_slug?: String.Max<200>;
+    transaction_nsu?: String.Max<200>;
+    order_nsu?: String.Max<200>;
+    receipt_url?: String.Max<500>;
+    amount?: number;
+    paid_amount?: number;
+    installments?: number;
+    capture_method?: String.Max<40>;
+  }>;
 }
 
 declare class WebhookResponse implements Http.Response {

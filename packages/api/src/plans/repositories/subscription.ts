@@ -9,13 +9,13 @@ export namespace SubscriptionRepository {
     owner_id: string;
     provider: SubscriptionProvider;
     stripe_customer_id: string;
-    stripe_subscription_id?: string;
+    stripe_subscription_id: string | null;
     plan: PlanTier;
     status: SubscriptionStatus;
-    current_period_end?: string;
+    current_period_end: string | null;
     cancel_at_period_end: boolean;
-    last_event_id?: string;
-    last_event_at?: string;
+    last_event_id: string | null;
+    last_event_at: string | null;
     created_at: string;
     updated_at: string;
   };

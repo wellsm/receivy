@@ -1,13 +1,13 @@
 import { effectiveConfig, normalizeReminderRules, type ReminderConfig, type ReminderRule, validateReminderConfig } from '@receivy/common';
 
-type ReminderRow = { reminders?: string; owner: { reminder_config?: string } };
+type ReminderRow = { reminders?: string | null; owner: { reminder_config?: string | null } };
 
 /** Kept apart from the repository so the notifier can read reminder settings without importing it. */
-export function parseReminders(row: { reminders?: string }): ReminderRule[] | undefined {
+export function parseReminders(row: { reminders?: string | null }): ReminderRule[] | undefined {
   return row.reminders ? normalizeReminderRules(JSON.parse(row.reminders)) : undefined;
 }
 
-export function parseReminderConfig(json?: string): ReminderConfig | null {
+export function parseReminderConfig(json?: string | null): ReminderConfig | null {
   if (!json) {
     return null;
   }

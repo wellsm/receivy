@@ -5,9 +5,9 @@ import type { DbClient } from '../../database';
 const sqlNull = null as unknown as undefined;
 
 export namespace SessionRepository {
-  export type Family = { id: string; user_id: string; revoked_at?: string };
+  export type Family = { id: string; user_id: string; revoked_at: string | null };
 
-  export type RefreshToken = { id: string; family_id: string; expires_at: string; consumed_at?: string };
+  export type RefreshToken = { id: string; family_id: string; expires_at: string; consumed_at: string | null };
 
   /** Whether the session family still belongs to this person and was not revoked. */
   export async function familyLive(db: DbClient, userId: string, familyId: string): Promise<boolean> {

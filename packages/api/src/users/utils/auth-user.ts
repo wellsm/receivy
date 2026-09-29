@@ -4,11 +4,11 @@ import { avatarRef } from './avatar';
 /** The account columns an authenticated session reads back as `AuthUser`. */
 export type AuthUserRow = {
   id: string;
-  email?: string;
-  name?: string;
-  phone?: string;
-  avatar_url?: string;
-  avatar_updated_at?: string;
+  email?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  avatar_url?: string | null;
+  avatar_updated_at?: string | null;
   status: AuthUser['status'];
   locale: 'pt-BR';
   timezone: string;

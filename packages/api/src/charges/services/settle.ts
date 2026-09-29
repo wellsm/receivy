@@ -46,7 +46,7 @@ async function tell(db: DbClient, notices: SettleNotices, userId: string | undef
 type PendingPush = { userId: string; title: string; body: string; chargeId: string };
 
 /** Never call `tell` from inside the transaction: an external push must not block on an open lock. Collect it instead. */
-function push(userId: string | undefined, title: string, body: string, chargeId: string): PendingPush[] {
+function push(userId: string | null, title: string, body: string, chargeId: string): PendingPush[] {
   return userId ? [{ userId, title, body, chargeId }] : [];
 }
 

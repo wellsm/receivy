@@ -16,7 +16,7 @@ export namespace AccountRepository {
   }
 
   /** Who a live account is and whether its e-mail was confirmed; null once the account was erased. */
-  export async function get(db: DbClient, id: string): Promise<{ id: string; name?: string; email?: string; verified_email?: string } | null> {
+  export async function get(db: DbClient, id: string): Promise<{ id: string; name: string | null; email: string | null; verified_email: string | null } | null> {
     const row = await db.users.findOne({
       select: { id: true, name: true, email: true, verified_email: true },
       where: { id, deleted_at: { isNull: true } }
@@ -119,7 +119,7 @@ export namespace AccountRepository {
     });
   }
 
-  export async function reminderConfig(db: DbClient, id: string): Promise<{ reminder_config?: string } | null> {
+  export async function reminderConfig(db: DbClient, id: string): Promise<{ reminder_config: string | null } | null> {
     const row = await db.users.findOne({ select: { reminder_config: true }, where: { id, deleted_at: { isNull: true } } });
 
     return row ?? null;
@@ -140,7 +140,7 @@ export namespace AccountRepository {
     await db.users.updateMany({ where: { id, opt_out_code: { isNull: true } }, data: { opt_out_code: code } });
   }
 
-  export async function byOptOutCode(db: DbClient, code: string): Promise<{ id: string; email?: string } | null> {
+  export async function byOptOutCode(db: DbClient, code: string): Promise<{ id: string; email: string | null } | null> {
     const row = await db.users.findOne({ select: { id: true, email: true }, where: { opt_out_code: code, deleted_at: { isNull: true } } });
 
     return row ?? null;
@@ -220,7 +220,7 @@ export namespace AccountRepository {
   }
 
   /** The row an erasure starts from, taken under lock: removed accounts included, so a retry answers the same. */
-  export async function forErasure(db: DbClient, id: string): Promise<{ id: string; email?: string; deleted_at?: string } | null> {
+  export async function forErasure(db: DbClient, id: string): Promise<{ id: string; email: string | null; deleted_at: string | null } | null> {
     const row = await db.users.findOne({ select: { id: true, email: true, deleted_at: true }, where: { id }, lock: true });
 
     return row ?? null;

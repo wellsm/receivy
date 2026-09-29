@@ -27,6 +27,9 @@ function rowWith(overrides: Partial<SubscriptionRepository.Row>): SubscriptionRe
     plan: PlanTier.Basic,
     status: SubscriptionStatus.Incomplete,
     cancel_at_period_end: false,
+    current_period_end: null,
+    last_event_id: null,
+    last_event_at: null,
     created_at: '2026-09-01T00:00:00.000Z',
     updated_at: '2026-09-01T00:00:00.000Z',
     ...overrides

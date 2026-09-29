@@ -4,7 +4,7 @@ export { DropReason, NoticeChannel };
 
 export type Dropped = { channel: NoticeChannel.Email | NoticeChannel.WhatsApp; reason: DropReason };
 
-export type ReachTarget = { email?: string; phone?: string; email_opt_out_at?: string; whatsapp_opt_out_at?: string };
+export type ReachTarget = { email?: string | null; phone?: string | null; email_opt_out_at?: string | null; whatsapp_opt_out_at?: string | null };
 
 export type ReachContact = { phone?: string; consentAt?: string } | null;
 

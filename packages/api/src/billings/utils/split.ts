@@ -42,7 +42,7 @@ export function payableOf(row: Pick<BillingRepository.Row, 'contact_id'>): Payab
 }
 
 export function calendarRule(row: BillingRepository.Row) {
-  return { frequency: row.frequency!, startDate: row.start_date, endDate: row.end_date, dueRule: row.due_rule };
+  return { frequency: row.frequency!, startDate: row.start_date, endDate: row.end_date ?? undefined, dueRule: row.due_rule };
 }
 
 export function installmentCountFor(row: BillingRepository.Row): number | undefined {
@@ -52,9 +52,9 @@ export function installmentCountFor(row: BillingRepository.Row): number | undefi
 
   return billingDueDates({
     recurrence: billingRecurrence(row),
-    frequency: row.frequency,
+    frequency: row.frequency ?? undefined,
     startDate: row.start_date,
-    endDate: row.end_date,
+    endDate: row.end_date ?? undefined,
     dueRule: row.due_rule
   }).length;
 }
@@ -77,18 +77,18 @@ export function billingInputFrom(row: BillingRow, split: BillingSplit): BillingI
 
   return {
     recurrence: billingRecurrence(row),
-    frequency: row.frequency,
+    frequency: row.frequency ?? undefined,
     description: row.description,
     totalCents: row.total_cents,
     startDate: row.start_date,
-    endDate: row.end_date,
+    endDate: row.end_date ?? undefined,
     dueRule: row.due_rule,
     timezone: row.timezone,
-    paymentMethodId: row.payment_method_id,
+    paymentMethodId: row.payment_method_id ?? undefined,
     // A conta a pagar takes no split as input: the normalizer settles it on the owner, as it did at creation.
     split: direction === Direction.Payable ? undefined : split,
     category: row.category,
-    contactId: row.contact_id,
+    contactId: row.contact_id ?? undefined,
     kind: billingKind(row)
   };
 }

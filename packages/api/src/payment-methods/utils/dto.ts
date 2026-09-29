@@ -3,9 +3,9 @@ import type { PaymentMethod, PaymentProvider, PixKeyType } from '@receivy/common
 export type PaymentMethodRow = {
   id: string;
   contact_id?: string | null;
-  provider?: PaymentProvider;
+  provider?: PaymentProvider | null;
   kind?: PixKeyType | null;
-  value?: string;
+  value?: string | null;
   label: string;
   is_default: boolean;
   archived_at?: string | null;
@@ -14,7 +14,7 @@ export type PaymentMethodRow = {
 
 /** A row the backfill has not reached yet has no provider: it must never reach a client half-read. */
 export function paymentMethodOf(row: PaymentMethodRow): PaymentMethod {
-  if (!row.provider || row.value === undefined) {
+  if (!row.provider || row.value === undefined || row.value === null) {
     throw new Error(`Payment method ${row.id} was not backfilled`);
   }
 

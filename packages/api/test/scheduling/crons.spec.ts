@@ -38,7 +38,7 @@ async function dueDates(billingId: string): Promise<string[]> {
   return (await charges(billingId)).map((row) => row.due_date);
 }
 
-async function cursorOf(billingId: string): Promise<string | undefined> {
+async function cursorOf(billingId: string): Promise<string | null | undefined> {
   const row = await db.billings.findOne({ select: { last_occurrence_date: true }, where: { id: billingId } });
 
   return row?.last_occurrence_date;

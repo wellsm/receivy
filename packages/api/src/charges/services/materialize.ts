@@ -26,7 +26,7 @@ export type ChargeMaterializationContext = {
 export type PayableMaterialization = {
   payer: ChargePayer.Owner;
   /** The receiving contact; absent when the bill is the owner's alone (no Pix on the charge). */
-  contactId?: string;
+  contactId?: string | null;
 };
 
 /** What the persistence seam knows about the billing behind the plan: enough to settle a registro without reading it. */
@@ -54,11 +54,11 @@ async function recipientSnapshots(db: DbClient, ownerId: string, userIds: string
 export async function paymentSnapshot(
   db: DbClient,
   ownerId: string,
-  paymentMethodId?: string,
-  contactId?: string
+  paymentMethodId?: string | null,
+  contactId?: string | null
 ): Promise<MethodSnapshot | null> {
   if (!paymentMethodId) {
-    return PaymentMethodRepository.defaultOf(db, ownerId, contactId);
+    return PaymentMethodRepository.defaultOf(db, ownerId, contactId ?? undefined);
   }
 
   // A conta a receber publishes the owner's own key, never one they keep about a contact. A conta a
@@ -78,7 +78,7 @@ export async function prepareChargeMaterialization(
   db: DbClient,
   ownerId: string,
   userIds: string[],
-  paymentMethodId?: string,
+  paymentMethodId?: string | null,
   payable?: PayableMaterialization
 ): Promise<ChargeMaterializationContext> {
   const recipients = await recipientSnapshots(db, ownerId, userIds);

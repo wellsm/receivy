@@ -11,11 +11,11 @@ export namespace WhatsappInstanceRepository {
     token: string;
     webhook_secret: string;
     state: WhatsappInstanceState;
-    phone?: string;
-    qr?: string;
-    pairing_code?: string;
-    connected_at?: string;
-    disconnected_at?: string;
+    phone: string | null;
+    qr: string | null;
+    pairing_code: string | null;
+    connected_at: string | null;
+    disconnected_at: string | null;
   };
 
   const SELECT = {

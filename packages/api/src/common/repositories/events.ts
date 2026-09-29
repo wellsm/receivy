@@ -17,7 +17,7 @@ export namespace EventRepository {
   export type Row = {
     id: string;
     type: string;
-    actor_user_id?: string;
+    actor_user_id?: string | null;
     payload: Record<string, unknown>;
     created_at: string;
   };

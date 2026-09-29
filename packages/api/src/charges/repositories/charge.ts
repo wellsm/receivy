@@ -125,25 +125,25 @@ export namespace ChargeRepository {
     id: string;
     /** The billing owner, whichever side of the money they are on. */
     owner_id: string;
-    /** Who receives; undefined on a conta a pagar without a payee. */
-    creditor_id?: string;
-    /** Who pays; undefined on a registro with nobody on the other side. */
-    debtor_id?: string;
+    /** Who receives; null on a conta a pagar without a payee. */
+    creditor_id: string | null;
+    /** Who pays; null on a registro with nobody on the other side. */
+    debtor_id: string | null;
     billing_id: string;
     description: string;
     amount_cents: number;
     due_date: string;
-    installment?: number;
-    installment_count?: number;
-    payment_snapshot?: PaymentSnapshotColumns;
-    payment_link_url?: string;
-    payment_link_state?: PaymentLinkState;
-    provider_link_id?: string;
-    provider_transaction_id?: string;
-    provider_receipt_url?: string;
+    installment: number | null;
+    installment_count: number | null;
+    payment_snapshot: PaymentSnapshotColumns | null;
+    payment_link_url: string | null;
+    payment_link_state: PaymentLinkState | null;
+    provider_link_id: string | null;
+    provider_transaction_id: string | null;
+    provider_receipt_url: string | null;
     state: ChargeState;
-    cancelled_at?: string;
-    paid_at?: string;
+    cancelled_at: string | null;
+    paid_at: string | null;
     notify: boolean;
     created_at: string;
     updated_at: string;
@@ -186,14 +186,22 @@ export namespace ChargeRepository {
   export type NoticeRow = Row & {
     billing: {
       kind: BillingKind;
-      reminders?: string;
-      whatsapp_group_jid?: string;
-      whatsapp_group_name?: string;
-      whatsapp_group_failed_at?: string;
-      owner: { timezone: string; reminder_config?: string };
+      reminders?: string | null;
+      whatsapp_group_jid?: string | null;
+      whatsapp_group_name?: string | null;
+      whatsapp_group_failed_at?: string | null;
+      owner: { timezone: string; reminder_config?: string | null };
     };
-    debtor?: { id: string; name?: string; email?: string; phone?: string; deleted_at?: string; email_opt_out_at?: string; whatsapp_opt_out_at?: string };
-    creditor?: { name?: string };
+    debtor?: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      phone?: string | null;
+      deleted_at?: string | null;
+      email_opt_out_at?: string | null;
+      whatsapp_opt_out_at?: string | null;
+    } | null;
+    creditor?: { name?: string | null } | null;
   };
 
   export async function forNotice(db: DbClient, id: string): Promise<NoticeRow | null> {
@@ -249,7 +257,7 @@ export namespace ChargeRepository {
       billing_id: string;
       due_date: string;
       notify: boolean;
-      billing: { kind: BillingKind; reminders?: string; owner: { timezone: string; reminder_config?: string } };
+      billing: { kind: BillingKind; reminders?: string | null; owner: { timezone: string; reminder_config?: string | null } };
     }[]
   > {
     const { records } = await db.charges.findMany({

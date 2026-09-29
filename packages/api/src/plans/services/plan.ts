@@ -112,7 +112,7 @@ async function ensureRow(db: DbClient, stripe: StripeClient, ownerId: string, no
   }
 
   const account = await AccountRepository.get(db, ownerId);
-  const customer = await stripe.createCustomer({ ownerId, email: account?.verified_email ?? account?.email, name: account?.name });
+  const customer = await stripe.createCustomer({ ownerId, email: account?.verified_email ?? account?.email ?? undefined, name: account?.name ?? undefined });
 
   if (customer.status !== 'ok') {
     throw new PlanUnavailableError();

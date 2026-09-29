@@ -9,10 +9,10 @@ import { Direction, type PaymentLink, PaymentLinkState, PaymentProvider, type Pa
 export type Axis = {
   /** The billing owner, whichever side of the money they are on. */
   owner_id: string;
-  /** Who receives; undefined on a conta a pagar without a payee. */
-  creditor_id?: string;
-  /** Who pays; undefined on a registro with nobody on the other side. */
-  debtor_id?: string;
+  /** Who receives; null on a conta a pagar without a payee. */
+  creditor_id: string | null;
+  /** Who pays; null on a registro with nobody on the other side. */
+  debtor_id: string | null;
 };
 
 export type PaymentSnapshotColumns = {
@@ -24,7 +24,7 @@ export type PaymentSnapshotColumns = {
 };
 
 /** How this charge is paid, frozen at the moment it was published. */
-export function paymentOf(row: { payment_snapshot?: PaymentSnapshotColumns }): PaymentSnapshotColumns | null {
+export function paymentOf(row: { payment_snapshot?: PaymentSnapshotColumns | null }): PaymentSnapshotColumns | null {
   return row.payment_snapshot ?? null;
 }
 
@@ -34,7 +34,11 @@ export function snapshotDto(payment: PaymentSnapshotColumns | null): PaymentSnap
 }
 
 /** The checkout link of a charge paid through a provider (InfinitePay, PagBank); a Pix charge has none. A link never asked for reads as pending. */
-export function paymentLinkOf(row: { payment_snapshot?: PaymentSnapshotColumns; payment_link_url?: string; payment_link_state?: PaymentLinkState }): PaymentLink | null {
+export function paymentLinkOf(row: {
+  payment_snapshot?: PaymentSnapshotColumns | null;
+  payment_link_url?: string | null;
+  payment_link_state?: PaymentLinkState | null;
+}): PaymentLink | null {
   if (!row.payment_snapshot || row.payment_snapshot.provider === PaymentProvider.Pix) {
     return null;
   }
@@ -47,13 +51,13 @@ export function ownerOf(row: Axis): string {
   return row.owner_id;
 }
 
-/** Who receives; undefined on a conta a pagar without a payee. */
-export function creditorOf(row: Axis): string | undefined {
+/** Who receives; null on a conta a pagar without a payee. */
+export function creditorOf(row: Axis): string | null {
   return row.creditor_id;
 }
 
-/** Who pays; undefined on a registro with nobody on the other side. */
-export function debtorOf(row: Axis): string | undefined {
+/** Who pays; null on a registro with nobody on the other side. */
+export function debtorOf(row: Axis): string | null {
   return row.debtor_id;
 }
 
@@ -61,11 +65,11 @@ export function debtorOf(row: Axis): string | undefined {
 export function ownerPays(row: Axis): boolean {
   const debtorId = debtorOf(row);
 
-  return debtorId !== undefined && debtorId === ownerOf(row);
+  return debtorId !== null && debtorId === ownerOf(row);
 }
 
-/** The person on the other side of the owner, whichever side of the money they are on; undefined when there is none. */
-export function counterpartId(row: Axis): string | undefined {
+/** The person on the other side of the owner, whichever side of the money they are on; null when there is none. */
+export function counterpartId(row: Axis): string | null {
   return ownerPays(row) ? creditorOf(row) : debtorOf(row);
 }
 

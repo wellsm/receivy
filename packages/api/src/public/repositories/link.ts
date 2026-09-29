@@ -11,10 +11,10 @@ export type LinkRow = {
   linkable_type: LinkableType;
   linkable_id: string;
   public_id: string;
-  short_code?: string;
+  short_code: string | null;
   expires_at: string;
-  revoked_at?: string;
-  accepted_count?: number;
+  revoked_at: string | null;
+  accepted_count: number | null;
   created_at: string;
 };
 

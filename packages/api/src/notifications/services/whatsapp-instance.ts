@@ -156,7 +156,7 @@ async function connect(
   api: EvolutionApi,
   request: typeof fetch,
   name: string,
-  phone: string | undefined,
+  phone: string | null,
 ): Promise<Pairing> {
   const query = phone ? `?number=${encodeURIComponent(phone)}` : "";
   const response = await call(
@@ -348,8 +348,8 @@ async function get(
       // Mirrors what was just saved: a code-only refresh clears the (now expired) qr, and vice versa.
       return view({
         ...row,
-        qr: pairing.qr,
-        pairing_code: pairing.pairingCode,
+        qr: pairing.qr ?? null,
+        pairing_code: pairing.pairingCode ?? null,
       });
     }
   }

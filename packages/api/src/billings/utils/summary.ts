@@ -80,18 +80,18 @@ export function billingSummary(
     counterpart,
     kind: billingKind(row),
     recurrence: billingRecurrence(row),
-    frequency: row.frequency,
+    frequency: row.frequency ?? undefined,
     description: row.description,
     total: { amountCents: row.total_cents, currency: 'BRL' },
     startDate: row.start_date,
-    endDate: row.end_date,
+    endDate: row.end_date ?? undefined,
     dueRule: row.due_rule,
     state: row.state,
     installmentCount: installmentCountFor(row),
     nextDueDate,
     createdAt: row.created_at,
     category: row.category,
-    splitMode: row.split_mode,
+    splitMode: row.split_mode ?? undefined,
     ...counters
   };
 }

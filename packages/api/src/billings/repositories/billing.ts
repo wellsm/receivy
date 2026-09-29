@@ -24,29 +24,29 @@ export namespace BillingRepository {
     owner_id: string;
     recurrence: BillingRecurrence;
     kind: BillingKind;
-    frequency?: BillingFrequency;
+    frequency: BillingFrequency | null;
     description: string;
     category: BillingCategory;
     total_cents: number;
     start_date: string;
-    end_date?: string;
+    end_date: string | null;
     due_rule: BillingDueRule;
-    payment_method_id?: string;
-    contact_id?: string;
-    reminders?: string;
-    whatsapp_group_jid?: string;
-    whatsapp_group_name?: string;
-    whatsapp_group_failed_at?: string;
+    payment_method_id: string | null;
+    contact_id: string | null;
+    reminders: string | null;
+    whatsapp_group_jid: string | null;
+    whatsapp_group_name: string | null;
+    whatsapp_group_failed_at: string | null;
     state: BillingState;
     /** Set when the billing ended on its own; see `billings/services/settlement.ts`. */
-    auto_ended_at?: string;
+    auto_ended_at: string | null;
     /** Null only until the block 3 backfill runs; reads as 'equal'. */
-    split_mode?: SplitMode;
-    last_occurrence_date?: string;
+    split_mode: SplitMode | null;
+    last_occurrence_date: string | null;
     request_hash: string;
     created_at: string;
     updated_at: string;
-    owner: { reminder_config?: string };
+    owner: { reminder_config?: string | null };
   };
 
   export type Filters = {
@@ -155,6 +155,7 @@ export namespace BillingRepository {
         contact_id: true,
         reminders: true,
         state: true,
+        auto_ended_at: true,
         split_mode: true,
         last_occurrence_date: true,
         request_hash: true,
@@ -180,7 +181,7 @@ export namespace BillingRepository {
     recurrence: BillingRecurrence;
     category: BillingCategory;
     state: BillingState;
-    owner: { name?: string };
+    owner: { name?: string | null };
   } | null> {
     const row = await db.billings.findOne({
       select: { id: true, owner_id: true, description: true, total_cents: true, recurrence: true, category: true, state: true, owner: { name: true } },
@@ -238,6 +239,7 @@ export namespace BillingRepository {
         contact_id: true,
         reminders: true,
         state: true,
+        auto_ended_at: true,
         split_mode: true,
         last_occurrence_date: true,
         request_hash: true,
@@ -348,6 +350,7 @@ export namespace BillingRepository {
         contact_id: true,
         reminders: true,
         state: true,
+        auto_ended_at: true,
         split_mode: true,
         last_occurrence_date: true,
         request_hash: true,
@@ -384,7 +387,7 @@ export namespace BillingRepository {
   }
 
   /** What deciding an automatic end needs; `lock` holds the row so two charges settling at once see each other. */
-  export async function settlement(db: DbClient, id: string, lock = false): Promise<{ recurrence: BillingRecurrence; state: BillingState; auto_ended_at?: string } | null> {
+  export async function settlement(db: DbClient, id: string, lock = false): Promise<{ recurrence: BillingRecurrence; state: BillingState; auto_ended_at: string | null } | null> {
     const row = await db.billings.findOne({ select: { recurrence: true, state: true, auto_ended_at: true }, where: { id }, lock });
 
     return row ?? null;

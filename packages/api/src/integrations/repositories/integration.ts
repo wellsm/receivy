@@ -11,7 +11,7 @@ export namespace IntegrationRepository {
     provider: PaymentProvider;
     credentials: IntegrationCredentialsSchema;
     label: string;
-    revoked_at?: string;
+    revoked_at: string | null;
     created_at: string;
     updated_at: string;
   };

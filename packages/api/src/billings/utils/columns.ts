@@ -16,7 +16,7 @@ export function billingKind(row: { kind: BillingKind }): BillingKind {
 }
 
 /** Which way the money goes: a receiving contact makes it the owner's own bill; without one the owner collects. */
-export function billingDirection(row: { contact_id?: string }): Direction {
+export function billingDirection(row: { contact_id?: string | null }): Direction {
   return row.contact_id ? Direction.Payable : Direction.Receivable;
 }
 

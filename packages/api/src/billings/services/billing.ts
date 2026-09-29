@@ -529,7 +529,7 @@ export async function patchBilling(
 
     // A conta a pagar keeps the owner alone in its split, for the whole total: a new total rewrites it
     // (a fixed part above the total would be refused otherwise).
-    const stored = payable ? normalizeBillingInput({ ...billingInputFrom(row, split), totalCents, contactId }).split : split;
+    const stored = payable ? normalizeBillingInput({ ...billingInputFrom(row, split), totalCents, contactId: contactId ?? undefined }).split : split;
 
     if (patch.split !== undefined || patch.totalCents !== undefined || (payable && contactPatched)) {
       const changes = await saveAllocations(tx, row, totalCents, stored, instant);
@@ -548,6 +548,7 @@ export async function patchBilling(
     }
 
     const boundary = addCalendarDays(today, -1);
+    const occurred = row.last_occurrence_date ?? boundary;
     const startDate = patch.startDate ?? row.start_date;
     const dueRule = patch.dueRule ?? row.due_rule;
     const rescheduled = startDate !== row.start_date || dueRule !== row.due_rule;
@@ -572,7 +573,7 @@ export async function patchBilling(
         ...(whatsappGroup ? { whatsappGroup } : patch.clearWhatsappGroup ? { whatsappGroup: null } : {}),
         ...(patch.split !== undefined || (payable && contactPatched) ? { splitMode: stored.mode } : {}),
         ...(patch.state ? { state: patch.state } : {}),
-        ...(resumed ? { lastOccurrenceDate: (row.last_occurrence_date ?? boundary) > boundary ? row.last_occurrence_date : boundary } : {}),
+        ...(resumed ? { lastOccurrenceDate: occurred > boundary ? occurred : boundary } : {}),
         // A new due day wins over the resume cursor: both only ever move the cursor forward.
         ...(rescheduled ? { startDate, dueRule, lastOccurrenceDate: cursor } : {})
       },

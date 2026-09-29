@@ -197,7 +197,7 @@ export async function sendChargeNotice(
   const optOutCode = ownBill || !target.email ? undefined : await ensureOptOutCode(db, target.id);
   const rendered = renderNotice(
     {
-      email: ownBill ? undefined : target.email,
+      email: ownBill ? undefined : (target.email ?? undefined),
       name: target.name?.trim() || target.email || 'Conta excluída',
       description: charge.description,
       cents: charge.amount_cents,

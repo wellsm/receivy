@@ -9,8 +9,14 @@ const sqlNull = null as unknown as undefined;
 /** The four columns a charge freezes from a method. */
 export type MethodSnapshot = { provider: PaymentProvider; kind: PixKeyType | null; value: string; label: string; integrationId?: string };
 
-function snapshotOf(row: { provider?: PaymentProvider; kind?: PixKeyType | null; value?: string; label: string; integration_id?: string }): MethodSnapshot | null {
-  if (!row.provider || row.value === undefined) {
+function snapshotOf(row: {
+  provider?: PaymentProvider | null;
+  kind?: PixKeyType | null;
+  value?: string | null;
+  label: string;
+  integration_id?: string | null;
+}): MethodSnapshot | null {
+  if (!row.provider || row.value === undefined || row.value === null) {
     return null;
   }
 

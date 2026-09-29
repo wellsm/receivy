@@ -25,7 +25,7 @@ export function paymentNoticeContext(variables: PaymentNoticeVariables): Payment
   return { transport: notificationTransport({ ...variables }), origin: variables.PUBLIC_WEB_ORIGIN };
 }
 
-function copy(notice: PaymentNotice, name: string, what: string, reason: string | undefined) {
+function copy(notice: PaymentNotice, name: string, what: string, reason: string | null | undefined) {
   switch (notice) {
     case PaymentNotice.Declared:
       return { title: 'Pagamento informado', body: `${name} disse que pagou ${what}. Confirme o recebimento.` };

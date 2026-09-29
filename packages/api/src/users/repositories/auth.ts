@@ -5,11 +5,11 @@ import type { OauthProvider } from '../services/oauth';
 const sqlNull = null as unknown as undefined;
 
 export namespace AuthRepository {
-  export type LoginCode = { id: string; code_hash: string; attempts: number; expires_at: string; consumed_at?: string; created_at: string };
+  export type LoginCode = { id: string; code_hash: string; attempts: number; expires_at: string; consumed_at: string | null; created_at: string };
 
-  export type Attempt = { id: string; destination: string; code_verifier: string; client_challenge: string; nonce: string; expires_at: string; consumed_at?: string };
+  export type Attempt = { id: string; destination: string; code_verifier: string; client_challenge: string; nonce: string; expires_at: string; consumed_at: string | null };
 
-  export type Grant = { id: string; user_id: string; expires_at: string; consumed_at?: string };
+  export type Grant = { id: string; user_id: string; expires_at: string; consumed_at: string | null };
 
   /**
    * Serializes the callers that share one e-mail for the rest of the transaction. No row exists on the first

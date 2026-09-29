@@ -1,12 +1,13 @@
 import type { Environment } from "@ez4/common";
 import type { Cdn } from "@ez4/distribution";
-import type { ApiDomain, ApiLocation, WebAliases, WebCertificateDomain } from "@stage";
+import type { ApiDomain, WebAliases, WebCertificateDomain } from "@stage";
 import type { WebFiles } from "./storage";
 
 /**
  * CloudFront in front of the SPA bucket. Two extra origins send the provider callbacks to the API Gateway:
  * Apple only accepts a Return URL on a verifiable domain, and the API lives on an execute-api host. CloudFront
  * keeps the request path, so the web paths are the API's own (`/api/auth/google/callback`, `/api/auth/apple/callback`).
+ * The origins have no `location`: a deployed API answers at the root of its host, only `ez4 serve` adds `/<stage>-receivy-api`.
  * Deploy-only: the app never imports this file, so Vite leaves it out of the bundle.
  *
  * The tag below is the label printed with the site URL after a deploy, and the distribution's comment in CloudFront.
@@ -39,13 +40,11 @@ export declare class WebCdn extends Cdn.Service {
     Cdn.UseOrigin<{
       path: "/api/auth/google/callback";
       domain: ApiDomain;
-      location: ApiLocation;
       cache: Cdn.UseCache<{ ttl: 0; queries: ["code", "state", "error"] }>;
     }>,
     Cdn.UseOrigin<{
       path: "/api/auth/apple/callback";
       domain: ApiDomain;
-      location: ApiLocation;
       cache: Cdn.UseCache<{ ttl: 0 }>;
     }>,
   ];

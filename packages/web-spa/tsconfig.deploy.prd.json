@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": { "@stage": ["./src/deploy/stage/prd.ts"] }
+  }
+}

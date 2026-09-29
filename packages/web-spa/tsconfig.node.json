@@ -1,10 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "noEmit": true,
     "module": "ESNext",
-    "moduleResolution": "Bundler"
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@stage": [
+        "./src/deploy/stage/dev.ts"
+      ]
+    }
   },
-  "include": ["vite.config.ts", "src/deploy"]
+  "include": [
+    "vite.config.ts",
+    "src/deploy"
+  ]
 }

@@ -17,6 +17,12 @@ export const Route = createFileRoute("/join/$token")({
     // A dead session peeks quietly: currentUser answers null and the visitor is treated as signed out, not sent to the login.
     const user = hasSession() ? await currentUser({ quietExpiry: true }) : null;
 
+    // A dead session was cleared by the refused refresh. A token still stored means the API did not answer: that is
+    // the unavailable invite, not a signed-out visitor.
+    if (!user && hasSession()) {
+      return { view: null, authenticated: false };
+    }
+
     // The invite names the guest by their profile name: a fresh account finishes onboarding first and comes back here.
     if (user && needsOnboarding(user)) {
       throw redirect({ to: "/onboarding", search: { next: `/join/${encodeURIComponent(params.token)}` } });

@@ -2,10 +2,11 @@ import { Apple, ArrowRight, Loader2, Mail } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { GoogleMark } from "@/components/app/brand-marks";
+import { StorageBlockedError } from "@/lib/api/errors";
 import { requestEmailCode, startOauth } from "@/lib/auth/flows";
 import { OAuthProvider } from "@/lib/auth/oauth";
 import type { LoginProviders } from "@/lib/auth/login-providers";
-import { writePendingLogin } from "@/lib/auth/pending-login";
+import { readPendingLogin, writePendingLogin } from "@/lib/auth/pending-login";
 import { useAppNavigate } from "@/lib/navigate";
 
 type LoginScreenProps = {
@@ -48,6 +49,12 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
       await requestEmailCode(email);
 
       writePendingLogin({ email, sentAt: Date.now(), nextPath });
+
+      // Blocked storage keeps no pending login, and the code screen would send the person back here without a word.
+      if (!readPendingLogin()) {
+        throw new StorageBlockedError();
+      }
+
       // Left busy on purpose: the route change unmounts this screen, and clearing it here
       // would flash the button back to idle while the old screen is still on top.
       navigate("/login/code");

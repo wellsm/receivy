@@ -254,6 +254,102 @@ describe("apiFetch", () => {
     expect(request.mock.calls[0]?.[0]).toBe("receivy.session.refresh");
   });
 
+  it("refreshes without the lock when the browser refuses the lock request", async () => {
+    const request = vi.fn().mockRejectedValue(new DOMException("denied", "SecurityError"));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(json({ accessToken: "a2", refreshToken: "r2", expiresIn: 900 }))
+      .mockResolvedValueOnce(json({ ok: true }));
+
+    vi.stubGlobal("navigator", { ...navigator, locks: { request } });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiFetch("charges");
+
+    expect(response.ok).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(getAccessToken()).toBe("a2");
+    expect(localStorage.getItem("receivy.session")).toContain("r2");
+  });
+
+  it("does not run the refresh a second time when it fails inside the lock", async () => {
+    const request = vi.fn((_name: string, task: () => Promise<unknown>) => task());
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockResolvedValueOnce(new Response("not json", { status: 200 }));
+
+    vi.stubGlobal("navigator", { ...navigator, locks: { request } });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const failure = await apiFetch("charges").then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(SessionExpiredError);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("limits how long the refresh request may take, and a timeout keeps the session", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (!url.endsWith("/auth/refresh")) {
+        return Promise.resolve(new Response(null, { status: 401 }));
+      }
+
+      // A request that never answers: only its signal ends it.
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = apiFetch("charges");
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    expect(timeout).toHaveBeenCalledWith(10000);
+    expect(fetchMock.mock.calls[1]?.[1]?.signal).toBe(controller.signal);
+
+    controller.abort();
+
+    const response = await pending;
+
+    expect(isUnavailable(response)).toBe(true);
+    expect(getAccessToken()).toBe("a1");
+    expect(localStorage.getItem("receivy.session")).toContain("r1");
+  });
+
+  it("answers unavailable and keeps the session when the refresh body stalls past the time limit", async () => {
+    const controller = new AbortController();
+    const stalled = {
+      ok: true,
+      status: 200,
+      json: () =>
+        new Promise((_resolve, reject) => {
+          controller.signal.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
+        }),
+    } as unknown as Response;
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockResolvedValueOnce(stalled);
+
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = apiFetch("charges");
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    controller.abort();
+
+    const response = await pending;
+
+    expect(isUnavailable(response)).toBe(true);
+    expect(getAccessToken()).toBe("a1");
+    expect(localStorage.getItem("receivy.session")).toContain("r1");
+  });
+
   it("apiJson reports a refresh network failure as unavailable and keeps the session", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockRejectedValueOnce(new TypeError("fetch failed"));
 

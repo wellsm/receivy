@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { PublicChargeScreen } from "@/components/screens/public-charge-screen";
-import { loadPublicCharge, ownChargeIdByToken, type PublicChargeQuery } from "@/lib/public-charge";
+import { loadPublicCharge, ownChargeIdByToken, postProviderReturn, type PublicChargeQuery } from "@/lib/public-charge";
 
 const pick = (search: Record<string, unknown>, key: keyof PublicChargeQuery) => (typeof search[key] === "string" ? { [key]: search[key] } : {});
 
@@ -16,9 +16,14 @@ export const Route = createFileRoute("/pay/$token")({
     // Back from InfinitePay: close the charge with the ids, then take them out of the address bar and the history
     // (replace), so going back or reloading never posts the return again. The loader then runs for `?returned=1`.
     if (deps.order_nsu && deps.transaction_nsu && deps.slug) {
-      await loadPublicCharge(params.token, deps);
+      const closed = await postProviderReturn(params.token, deps);
 
-      throw redirect({ to: "/pay/$token", params, search: { returned: "1" }, replace: true });
+      if (closed) {
+        throw redirect({ to: "/pay/$token", params, search: { returned: "1" }, replace: true });
+      }
+
+      // The return did not go through: the ids stay in the address, so loading the page again posts them again.
+      return { charge: await loadPublicCharge(params.token, {}) };
     }
 
     const charge = await loadPublicCharge(params.token, deps);

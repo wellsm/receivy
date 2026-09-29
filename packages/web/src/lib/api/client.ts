@@ -19,6 +19,8 @@ const STALE_SESSION = 409;
 const TOO_MANY_REQUESTS = 429;
 /** How long a 409 waits for the sibling tab to store the rotated pair. */
 const ROTATION_WAIT_MS = 3000;
+/** A refresh request that hangs would hold the lock, and every other tab behind it, for as long as it hangs. */
+const REFRESH_TIMEOUT_MS = 10000;
 const REFRESH_LOCK = "receivy.session.refresh";
 
 let sessionExpiredHandler: (() => void) | null = null;
@@ -122,7 +124,9 @@ async function refreshOnce(): Promise<RefreshOutcome> {
       return RefreshOutcome.Expired;
     }
 
-    const response = await send("auth/refresh", { auth: false, method: "POST", body: JSON.stringify({ refreshToken }) });
+    // The timeout rejects the fetch, which `send` answers as unavailable like any other network failure.
+    const signal = AbortSignal.timeout(REFRESH_TIMEOUT_MS);
+    const response = await send("auth/refresh", { auth: false, method: "POST", body: JSON.stringify({ refreshToken }), signal });
 
     // The session survives an outage: nothing is cleared, and the caller answers unavailable. A 5xx or a 429 is
     // the API failing or throttling, not the API refusing this refresh token.
@@ -131,7 +135,20 @@ async function refreshOnce(): Promise<RefreshOutcome> {
     }
 
     if (response.ok) {
-      storeSession((await response.json()) as SessionTokens);
+      // A body that stalls past the time limit is the same outage; a body that cannot be read is still thrown.
+      const tokens = await response.json().catch((error: unknown) => {
+        if (signal.aborted) {
+          return null;
+        }
+
+        throw error;
+      });
+
+      if (!tokens) {
+        return RefreshOutcome.Unavailable;
+      }
+
+      storeSession(tokens as SessionTokens);
 
       return RefreshOutcome.Refreshed;
     }
@@ -153,14 +170,29 @@ async function refreshOnce(): Promise<RefreshOutcome> {
 }
 
 /** Serializes the refresh across tabs where the browser has Web Locks; elsewhere the in-tab single flight is all there is. */
-function withRefreshLock(task: () => Promise<RefreshOutcome>): Promise<RefreshOutcome> {
+async function withRefreshLock(task: () => Promise<RefreshOutcome>): Promise<RefreshOutcome> {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
 
   if (!locks) {
     return task();
   }
 
-  return locks.request(REFRESH_LOCK, task);
+  let started = false;
+
+  try {
+    return await locks.request(REFRESH_LOCK, () => {
+      started = true;
+
+      return task();
+    });
+  } catch (error) {
+    // The task's own failure belongs to the caller; only a refused lock request falls back to the in-tab single flight.
+    if (started) {
+      throw error;
+    }
+
+    return task();
+  }
 }
 
 /** One refresh at a time per tab; callers share the promise and its outcome. */

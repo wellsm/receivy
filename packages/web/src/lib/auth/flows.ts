@@ -1,13 +1,14 @@
 import type { AuthSessionResponse, AuthUser, ConfirmEmailCodeBody } from "@receivy/common";
 import { apiJson } from "@/lib/api/client";
-import { ApiError } from "@/lib/api/errors";
-import { clearSession, loadRefreshToken, storeSession } from "@/lib/auth/session";
+import { ApiError, StorageBlockedError } from "@/lib/api/errors";
+import { clearSession, hasSession, loadRefreshToken, storeSession } from "@/lib/auth/session";
 import type { LoginProviders } from "./login-providers";
 import { isProviderAuthorizationUrl, type OAuthProvider } from "./oauth";
 import { createPkcePair, popOauthVerifier, saveOauthVerifier } from "./pkce";
 
 const DEVICE_NAME = "Web";
 const EMAIL_CODE_FAILED_MESSAGE = "Não foi possível enviar o código agora.";
+const EMAIL_INVALID_MESSAGE = "Informe um e-mail válido.";
 const EMAIL_CONFIRM_INVALID_MESSAGE = "Código inválido ou expirado. Peça um novo código e tente novamente.";
 const EMAIL_CONFIRM_FAILED_MESSAGE = "Não foi possível entrar agora.";
 const OAUTH_START_FAILED_MESSAGE = "Não foi possível iniciar o login. Tente novamente.";
@@ -20,8 +21,9 @@ export async function requestEmailCode(email: string): Promise<void> {
       body: JSON.stringify({ email }),
     });
   } catch (error) {
-    if (error instanceof ApiError && error.status < 500) {
-      throw error;
+    // The API's own text is technical ("Malformed body payload."): a 400 here is the e-mail failing its validation.
+    if (error instanceof ApiError && error.status === 400) {
+      throw new ApiError(400, EMAIL_INVALID_MESSAGE);
     }
 
     throw new ApiError(503, EMAIL_CODE_FAILED_MESSAGE);
@@ -38,8 +40,19 @@ export async function confirmEmailCode(body: ConfirmEmailCodeBody): Promise<Auth
 
     storeSession(response);
 
+    // Blocked storage keeps no refresh token, and the next route would send the person back to the login without a word.
+    if (!hasSession()) {
+      clearSession();
+
+      throw new StorageBlockedError();
+    }
+
     return response.user;
   } catch (error) {
+    if (error instanceof StorageBlockedError) {
+      throw error;
+    }
+
     if (error instanceof ApiError && (error.status === 400 || error.status === 401)) {
       throw new ApiError(401, EMAIL_CONFIRM_INVALID_MESSAGE);
     }
@@ -88,6 +101,13 @@ export async function completeOauth(code: string): Promise<AuthUser | null> {
   });
 
   storeSession(response);
+
+  // Blocked storage keeps no refresh token, and the next route would send the person back to the login without a word.
+  if (!hasSession()) {
+    clearSession();
+
+    throw new StorageBlockedError();
+  }
 
   return response.user;
 }

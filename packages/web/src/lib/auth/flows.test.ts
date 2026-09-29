@@ -1,6 +1,6 @@
 import type { AuthUser } from "@receivy/common";
 import { onSessionExpired } from "@/lib/api/client";
-import { ApiError } from "@/lib/api/errors";
+import { ApiError, StorageBlockedError } from "@/lib/api/errors";
 import { clearSession, getAccessToken, loadRefreshToken, storeSession } from "@/lib/auth/session";
 import {
   completeOauth,
@@ -62,6 +62,24 @@ describe("requestEmailCode", () => {
       message: "Não foi possível enviar o código agora.",
     });
   });
+
+  it("asks for a valid e-mail instead of showing the API's validation text", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ message: "Malformed body payload." }, 400)));
+
+    await expect(requestEmailCode("ana@localhost")).rejects.toMatchObject({
+      status: 400,
+      message: "Informe um e-mail válido.",
+    });
+  });
+
+  it("maps any other refusal to the generic message, never to the API's text", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ message: "Too Many Requests" }, 429)));
+
+    await expect(requestEmailCode("a@b.com")).rejects.toMatchObject({
+      status: 503,
+      message: "Não foi possível enviar o código agora.",
+    });
+  });
 });
 
 describe("confirmEmailCode", () => {
@@ -107,6 +125,19 @@ describe("confirmEmailCode", () => {
     await expect(confirmEmailCode({ email: "a@b.com", code: "123456" })).rejects.toMatchObject({
       message: "Não foi possível entrar agora.",
     });
+  });
+
+  it("says the browser is blocking storage when the login cannot be kept", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ accessToken: "a1", refreshToken: "r1", expiresIn: 900, user })));
+
+    const failure = confirmEmailCode({ email: "a@b.com", code: "123456" });
+
+    await expect(failure).rejects.toBeInstanceOf(StorageBlockedError);
+    await expect(failure).rejects.toThrow("Seu navegador está bloqueando o armazenamento deste site, então o login não pode ser mantido. Libere o armazenamento ou saia do modo privado e tente novamente.");
+    expect(getAccessToken()).toBeNull();
   });
 });
 
@@ -180,6 +211,18 @@ describe("completeOauth", () => {
 
     await expect(completeOauth("grant-code")).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fails instead of going on without a session when the browser is blocking storage", async () => {
+    saveOauthVerifier("verifier-1");
+
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ accessToken: "a2", refreshToken: "r2", expiresIn: 900, user })));
+
+    await expect(completeOauth("grant-code")).rejects.toBeInstanceOf(StorageBlockedError);
+    expect(getAccessToken()).toBeNull();
   });
 });
 

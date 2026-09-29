@@ -14,6 +14,27 @@ async function readCharge(token: string): Promise<PublicChargeView | null> {
   return (await response.json()) as PublicChargeView;
 }
 
+/** The charge the provider return closed: null when the return was refused or never reached the API, so the caller can keep the ids. */
+export async function postProviderReturn(token: string, query: PublicChargeQuery): Promise<PublicChargeView | null> {
+  const { order_nsu: orderNsu, transaction_nsu: transactionNsu, slug } = query;
+
+  try {
+    const response = await apiFetch(`public/charges/${encodeURIComponent(token)}/provider-return`, {
+      method: "POST",
+      auth: false,
+      body: JSON.stringify({ orderNsu, transactionNsu, slug }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as PublicChargeView;
+  } catch {
+    return null;
+  }
+}
+
 /** The charge behind a public token, as the payer sees it: null for a missing, expired or unreachable link. */
 export async function loadPublicCharge(token: string, query: PublicChargeQuery): Promise<PublicChargeView | null> {
   const { order_nsu: orderNsu, transaction_nsu: transactionNsu, slug } = query;
@@ -24,14 +45,10 @@ export async function loadPublicCharge(token: string, query: PublicChargeQuery):
     }
 
     // Back from InfinitePay: the ids in the url close the charge (after payment_check) before the page renders.
-    const response = await apiFetch(`public/charges/${encodeURIComponent(token)}/provider-return`, {
-      method: "POST",
-      auth: false,
-      body: JSON.stringify({ orderNsu, transactionNsu, slug }),
-    });
+    const closed = await postProviderReturn(token, query);
 
-    if (response.ok) {
-      return (await response.json()) as PublicChargeView;
+    if (closed) {
+      return closed;
     }
 
     // A refused return (wrong ids, provider down) still shows the charge as it is.

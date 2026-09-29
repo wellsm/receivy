@@ -98,6 +98,27 @@ describe("join route", () => {
     expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
 
+  it("shows the unavailable state, not the signed-out invite, when the API is down for a visitor with a live session", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/auth/flows")>("@/lib/auth/flows");
+
+    vi.mocked(currentUser).mockImplementation(actual.currentUser);
+    stubApi({
+      "GET /public/invites/tok-1": () => Response.json(view),
+      "GET /auth/me": () => {
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    storeSession({ accessToken: "a", refreshToken: "r", user: { id: "u1" } } as never);
+
+    const router = open("tok-1");
+
+    expect(await screen.findByRole("heading", { name: "Convite indisponível" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/join/tok-1");
+    expect(screen.queryByRole("link", { name: "Entrar para participar" })).toBeNull();
+    expect(localStorage.getItem("receivy.session")).toContain("r");
+    expect(screen.queryByText("Algo deu errado")).toBeNull();
+  });
+
   it("finishes onboarding first and comes back to the invite", async () => {
     stubApi({ "GET /public/invites/tok-1": () => Response.json(view) });
     storeSession({ accessToken: "a", refreshToken: "r", user: { id: "u1", name: null, status: "pending" } } as never);

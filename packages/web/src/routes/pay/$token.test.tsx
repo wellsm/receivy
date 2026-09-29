@@ -152,6 +152,38 @@ describe("pay route", () => {
     expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
 
+  it("keeps the ids in the url when the provider return does not go through, so loading the page again posts them again", async () => {
+    let down = true;
+
+    const fetchMock = stubApi({
+      "POST /public/charges/tok/provider-return": () => {
+        if (down) {
+          throw new TypeError("Failed to fetch");
+        }
+
+        return Response.json(charge);
+      },
+      "GET /public/charges/tok": () => Response.json(charge),
+    });
+
+    const router = renderAt("/pay/tok?order_nsu=123&transaction_nsu=456&slug=shop");
+
+    expect(await screen.findByRole("heading", { name: "Churrasco" })).toBeInTheDocument();
+    expect(router.state.location.href).toBe("/pay/tok?order_nsu=123&transaction_nsu=456&slug=shop");
+    expect(requested(fetchMock).filter((call) => call === "POST /public/charges/tok/provider-return")).toHaveLength(1);
+
+    down = false;
+
+    await act(async () => {
+      await router.invalidate();
+    });
+
+    await waitFor(() => expect(router.state.location.href).toBe("/pay/tok?returned=1"));
+
+    expect(requested(fetchMock).filter((call) => call === "POST /public/charges/tok/provider-return")).toHaveLength(2);
+    expect(screen.queryByText("Algo deu errado")).toBeNull();
+  });
+
   it("sends a signed-in participant back from the provider return to their own charge, posting once", async () => {
     const fetchMock = stubApi({
       "POST /public/charges/tok/provider-return": () => Response.json(charge),

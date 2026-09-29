@@ -63,6 +63,24 @@ describe("LoginScreen", () => {
     expect(typeof pending.sentAt).toBe("number");
   });
 
+  it("says the browser is blocking storage instead of going to a code screen that would send the person back", async () => {
+    vi.mocked(requestEmailCode).mockResolvedValue(undefined);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
+
+    const user = userEvent.setup();
+
+    await open(<LoginScreen nextPath="/charges" providers={ALL} />);
+
+    await user.type(screen.getByLabelText("Seu e-mail"), "ana@example.com");
+    await user.click(screen.getByRole("button", { name: "Continuar com E-mail" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Seu navegador está bloqueando o armazenamento deste site, então o login não pode ser mantido. Libere o armazenamento ou saia do modo privado e tente novamente.");
+    expect(navigate).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Continuar com E-mail" })).toBeEnabled();
+  });
+
   it("keeps the e-mail button busy after a successful send, so the spinner survives the route change", async () => {
     vi.mocked(requestEmailCode).mockResolvedValue(undefined);
 

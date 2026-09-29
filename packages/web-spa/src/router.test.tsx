@@ -27,6 +27,7 @@ describe("redirectToLogin", () => {
   it("goes to /login carrying where the tab was", async () => {
     // An unknown path renders the not-found page, so no route guard interferes.
     const router = await mountAt("/nowhere?x=1");
+    const navigate = vi.spyOn(router, "navigate");
 
     await act(async () => {
       redirectToLogin(router);
@@ -34,16 +35,22 @@ describe("redirectToLogin", () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
 
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith({ to: "/login", search: { next: "/nowhere?x=1" }, replace: true });
     expect(router.state.location.search).toEqual({ next: "/nowhere?x=1" });
   });
 
   it("does nothing when the tab is already on the login", async () => {
-    const router = await mountAt("/login");
-    const before = router.state.location.href;
+    const router = await mountAt("/login?next=/feed");
+    const navigate = vi.spyOn(router, "navigate");
 
-    redirectToLogin(router);
+    await act(async () => {
+      redirectToLogin(router);
+      await router.load();
+    });
 
-    expect(router.state.location.href).toBe(before);
-    expect(router.state.location.search).toEqual({});
+    expect(navigate).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/login");
+    expect(router.state.location.search).toEqual({ next: "/feed" });
   });
 });

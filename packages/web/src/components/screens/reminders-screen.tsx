@@ -1,5 +1,3 @@
-"use client";
-
 import {
   calendarDate,
   PlanTier,
@@ -11,10 +9,10 @@ import {
   validateReminderConfig,
 } from "@receivy/common";
 import { useCallback, useEffect, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { ManualRulerChannels, ReminderRuler, RulerPreview } from "@/components/app/reminder-ruler";
+import { apiFetch } from "@/lib/api/client";
 import { responseMessage } from "@/lib/financial-response";
 import { whatsappEnabled } from "@/lib/whatsapp-flag";
-import { ManualRulerChannels, ReminderRuler, RulerPreview } from "@/components/app/reminder-ruler";
 
 const LOAD_ERROR = "Não foi possível carregar seus lembretes.";
 const ACTION_ERROR = "Não foi possível salvar seus lembretes.";
@@ -24,7 +22,7 @@ async function request<T>(
   init?: RequestInit,
   fallback = ACTION_ERROR,
 ): Promise<T> {
-  const response = await browserFetch(path, init);
+  const response = await apiFetch(path, init);
 
   if (!response.ok) {
     throw new Error(await responseMessage(response, fallback));
@@ -58,8 +56,8 @@ export function RemindersScreen() {
 
   const load = useCallback(() => {
     return Promise.all([
-      request<ReminderSettings>("/api/financial/account/reminders", undefined, LOAD_ERROR),
-      request<PlanSummary>("/api/financial/plan", undefined, LOAD_ERROR),
+      request<ReminderSettings>("account/reminders", undefined, LOAD_ERROR),
+      request<PlanSummary>("plan", undefined, LOAD_ERROR),
     ])
       .then(([settings, summary]) => {
         applySettings(settings);
@@ -101,7 +99,7 @@ export function RemindersScreen() {
     setBusy(true);
 
     try {
-      const settings = await request<ReminderSettings>("/api/financial/account/reminders", {
+      const settings = await request<ReminderSettings>("account/reminders", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(config),
@@ -120,7 +118,7 @@ export function RemindersScreen() {
     setBusy(true);
 
     try {
-      const settings = await request<ReminderSettings>("/api/financial/account/reminders", { method: "DELETE" });
+      const settings = await request<ReminderSettings>("account/reminders", { method: "DELETE" });
 
       applySettings(settings);
     } catch (reason) {

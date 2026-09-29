@@ -1,15 +1,16 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BillingCategory, BillingFrequency, BillingState, BillingKind, BillingRecurrence, ChargeState, chargeShareText, Direction, PaymentProvider, PendingChargesAction, PixKeyType, ProofState, SharingState, SplitMode, SplitPartKind, type BillingDetail, type ChargeDetail } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { BillingDetailScreen } from "@/components/screens/billing-detail-screen";
+import { renderWithRouter } from "@/test/render";
 
-const router = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
+const navigate = vi.fn();
 const writeText = vi.fn(async () => {});
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
+
+const API = "https://api.test";
 
 /** userEvent installs its own clipboard stub on setup, so ours has to land afterwards. */
 function setup() {
@@ -19,6 +20,10 @@ function setup() {
 
   return user;
 }
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+});
 
 afterEach(() => {
   cleanup();
@@ -102,50 +107,55 @@ function billing(overrides: Partial<BillingDetail> = {}): BillingDetail {
   };
 }
 
-type Handler = (path: string, init?: RequestInit) => Response | undefined;
+type Handler = (url: string, init?: RequestInit) => Response | undefined;
+
+let currentFetch: ReturnType<typeof vi.fn>;
 
 /** Answers the detail and an empty wallet by default; `handler` overrides any call. */
 function mockApi(detail: BillingDetail, handler: Handler = () => undefined): string[] {
   const calls: string[] = [];
   let current = detail;
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init) => {
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
 
-    calls.push(`${method} ${path}`);
+    calls.push(`${method} ${url}`);
 
-    const custom = handler(path, init);
+    const custom = handler(url, init);
 
     if (custom) {
       return custom;
     }
 
-    if (path === "/api/financial/billings/b1" && method === "GET") {
+    if (url === `${API}/billings/b1` && method === "GET") {
       return Response.json(current);
     }
-    if (path === "/api/financial/billings/b1" && method === "PATCH") {
+    if (url === `${API}/billings/b1` && method === "PATCH") {
       current = { ...current, ...(JSON.parse(String(init?.body)) as Partial<BillingDetail>) };
 
       return Response.json(current);
     }
-    if (path === "/api/financial/payment-methods") {
+    if (url === `${API}/payment-methods`) {
       return Response.json({ paymentMethods: [] });
     }
-    if (path === "/api/financial/billings/b1/invite" && method === "POST") {
+    if (url === `${API}/billings/b1/invite` && method === "POST") {
       return Response.json({ url: "http://localhost:3000/join/abc", expiresAt: "2026-10-08T12:00:00Z" });
     }
-    if (path === "/api/financial/billings/b1/invite" && method === "DELETE") {
+    if (url === `${API}/billings/b1/invite` && method === "DELETE") {
       return new Response(null, { status: 204 });
     }
-    if (path.endsWith("/public-link") && method === "POST") {
+    if (url.endsWith("/public-link") && method === "POST") {
       return Response.json({ token: "tk", expiresAt: "2026-10-08T00:00:00Z" });
     }
-    if (path.endsWith("/reminders") && method === "POST") {
+    if (url.endsWith("/reminders") && method === "POST") {
       return Response.json({ queued: true });
     }
 
     return Response.json({ message: "não mapeado" }, { status: 404 });
   });
+
+  vi.stubGlobal("fetch", fetchMock);
+  currentFetch = fetchMock;
 
   return calls;
 }
@@ -153,7 +163,7 @@ function mockApi(detail: BillingDetail, handler: Handler = () => undefined): str
 async function open(detail = billing(), handler?: Handler) {
   const calls = mockApi(detail, handler);
 
-  render(<BillingDetailScreen id="b1" />);
+  renderWithRouter(<BillingDetailScreen id="b1" />);
 
   await screen.findByRole("heading", { name: "Jantar de despedida" });
 
@@ -161,11 +171,19 @@ async function open(detail = billing(), handler?: Handler) {
 }
 
 function patchBodies(): unknown[] {
-  return vi
-    .mocked(browserFetch)
-    .mock.calls.filter(([, init]) => init?.method === "PATCH")
+  return (currentFetch.mock.calls as [string, RequestInit?][])
+    .filter(([, init]) => init?.method === "PATCH")
     .map(([, init]) => JSON.parse(String(init?.body)));
 }
+
+it("encodes the id from the URL into the API path", async () => {
+  const calls = mockApi(billing(), (url, init) => (url === `${API}/billings/a%2Fb` && (init?.method ?? "GET") === "GET" ? Response.json(billing()) : undefined));
+
+  renderWithRouter(<BillingDetailScreen id="a/b" />);
+
+  expect(await screen.findByRole("heading", { name: "Jantar de despedida" })).toBeInTheDocument();
+  expect(calls).toContain(`GET ${API}/billings/a%2Fb`);
+});
 
 it("sums the current cycle in the hero and lists its participants with their status", async () => {
   // Pinned before the second cycle's due date (2026-11-15) so Carlos's charge reads "Pendente", not
@@ -251,13 +269,13 @@ it("asks the owner to review a sent proof instead of reminding the debtor", asyn
 
   await userEvent.setup().click(screen.getByRole("button", { name: "Revisar comprovante de Carlos" }));
 
-  expect(router.push).toHaveBeenCalledWith("/charges/c6");
+  expect(navigate).toHaveBeenCalledWith("/charges/c6");
 });
 
 it("accepts the proof under review when the owner marks that participant as paid from the row", async () => {
   const detail = billing({ charges: [charge({ id: "c4", name: "Lucas F.", state: ChargeState.Paid }), charge({ id: "c6", name: "Carlos", proofState: ProofState.Pending })] });
-  const calls = await open(detail, (path, init) => {
-    if (path === "/api/financial/charges/c6/proof/review" && init?.method === "POST") {
+  const calls = await open(detail, (url, init) => {
+    if (url === `${API}/charges/c6/proof/review` && init?.method === "POST") {
       return Response.json(charge({ id: "c6", name: "Carlos", state: ChargeState.Paid, proofState: ProofState.Accepted }));
     }
 
@@ -268,10 +286,10 @@ it("accepts the proof under review when the owner marks that participant as paid
   await user.click(screen.getByRole("button", { name: "Marcar Carlos como pago" }));
   await user.click(await screen.findByRole("button", { name: "Marcar paga" }));
 
-  await vi.waitFor(() => expect(calls).toContain("POST /api/financial/charges/c6/proof/review"));
+  await vi.waitFor(() => expect(calls).toContain(`POST ${API}/charges/c6/proof/review`));
 
-  expect(calls).not.toContain("POST /api/financial/charges/c6/pay");
-  expect(calls).not.toContain("GET /api/financial/charges/c6/proofs");
+  expect(calls).not.toContain(`POST ${API}/charges/c6/pay`);
+  expect(calls).not.toContain(`GET ${API}/charges/c6/proofs`);
   expect(await screen.findByText("Pagamento de Carlos registrado.")).toBeInTheDocument();
 });
 
@@ -300,7 +318,7 @@ it("copies the Pix key and shares the link of a pending participant from its row
 
   await user.click(screen.getByRole("button", { name: "Compartilhar link de Carlos" }));
 
-  expect(calls).toContain("POST /api/financial/charges/c6/public-link");
+  expect(calls).toContain(`POST ${API}/charges/c6/public-link`);
   expect(writeText).toHaveBeenCalledWith(chargeShareText(charge({ id: "c6", name: "Carlos" }), "http://localhost:3000/pay/tk"));
 });
 
@@ -310,7 +328,7 @@ it("copies the payment link of the only pending participant", async () => {
 
   await user.click(screen.getByRole("button", { name: "Compartilhar link de pagamento" }));
 
-  expect(calls).toContain("POST /api/financial/charges/c6/public-link");
+  expect(calls).toContain(`POST ${API}/charges/c6/public-link`);
   expect(writeText).toHaveBeenCalledWith(chargeShareText(charge({ id: "c6", name: "Carlos" }), "http://localhost:3000/pay/tk"));
   expect(await screen.findByRole("status")).toHaveTextContent("Link copiado");
 });
@@ -323,7 +341,7 @@ it("asks whose link to share when more than one participant is pending", async (
   await user.click(screen.getByRole("button", { name: "Compartilhar link de pagamento" }));
   await user.click(await screen.findByRole("button", { name: "Link de Lucas F." }));
 
-  expect(calls).toContain("POST /api/financial/charges/c4/public-link");
+  expect(calls).toContain(`POST ${API}/charges/c4/public-link`);
 });
 
 it("opens the charge and the edit route from the actions", async () => {
@@ -334,8 +352,8 @@ it("opens the charge and the edit route from the actions", async () => {
   await user.click(screen.getByRole("button", { name: "Abrir cobrança de Carlos" }));
   await user.click(screen.getByRole("button", { name: "Editar" }));
 
-  expect(router.push).toHaveBeenCalledWith("/charges/c6");
-  expect(router.push).toHaveBeenCalledWith("/billings/b1/edit");
+  expect(navigate).toHaveBeenCalledWith("/charges/c6");
+  expect(navigate).toHaveBeenCalledWith("/billings/b1/edit");
 });
 
 it("creates, copies and revokes the invite", async () => {
@@ -344,13 +362,13 @@ it("creates, copies and revokes the invite", async () => {
 
   await user.click(screen.getByRole("button", { name: "Convidar" }));
 
-  expect(calls).toContain("POST /api/financial/billings/b1/invite");
+  expect(calls).toContain(`POST ${API}/billings/b1/invite`);
   expect(writeText).toHaveBeenCalledWith("Entre na cobrança Jantar de despedida no Receivy: http://localhost:3000/join/abc");
   expect(await screen.findByText("Convite ativo até 08/10")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Revogar convite" }));
 
-  expect(calls).toContain("DELETE /api/financial/billings/b1/invite");
+  expect(calls).toContain(`DELETE ${API}/billings/b1/invite`);
   expect(screen.queryByText("Convite ativo até 08/10")).not.toBeInTheDocument();
 });
 
@@ -358,8 +376,8 @@ it("links a guest who joined by the link to a contact without e-mail", async () 
   const guest = { id: "g1", userId: "u9", name: "José Silva", email: "ze@example.com", createdAt: "2026-10-02T00:00:00Z" };
   const resolved = billing();
   const sent: string[] = [];
-  const calls = await open(billing({ guests: [guest], linkableContacts: [{ contactId: "c1", displayName: "Zé" }] }), (path, init) => {
-    if (path === "/api/financial/billings/b1/guests/g1" && init?.method === "POST") {
+  const calls = await open(billing({ guests: [guest], linkableContacts: [{ contactId: "c1", displayName: "Zé" }] }), (url, init) => {
+    if (url === `${API}/billings/b1/guests/g1` && init?.method === "POST") {
       sent.push(String(init.body));
 
       return Response.json(resolved);
@@ -377,7 +395,7 @@ it("links a guest who joined by the link to a contact without e-mail", async () 
 
   await user.click(screen.getByRole("button", { name: "É Zé" }));
 
-  expect(calls).toContain("POST /api/financial/billings/b1/guests/g1");
+  expect(calls).toContain(`POST ${API}/billings/b1/guests/g1`);
   expect(sent).toEqual(['{"action":"link","contactId":"c1"}']);
   expect(screen.queryByRole("heading", { name: "Aguardando você" })).not.toBeInTheDocument();
 });
@@ -390,7 +408,7 @@ it("shares an invite that already exists instead of issuing a new one", async ()
 
   await user.click(screen.getByRole("button", { name: "Convidar" }));
 
-  expect(calls).not.toContain("POST /api/financial/billings/b1/invite");
+  expect(calls).not.toContain(`POST ${API}/billings/b1/invite`);
   expect(writeText).toHaveBeenCalled();
 });
 
@@ -435,7 +453,7 @@ it("names the Pix key from the wallet while no charge has been generated", async
   const detail = billing({ recurrence: BillingRecurrence.Indefinite, frequency: BillingFrequency.Monthly, installmentCount: undefined, endDate: undefined, charges: [], paymentMethodId: "pix-2" });
   const wallet = [{ id: "pix-2", provider: PaymentProvider.Pix, kind: PixKeyType.Email, value: "ana@example.com", label: "", isDefault: true, contactId: null, archivedAt: null, createdAt: "" }];
 
-  await open(detail, (path) => (path === "/api/financial/payment-methods" ? Response.json({ paymentMethods: wallet }) : undefined));
+  await open(detail, (url) => (url === `${API}/payment-methods` ? Response.json({ paymentMethods: wallet }) : undefined));
 
   expect(screen.getByText("ana@example.com")).toBeInTheDocument();
   expect(screen.queryByText("Sem meio de pagamento vinculado")).not.toBeInTheDocument();
@@ -472,7 +490,7 @@ it("ends cancelling the pending charges, revokes the invite and hides the action
 
   expect(await screen.findByText("Encerrada")).toBeInTheDocument();
   expect(patchBodies()).toEqual([{ state: "ended", pendingCharges: PendingChargesAction.Cancel }]);
-  expect(calls).toContain("DELETE /api/financial/billings/b1/invite");
+  expect(calls).toContain(`DELETE ${API}/billings/b1/invite`);
   expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Compartilhar link de pagamento" })).not.toBeInTheDocument();
 });
@@ -518,7 +536,7 @@ it("shows a conta a pagar with its inline key and receiving contact, without inv
   await user.click(screen.getByRole("button", { name: "Copiar valor" }));
 
   expect(writeText).toHaveBeenCalledWith("ana@example.com");
-  expect(calls).not.toContain("GET /api/financial/payment-methods/pix-1");
+  expect(calls).not.toContain(`GET ${API}/payment-methods/pix-1`);
 });
 
 it("names a conta a pagar without a contact or key as the owner's alone", async () => {
@@ -530,12 +548,12 @@ it("names a conta a pagar without a contact or key as the owner's alone", async 
 
 it("marks a pending participant as paid only after confirmation and reloads", async () => {
   let paid = false;
-  const calls = await open(billing(), (path, init) => {
-    if (path === "/api/financial/billings/b1" && (init?.method ?? "GET") === "GET" && paid) {
+  const calls = await open(billing(), (url, init) => {
+    if (url === `${API}/billings/b1` && (init?.method ?? "GET") === "GET" && paid) {
       return Response.json(billing({ charges: [...firstCycle, ...secondCycle.slice(0, 2), charge({ id: "c6", name: "Carlos", state: ChargeState.Paid, paidAt: "2026-11-16T10:00:00Z" })] }));
     }
 
-    if (path === "/api/financial/charges/c6/pay" && init?.method === "POST") {
+    if (url === `${API}/charges/c6/pay` && init?.method === "POST") {
       paid = true;
 
       return Response.json(charge({ id: "c6", name: "Carlos", state: ChargeState.Paid }));
@@ -549,13 +567,13 @@ it("marks a pending participant as paid only after confirmation and reloads", as
 
   const dialog = await screen.findByRole("dialog", { name: "Marcar como paga?" });
 
-  expect(calls).not.toContain("POST /api/financial/charges/c6/pay");
+  expect(calls).not.toContain(`POST ${API}/charges/c6/pay`);
 
   await user.click(within(dialog).getByRole("button", { name: "Marcar paga" }));
 
   expect(await screen.findByText("Pagamento de Carlos registrado.")).toBeInTheDocument();
-  expect(calls).toContain("POST /api/financial/charges/c6/pay");
-  expect(calls.filter((call) => call === "GET /api/financial/billings/b1")).toHaveLength(2);
+  expect(calls).toContain(`POST ${API}/charges/c6/pay`);
+  expect(calls.filter((call) => call === `GET ${API}/billings/b1`)).toHaveLength(2);
 
   await waitFor(() => expect(screen.getAllByText("Todos os 3 pagaram")).toHaveLength(2));
 
@@ -564,8 +582,8 @@ it("marks a pending participant as paid only after confirmation and reloads", as
 });
 
 it("reopens a paid participant only after confirmation", async () => {
-  const calls = await open(billing(), (path, init) => {
-    if (path === "/api/financial/charges/c4/reopen" && init?.method === "POST") {
+  const calls = await open(billing(), (url, init) => {
+    if (url === `${API}/charges/c4/reopen` && init?.method === "POST") {
       return Response.json(charge({ id: "c4", name: "Lucas F." }));
     }
 
@@ -577,22 +595,22 @@ it("reopens a paid participant only after confirmation", async () => {
 
   const dialog = await screen.findByRole("dialog", { name: "Reabrir cobrança?" });
 
-  expect(calls).not.toContain("POST /api/financial/charges/c4/reopen");
+  expect(calls).not.toContain(`POST ${API}/charges/c4/reopen`);
 
   await user.click(within(dialog).getByRole("button", { name: "Reabrir" }));
 
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
-  expect(calls).toContain("POST /api/financial/charges/c4/reopen");
+  expect(calls).toContain(`POST ${API}/charges/c4/reopen`);
 
-  await waitFor(() => expect(calls.filter((call) => call === "GET /api/financial/billings/b1")).toHaveLength(2));
+  await waitFor(() => expect(calls.filter((call) => call === `GET ${API}/billings/b1`)).toHaveLength(2));
 });
 
 it("reports a billing that cannot be loaded and retries", async () => {
   let failed = false;
 
-  mockApi(billing(), (path, init) => {
-    if (path === "/api/financial/billings/b1" && (init?.method ?? "GET") === "GET" && !failed) {
+  mockApi(billing(), (url, init) => {
+    if (url === `${API}/billings/b1` && (init?.method ?? "GET") === "GET" && !failed) {
       failed = true;
 
       return Response.json({ code: "unknown" }, { status: 500 });
@@ -601,7 +619,7 @@ it("reports a billing that cannot be loaded and retries", async () => {
     return undefined;
   });
 
-  render(<BillingDetailScreen id="b1" />);
+  renderWithRouter(<BillingDetailScreen id="b1" />);
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível carregar a cobrança.");
 
@@ -636,8 +654,8 @@ it("turns the notices of a participant off after confirmation and back on withou
   });
   const loudBilling = billing({ charges: [charge({ id: "c6", name: "Carlos", notify: true })], allocations: [{ ...quietBilling.allocations[0]!, notify: true }] });
   const bodies: string[] = [];
-  const calls = await open(loudBilling, (path, init) => {
-    if (path !== "/api/financial/billings/b1/participants/u1/notify" || init?.method !== "PUT") {
+  const calls = await open(loudBilling, (url, init) => {
+    if (url !== `${API}/billings/b1/participants/u1/notify` || init?.method !== "PUT") {
       return undefined;
     }
 
@@ -654,7 +672,7 @@ it("turns the notices of a participant off after confirmation and back on withou
   const dialog = await screen.findByRole("dialog", { name: "Não notificar Carlos?" });
 
   expect(within(dialog).getByText("Os lembretes automáticos das cobranças pendentes e futuras de Carlos nesta conta param.")).toBeInTheDocument();
-  expect(calls).not.toContain("PUT /api/financial/billings/b1/participants/u1/notify");
+  expect(calls).not.toContain(`PUT ${API}/billings/b1/participants/u1/notify`);
 
   await user.click(within(dialog).getByRole("button", { name: "Não notificar" }));
 

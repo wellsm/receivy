@@ -1,5 +1,3 @@
-"use client";
-
 import {
   type BadgeTone,
   billingCategoryColor,
@@ -17,8 +15,8 @@ import {
   type ListChargeItem,
 } from "@receivy/common";
 import { Bell, Check } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
+import { Link } from "@/components/ui/link";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { InitialsAvatar } from "../ui/initials-avatar";
 import { StatusTag } from "../ui/status-tag";
@@ -62,7 +60,8 @@ export function FeedChargeCard({ charge, direction, today, reminded, onRemind, o
       className={`relative flex items-center gap-3 border-b border-outline/60 bg-surface px-[18px] py-3 md:gap-4 md:rounded-[18px] md:border md:border-outline md:py-4 ${settled ? "opacity-60 md:opacity-100" : ""}`}
     >
       <Link
-        href={`/charges/${charge.id}`}
+        to="/charges/$id"
+        params={{ id: charge.id }}
         aria-label={`Abrir cobrança ${charge.description}`}
         className="absolute inset-0 focus-visible:outline-[3px] focus-visible:outline-primary focus-visible:-outline-offset-2 md:rounded-[18px]"
       />

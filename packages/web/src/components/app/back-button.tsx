@@ -1,8 +1,6 @@
-"use client";
-
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@tanstack/react-router";
 import type { MouseEvent } from "react";
+import { Link } from "@/components/ui/link";
 
 type BackButtonProps = {
   /** Where the screen sits in the hierarchy. Kept as the href so the control stays a real link:
@@ -22,11 +20,11 @@ export function BackButton({ fallback, className }: BackButtonProps) {
     }
 
     event.preventDefault();
-    router.back();
+    router.history.back();
   }
 
   return (
-    <Link href={fallback} onClick={goBack} className={className}>
+    <Link to={fallback} onClick={goBack} className={className}>
       ← <span className="sr-only md:not-sr-only">Voltar</span>
     </Link>
   );

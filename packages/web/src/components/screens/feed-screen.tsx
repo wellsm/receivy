@@ -1,5 +1,3 @@
-"use client";
-
 import {
   activeFeedFilterCount,
   type AuthUser,
@@ -11,18 +9,19 @@ import {
   type ListChargeItem,
   searchCharges,
 } from "@receivy/common";
+import { useRouter } from "@tanstack/react-router";
 import { ReceiptText } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FeedDayGroup } from "@/components/app/feed-day-group";
 import { FeedFiltersBar, FeedFiltersSheet } from "@/components/app/feed-filters";
 import { FeedMonthTabs } from "@/components/app/feed-month-tabs";
 import { FeedSummaryBox } from "@/components/app/feed-summary-box";
 import { SearchFooter } from "@/components/app/search-footer";
+import { Link } from "@/components/ui/link";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { apiFetch } from "@/lib/api/client";
 import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
 
 const REMIND_ERROR = "Não foi possível enviar o lembrete.";
 const PAY_ERROR = "Não foi possível atualizar a cobrança.";
@@ -41,7 +40,7 @@ type Props = {
 };
 
 async function post(path: string, fallback: string): Promise<Response> {
-  const response = await browserFetch(path, { method: "POST" });
+  const response = await apiFetch(path, { method: "POST" });
 
   if (!response.ok) {
     throw new Error(await responseMessage(response, fallback));
@@ -56,7 +55,7 @@ function FeedHeader({ user }: { user?: Pick<AuthUser, "name" | "avatar"> | null 
 
   return (
     <header className="flex items-center gap-3 md:hidden">
-      <Link href="/settings" aria-label="Perfil" className="shrink-0 rounded-full">
+      <Link to="/settings" aria-label="Perfil" className="shrink-0 rounded-full">
         <InitialsAvatar name={name || "R"} size={40} avatar={user?.avatar} />
       </Link>
 
@@ -65,7 +64,7 @@ function FeedHeader({ user }: { user?: Pick<AuthUser, "name" | "avatar"> | null 
         <h1 className="m-0 font-display text-[22px] font-bold text-ink">Feed</h1>
       </div>
 
-      <Link href="/billings" className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-surface-muted px-3.5 text-[13px] font-bold text-ink">
+      <Link to="/billings" className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-surface-muted px-3.5 text-[13px] font-bold text-ink">
         <ReceiptText size={16} aria-hidden="true" />
         Contas
       </Link>
@@ -75,6 +74,7 @@ function FeedHeader({ user }: { user?: Pick<AuthUser, "name" | "avatar"> | null 
 
 export function FeedScreen({ charges, filters, month, today, user }: Props) {
   const router = useRouter();
+  const navigate = useAppNavigate();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [reminded, setReminded] = useState<Record<string, string>>({});
@@ -85,8 +85,8 @@ export function FeedScreen({ charges, filters, month, today, user }: Props) {
   const totals = chargeTotals(charges);
 
   // Every knob of the feed lives in the URL, so changing one re-runs the server render.
-  function navigate(next: FeedFilters, nextMonth = month) {
-    router.replace(`/feed?${feedFilterQuery(next, today, nextMonth)}`, { scroll: false });
+  function go(next: FeedFilters, nextMonth = month) {
+    navigate(`/feed?${feedFilterQuery(next, today, nextMonth)}`, { replace: true, resetScroll: false });
   }
 
   async function run(fallback: string, action: () => Promise<void>) {
@@ -102,7 +102,7 @@ export function FeedScreen({ charges, filters, month, today, user }: Props) {
 
   function remind(charge: ListChargeItem) {
     void run(REMIND_ERROR, async () => {
-      const result = (await (await post(`/api/financial/charges/${charge.id}/reminders`, REMIND_ERROR)).json()) as { queued: boolean };
+      const result = (await (await post(`charges/${charge.id}/reminders`, REMIND_ERROR)).json()) as { queued: boolean };
 
       if (result.queued) {
         setReminded((current) => ({ ...current, [charge.id]: "Lembrete enviado" }));
@@ -117,17 +117,17 @@ export function FeedScreen({ charges, filters, month, today, user }: Props) {
   // The card state and the totals both change: the server render is what knows the new month.
   function markPaid(charge: ListChargeItem) {
     void run(PAY_ERROR, async () => {
-      await post(`/api/financial/charges/${charge.id}/pay`, PAY_ERROR);
+      await post(`charges/${charge.id}/pay`, PAY_ERROR);
 
-      router.refresh();
+      router.invalidate();
     });
   }
 
   function declare(charge: ListChargeItem) {
     void run(DECLARE_ERROR, async () => {
-      await post(`/api/financial/charges/${charge.id}/proof/declaration`, DECLARE_ERROR);
+      await post(`charges/${charge.id}/proof/declaration`, DECLARE_ERROR);
 
-      router.refresh();
+      router.invalidate();
     });
   }
 
@@ -135,7 +135,7 @@ export function FeedScreen({ charges, filters, month, today, user }: Props) {
     <section className="flex flex-col gap-4 pt-2 md:grid md:grid-cols-[minmax(0,352px)_minmax(0,1fr)] md:items-start md:gap-7 md:pt-0">
       <div className="flex flex-col gap-4">
         <FeedHeader user={user} />
-        <FeedMonthTabs month={month} onSelect={(nextMonth) => navigate(filters, nextMonth)} />
+        <FeedMonthTabs month={month} onSelect={(nextMonth) => go(filters, nextMonth)} />
         <FeedSummaryBox summary={totals} />
 
         {/* Below `md` the filters open from the footer. */}
@@ -144,7 +144,7 @@ export function FeedScreen({ charges, filters, month, today, user }: Props) {
           <FeedFiltersBar
             value={filters}
             counts={{ receivable: totals.receivable.count, payable: totals.payable.count }}
-            onChange={(next) => navigate(next)}
+            onChange={(next) => go(next)}
           />
         </div>
       </div>
@@ -198,7 +198,7 @@ export function FeedScreen({ charges, filters, month, today, user }: Props) {
           onClose={() => setFiltersOpen(false)}
           onApply={(next) => {
             setFiltersOpen(false);
-            navigate(next);
+            go(next);
           }}
         />
       )}

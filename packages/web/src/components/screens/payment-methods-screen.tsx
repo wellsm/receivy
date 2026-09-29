@@ -1,15 +1,13 @@
-"use client";
-
 import { paymentMethodCopyValue, paymentMethodText, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
 import { Check, CircleCheck, Lock, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { responseMessage } from "@/lib/financial-response";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
+import { Link } from "@/components/ui/link";
 import { ProviderIcon } from "@/components/ui/provider-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
+import { apiFetch } from "@/lib/api/client";
+import { responseMessage } from "@/lib/financial-response";
 
 type PaymentMethodsScreenProps = { returnTo?: string; required?: boolean };
 
@@ -18,15 +16,8 @@ const UPDATE_ERROR = "Não foi possível atualizar seus meios de pagamento.";
 const COPY_ERROR = "Não foi possível copiar o valor.";
 const SAFETY_NOTE = "Seus dados de recebimento ficam protegidos e nunca são compartilhados sem sua autorização.";
 
-function formHref({ returnTo, required }: PaymentMethodsScreenProps): string {
-  const query = new URLSearchParams({ ...(returnTo ? { returnTo } : {}), ...(required ? { required: "1" } : {}) });
-  const suffix = query.toString();
-
-  if (!suffix) {
-    return "/settings/payment-methods/new";
-  }
-
-  return `/settings/payment-methods/new?${suffix}`;
+function formSearch({ returnTo, required }: PaymentMethodsScreenProps): Record<string, string> {
+  return { ...(returnTo ? { returnTo } : {}), ...(required ? { required: "1" } : {}) };
 }
 
 export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMethodsScreenProps) {
@@ -38,10 +29,10 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
   // The trash button that opened the dialog; the keyboard goes back to it on cancel.
   const trigger = useRef<HTMLButtonElement | null>(null);
 
-  const newKeyHref = formHref({ returnTo, required });
+  const newKeySearch = formSearch({ returnTo, required });
 
   const load = useCallback(() => {
-    return browserFetch("/api/financial/payment-methods")
+    return apiFetch("payment-methods")
       .then(async response => {
         if (!response.ok) {
           throw new Error(await responseMessage(response, LIST_ERROR));
@@ -70,7 +61,7 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
     setNotice("");
 
     try {
-      const response = await browserFetch(`/api/financial/payment-methods/${method.id}/${action}`, { method: "POST" });
+      const response = await apiFetch(`payment-methods/${method.id}/${action}`, { method: "POST" });
 
       if (!response.ok) {
         throw new Error(await responseMessage(response, UPDATE_ERROR));
@@ -113,7 +104,11 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
         <section className="flex flex-col items-center gap-2 rounded-2xl border border-outline/40 bg-surface p-8 text-center">
           <h3 className="m-0 text-lg font-extrabold text-primary-strong">Nenhum meio de pagamento</h3>
           <p className="m-0 text-sm leading-5 text-muted">Cadastre uma chave Pix ou sua InfiniteTag para receber pelos links de cobrança.</p>
-          <Link className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-bold text-on-primary" href={newKeyHref}>
+          <Link
+            className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-bold text-on-primary"
+            to="/settings/payment-methods/new"
+            search={newKeySearch}
+          >
             Cadastrar novo meio
           </Link>
         </section>
@@ -204,7 +199,8 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
       <ScreenFooter className="-mx-1 bg-canvas/95 px-1 pb-2 pt-3 backdrop-blur-md">
         <Link
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-on-primary transition active:scale-[0.98]"
-          href={newKeyHref}
+          to="/settings/payment-methods/new"
+          search={newKeySearch}
           aria-label="Cadastrar novo meio"
         >
           <Plus size={20} aria-hidden="true" />

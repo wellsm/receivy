@@ -1,35 +1,52 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, PlanTier, WhatsappSender } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, PlanTier, UserStatus, WhatsappSender, type AuthUser } from "@receivy/common";
 import { ProfileScreen } from "@/components/screens/profile-screen";
+import { onSessionExpired } from "@/lib/api/client";
+import { currentUser, logout } from "@/lib/auth/flows";
+import { clearSession, storeSession } from "@/lib/auth/session";
+import { renderWithRouter } from "@/test/render";
 
-const routerMock = { replace: vi.fn(), push: vi.fn() };
+const navigate = vi.fn();
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
+vi.mock("@/lib/auth/flows", () => ({
+  currentUser: vi.fn(),
+  logout: vi.fn(),
+}));
 vi.mock("@/lib/avatar-upload", () => ({
   squareJpeg: vi.fn(async () => new Blob(["j"], { type: "image/jpeg" })),
   uploadAvatar: vi.fn(async () => ({ url: "https://bucket.test/new", version: "v3" })),
 }));
 
+const API = "https://api.test";
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+});
+
 afterEach(() => {
   cleanup();
+  onSessionExpired(null);
+  clearSession();
   vi.resetAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  navigate.mockReset();
 });
 
-const account = {
+const account: AuthUser = {
   id: "user-1",
   email: "lucas@email.com",
   name: "Lucas Silveira",
+  phone: null,
   avatar: null,
-  locale: "pt-BR" as const,
+  status: UserStatus.Active,
+  locale: "pt-BR",
   timezone: "America/Sao_Paulo",
-  country: "BR" as const,
-  currency: "BRL" as const,
+  country: "BR",
+  currency: "BRL",
 };
 
 function expectedTimezone(): string {
@@ -41,53 +58,43 @@ function expectedTimezone(): string {
 }
 
 function loadAccount() {
-  vi.mocked(browserFetch).mockImplementation(async (path) => {
-    if (path === "/api/auth/me") {
-      return Response.json({ user: account });
-    }
-
-    throw new Error(`unexpected ${String(path)}`);
-  });
+  vi.mocked(currentUser).mockResolvedValue(account);
 }
 
-/** The account deletion and the logout deliberately bypass browserFetch. */
-function stubDirectFetch(
-  erase: () => Promise<Response>,
-  logout: () => Response = () => new Response(null, { status: 204 }),
-) {
-  const direct = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>(async (path) => {
-    if (path === "/api/financial/account") {
-      return erase();
-    }
-    if (path === "/api/auth/logout") {
-      return logout();
+/** Answers every `apiFetch`/`apiJson` call by method + path; an unmapped call fails loudly. */
+function stubFetch(handlers: Record<string, (init?: RequestInit) => Response | Promise<Response>>) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const path = url.startsWith(`${API}/`) ? url.slice(API.length + 1) : url;
+    const method = init?.method ?? "GET";
+    const key = `${method} ${path}`;
+    const handler = handlers[key];
+
+    if (!handler) {
+      throw new Error(`unexpected ${key}`);
     }
 
-    throw new Error(`unexpected ${path}`);
+    return handler(init);
   });
 
-  vi.stubGlobal("fetch", direct);
+  vi.stubGlobal("fetch", fetchMock);
 
-  return direct;
+  return fetchMock;
 }
 
 describe("ProfileScreen", () => {
   it("shows identity and edits the name inline", async () => {
-    vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-      if (path === "/api/auth/me") {
-        return Response.json({ user: account });
-      }
+    loadAccount();
 
-      if (path === "/api/financial/account/profile") {
-        const body = JSON.parse(String((init as RequestInit).body)) as { name: string };
+    const fetchMock = stubFetch({
+      "PATCH account/profile": (init) => {
+        const body = JSON.parse(String(init?.body)) as { name: string };
 
         return Response.json({ user: { ...account, name: body.name } });
-      }
-
-      throw new Error(`unexpected ${String(path)}`);
+      },
     });
 
-    render(<ProfileScreen />);
+    renderWithRouter(<ProfileScreen />);
 
     const user = userEvent.setup();
 
@@ -102,7 +109,7 @@ describe("ProfileScreen", () => {
 
     expect(await screen.findByText("Lucas S.")).toBeInTheDocument();
 
-    const call = vi.mocked(browserFetch).mock.calls.find(([path]) => path === "/api/financial/account/profile");
+    const call = fetchMock.mock.calls.find(([input]) => String(input) === `${API}/account/profile`);
 
     expect(call).toBeDefined();
     expect((call![1] as RequestInit).method).toBe("PATCH");
@@ -117,7 +124,7 @@ describe("ProfileScreen", () => {
   it("changes the profile photo from Perfil", async () => {
     loadAccount();
 
-    const { container } = render(<ProfileScreen />);
+    const { container } = renderWithRouter(<ProfileScreen />);
     const user = userEvent.setup();
 
     const input = await screen.findByLabelText("Trocar foto");
@@ -132,7 +139,7 @@ describe("ProfileScreen", () => {
   it("links to contacts, payment methods, terms and privacy", async () => {
     loadAccount();
 
-    render(<ProfileScreen />);
+    renderWithRouter(<ProfileScreen />);
 
     expect(await screen.findByRole("link", { name: "Gerenciar contatos" })).toHaveAttribute("href", "/contacts");
     expect(screen.getByRole("link", { name: "Gerenciar meios de pagamento" })).toHaveAttribute("href", "/settings/payment-methods");
@@ -145,42 +152,29 @@ describe("ProfileScreen", () => {
   });
 
   it("lists the WhatsApp row with the sender state when the switch is on, and hides it when off", async () => {
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true");
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "true");
+    loadAccount();
 
-    vi.mocked(browserFetch).mockImplementation(async (path) => {
-      if (path === "/api/auth/me") {
-        return Response.json({ user: account });
-      }
-
-      if (String(path).endsWith("/whatsapp")) {
-        return Response.json({ available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } });
-      }
-
-      if (String(path).endsWith("/plan")) {
-        return Response.json({ plan: PlanTier.Basic, usage: { indefinite: { used: 0, limit: 30 } } });
-      }
-
-      throw new Error(`unexpected ${String(path)}`);
+    stubFetch({
+      "GET whatsapp": () => Response.json({ available: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } }),
+      "GET plan": () => Response.json({ plan: PlanTier.Basic, usage: { indefinite: { used: 0, limit: 30 } } }),
     });
 
-    render(<ProfileScreen />);
+    renderWithRouter(<ProfileScreen />);
 
     expect(await screen.findByRole("link", { name: /WhatsApp/ })).toHaveAttribute("href", "/settings/whatsapp");
     expect(screen.getByText("Pelo número do Receivy · 37 de 150 neste ciclo")).toBeInTheDocument();
 
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
-    render(<ProfileScreen />);
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
+    renderWithRouter(<ProfileScreen />);
     expect(screen.queryAllByRole("link", { name: /WhatsApp/ })).toHaveLength(1);
   });
 
   it("logs out only after confirmation", async () => {
     loadAccount();
+    vi.mocked(logout).mockResolvedValue(undefined);
 
-    const logout = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-
-    vi.stubGlobal("fetch", logout);
-
-    render(<ProfileScreen />);
+    renderWithRouter(<ProfileScreen />);
 
     const user = userEvent.setup();
 
@@ -196,16 +190,23 @@ describe("ProfileScreen", () => {
     await user.click(screen.getByRole("button", { name: "Sair da conta" }));
     await user.click(screen.getByRole("button", { name: "Sair" }));
 
-    expect(logout).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
-    expect(routerMock.replace).toHaveBeenCalledWith("/login");
+    await waitFor(() => expect(logout).toHaveBeenCalled());
+    expect(navigate).toHaveBeenCalledWith("/login", { replace: true });
   });
 
   it("deletes the account only with the literal confirmation", async () => {
     loadAccount();
+    vi.mocked(logout).mockResolvedValue(undefined);
 
-    const direct = stubDirectFetch(async () => Response.json({ deleted: true }));
+    const fetchMock = stubFetch({
+      "DELETE account": (init) => {
+        expect(JSON.parse(String(init?.body))).toEqual({ confirmation: "EXCLUIR" });
 
-    render(<ProfileScreen />);
+        return Response.json({ deleted: true });
+      },
+    });
+
+    renderWithRouter(<ProfileScreen />);
 
     const user = userEvent.setup();
 
@@ -224,26 +225,22 @@ describe("ProfileScreen", () => {
 
     await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
 
-    // The delete bypasses browserFetch so a stale token cannot trigger a refresh
-    // and a hard navigation before the outcome is shown.
-    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/account", expect.anything());
-    expect(direct).toHaveBeenCalledWith("/api/financial/account", expect.objectContaining({ method: "DELETE" }));
-
-    const call = direct.mock.calls.find(([path]) => path === "/api/financial/account");
-
-    expect(JSON.parse(String(call![1]?.body))).toEqual({ confirmation: "EXCLUIR" });
-    expect(direct).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
+    expect(fetchMock).toHaveBeenCalledWith(`${API}/account`, expect.objectContaining({ method: "DELETE" }));
     expect(await screen.findByText(ACCOUNT_DELETED)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Voltar ao login" })).toHaveAttribute("href", "/login");
-    expect(routerMock.replace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(logout).toHaveBeenCalled();
   });
 
   it("reports an unconfirmed deletion when the account request is rejected", async () => {
     loadAccount();
+    vi.mocked(logout).mockResolvedValue(undefined);
 
-    const direct = stubDirectFetch(async () => new Response(null, { status: 401 }));
+    stubFetch({
+      "DELETE account": () => new Response(null, { status: 401 }),
+    });
 
-    render(<ProfileScreen />);
+    renderWithRouter(<ProfileScreen />);
 
     const user = userEvent.setup();
 
@@ -251,20 +248,26 @@ describe("ProfileScreen", () => {
     await user.type(screen.getByLabelText("Digite EXCLUIR para confirmar"), "EXCLUIR");
     await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
 
-    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/account", expect.anything());
-    expect(direct).toHaveBeenCalledWith("/api/auth/logout", { method: "POST" });
     expect(await screen.findByText(ACCOUNT_DELETION_UNCONFIRMED)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Voltar ao login" })).toHaveAttribute("href", "/login");
-    expect(routerMock.replace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(logout).toHaveBeenCalled();
   });
 
-  it("keeps a logout retry when the browser session cannot be cleared", async () => {
+  it("keeps its own unconfirmed outcome instead of the login when the session dies during the deletion", async () => {
+    const expired = vi.fn();
+
     loadAccount();
+    vi.mocked(logout).mockResolvedValue(undefined);
+    storeSession({ accessToken: "a1", refreshToken: "r1", expiresIn: 900 });
+    onSessionExpired(expired);
 
-    let logoutStatus = 500;
-    const direct = stubDirectFetch(async () => Response.json({ deleted: true }), () => new Response(null, { status: logoutStatus }));
+    stubFetch({
+      "DELETE account": () => new Response(null, { status: 401 }),
+      "POST auth/refresh": () => new Response(null, { status: 401 }),
+    });
 
-    render(<ProfileScreen />);
+    renderWithRouter(<ProfileScreen />);
 
     const user = userEvent.setup();
 
@@ -272,18 +275,48 @@ describe("ProfileScreen", () => {
     await user.type(screen.getByLabelText("Digite EXCLUIR para confirmar"), "EXCLUIR");
     await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Conta excluída, mas não foi possível encerrar a sessão neste navegador.",
-    );
-    expect(screen.getByRole("button", { name: "Tentar encerrar a sessão novamente" })).toBeInTheDocument();
+    expect(await screen.findByText(ACCOUNT_DELETION_UNCONFIRMED)).toBeInTheDocument();
+    expect(expired).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
 
-    logoutStatus = 204;
+  it("still goes to the login on a plain logout when the logout request fails", async () => {
+    loadAccount();
+    vi.mocked(logout).mockRejectedValue(new Error("network"));
 
-    await user.click(screen.getByRole("button", { name: "Tentar encerrar a sessão novamente" }));
+    renderWithRouter(<ProfileScreen />);
+
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Sair da conta" }));
+    await user.click(screen.getByRole("button", { name: "Sair" }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/login", { replace: true }));
+    expect(logout).toHaveBeenCalledTimes(1);
+  });
+
+  // authLogout() clears the local session in its own `finally` block, whether or not the POST
+  // reaches the server, so there is no longer a "session not cleared" outcome to retry: the
+  // deletion result shows regardless, and no retry affordance is rendered.
+  it("shows the deletion outcome even when the session cannot be revoked server-side", async () => {
+    loadAccount();
+    vi.mocked(logout).mockRejectedValue(new Error("network"));
+
+    stubFetch({
+      "DELETE account": () => Response.json({ deleted: true }),
+    });
+
+    renderWithRouter(<ProfileScreen />);
+
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Excluir conta" }));
+    await user.type(screen.getByLabelText("Digite EXCLUIR para confirmar"), "EXCLUIR");
+    await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
 
     expect(await screen.findByText(ACCOUNT_DELETED)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Tentar encerrar a sessão novamente" })).not.toBeInTheDocument();
-    expect(direct.mock.calls.filter(([path]) => path === "/api/auth/logout")).toHaveLength(2);
+    expect(logout).toHaveBeenCalledTimes(1);
   });
 
   describe("appearance", () => {
@@ -298,7 +331,7 @@ describe("ProfileScreen", () => {
 
       const user = userEvent.setup();
 
-      render(<ProfileScreen />);
+      renderWithRouter(<ProfileScreen />);
 
       const group = await screen.findByRole("radiogroup", { name: "APARÊNCIA" });
 

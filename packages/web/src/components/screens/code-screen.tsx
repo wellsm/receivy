@@ -1,17 +1,15 @@
-"use client";
-
 import { formatRemaining, LOGIN_CODE_TTL_MS, maskEmail, RESEND_COOLDOWN_MS } from "@receivy/common";
 import { ArrowLeft, ArrowRight, Loader2, Lock, RefreshCw, ShieldCheck } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { CODE_LENGTH, CodeBoxes } from "@/components/ui/code-boxes";
+import { Link } from "@/components/ui/link";
+import { confirmEmailCode, requestEmailCode } from "@/lib/auth/flows";
 import { readPendingLogin, writePendingLogin, type PendingLogin } from "@/lib/auth/pending-login";
-import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
 
 export function CodeScreen() {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   // Read once when the component mounts; readPendingLogin() only touches
   // sessionStorage (unavailable during any server render) and safely
   // returns null there, so this stays SSR-safe without needing an effect.
@@ -25,9 +23,9 @@ export function CodeScreen() {
 
   useEffect(() => {
     if (!pending) {
-      router.replace("/login");
+      navigate("/login", { replace: true });
     }
-  }, [pending, router]);
+  }, [pending, navigate]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -56,24 +54,13 @@ export function CodeScreen() {
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/email/confirm", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: pending.email, code }),
-      });
+      await confirmEmailCode({ email: pending.email, code });
 
-      if (!response.ok) {
-        setError(await responseMessage(response, "Código inválido ou expirado. Peça um novo código e tente novamente."));
-        setBusy(false);
-
-        return;
-      }
-
-      // Left busy on purpose: the full page navigation replaces this screen, and clearing it
+      // Left busy on purpose: the route change unmounts this screen, and clearing it
       // here would flash the button back to idle mid-navigation.
-      window.location.assign(pending.nextPath);
-    } catch {
-      setError("Não foi possível entrar agora.");
+      navigate(pending.nextPath, { replace: true });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível entrar agora.");
       setBusy(false);
     }
   }
@@ -88,17 +75,7 @@ export function CodeScreen() {
     setNotice(null);
 
     try {
-      const response = await fetch("/api/auth/email/code", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: pending.email }),
-      });
-
-      if (!response.ok) {
-        setError(await responseMessage(response, "Não foi possível enviar o código agora."));
-
-        return;
-      }
+      await requestEmailCode(pending.email);
 
       const refreshed = { ...pending, sentAt: Date.now() };
 
@@ -106,8 +83,8 @@ export function CodeScreen() {
       setPending(refreshed);
       setCode("");
       setNotice("Enviamos um novo código.");
-    } catch {
-      setError("Não foi possível enviar o código agora.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível enviar o código agora.");
     } finally {
       setResending(false);
     }
@@ -116,7 +93,7 @@ export function CodeScreen() {
   return (
     <div className="mx-auto flex w-full max-w-md flex-col md:max-w-lg">
       <header className="grid h-14 grid-cols-[44px_1fr_44px] items-center">
-        <Link href="/login" aria-label="Voltar" className="flex h-11 w-11 items-center justify-center rounded-full text-primary-strong hover:bg-surface-muted">
+        <Link to="/login" aria-label="Voltar" className="flex h-11 w-11 items-center justify-center rounded-full text-primary-strong hover:bg-surface-muted">
           <ArrowLeft aria-hidden="true" size={22} />
         </Link>
         <span className="text-center text-base font-bold text-primary-strong">Código</span>

@@ -1,5 +1,5 @@
 import { AVATAR_INVALID_MESSAGE, AvatarMime, type AvatarUploadTicket, type UserAvatar } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { apiFetch } from "@/lib/api/client";
 import { responseMessage } from "@/lib/financial-response";
 
 const EDGE = 512;
@@ -34,7 +34,7 @@ export async function squareJpeg(file: File, edge = EDGE): Promise<Blob> {
 
 /** Reserve, signed PUT, then complete: the same three steps as a proof upload. */
 export async function uploadAvatar(blob: Blob): Promise<UserAvatar> {
-  const reserve = await browserFetch("/api/financial/account/avatar", {
+  const reserve = await apiFetch("account/avatar", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ mime: AvatarMime.Jpeg }),
@@ -45,13 +45,14 @@ export async function uploadAvatar(blob: Blob): Promise<UserAvatar> {
   }
 
   const ticket = (await reserve.json()) as AvatarUploadTicket;
-  const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": AvatarMime.Jpeg }, body: blob, credentials: "omit", referrerPolicy: "no-referrer" });
+  // A PUT that never reaches the storage is the same failed upload as a refused one, not the browser's text.
+  const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": AvatarMime.Jpeg }, body: blob, credentials: "omit", referrerPolicy: "no-referrer" }).catch(() => null);
 
-  if (!put.ok) {
+  if (!put?.ok) {
     throw new Error("A foto não foi enviada. Tente novamente.");
   }
 
-  const complete = await browserFetch("/api/financial/account/avatar/complete", { method: "POST" });
+  const complete = await apiFetch("account/avatar/complete", { method: "POST" });
 
   if (!complete.ok) {
     throw new Error(await responseMessage(complete, AVATAR_INVALID_MESSAGE));

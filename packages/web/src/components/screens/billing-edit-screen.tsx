@@ -1,24 +1,24 @@
-"use client";
-
 import type { BillingDetail } from "@receivy/common";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { responseMessage } from "@/lib/financial-response";
 import { BillingFormScreen } from "@/components/forms/billing-form-screen";
+import { apiFetch } from "@/lib/api/client";
+import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
 
 const LOAD_ERROR = "Não foi possível carregar a cobrança.";
 
 /** The same form as the creation route, seeded with the billing; the API decides what is still editable. */
 export function BillingEditScreen({ id }: { id: string }) {
   const router = useRouter();
+  const navigate = useAppNavigate();
   const [billing, setBilling] = useState<BillingDetail | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let live = true;
 
-    browserFetch(`/api/financial/billings/${id}`)
+    apiFetch(`billings/${encodeURIComponent(id)}`)
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(await responseMessage(response, LOAD_ERROR));
@@ -40,7 +40,7 @@ export function BillingEditScreen({ id }: { id: string }) {
         <p role="alert" className="m-0 text-center text-danger">
           {error}
         </p>
-        <button type="button" className="min-h-12 font-bold text-primary" onClick={() => router.back()}>
+        <button type="button" className="min-h-12 font-bold text-primary" onClick={() => router.history.back()}>
           Voltar
         </button>
       </div>
@@ -55,5 +55,5 @@ export function BillingEditScreen({ id }: { id: string }) {
     );
   }
 
-  return <BillingFormScreen billing={billing} onSaved={() => router.replace(`/billings/${id}`)} />;
+  return <BillingFormScreen billing={billing} onSaved={() => navigate(`/billings/${id}`, { replace: true })} />;
 }

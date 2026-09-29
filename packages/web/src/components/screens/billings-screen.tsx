@@ -1,5 +1,3 @@
-"use client";
-
 import {
   activeBillingFilterCount,
   type AuthUser,
@@ -16,17 +14,17 @@ import {
   type PublicLink,
 } from "@receivy/common";
 import { ChevronLeft, Plus, Search } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { responseMessage } from "@/lib/financial-response";
-import { loadPlanSummary } from "@/lib/plan-summary";
-import { publicLinkUrl } from "@/lib/public-link-url";
 import { BillingFiltersSheet } from "@/components/app/billing-filters-sheet";
 import { SearchFooter } from "@/components/app/search-footer";
 import { BILLING_ROW_COLUMNS, BillingCard } from "@/components/ui/billing-card";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { Link } from "@/components/ui/link";
+import { apiFetch } from "@/lib/api/client";
+import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
+import { loadPlanSummary } from "@/lib/plan-summary";
+import { publicLinkUrl } from "@/lib/public-link-url";
 
 const LIST_ERROR = "Não foi possível carregar suas cobranças.";
 
@@ -42,7 +40,7 @@ function pillClass(selected: boolean): string {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await browserFetch(path, init);
+  const response = await apiFetch(path, init);
 
   if (!response.ok) {
     throw new Error(await responseMessage(response, LIST_ERROR));
@@ -65,7 +63,7 @@ function listQuery(search: string, cursor?: string): string {
 
   const encoded = query.toString();
 
-  return `/api/financial/billings${encoded ? `?${encoded}` : ""}`;
+  return `billings${encoded ? `?${encoded}` : ""}`;
 }
 
 type BillingsScreenProps = {
@@ -74,7 +72,7 @@ type BillingsScreenProps = {
 };
 
 export function BillingsScreen({ user }: BillingsScreenProps = {}) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [page, setPage] = useState<BillingsPage | null>(null);
   const [term, setTerm] = useState("");
   const [search, setSearch] = useState("");
@@ -143,15 +141,15 @@ export function BillingsScreen({ user }: BillingsScreenProps = {}) {
 
     // A conta a pagar has no public link: its action only opens the billing.
     if (billing.type === "payable" || billingShareAction(billing) !== "share" || !chargeId) {
-      router.push(`/billings/${billing.id}`);
+      navigate(`/billings/${billing.id}`);
 
       return;
     }
 
-    const response = await browserFetch(`/api/financial/charges/${chargeId}/public-link`, { method: "POST" });
+    const response = await apiFetch(`charges/${chargeId}/public-link`, { method: "POST" });
 
     if (!response.ok) {
-      router.push(`/charges/${chargeId}`);
+      navigate(`/charges/${chargeId}`);
 
       return;
     }
@@ -169,7 +167,7 @@ export function BillingsScreen({ user }: BillingsScreenProps = {}) {
     <section className="flex min-h-full flex-col gap-3.5 pb-24 md:gap-[18px] md:pb-0">
       {/* Design 8b, below `md`: back to the Feed, the counts, and the avatar that opens Perfil. */}
       <header className="flex items-center gap-3 md:hidden">
-        <Link href="/feed" aria-label="Voltar para o Feed" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-ink">
+        <Link to="/feed" aria-label="Voltar para o Feed" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-ink">
           <ChevronLeft size={18} aria-hidden="true" />
         </Link>
 
@@ -182,7 +180,7 @@ export function BillingsScreen({ user }: BillingsScreenProps = {}) {
           <h1 className="m-0 font-display text-[22px] font-bold text-ink">Contas</h1>
         </div>
 
-        <Link href="/settings" aria-label="Perfil" className="shrink-0 rounded-full">
+        <Link to="/settings" aria-label="Perfil" className="shrink-0 rounded-full">
           <InitialsAvatar name={user?.name?.trim() || "R"} size={40} avatar={user?.avatar} />
         </Link>
       </header>
@@ -223,13 +221,13 @@ export function BillingsScreen({ user }: BillingsScreenProps = {}) {
             />
           </label>
           {plan && plan.usage.indefinite.used >= Math.ceil(plan.usage.indefinite.limit * 0.8) && (
-            <Link href="/settings/plan" className="self-center shrink-0 whitespace-nowrap rounded-full bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">
+            <Link to="/settings/plan" className="self-center shrink-0 whitespace-nowrap rounded-full bg-warning-soft px-3 py-1 text-xs font-semibold text-warning">
               {`${plan.usage.indefinite.used} de ${plan.usage.indefinite.limit} cobranças indefinidas`}
             </Link>
           )}
           <Link
             className="hidden h-[42px] shrink-0 items-center gap-2 rounded-xl bg-primary px-4 text-[13.5px] font-bold text-on-primary md:ml-auto md:inline-flex"
-            href="/billings/new"
+            to="/billings/new"
             aria-label="Nova conta"
           >
             <Plus size={17} aria-hidden="true" className="text-on-primary" />
@@ -297,7 +295,7 @@ export function BillingsScreen({ user }: BillingsScreenProps = {}) {
         <section className="flex flex-col gap-3 rounded-[20px] border border-outline bg-surface p-5">
           <h2 className="m-0 font-display text-2xl font-bold text-ink">Nenhuma conta ainda</h2>
           <p className="m-0 text-sm leading-6 text-muted">Crie a primeira para acompanhar os vencimentos.</p>
-          <Link className="inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 font-bold text-on-primary" href="/billings/new">
+          <Link className="inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-4 font-bold text-on-primary" to="/billings/new">
             Nova conta
           </Link>
         </section>
@@ -320,7 +318,7 @@ export function BillingsScreen({ user }: BillingsScreenProps = {}) {
               billing={billing}
               today={today}
               onShare={(target) => void share(target)}
-              onOpen={(target) => router.push(`/billings/${target.id}`)}
+              onOpen={(target) => navigate(`/billings/${target.id}`)}
             />
           ))}
         </div>

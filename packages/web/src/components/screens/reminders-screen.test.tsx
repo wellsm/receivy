@@ -2,21 +2,19 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SYSTEM_REMINDER_CONFIG } from "@receivy/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { RemindersScreen } from "./reminders-screen";
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
-
-const fetchMock = vi.mocked(browserFetch);
+const fetchMock = vi.fn();
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 
 // Every existing test assumes the channel chips exist; the kill-switch tests flip the flag off themselves.
 beforeEach(() => {
-  vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true");
+  vi.stubEnv("VITE_API_URL", "https://api.test");
+  vi.stubEnv("VITE_WHATSAPP_ENABLED", "true");
+  vi.stubGlobal("fetch", fetchMock);
 });
 
-afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => { cleanup(); vi.resetAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 function arrange(settings = { config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: false }, plan = "free") {
   fetchMock.mockImplementation((path: string, init?: RequestInit) => {
@@ -111,7 +109,7 @@ describe("RemindersScreen", () => {
   });
 
   it("hides the channel chips and the manual section, and saves whatsapp rules back as e-mail, when the kill switch is off", async () => {
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
     arrange(
       {
         config: {
@@ -148,13 +146,21 @@ describe("RemindersScreen", () => {
   });
 
   it("keeps the WhatsApp channel option with only the Evolution flag on", async () => {
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
-    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "true");
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("VITE_EVOLUTION_ENABLED", "true");
     arrange({ config: SYSTEM_REMINDER_CONFIG, inherited: true, whatsappAvailable: true }, "basic");
     render(<RemindersScreen />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Editar lembrete 1" }));
 
     expect(screen.getByRole("radio", { name: "whatsapp no lembrete 1" })).toBeInTheDocument();
+  });
+
+  it("shows the Portuguese fallback when the settings cannot be reached", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<RemindersScreen />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível carregar seus lembretes.");
+    expect(screen.queryByText(/failed to fetch/i)).toBeNull();
   });
 });

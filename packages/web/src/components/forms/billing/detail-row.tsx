@@ -1,5 +1,3 @@
-"use client";
-
 import type { LucideIcon } from "lucide-react";
 import { ChevronRight } from "lucide-react";
 import { Children, type ReactNode, type RefObject } from "react";

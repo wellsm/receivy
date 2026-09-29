@@ -1,16 +1,17 @@
 import { BillingRecurrence, ChargeState, Direction, ProofState, SharingState, UserStatus, type ChargeDetail, type Contact, type ContactLedger } from "@receivy/common";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContactLedgerScreen } from "@/components/screens/contact-ledger-screen";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { takeDraft } from "@/lib/billing-draft";
+import { renderWithRouter } from "@/test/render";
 
-const router = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
+const navigate = vi.fn();
 const writeText = vi.fn(async () => {});
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
+
+const API = "https://api.test";
 
 /** userEvent installs its own clipboard stub on setup, so ours has to land afterwards. */
 function setup() {
@@ -20,6 +21,10 @@ function setup() {
 
   return user;
 }
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+});
 
 afterEach(() => {
   cleanup();
@@ -90,20 +95,33 @@ type Handler = (path: string, init?: RequestInit) => Response | undefined;
 function mockApi(page: ContactLedger, handler: Handler = () => undefined): string[] {
   const calls: string[] = [];
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-    calls.push(`${init?.method ?? "GET"} ${path}`);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? "GET"} ${path}`);
 
-    return handler(path, init) ?? (path.startsWith("/api/financial/contacts/c1/ledger") ? Response.json(page) : new Response(null, { status: 404 }));
-  });
+      return handler(path, init) ?? (path.startsWith(`${API}/contacts/c1/ledger`) ? Response.json(page) : new Response(null, { status: 404 }));
+    }),
+  );
 
   return calls;
 }
 
 describe("ContactLedgerScreen", () => {
+  it("encodes the id from the URL into the API path", async () => {
+    const page = ledger();
+    const calls = mockApi(page, (path) => (path === `${API}/contacts/a%2Fb/ledger` ? Response.json(page) : undefined));
+
+    renderWithRouter(<ContactLedgerScreen id="a/b" />);
+
+    expect(await screen.findByRole("heading", { level: 2, name: "Ana Paula Souza" })).toBeInTheDocument();
+    expect(calls).toContain(`GET ${API}/contacts/a%2Fb/ledger`);
+  });
+
   it("shows the profile card with the two-letter avatar, the full name and the formatted phone", async () => {
     mockApi(ledger({ nickname: "Aninha", displayName: "Aninha", phone: "+5511987654321", email: "ana@example.com" }));
 
-    render(<ContactLedgerScreen id="c1" />);
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
 
     expect(await screen.findByRole("heading", { level: 2, name: "Aninha" })).toBeInTheDocument();
     expect(screen.getByText("Ana Paula Souza")).toBeInTheDocument();
@@ -127,7 +145,7 @@ describe("ContactLedgerScreen", () => {
 
     mockApi(ledger({}, [charge({ id: "c1" }), waiting, paid]));
 
-    render(<ContactLedgerScreen id="c1" />);
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
 
     expect(await screen.findByText("2 cobranças ativas")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Balanço com Ana" })).toBeInTheDocument();
@@ -144,10 +162,10 @@ describe("ContactLedgerScreen", () => {
 
   it("copies the payment link and reminds from an active charge", async () => {
     const calls = mockApi(ledger({}, [charge({ id: "c1" })]), (path, init) => {
-      if (path === "/api/financial/charges/c1/public-link" && init?.method === "POST") {
+      if (path === `${API}/charges/c1/public-link` && init?.method === "POST") {
         return Response.json({ token: "tk", expiresAt: "2099-01-01T00:00:00Z" });
       }
-      if (path === "/api/financial/charges/c1/reminders" && init?.method === "POST") {
+      if (path === `${API}/charges/c1/reminders` && init?.method === "POST") {
         return Response.json({ queued: true });
       }
 
@@ -155,7 +173,7 @@ describe("ContactLedgerScreen", () => {
     });
     const user = setup();
 
-    render(<ContactLedgerScreen id="c1" />);
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
 
     await user.click(await screen.findByRole("button", { name: "Link de Jantar" }));
 
@@ -165,7 +183,7 @@ describe("ContactLedgerScreen", () => {
 
     await user.click(screen.getByRole("button", { name: "Lembrar Jantar" }));
 
-    await waitFor(() => expect(calls).toContain("POST /api/financial/charges/c1/reminders"));
+    await waitFor(() => expect(calls).toContain(`POST ${API}/charges/c1/reminders`));
 
     expect(await screen.findByText("Lembrete enviado.")).toBeInTheDocument();
   });
@@ -175,23 +193,23 @@ describe("ContactLedgerScreen", () => {
 
     const user = setup();
 
-    render(<ContactLedgerScreen id="c1" />);
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
 
     await user.click(await screen.findByRole("button", { name: "Cobrar" }));
 
-    expect(router.push).toHaveBeenCalledWith("/billings/new");
+    expect(navigate).toHaveBeenCalledWith("/billings/new");
     expect(takeDraft()).toMatchObject({ returnTo: "/billings/new", draft: { selected: ["u1"] } });
   });
 
   it("removes the contact only after the confirmation and hides the actions afterwards", async () => {
     let archived = false;
     const calls = mockApi(ledger(), (path, init) => {
-      if (path === "/api/contacts/c1/archive" && init?.method === "POST") {
+      if (path === `${API}/contacts/c1/archive` && init?.method === "POST") {
         archived = true;
 
         return new Response(null, { status: 204 });
       }
-      if (path.startsWith("/api/financial/contacts/c1/ledger")) {
+      if (path.startsWith(`${API}/contacts/c1/ledger`)) {
         return Response.json(ledger(archived ? { archivedAt: "2026-10-01T00:00:00Z" } : {}));
       }
 
@@ -199,13 +217,13 @@ describe("ContactLedgerScreen", () => {
     });
     const user = setup();
 
-    render(<ContactLedgerScreen id="c1" />);
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
 
     await user.click(await screen.findByRole("button", { name: "Remover" }));
 
     const dialog = screen.getByRole("dialog", { name: "Remover contato?" });
 
-    expect(calls).not.toContain("POST /api/contacts/c1/archive");
+    expect(calls).not.toContain(`POST ${API}/contacts/c1/archive`);
 
     await user.click(within(dialog).getByRole("button", { name: "Cancelar" }));
 
@@ -214,7 +232,7 @@ describe("ContactLedgerScreen", () => {
     await user.click(screen.getByRole("button", { name: "Remover" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remover" }));
 
-    await waitFor(() => expect(calls).toContain("POST /api/contacts/c1/archive"));
+    await waitFor(() => expect(calls).toContain(`POST ${API}/contacts/c1/archive`));
 
     expect(await screen.findByText("Contato removido")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
@@ -225,7 +243,7 @@ describe("ContactLedgerScreen", () => {
     let failed = false;
 
     mockApi(ledger(), (path) => {
-      if (path.startsWith("/api/financial/contacts/c1/ledger") && !failed) {
+      if (path.startsWith(`${API}/contacts/c1/ledger`) && !failed) {
         failed = true;
 
         return Response.json({ code: "unknown" }, { status: 500 });
@@ -236,12 +254,46 @@ describe("ContactLedgerScreen", () => {
 
     const user = setup();
 
-    render(<ContactLedgerScreen id="c1" />);
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
 
     expect(await screen.findByRole("alert")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
 
     expect(await screen.findByRole("heading", { level: 2, name: "Ana Paula Souza" })).toBeInTheDocument();
+  });
+
+  it("shows the contacts conflict text when the archive answers 409", async () => {
+    mockApi(ledger(), (path, init) => (path === `${API}/contacts/c1/archive` && init?.method === "POST" ? Response.json({ message: "outra coisa" }, { status: 409 }) : undefined));
+
+    const user = setup();
+
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
+
+    await user.click(await screen.findByRole("button", { name: "Remover" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remover" }));
+
+    expect(await screen.findByText(/Esse e-mail já está em uso/)).toBeInTheDocument();
+  });
+
+  it("shows the archive fallback for statuses other than 400 and 409", async () => {
+    mockApi(ledger(), (path, init) => (path === `${API}/contacts/c1/archive` && init?.method === "POST" ? Response.json({ message: "Limite" }, { status: 429 }) : undefined));
+
+    const user = setup();
+
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
+
+    await user.click(await screen.findByRole("button", { name: "Remover" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remover" }));
+
+    expect(await screen.findByText("Não foi possível remover o contato.")).toBeInTheDocument();
+  });
+
+  it("shows the Portuguese fallback when the ledger cannot be reached", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    renderWithRouter(<ContactLedgerScreen id="c1" />);
+
+    expect(await screen.findByText("Não foi possível carregar o histórico.")).toBeInTheDocument();
+    expect(screen.queryByText(/failed to fetch/i)).toBeNull();
   });
 });

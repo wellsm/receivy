@@ -9,7 +9,8 @@ afterEach(() => {
 
 describe("stripe loader", () => {
   it("is off without a publishable key", async () => {
-    vi.stubEnv("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY", "");
+    vi.stubEnv("VITE_API_URL", "https://api.test");
+    vi.stubEnv("VITE_STRIPE_PUBLISHABLE_KEY", "");
 
     const { stripeConfigured, stripePromise } = await import("./stripe");
 
@@ -18,7 +19,8 @@ describe("stripe loader", () => {
   });
 
   it("loads Stripe.js once with the key", async () => {
-    vi.stubEnv("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY", "pk_test_x");
+    vi.stubEnv("VITE_API_URL", "https://api.test");
+    vi.stubEnv("VITE_STRIPE_PUBLISHABLE_KEY", "pk_test_x");
 
     const { loadStripe } = await import("@stripe/stripe-js");
     const { stripePromise } = await import("./stripe");
@@ -28,7 +30,8 @@ describe("stripe loader", () => {
   });
 
   it("reads the display price as an integer of cents", async () => {
-    vi.stubEnv("NEXT_PUBLIC_PLAN_BASIC_PRICE_CENTS", "1990");
+    vi.stubEnv("VITE_API_URL", "https://api.test");
+    vi.stubEnv("VITE_PLAN_BASIC_PRICE_CENTS", "1990");
 
     const { PLAN_BASIC_PRICE_CENTS } = await import("./stripe");
 

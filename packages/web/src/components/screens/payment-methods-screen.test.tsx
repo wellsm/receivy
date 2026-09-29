@@ -1,18 +1,20 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PaymentMethodsScreen } from "@/components/screens/payment-methods-screen";
+import { renderWithRouter } from "@/test/render";
 
-const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
+const API = "https://api.test";
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+});
 
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   window.sessionStorage.clear();
 });
 
@@ -25,28 +27,31 @@ function api(methods: unknown[] = [main, other]) {
   const sent: { path: string; init: RequestInit }[] = [];
   let list = methods;
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
-    sent.push({ path, init });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, init: RequestInit = {}) => {
+      sent.push({ path, init });
 
-    if (init.method === "POST" && path.endsWith("/archive")) {
-      list = list.filter(item => item !== other);
+      if (init.method === "POST" && path.endsWith("/archive")) {
+        list = list.filter(item => item !== other);
 
-      return new Response(null, { status: 204 });
-    }
+        return new Response(null, { status: 204 });
+      }
 
-    if (init.method === "POST") {
-      return new Response(null, { status: 204 });
-    }
+      if (init.method === "POST") {
+        return new Response(null, { status: 204 });
+      }
 
-    return Response.json({ paymentMethods: list });
-  });
+      return Response.json({ paymentMethods: list });
+    }),
+  );
 
   return sent;
 }
 
 it("lists the active keys with the type label, the masked key and the main badge", async () => {
   api();
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   expect(await screen.findByText("MEIOS ATIVOS (2)")).toBeInTheDocument();
   expect(screen.getByText("529.982.247-25")).toBeInTheDocument();
@@ -60,7 +65,7 @@ it("lists the active keys with the type label, the masked key and the main badge
 
 it("lists an InfinitePay method with its tag", async () => {
   api([main, tag]);
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   expect(await screen.findByText("InfinitePay")).toBeInTheDocument();
   expect(screen.getByText("$minha.loja")).toBeInTheDocument();
@@ -68,7 +73,7 @@ it("lists an InfinitePay method with its tag", async () => {
 
 it("lists a PagBank method without a copy button", async () => {
   api([main, pagbank]);
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   expect(await screen.findByText("PagBank")).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Copiar valor" })).toHaveLength(1);
@@ -76,7 +81,7 @@ it("lists a PagBank method without a copy button", async () => {
 
 it("copies a key to the clipboard and confirms inline", async () => {
   api();
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   const user = userEvent.setup();
   // `userEvent.setup()` installs its own clipboard stub, so the write is spied after it.
@@ -90,7 +95,7 @@ it("copies a key to the clipboard and confirms inline", async () => {
 
 it("reports a failure instead of announcing a copy the browser cannot make", async () => {
   api();
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   const user = userEvent.setup();
   // A plain-http origin exposes no clipboard at all.
@@ -112,7 +117,7 @@ it("reports a failure instead of announcing a copy the browser cannot make", asy
 
 it("closes the delete dialog on Escape and returns focus to the trash button", async () => {
   api();
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   const user = userEvent.setup();
   const trigger = (await screen.findAllByRole("button", { name: "Excluir" }))[1]!;
@@ -130,17 +135,18 @@ it("closes the delete dialog on Escape and returns focus to the trash button", a
 it("promotes another key to the main one", async () => {
   const sent = api();
 
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   await userEvent.setup().click(await screen.findByRole("button", { name: "Tornar padrão" }));
 
-  await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pix-2/default")).toBe(true));
+  expect(await screen.findByText("Meio principal atualizado.")).toBeInTheDocument();
+  expect(sent.some(entry => entry.path === `${API}/payment-methods/pix-2/default`)).toBe(true);
 });
 
 it("asks for confirmation before deleting a key", async () => {
   const sent = api();
 
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   const user = userEvent.setup();
 
@@ -154,12 +160,13 @@ it("asks for confirmation before deleting a key", async () => {
 
   await user.click(screen.getByRole("button", { name: "Remover" }));
 
-  await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pix-2/archive")).toBe(true));
+  expect(await screen.findByText("Meio de pagamento excluído.")).toBeInTheDocument();
+  expect(sent.some(entry => entry.path === `${API}/payment-methods/pix-2/archive`)).toBe(true);
 });
 
 it("shows the empty state and no inline form", async () => {
   api([]);
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   expect(await screen.findByText("Nenhum meio de pagamento")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Salvar chave Pix" })).not.toBeInTheDocument();
@@ -168,7 +175,7 @@ it("shows the empty state and no inline form", async () => {
 
 it("carries the return path and the required flag into the key form", async () => {
   api([]);
-  render(<PaymentMethodsScreen returnTo="/billings/new" required />);
+  renderWithRouter(<PaymentMethodsScreen returnTo="/billings/new" required />);
 
   expect(await screen.findByText("Você precisa de um meio de pagamento para criar cobranças.")).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: "Cadastrar novo meio" })[0]).toHaveAttribute(
@@ -179,9 +186,17 @@ it("carries the return path and the required flag into the key form", async () =
 
 it("links to the plain key form on a direct visit", async () => {
   api([]);
-  render(<PaymentMethodsScreen />);
+  renderWithRouter(<PaymentMethodsScreen />);
 
   await screen.findByText("Nenhum meio de pagamento");
 
   expect(screen.getAllByRole("link", { name: "Cadastrar novo meio" })[0]).toHaveAttribute("href", "/settings/payment-methods/new");
+});
+
+it("shows the Portuguese fallback when the list cannot be reached", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+  renderWithRouter(<PaymentMethodsScreen />);
+
+  expect(await screen.findByText("Não foi possível carregar seus meios de pagamento.")).toBeInTheDocument();
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
 });

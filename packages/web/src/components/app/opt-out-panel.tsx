@@ -1,6 +1,5 @@
-"use client";
-
 import { useState } from "react";
+import { apiFetch } from "@/lib/api/client";
 
 type OptOutPanelProps = { token: string; optedOut: boolean };
 
@@ -19,7 +18,7 @@ export function OptOutPanel({ token, optedOut: initialOptedOut }: OptOutPanelPro
     setError("");
 
     try {
-      const response = await fetch(`/api/public/opt-out/${token}`, { method: "DELETE" });
+      const response = await apiFetch(`public/notices/opt-out/${encodeURIComponent(token)}`, { method: "DELETE", auth: false });
 
       if (!response.ok) {
         throw new Error("opt-in failed");

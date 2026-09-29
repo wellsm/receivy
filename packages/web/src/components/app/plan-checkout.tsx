@@ -1,5 +1,3 @@
-"use client";
-
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { type FormEvent, useState } from "react";
 import { stripePromise } from "@/lib/stripe";

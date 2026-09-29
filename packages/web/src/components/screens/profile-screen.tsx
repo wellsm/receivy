@@ -1,16 +1,15 @@
-"use client";
-
 import { Bell, Check, ChevronRight, Crown, KeyRound, Loader2, LogOut, MessageCircle, Pencil, Trash2, TriangleAlert, Users, type LucideIcon } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, PlanTier, THEME_PREFERENCE_OPTIONS, planName, type AuthUser, type WhatsappSettings } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { apiFetch, apiJson } from "@/lib/api/client";
+import { currentUser, logout as authLogout } from "@/lib/auth/flows";
 import { squareJpeg, uploadAvatar } from "@/lib/avatar-upload";
+import { useAppNavigate } from "@/lib/navigate";
 import { useThemePreference } from "@/lib/theme";
 import { whatsappClient, whatsappSubtitle } from "@/lib/whatsapp-client";
 import { whatsappEnabled } from "@/lib/whatsapp-flag";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { Link } from "@/components/ui/link";
 
 type Dialog = "logout" | "delete" | null;
 
@@ -48,7 +47,7 @@ type RowProps = {
 /** A management row: a chevron on narrow screens, a "Gerenciar" button on wide ones. */
 function Row({ icon: Icon, label, title, subtitle, tone, href }: RowProps) {
   return (
-    <Link className="flex min-h-14 w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-surface-muted/60 md:gap-3.5 md:px-[22px] md:py-[18px]" href={href} aria-label={label}>
+    <Link className="flex min-h-14 w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-surface-muted/60 md:gap-3.5 md:px-[22px] md:py-[18px]" to={href} aria-label={label}>
       <span className={`flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl md:h-[42px] md:w-[42px] md:rounded-[13px] ${ROW_TONES[tone]}`}>
         <Icon aria-hidden="true" size={19} strokeWidth={1.8} />
       </span>
@@ -89,7 +88,7 @@ function DialogShell({ titleId, onClose, children }: DialogShellProps) {
 }
 
 export function ProfileScreen() {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -100,8 +99,6 @@ export function ProfileScreen() {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [ended, setEnded] = useState(false);
-  // Holds the `deleted` outcome while the browser session could not be cleared yet.
-  const [logoutRetry, setLogoutRetry] = useState<boolean | null>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const [themePreference, chooseTheme] = useThemePreference();
   const [whatsapp, setWhatsapp] = useState<WhatsappSettings | null>(null);
@@ -110,23 +107,20 @@ export function ProfileScreen() {
   useEffect(() => {
     let active = true;
 
-    void browserFetch("/api/auth/me")
-      .then((response) => (response.ok ? (response.json() as Promise<{ user: AuthUser }>) : Promise.reject(new Error())))
-      .then((payload) => {
-        if (!active) {
-          return;
-        }
+    void currentUser().then((fetchedUser) => {
+      if (!active) {
+        return;
+      }
 
-        setUser(payload.user);
-        setDraft(payload.user.name ?? "");
-      })
-      .catch(() => {
-        if (!active) {
-          return;
-        }
-
+      if (!fetchedUser) {
         setNotice("Não foi possível carregar sua conta.");
-      });
+
+        return;
+      }
+
+      setUser(fetchedUser);
+      setDraft(fetchedUser.name ?? "");
+    });
 
     return () => {
       active = false;
@@ -140,7 +134,7 @@ export function ProfileScreen() {
 
     let active = true;
 
-    void Promise.all([whatsappClient.settings(), browserFetch("/api/financial/plan").then((response) => (response.ok ? (response.json() as Promise<{ plan: PlanTier }>) : Promise.reject(new Error())))])
+    void Promise.all([whatsappClient.settings(), apiJson<{ plan: PlanTier }>("plan")])
       .then(([settings, summary]) => {
         if (!active) {
           return;
@@ -181,7 +175,7 @@ export function ProfileScreen() {
     setBusy(true);
 
     try {
-      const response = await browserFetch("/api/financial/account/profile", {
+      const response = await apiFetch("account/profile", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name, locale: "pt-BR", country: "BR", timezone: deviceTimezone() }),
@@ -223,45 +217,30 @@ export function ProfileScreen() {
     }
   }
 
-  /** `deleted` is null for a plain logout, and the deletion outcome after an erase. */
+  /**
+   * `deleted` is null for a plain logout, and the deletion outcome after an erase.
+   * `authLogout()` always clears the local session in its own `finally` block, whether or
+   * not the POST to the API reaches the server, so there is no "session not cleared" outcome
+   * left to retry here.
+   */
   async function finishLogout(deleted: boolean | null) {
-    let cleared = false;
-
     try {
-      cleared = (await fetch("/api/auth/logout", { method: "POST" })).ok;
+      await authLogout();
     } catch {
-      cleared = false;
+      // The local session is already cleared; a failed request only means the
+      // refresh token was not revoked server-side.
     }
 
-    if (cleared) {
-      setLogoutRetry(null);
-      setEnded(true);
+    setEnded(true);
 
-      if (deleted === null) {
-        setNotice("");
-        router.replace("/login");
-
-        return;
-      }
-
-      setNotice(deleted ? ACCOUNT_DELETED : ACCOUNT_DELETION_UNCONFIRMED);
-
-      return;
-    }
-
-    // A failed request cannot establish that the HttpOnly browser cookies were cleared.
     if (deleted === null) {
-      setNotice("Não foi possível sair. Tente novamente.");
+      setNotice("");
+      navigate("/login", { replace: true });
 
       return;
     }
 
-    setLogoutRetry(deleted);
-    setNotice(
-      deleted
-        ? "Conta excluída, mas não foi possível encerrar a sessão neste navegador."
-        : "Não foi possível confirmar a exclusão nem encerrar a sessão. Conecte-se e tente novamente.",
-    );
+    setNotice(deleted ? ACCOUNT_DELETED : ACCOUNT_DELETION_UNCONFIRMED);
   }
 
   async function logout() {
@@ -287,12 +266,14 @@ export function ProfileScreen() {
     setBusy(true);
     setDialog(null);
 
-    let deleted = false;
+    let deleted: boolean;
 
     try {
-      // No automatic retry/redirect: a 401 cannot certify that deletion committed.
-      const response = await fetch("/api/financial/account", {
+      // apiFetch refreshes and retries once on a 401; a refused refresh stays quiet (no login redirect) so the
+      // screen shows its own outcome: a dead session cannot certify that the deletion committed.
+      const response = await apiFetch("account", {
         method: "DELETE",
+        quietExpiry: true,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ confirmation }),
       });
@@ -304,20 +285,6 @@ export function ProfileScreen() {
 
     try {
       await finishLogout(deleted);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function retryLogout() {
-    if (logoutRetry === null || busy) {
-      return;
-    }
-
-    setBusy(true);
-
-    try {
-      await finishLogout(logoutRetry);
     } finally {
       setBusy(false);
     }
@@ -338,14 +305,8 @@ export function ProfileScreen() {
         </p>
       )}
 
-      {logoutRetry !== null && (
-        <button type="button" className={OUTLINE_BUTTON} disabled={busy} onClick={() => void retryLogout()}>
-          Tentar encerrar a sessão novamente
-        </button>
-      )}
-
       {ended && (
-        <Link className={OUTLINE_BUTTON} href="/login">
+        <Link className={OUTLINE_BUTTON} to="/login">
           Voltar ao login
         </Link>
       )}
@@ -510,13 +471,13 @@ export function ProfileScreen() {
 
       <footer className="flex flex-col items-center gap-1 pt-2">
         <p className="m-0 flex items-center gap-2">
-          <Link className="flex min-h-12 items-center font-bold text-primary" href="/terms">
+          <Link className="flex min-h-12 items-center font-bold text-primary" to="/terms">
             Termos
           </Link>
           <span className="text-muted" aria-hidden="true">
             ·
           </span>
-          <Link className="flex min-h-12 items-center font-bold text-primary" href="/privacy">
+          <Link className="flex min-h-12 items-center font-bold text-primary" to="/privacy">
             Privacidade
           </Link>
         </p>

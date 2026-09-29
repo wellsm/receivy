@@ -1,12 +1,6 @@
-"use client";
-
 import { billingCategoryLabel, BillingKind, calendarDate, chargeShareText, chargeStateTag, formatMoney, paymentMethodCopyValue, paymentMethodText, PaymentProvider, pendingChargesOf, PendingChargesAction, SplitPartKind, type BillingAllocation, type BillingDetail, type BillingGuest, type BillingGuestAction, type BillingInvite, type ChargeDetail, type Money, type PaymentMethod } from "@receivy/common";
 import { Bell, BellOff, Check, CircleDashed, CirclePause, CirclePlay, CircleStop, KeyRound, Pencil, Receipt, RotateCcw, Share2, UserPlus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { responseMessage } from "@/lib/financial-response";
-import { publicLinkUrl } from "@/lib/public-link-url";
 import { ScopeDialog } from "@/components/app/scope-dialog";
 import { Toast } from "@/components/app/toast";
 import { ActionTile } from "@/components/ui/action-tile";
@@ -15,6 +9,10 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { StatusTag } from "@/components/ui/status-tag";
+import { apiFetch } from "@/lib/api/client";
+import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
+import { publicLinkUrl } from "@/lib/public-link-url";
 
 /** One due date of the billing: the charges generated for it, oldest cycle first. */
 type Cycle = {
@@ -32,7 +30,7 @@ const STATE_LABELS = {
 } as const;
 
 async function request<T>(path: string, init: RequestInit = {}, fallback = LOAD_ERROR): Promise<T> {
-  const response = await browserFetch(path, init);
+  const response = await apiFetch(path, init);
 
   if (!response.ok) {
     throw new Error(await responseMessage(response, fallback));
@@ -204,7 +202,7 @@ type BillingDetailScreenProps = {
 };
 
 export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [billing, setBilling] = useState<BillingDetail | null>(null);
   const [invite, setInvite] = useState<BillingInvite | null>(null);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -224,7 +222,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
     let live = true;
 
     // The wallet only names the key of a billing that has no charge yet; losing it must not hide the billing.
-    Promise.all([request<BillingDetail>(`/api/financial/billings/${id}`), request<{ paymentMethods: PaymentMethod[] }>("/api/financial/payment-methods").catch(() => ({ paymentMethods: [] }))])
+    Promise.all([request<BillingDetail>(`billings/${encodeURIComponent(id)}`), request<{ paymentMethods: PaymentMethod[] }>("payment-methods").catch(() => ({ paymentMethods: [] }))])
       .then(([detail, wallet]) => {
         if (!live) {
           return;
@@ -285,7 +283,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
     }
 
     await run(async () => {
-      const created = await request<BillingInvite>(`/api/financial/billings/${detail.id}/invite`, { method: "POST" }, "Não foi possível criar o convite.");
+      const created = await request<BillingInvite>(`billings/${detail.id}/invite`, { method: "POST" }, "Não foi possível criar o convite.");
 
       setInvite(created);
 
@@ -295,7 +293,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
 
   async function revokeInvite(detail: BillingDetail) {
     await run(async () => {
-      await request<void>(`/api/financial/billings/${detail.id}/invite`, { method: "DELETE" }, "Não foi possível revogar o convite.");
+      await request<void>(`billings/${detail.id}/invite`, { method: "DELETE" }, "Não foi possível revogar o convite.");
 
       setInvite(null);
     }, "Não foi possível revogar o convite.");
@@ -304,7 +302,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   async function transition(detail: BillingDetail, state: "active" | "paused" | "ended", pendingCharges?: PendingChargesAction) {
     await run(async () => {
       const body = pendingCharges ? { state, pendingCharges } : { state };
-      const updated = await request<BillingDetail>(`/api/financial/billings/${detail.id}`, jsonInit("PATCH", body), "Não foi possível atualizar a cobrança.");
+      const updated = await request<BillingDetail>(`billings/${detail.id}`, jsonInit("PATCH", body), "Não foi possível atualizar a cobrança.");
 
       setBilling(updated);
       setConfirmEnd(false);
@@ -312,7 +310,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
 
       // The server keeps the invite alive after the billing ends, so drop it here; a failure must not block the transition.
       if (state === "ended" && invite) {
-        await request<void>(`/api/financial/billings/${detail.id}/invite`, {
+        await request<void>(`billings/${detail.id}/invite`, {
           method: "DELETE",
         }).catch(() => undefined);
 
@@ -324,7 +322,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   /** The owner says who a guest is: an existing contact without e-mail, a brand-new participant, or nobody. */
   async function resolveGuest(detail: BillingDetail, guest: BillingGuest, action: BillingGuestAction) {
     await run(async () => {
-      const updated = await request<BillingDetail>(`/api/financial/billings/${detail.id}/guests/${guest.id}`, jsonInit("POST", action), "Não foi possível confirmar a pessoa.");
+      const updated = await request<BillingDetail>(`billings/${detail.id}/guests/${guest.id}`, jsonInit("POST", action), "Não foi possível confirmar a pessoa.");
 
       setBilling(updated);
     }, "Não foi possível confirmar a pessoa.");
@@ -334,7 +332,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
     setChooser(false);
 
     await run(async () => {
-      const link = await request<{ token: string }>(`/api/financial/charges/${charge.id}/public-link`, { method: "POST" }, "Não foi possível compartilhar o link.");
+      const link = await request<{ token: string }>(`charges/${charge.id}/public-link`, { method: "POST" }, "Não foi possível compartilhar o link.");
 
       const url = publicLinkUrl(window.location.origin, link);
 
@@ -347,9 +345,9 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
     await run(async () => {
       // A file under review is what the owner is answering: accepting it registers the payment.
       if (charge.proofState === "pending") {
-        await request<ChargeDetail>(`/api/financial/charges/${charge.id}/proof/review`, jsonInit("POST", { decision: "accepted" }), "Não foi possível revisar o comprovante.");
+        await request<ChargeDetail>(`charges/${charge.id}/proof/review`, jsonInit("POST", { decision: "accepted" }), "Não foi possível revisar o comprovante.");
       } else {
-        await request<ChargeDetail>(`/api/financial/charges/${charge.id}/pay`, { method: "POST" }, "Não foi possível atualizar a cobrança.");
+        await request<ChargeDetail>(`charges/${charge.id}/pay`, { method: "POST" }, "Não foi possível atualizar a cobrança.");
       }
 
       setConfirmPaid(null);
@@ -360,7 +358,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
 
   async function reopen(charge: ChargeDetail) {
     await run(async () => {
-      await request<ChargeDetail>(`/api/financial/charges/${charge.id}/reopen`, { method: "POST" }, "Não foi possível reabrir a cobrança.");
+      await request<ChargeDetail>(`charges/${charge.id}/reopen`, { method: "POST" }, "Não foi possível reabrir a cobrança.");
 
       setConfirmReopen(null);
       load();
@@ -370,7 +368,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
   /** "Não notificar" / "Voltar a notificar" for one participant; the answer is the billing with its pending charges updated. */
   async function notifyParticipant(detail: BillingDetail, userId: string, name: string, notify: boolean) {
     await run(async () => {
-      const updated = await request<BillingDetail>(`/api/financial/billings/${detail.id}/participants/${userId}/notify`, jsonInit("PUT", { notify }), "Não foi possível atualizar os avisos.");
+      const updated = await request<BillingDetail>(`billings/${detail.id}/participants/${userId}/notify`, jsonInit("PUT", { notify }), "Não foi possível atualizar os avisos.");
 
       setBilling(updated);
       setConfirmStopNotify(null);
@@ -592,7 +590,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                   icon={Pencil}
                   hint={payable ? "Categoria, Pix e lembretes" : billing.recurrence === "indefinite" ? "Valor e pessoas do próximo ciclo" : "Categoria e Pix"}
                   disabled={busy}
-                  onClick={() => router.push(`/billings/${billing.id}/edit`)}
+                  onClick={() => navigate(`/billings/${billing.id}/edit`)}
                 />
                 {billing.state === "active" && !payable && !settled && (
                   <ActionTile label="Convidar" icon={UserPlus} hint="Compartilha um convite para entrar na cobrança" disabled={busy} onClick={() => void inviteSomeone(billing)} />
@@ -707,7 +705,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                   <button
                     type="button"
                     aria-label={`Abrir cobrança de ${name}`}
-                    onClick={() => router.push(`/charges/${charge.id}`)}
+                    onClick={() => navigate(`/charges/${charge.id}`)}
                     className="flex w-full items-center justify-between gap-3 text-left"
                   >
                     <span className="flex min-w-0 flex-1 items-center gap-3">
@@ -745,7 +743,7 @@ export function BillingDetailScreen({ id }: BillingDetailScreenProps) {
                         <button
                           type="button"
                           aria-label={`Revisar comprovante de ${name}`}
-                          onClick={() => router.push(`/charges/${charge.id}`)}
+                          onClick={() => navigate(`/charges/${charge.id}`)}
                           className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[11px] font-semibold text-on-primary"
                         >
                           Revisar

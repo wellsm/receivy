@@ -1,6 +1,6 @@
-"use client";
 import { useEffect, useState } from "react";
 import { fileSizeText, ProofKind, type ChargeState, type ProofUploadTicket, type PublicProofState } from "@receivy/common";
+import { apiFetch } from "@/lib/api/client";
 import { responseMessage } from "@/lib/financial-response";
 import { CloudUpload, FileText, Loader2, Receipt, Trash2 } from "lucide-react";
 
@@ -35,8 +35,7 @@ function PreviewCard({ preview, children }: { preview: ProofPreview; children?: 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-outline/30 bg-surface-muted/50 p-3">
       {preview.url ? (
-        // A blob URL from the payer's own device: nothing for next/image to optimise or serve.
-        // eslint-disable-next-line @next/next/no-img-element
+        // A blob URL from the payer's own device: nothing to optimise or serve.
         <img src={preview.url} alt={`Prévia de ${preview.name}`} className="max-h-56 w-full rounded-lg object-contain" />
       ) : (
         <div className="flex h-24 items-center justify-center rounded-lg bg-surface">
@@ -58,7 +57,7 @@ function forgetUpload() { try { sessionStorage.removeItem(STARTED_KEY); } catch 
 /** `null` means the lookup itself failed; a `state: null` answer means there is no slot for this payer. */
 async function readStatus(base: string): Promise<PublicProofState | null> {
   try {
-    const response = await fetch(`${base}/proof`, { cache: "no-store" });
+    const response = await apiFetch(`${base}/proof`, { auth: false });
 
     if (!response.ok) {
       return null;
@@ -70,7 +69,7 @@ async function readStatus(base: string): Promise<PublicProofState | null> {
 /** Tells the API the bytes landed; `null` when it could not attach them, so the flag stays for a reload. */
 async function completeStatus(base: string): Promise<PublicProofState | null> {
   try {
-    const response = await fetch(`${base}/proof/complete`, { method: "POST" });
+    const response = await apiFetch(`${base}/proof/complete`, { method: "POST", auth: false });
 
     if (!response.ok) {
       return null;
@@ -156,16 +155,17 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, cred
         throw new Error("Selecione JPG, PNG ou PDF de até 10 MB.");
       }
 
-      const response = await fetch(`${base}/proof`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: file.name, mime: file.type, size: file.size }) });
+      const response = await apiFetch(`${base}/proof`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: file.name, mime: file.type, size: file.size }), auth: false });
 
       if (!response.ok) {
         throw new Error(await responseMessage(response, "Não foi possível iniciar o envio."));
       }
 
       const ticket = await response.json() as ProofUploadTicket;
-      const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" });
+      // A PUT that never reaches the storage is the same failed upload as a refused one, not the browser's text.
+      const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" }).catch(() => null);
 
-      if (!put.ok) {
+      if (!put?.ok) {
         throw new Error("O arquivo não foi enviado. Tente novamente.");
       }
 
@@ -196,7 +196,7 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, cred
     setBusy(true); setError("");
 
     try {
-      const response = await fetch(`${base}/proof`, { method: "DELETE" });
+      const response = await apiFetch(`${base}/proof`, { method: "DELETE", auth: false });
 
       if (!response.ok) {
         throw new Error(await responseMessage(response, "Não foi possível apagar o comprovante."));
@@ -214,7 +214,7 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, cred
     setBusy(true); setError("");
 
     try {
-      const response = await fetch(`${base}/proof/declaration`, { method: "POST" });
+      const response = await apiFetch(`${base}/proof/declaration`, { method: "POST", auth: false });
 
       if (!response.ok) {
         throw new Error(await responseMessage(response, "Não foi possível informar o pagamento."));

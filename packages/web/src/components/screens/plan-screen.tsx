@@ -1,5 +1,3 @@
-"use client";
-
 import {
   formatMoney,
   momentText,
@@ -10,11 +8,11 @@ import {
 } from "@receivy/common";
 import { CreditCard, Crown } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { responseMessage } from "@/lib/financial-response";
-import { PLAN_BASIC_PRICE_CENTS, stripeConfigured } from "@/lib/stripe";
 import { PlanCheckout } from "@/components/app/plan-checkout";
 import { Toast } from "@/components/app/toast";
+import { apiFetch } from "@/lib/api/client";
+import { responseMessage } from "@/lib/financial-response";
+import { PLAN_BASIC_PRICE_CENTS, stripeConfigured } from "@/lib/stripe";
 
 const LOAD_ERROR = "Não foi possível carregar seu plano.";
 const ACTION_ERROR = "Não foi possível atualizar seu plano.";
@@ -38,7 +36,7 @@ async function request<T>(
   init?: RequestInit,
   fallback = ACTION_ERROR,
 ): Promise<T> {
-  const response = await browserFetch(path, init);
+  const response = await apiFetch(path, init);
 
   if (!response.ok) {
     throw new Error(await responseMessage(response, fallback));
@@ -84,9 +82,9 @@ export function PlanScreen() {
 
   const load = useCallback(() => {
     return Promise.all([
-      request<PlanSummary>("/api/financial/plan", undefined, LOAD_ERROR),
+      request<PlanSummary>("plan", undefined, LOAD_ERROR),
       request<{ invoices: PlanInvoice[] }>(
-        "/api/financial/plan/invoices",
+        "plan/invoices",
         undefined,
         LOAD_ERROR,
       ),
@@ -157,7 +155,7 @@ export function PlanScreen() {
   function subscribe() {
     return act(async () => {
       const { clientSecret } = await request<{ clientSecret: string }>(
-        "/api/financial/plan/subscribe",
+        "plan/subscribe",
         { method: "POST" },
       );
 
@@ -168,7 +166,7 @@ export function PlanScreen() {
   function changeCard() {
     return act(async () => {
       const { clientSecret } = await request<{ clientSecret: string }>(
-        "/api/financial/plan/payment-method",
+        "plan/payment-method",
         { method: "POST" },
       );
 
@@ -189,7 +187,7 @@ export function PlanScreen() {
 
     if (paymentMethodId) {
       void act(async () => {
-        await request<void>("/api/financial/plan/payment-method/confirm", {
+        await request<void>("plan/payment-method/confirm", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ paymentMethodId }),
@@ -297,8 +295,8 @@ export function PlanScreen() {
                     void act(() =>
                       request<void>(
                         summary.cancelAtPeriodEnd
-                          ? "/api/financial/plan/resume"
-                          : "/api/financial/plan/cancel",
+                          ? "plan/resume"
+                          : "plan/cancel",
                         { method: "POST" },
                       ),
                     )

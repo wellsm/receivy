@@ -1,13 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { PlanTier, WhatsappInstanceState, WhatsappSender } from "@receivy/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { renderWithRouter } from "@/test/render";
 import { WhatsappScreen } from "./whatsapp-screen";
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
-
-const fetchMock = vi.mocked(browserFetch);
+const fetchMock = vi.fn();
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 
 const receivy = { available: true, ownAvailable: true, sender: WhatsappSender.Receivy, instance: null, quota: { used: 37, limit: 150, cycleEnd: "2026-10-12T03:00:00.000Z" } };
@@ -41,19 +38,22 @@ function arrange(settings: unknown = receivy, plan: PlanTier = PlanTier.Basic) {
 
 describe("WhatsappScreen", () => {
   beforeEach(() => {
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true");
-    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "true");
+    vi.stubEnv("VITE_API_URL", "https://api.test");
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "true");
+    vi.stubEnv("VITE_EVOLUTION_ENABLED", "true");
+    vi.stubGlobal("fetch", fetchMock);
   });
   afterEach(() => {
     cleanup();
     vi.resetAllMocks();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
   it("locks both cards on the free plan and offers the Basic plan", async () => {
     arrange({ ...receivy, quota: null }, PlanTier.Free);
-    render(<WhatsappScreen />);
+    renderWithRouter(<WhatsappScreen />);
 
     expect(await screen.findByRole("link", { name: "Assinar o Básico" })).toHaveAttribute("href", "/settings/plan");
     expect(screen.getByRole("radio", { name: /Número do Receivy/ })).toHaveAttribute("aria-disabled", "true");
@@ -102,8 +102,8 @@ describe("WhatsappScreen", () => {
   });
 
   it("renders nothing with both flags off", () => {
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
-    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "false");
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("VITE_EVOLUTION_ENABLED", "false");
     arrange();
 
     const { container } = render(<WhatsappScreen />);
@@ -112,7 +112,7 @@ describe("WhatsappScreen", () => {
   });
 
   it("shows only the Receivy quota card, with no radios and no own-number option, when only that flag is on", async () => {
-    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "false");
+    vi.stubEnv("VITE_EVOLUTION_ENABLED", "false");
     arrange();
 
     render(<WhatsappScreen />);
@@ -124,7 +124,7 @@ describe("WhatsappScreen", () => {
   });
 
   it("shows only the own-number card, with no radios and no quota line, when only the Evolution flag is on", async () => {
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
     arrange({ ...receivy, instance: null });
 
     render(<WhatsappScreen />);
@@ -136,7 +136,7 @@ describe("WhatsappScreen", () => {
   });
 
   it("switches the plain own-number card back to own with Usar este número, then hides the button", async () => {
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
 
     const calls = arrange({ ...receivy, available: false, instance: { state: WhatsappInstanceState.Open, phone: "5511988887777", qr: null, pairingCode: null, connectedAt: "2026-09-25T12:00:00.000Z", disconnectedAt: null } });
 
@@ -228,18 +228,30 @@ describe("WhatsappScreen", () => {
 
     // Two zero-length advances: the settings load needs one macrotask handoff to commit, and a second
     // for React to flush the passive effect that starts the polling interval (jsdom + fake timers).
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(5000);
-    await vi.advanceTimersByTimeAsync(5000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
     expect(polls).toBe(2);
     expect(screen.getByText(/Conectado ao/)).toBeInTheDocument();
 
-    await vi.advanceTimersByTimeAsync(10000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
     expect(polls).toBe(2);
 
     unmount();
-    await vi.advanceTimersByTimeAsync(10000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
     expect(polls).toBe(2);
   });
 
@@ -355,28 +367,44 @@ describe("WhatsappScreen", () => {
 
     render(<WhatsappScreen />);
 
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(5000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
     expect(pollRequests).toBe(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     // `waitFor`/`findBy*` poll with real timers internally, which never advance under fake timers;
     // flush by hand instead.
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(calls.some((call) => call.method === "DELETE")).toBe(true);
     expect(screen.getByRole("checkbox", { name: /Entendo que este canal não é oficial/ })).toBeInTheDocument();
 
     // The stale poll answers only now, after the user already cancelled — it must be ignored.
     resolvePoll?.();
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
 
     expect(screen.getByRole("checkbox", { name: /Entendo que este canal não é oficial/ })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: "QR code para conectar" })).not.toBeInTheDocument();
 
-    await vi.advanceTimersByTimeAsync(10000);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
     expect(pollRequests).toBe(1);
   });
 
@@ -425,7 +453,7 @@ describe("WhatsappScreen", () => {
   it("keeps arrow-key selection locked on the Free plan, same as a click", async () => {
     const calls = arrange({ ...receivy, quota: null }, PlanTier.Free);
 
-    render(<WhatsappScreen />);
+    renderWithRouter(<WhatsappScreen />);
 
     const receivyRadio = await screen.findByRole("radio", { name: /Número do Receivy/ });
 
@@ -474,5 +502,13 @@ describe("WhatsappScreen", () => {
 
     resolvePatch?.();
     await waitFor(() => expect(screen.getByRole("radio", { name: /Número do Receivy/ })).toHaveAttribute("aria-checked", "true"));
+  });
+
+  it("shows the Portuguese fallback when the settings cannot be reached", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<WhatsappScreen />);
+
+    expect(await screen.findByText("Não foi possível carregar o WhatsApp.")).toBeInTheDocument();
+    expect(screen.queryByText(/failed to fetch/i)).toBeNull();
   });
 });

@@ -1,5 +1,3 @@
-"use client";
-
 import {
   DEFAULT_FEED_FILTERS,
   FEED_DIRECTIONS,

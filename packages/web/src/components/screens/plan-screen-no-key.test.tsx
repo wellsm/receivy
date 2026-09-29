@@ -1,10 +1,10 @@
 import { PlanTier, SubscriptionStatus, type PlanSummary } from "@receivy/common";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { PlanScreen } from "@/components/screens/plan-screen";
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
+const API = "https://api.test";
+
 vi.mock("@/lib/stripe", () => ({ stripeConfigured: () => false, stripePromise: () => null, PLAN_BASIC_PRICE_CENTS: 0 }));
 vi.mock("@/components/app/plan-checkout", () => ({
   PlanCheckout: () => null,
@@ -13,20 +13,29 @@ vi.mock("@/components/app/plan-checkout", () => ({
 const FREE: PlanSummary = { plan: PlanTier.Free, status: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, usage: { indefinite: { used: 3, limit: 5 } }, checkoutLinks: false, card: null };
 const BASIC: PlanSummary = { plan: PlanTier.Basic, status: SubscriptionStatus.Active, currentPeriodEnd: "2026-10-19T12:00:00.000Z", cancelAtPeriodEnd: false, usage: { indefinite: { used: 12, limit: 30 } }, checkoutLinks: true, card: { brand: "visa", last4: "4242" } };
 
-beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+function mockFetch(handler: (path: string) => Promise<Response>) {
+  vi.stubGlobal("fetch", vi.fn(handler));
+}
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.resetAllMocks();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 it("shows the environment as unavailable and hides the subscribe button when there is no Stripe key", async () => {
-  vi.mocked(browserFetch).mockImplementation(async (path) => {
-    if (path === "/api/financial/plan") {
+  mockFetch(async (path) => {
+    if (path === `${API}/plan`) {
       return Response.json(FREE);
     }
 
-    if (path === "/api/financial/plan/invoices") {
+    if (path === `${API}/plan/invoices`) {
       return Response.json({ invoices: [] });
     }
 
@@ -40,12 +49,12 @@ it("shows the environment as unavailable and hides the subscribe button when the
 });
 
 it("keeps cancel/resume available on a paid plan without a Stripe key, but hides Trocar cartão", async () => {
-  vi.mocked(browserFetch).mockImplementation(async (path) => {
-    if (path === "/api/financial/plan") {
+  mockFetch(async (path) => {
+    if (path === `${API}/plan`) {
       return Response.json(BASIC);
     }
 
-    if (path === "/api/financial/plan/invoices") {
+    if (path === `${API}/plan/invoices`) {
       return Response.json({ invoices: [] });
     }
 

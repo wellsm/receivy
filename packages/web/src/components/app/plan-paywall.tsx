@@ -1,9 +1,7 @@
-"use client";
-
 import { PLAN_LIMITS, type PlanErrorPayload, PlanTier } from "@receivy/common";
 import { Crown } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useId, useRef } from "react";
+import { Link } from "@/components/ui/link";
 
 type PlanPaywallProps = { error: PlanErrorPayload; onClose: () => void };
 
@@ -41,7 +39,7 @@ export function PlanPaywall({ error, onClose }: PlanPaywallProps) {
           ))}
         </ul>
         <div className="mt-5 flex flex-col gap-2">
-          <Link href="/settings/plan" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-5 font-bold text-on-primary">Ver plano</Link>
+          <Link to="/settings/plan" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-primary px-5 font-bold text-on-primary">Ver plano</Link>
           <button ref={dismiss} type="button" onClick={onClose} className="min-h-12 rounded-xl font-semibold text-muted">Agora não</button>
         </div>
       </div>

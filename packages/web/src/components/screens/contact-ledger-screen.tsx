@@ -1,18 +1,17 @@
-"use client";
-
 import { calendarDate, EMPTY_BILLING_DRAFT, formatMoney, formatPhoneBR, initialsOf, type ChargeDetail, type ContactLedger, type PublicLink } from "@receivy/common";
 import { Bell, Check, Mail, Pencil, Plus, Share2, Smartphone, Trash2 } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { saveDraft } from "@/lib/billing-draft";
-import { responseMessage } from "@/lib/financial-response";
-import { publicLinkUrl } from "@/lib/public-link-url";
 import { ActionTile } from "@/components/ui/action-tile";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { Link } from "@/components/ui/link";
 import { StatusTag } from "@/components/ui/status-tag";
+import { apiFetch } from "@/lib/api/client";
+import { saveDraft } from "@/lib/billing-draft";
+import { CONTACT_CONFLICT_MESSAGE } from "@/lib/contacts-errors";
+import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
+import { publicLinkUrl } from "@/lib/public-link-url";
 
 const LEDGER_ERROR = "Não foi possível carregar o histórico.";
 const ARCHIVE_ERROR = "Não foi possível remover o contato.";
@@ -64,7 +63,7 @@ function firstName(name: string): string {
 }
 
 export function ContactLedgerScreen({ id }: { id: string }) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [data, setData] = useState<ContactLedger | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -76,7 +75,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
   const load = useCallback(
     async (cursor?: string) => {
       try {
-        const response = await browserFetch(`/api/financial/contacts/${id}/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
+        const response = await apiFetch(`contacts/${encodeURIComponent(id)}/ledger${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
 
         if (!response.ok) {
           throw new Error(await responseMessage(response, LEDGER_ERROR));
@@ -118,12 +117,21 @@ export function ContactLedgerScreen({ id }: { id: string }) {
 
   async function archive() {
     const done = await run(async () => {
-      const response = await browserFetch(`/api/contacts/${id}/archive`, {
+      const response = await apiFetch(`contacts/${encodeURIComponent(id)}/archive`, {
         method: "POST",
       });
 
-      if (!response.ok) {
+      // The old proxy answered a conflict with the contacts copy and flattened every status but 400 into the screen's own text.
+      if (response.status === 409) {
+        throw new Error(CONTACT_CONFLICT_MESSAGE);
+      }
+
+      if (response.status === 400) {
         throw new Error(await responseMessage(response, ARCHIVE_ERROR));
+      }
+
+      if (!response.ok) {
+        throw new Error(ARCHIVE_ERROR);
       }
 
       await load();
@@ -141,7 +149,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
   // The web has no share sheet, so the link goes to the clipboard; the notice says so.
   async function shareLink(charge: ChargeDetail) {
     await run(async () => {
-      const response = await browserFetch(`/api/financial/charges/${charge.id}/public-link`, { method: "POST" });
+      const response = await apiFetch(`charges/${charge.id}/public-link`, { method: "POST" });
 
       if (!response.ok) {
         throw new Error(await responseMessage(response, LINK_ERROR));
@@ -158,7 +166,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
 
   async function remind(charge: ChargeDetail) {
     const result = await run(async () => {
-      const response = await browserFetch(`/api/financial/charges/${charge.id}/reminders`, { method: "POST" });
+      const response = await apiFetch(`charges/${charge.id}/reminders`, { method: "POST" });
 
       if (!response.ok) {
         throw new Error(await responseMessage(response, REMIND_ERROR));
@@ -181,7 +189,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
       },
       NEW_BILLING,
     );
-    router.push(NEW_BILLING);
+    navigate(NEW_BILLING);
   }
 
   if (!data) {
@@ -286,7 +294,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
           {/* Ações rápidas */}
           {!archived && (
             <div className="flex gap-2">
-              <ActionTile label="Editar" icon={Pencil} hint="Abre o formulário do contato" disabled={busy} onClick={() => router.push(`/contacts/${id}/edit`)} />
+              <ActionTile label="Editar" icon={Pencil} hint="Abre o formulário do contato" disabled={busy} onClick={() => navigate(`/contacts/${id}/edit`)} />
               <ActionTile label="Cobrar" icon={Plus} tone="primary" hint={`Nova cobrança para ${first}`} disabled={busy} onClick={() => charge(contact.userId)} />
               <ActionTile label="Remover" icon={Trash2} tone="danger" hint="Arquiva o contato e preserva o histórico" disabled={busy} onClick={() => setConfirmRemoval(true)} />
             </div>
@@ -349,7 +357,7 @@ export function ContactLedgerScreen({ id }: { id: string }) {
                   aria-label={`Cobrança ${item.description}`}
                   className={`flex flex-col gap-3 rounded-xl border border-outline/30 bg-surface p-4 ${due.late ? "border-l-4 border-l-danger" : receivable ? "border-l-4 border-l-warning" : ""}`}
                 >
-                  <Link href={`/charges/${item.id}`} className="flex items-start justify-between gap-2 text-inherit no-underline">
+                  <Link to="/charges/$id" params={{ id: item.id }} className="flex items-start justify-between gap-2 text-inherit no-underline">
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="flex flex-wrap items-center gap-2">
                         <strong className="text-base font-bold text-ink">{item.description}</strong>
@@ -417,7 +425,8 @@ export function ContactLedgerScreen({ id }: { id: string }) {
               return (
                 <Link
                   key={item.id}
-                  href={`/charges/${item.id}`}
+                  to="/charges/$id"
+                  params={{ id: item.id }}
                   aria-label={`Abrir cobrança ${item.description}`}
                   className="flex items-center justify-between gap-3 rounded-xl border border-outline/20 bg-surface p-4 text-inherit no-underline"
                 >

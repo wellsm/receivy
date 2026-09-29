@@ -1,5 +1,3 @@
-"use client";
-
 import { type ManualReminderResult, NOBODY_REACHABLE, NoticeChannel, PREVIEW_UNAVAILABLE, remindLines } from "@receivy/common";
 import { Bell } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";

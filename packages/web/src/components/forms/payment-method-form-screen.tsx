@@ -1,16 +1,15 @@
-"use client";
-
 import { apiErrorCode, pixKeyField, planErrorOf, PaymentProvider, PixKeyType, PlanErrorCode, type PaymentMethod, type PaymentMethodsPage, type PlanErrorPayload, type PlanSummary } from "@receivy/common";
 import { Check, Loader2, Lock, Star } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { patchDraft } from "@/lib/billing-draft";
-import { responseMessage } from "@/lib/financial-response";
-import { loadPlanSummary } from "@/lib/plan-summary";
 import { PlanPaywall } from "@/components/app/plan-paywall";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { ScreenFooter } from "@/components/ui/screen-footer";
+import { apiFetch } from "@/lib/api/client";
+import { currentUser } from "@/lib/auth/flows";
+import { patchDraft } from "@/lib/billing-draft";
+import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
+import { loadPlanSummary } from "@/lib/plan-summary";
 
 type PaymentMethodFormScreenProps = { returnTo?: string; required?: boolean; method?: PaymentMethod };
 
@@ -19,7 +18,7 @@ type ErrorPayload = { message?: string; context?: { code?: string; fields?: Reco
 const SAVE_ERROR = "Não foi possível salvar o meio de pagamento.";
 
 export function PaymentMethodFormScreen({ returnTo, required = false, method }: PaymentMethodFormScreenProps) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const editing = Boolean(method);
   const [provider, setProvider] = useState<PaymentProvider>(method?.provider ?? PaymentProvider.Pix);
   const [type, setType] = useState<PixKeyType>(PixKeyType.Email);
@@ -41,7 +40,7 @@ export function PaymentMethodFormScreen({ returnTo, required = false, method }: 
   useEffect(() => {
     let live = true;
 
-    void browserFetch("/api/financial/payment-methods")
+    void apiFetch("payment-methods")
       .then(response => (response.ok ? (response.json() as Promise<PaymentMethodsPage>) : null))
       .then(page => {
         if (!live || !page) {
@@ -63,22 +62,19 @@ export function PaymentMethodFormScreen({ returnTo, required = false, method }: 
   useEffect(() => {
     let live = true;
 
-    void browserFetch("/api/auth/me")
-      .then(response => (response.ok ? (response.json() as Promise<{ user: { email: string | null; phone?: string | null } }>) : null))
-      .then(payload => {
-        if (!live || !payload) {
-          return;
-        }
+    void currentUser().then(user => {
+      if (!live || !user) {
+        return;
+      }
 
-        if (payload.user.email) {
-          setAccountEmail(payload.user.email);
-        }
+      if (user.email) {
+        setAccountEmail(user.email);
+      }
 
-        if (payload.user.phone) {
-          setAccountPhone(pixKeyField(PixKeyType.Phone).format(payload.user.phone));
-        }
-      })
-      .catch(() => undefined);
+      if (user.phone) {
+        setAccountPhone(pixKeyField(PixKeyType.Phone).format(user.phone));
+      }
+    });
 
     void loadPlanSummary().then(summary => {
       if (live) {
@@ -120,7 +116,7 @@ export function PaymentMethodFormScreen({ returnTo, required = false, method }: 
     setBusy(true);
 
     try {
-      const response = await browserFetch("/api/financial/payment-methods", {
+      const response = await apiFetch("payment-methods", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
@@ -164,18 +160,18 @@ export function PaymentMethodFormScreen({ returnTo, required = false, method }: 
       const saved = (await response.json()) as PaymentMethod;
 
       if (makeDefault && !saved.isDefault) {
-        await browserFetch(`/api/financial/payment-methods/${saved.id}/default`, { method: "POST" });
+        await apiFetch(`payment-methods/${saved.id}/default`, { method: "POST" });
       }
 
       // Came from the billing form: hand the new key back to the draft.
       if (returnTo) {
         patchDraft({ pix: saved.id });
-        router.push(returnTo);
+        navigate(returnTo);
 
         return;
       }
 
-      router.push("/settings/payment-methods");
+      navigate("/settings/payment-methods");
     } catch (reason) {
       setError({ message: reason instanceof Error ? reason.message : SAVE_ERROR });
     } finally {

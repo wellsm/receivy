@@ -1,23 +1,22 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { AppShell } from "@/components/app/app-shell";
-
-vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn() }) }));
+import { renderWithRouter } from "@/test/render";
 
 afterEach(() => {
   cleanup();
 });
 
 describe("AppShell", () => {
-  it("exposes exactly the three approved navigation destinations", () => {
-    render(
+  it("exposes exactly the three approved navigation destinations", async () => {
+    renderWithRouter(
       <AppShell>
         <p>Conteúdo</p>
       </AppShell>,
     );
 
     for (const label of ["Feed", "Contas", "Perfil"]) {
-      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+      expect((await screen.findAllByText(label)).length).toBeGreaterThan(0);
     }
 
     expect(screen.queryByText("Contatos")).not.toBeInTheDocument();
@@ -25,46 +24,48 @@ describe("AppShell", () => {
     expect(screen.queryByRole("link", { name: "Nova conta" })).not.toBeInTheDocument();
   });
 
-  it("links the bell to the profile and shows a dot only when badged", () => {
-    const { rerender } = render(
+  it("links the bell to the profile and shows a dot only when badged", async () => {
+    const first = renderWithRouter(
       <AppShell>
         <p>Conteúdo</p>
       </AppShell>,
     );
 
-    const bells = screen.getAllByRole("link", { name: "Notificações" });
+    const bells = await screen.findAllByRole("link", { name: "Notificações" });
 
     for (const bell of bells) {
       expect(bell).toHaveAttribute("href", "/settings");
     }
 
     expect(screen.queryAllByTestId("header-bell-dot").length).toBe(0);
+    first.unmount();
 
-    rerender(
+    renderWithRouter(
       <AppShell notificationsBadge>
         <p>Conteúdo</p>
       </AppShell>,
     );
 
-    expect(screen.getAllByTestId("header-bell-dot").length).toBeGreaterThan(0);
+    expect((await screen.findAllByTestId("header-bell-dot")).length).toBeGreaterThan(0);
   });
 
-  it("has no bottom navigation: Feed and Contas draw their own header, Perfil goes back to the Feed", () => {
-    const { rerender } = render(
+  it("has no bottom navigation: Feed and Contas draw their own header, Perfil goes back to the Feed", async () => {
+    const first = renderWithRouter(
       <AppShell activePath="/feed">
         <p>Conteúdo</p>
       </AppShell>,
     );
 
-    expect(screen.getAllByRole("navigation")).toHaveLength(1);
+    expect(await screen.findAllByRole("navigation")).toHaveLength(1);
     expect(screen.queryByRole("link", { name: /Voltar/ })).not.toBeInTheDocument();
+    first.unmount();
 
-    rerender(
+    renderWithRouter(
       <AppShell activePath="/settings">
         <p>Conteúdo</p>
       </AppShell>,
     );
 
-    expect(screen.getByRole("link", { name: /Voltar/ })).toHaveAttribute("href", "/feed");
+    expect(await screen.findByRole("link", { name: /Voltar/ })).toHaveAttribute("href", "/feed");
   });
 });

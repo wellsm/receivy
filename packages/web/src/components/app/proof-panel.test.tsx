@@ -3,8 +3,9 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChargeState } from "@receivy/common";
 import { ProofPanel } from "@/components/app/proof-panel";
 
-const BASE = "/api/public-proof/token";
-const STATUS = `${BASE}/proof`;
+const API = "https://api.test";
+const BASE = "public/charges/token";
+const STATUS = `${API}/${BASE}/proof`;
 const COMPLETE = `${STATUS}/complete`;
 const ticket = () => Response.json({ uploadUrl: "https://upload.test/file", expiresAt: new Date(Date.now() + 300_000).toISOString() });
 const empty = () => Response.json({ state: null, reason: null, file: null });
@@ -13,7 +14,7 @@ const uploading = () => Response.json({ state: "uploading", reason: null, file: 
 
 function pdf(name = "recibo.pdf") { return new File(["%PDF-1.7\nproof"], name, { type: "application/pdf" }); }
 
-beforeEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
+beforeEach(() => { vi.restoreAllMocks(); vi.stubEnv("VITE_API_URL", API); sessionStorage.clear(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 it("shows the selected file in place of the dropzone, then lets the payer delete the sent proof and pick another", async () => {
   let stored = false;
@@ -226,4 +227,22 @@ it("does not remember an upload whose bytes never reached the storage", async ()
   expect(sessionStorage.getItem("receivy-proof-upload")).toBeNull();
   expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeEnabled();
   expect(screen.getByText("recibo.pdf")).toBeTruthy();
+});
+it("shows the Portuguese upload failure, not the browser text, when the storage cannot be reached", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    if (init?.method === "PUT") {
+      throw new TypeError("Failed to fetch");
+    }
+    if (init?.method === "POST") {
+      return ticket();
+    }
+
+    return empty();
+  });
+  render(<ProofPanel base={BASE} state={ChargeState.Pending} />);
+  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [pdf()] } });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("O arquivo não foi enviado. Tente novamente.");
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
 });

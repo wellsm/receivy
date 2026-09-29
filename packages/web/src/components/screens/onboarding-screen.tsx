@@ -1,12 +1,10 @@
-"use client";
-
 import { formatPhoneBR } from "@receivy/common";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { LegalText } from "@/components/ui/legal-text";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { apiFetch } from "@/lib/api/client";
+import { useAppNavigate } from "@/lib/navigate";
 
 type LegalKind = "terms" | "privacy";
 
@@ -20,7 +18,7 @@ type OnboardingScreenProps = {
 const INPUT_CLASS = "h-14 w-full rounded-2xl border border-outline bg-surface px-4 text-base text-ink outline-none placeholder:text-muted focus:border-primary";
 
 export function OnboardingScreen({ nextPath = "/", initialName = null }: OnboardingScreenProps = {}) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [name, setName] = useState(initialName ?? "");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,7 +40,7 @@ export function OnboardingScreen({ nextPath = "/", initialName = null }: Onboard
 
     try {
       // The phone goes as typed (masked); the API normalizes it to its canonical form.
-      const response = await browserFetch("/api/financial/account/profile", {
+      const response = await apiFetch("account/profile", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -58,7 +56,7 @@ export function OnboardingScreen({ nextPath = "/", initialName = null }: Onboard
         throw new Error("profile rejected");
       }
 
-      router.replace(nextPath);
+      navigate(nextPath, { replace: true });
     } catch {
       setError("Não foi possível salvar seus dados. Tente novamente.");
       setBusy(false);

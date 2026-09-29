@@ -1,20 +1,18 @@
-"use client";
-
 import { canAcceptProof, canUploadProof, canWithdrawProof, fileSizeText, momentText, proofNote, proofStateLabel, type ChargeDetail } from "@receivy/common";
 import { Check, CloudUpload, ExternalLink, FileText, Trash2, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { responseMessage } from "@/lib/financial-response";
-import { PROOF_ACCEPT, uploadProofFile } from "@/lib/proof-upload";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 import { StatusTag } from "@/components/ui/status-tag";
+import { apiFetch } from "@/lib/api/client";
+import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
+import { PROOF_ACCEPT, uploadProofFile } from "@/lib/proof-upload";
 
 const LOAD_ERROR = "Não foi possível carregar o comprovante.";
 
 async function request<T>(path: string, init: RequestInit = {}, fallback = LOAD_ERROR): Promise<T> {
-  const response = await browserFetch(path, init);
+  const response = await apiFetch(path, init);
 
   if (!response.ok) {
     throw new Error(await responseMessage(response, fallback));
@@ -25,7 +23,7 @@ async function request<T>(path: string, init: RequestInit = {}, fallback = LOAD_
 
 /** Full view of the proof on a charge: the creditor settles it here, the debtor replaces a rejected one or takes back a pending one. */
 export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [charge, setCharge] = useState<ChargeDetail | null>(null);
   const [url, setUrl] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -35,7 +33,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
   const [confirmAccept, setConfirmAccept] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
 
-  const base = `/api/financial/charges/${chargeId}`;
+  const base = `charges/${encodeURIComponent(chargeId)}`;
 
   const downloadUrl = useCallback(
     async () => (await request<{ url: string }>(`${base}/proof/download`, {}, "Não foi possível baixar o comprovante.")).url,
@@ -100,7 +98,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
         "Não foi possível revisar o comprovante.",
       );
 
-      router.push(`/charges/${chargeId}`);
+      navigate(`/charges/${chargeId}`);
     }, "Não foi possível revisar o comprovante.");
   }
 
@@ -118,7 +116,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
     await run(async () => {
       await request<void>(`${base}/proof`, { method: "DELETE" }, "Não foi possível apagar o comprovante.");
 
-      router.push(`/charges/${chargeId}`);
+      navigate(`/charges/${chargeId}`);
     }, "Não foi possível apagar o comprovante.");
   }
 
@@ -182,7 +180,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
           {isPdf ? (
             <iframe title={`Comprovante ${proof.file.name}`} src={url} className="h-[70vh] w-full rounded-xl border border-outline/30 bg-surface-muted" />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- signed, short-lived URL from the storage provider
+            // Signed, short-lived URL from the storage provider.
             <img src={url} alt={`Comprovante ${proof.file.name}`} className="max-h-[70vh] w-full rounded-xl bg-surface-muted object-contain" />
           )}
 

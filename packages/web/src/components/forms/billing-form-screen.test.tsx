@@ -1,16 +1,21 @@
 import { addCalendarDays, BillingCategory, BillingFrequency, BillingKind, BillingState, BillingRecurrence, calendarDate, ChargeState, dayMonth, Direction, EMPTY_BILLING_DRAFT, endOfMonth, endOfMonthOptions, PixKeyType, SharingState, SplitMode, SplitPartKind, type BillingDetail, type BillingPatch, type ChargeDetail, type ReminderRule } from "@receivy/common";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
-import { afterEach, expect, it, vi } from "vitest";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { saveDraft } from "@/lib/billing-draft";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BillingFormScreen } from "@/components/forms/billing-form-screen";
+import { saveDraft } from "@/lib/billing-draft";
+import { renderWithRouter } from "@/test/render";
 
-const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
+const navigate = vi.fn();
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
+
+const API = "https://api.test";
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+});
 
 afterEach(() => {
   cleanup();
@@ -39,7 +44,9 @@ type Sent = { path: string; init: RequestInit };
 function api(handler: (path: string, init: RequestInit) => Response | undefined = () => undefined) {
   const sent: Sent[] = [];
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
+  const fetchMock = vi.fn(async (url: string, init: RequestInit = {}) => {
+    const path = url.startsWith(`${API}/`) ? url.slice(API.length + 1) : url;
+
     sent.push({ path, init });
 
     const custom = handler(path, init);
@@ -48,11 +55,11 @@ function api(handler: (path: string, init: RequestInit) => Response | undefined 
       return custom;
     }
 
-    if (path.startsWith("/api/contacts?search=")) {
+    if (path.startsWith("contacts?search=")) {
       return Response.json({ contacts: [bruno], nextCursor: null });
     }
 
-    if (path.startsWith("/api/contacts")) {
+    if (path.startsWith("contacts")) {
       return Response.json({ contacts: [ana], nextCursor: null });
     }
 
@@ -73,13 +80,15 @@ function api(handler: (path: string, init: RequestInit) => Response | undefined 
     throw new Error(`unexpected ${path}`);
   });
 
+  vi.stubGlobal("fetch", fetchMock);
+
   return sent;
 }
 
 function renderForm(billing: BillingDetail | null = null) {
   const onSaved = vi.fn();
 
-  render(<BillingFormScreen billing={billing} onSaved={onSaved} />);
+  renderWithRouter(<BillingFormScreen billing={billing} onSaved={onSaved} />);
 
   return { user: userEvent.setup(), onSaved };
 }
@@ -127,7 +136,7 @@ it("starts with only me on the split and adds contacts through the agenda dialog
 
   expect(await screen.findByRole("switch", { name: "Eu também participo" })).toBeChecked();
   expect(screen.queryByRole("button", { name: "Remover Ana" })).not.toBeInTheDocument();
-  expect(sent.some((entry) => entry.path === "/api/contacts?sort=recent")).toBe(true);
+  expect(sent.some((entry) => entry.path === "contacts?sort=recent")).toBe(true);
 
   await pickAna(user);
 
@@ -150,7 +159,7 @@ it("opens the contact panel and searches the whole agenda", async () => {
   await user.type(within(panel).getByLabelText("Buscar contatos"), "ma");
 
   expect(await within(panel).findByRole("checkbox", { name: "Bruno Lima" })).toBeInTheDocument();
-  expect(sent.some((entry) => entry.path === "/api/contacts?search=ma")).toBe(true);
+  expect(sent.some((entry) => entry.path === "contacts?search=ma")).toBe(true);
 
   await user.click(within(panel).getByRole("checkbox", { name: "Bruno Lima" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
@@ -512,7 +521,7 @@ it("saves the draft and navigates when the user creates a new contact", async ()
   await user.click(screen.getByRole("button", { name: "Adicionar" }));
   await user.click(await screen.findByRole("button", { name: "+ Novo contato" }));
 
-  expect(routerMock.push).toHaveBeenCalledWith("/contacts/new?returnTo=%2Fbillings%2Fnew");
+  expect(navigate).toHaveBeenCalledWith("/contacts/new?returnTo=%2Fbillings%2Fnew");
   expect(JSON.parse(window.sessionStorage.getItem("receivy.billingDraft") ?? "{}")).toMatchObject({
     returnTo: "/billings/new",
     draft: { amount: "70,00" },
@@ -530,7 +539,7 @@ it("saves the draft and navigates when the user registers a Pix key from the Rec
 
   await user.click(within(dialog).getByRole("button", { name: "Cadastrar chave" }));
 
-  expect(routerMock.push).toHaveBeenCalledWith(PIX_SETUP);
+  expect(navigate).toHaveBeenCalledWith(PIX_SETUP);
   expect(window.sessionStorage.getItem("receivy.billingDraft")).toContain("70,00");
 });
 
@@ -556,7 +565,7 @@ it("returns focus to Adicionar even when StrictMode runs the panel effects twice
 
   const user = userEvent.setup();
 
-  render(
+  renderWithRouter(
     <StrictMode>
       <BillingFormScreen billing={null} onSaved={vi.fn()} />
     </StrictMode>,
@@ -616,7 +625,7 @@ it("keeps the restored draft when StrictMode runs the mount effect twice", async
   api();
   saveDraft({ ...EMPTY_BILLING_DRAFT(TIMEZONE, today()), selected: ["u1"], amount: "80,00" }, "/billings/new");
 
-  render(
+  renderWithRouter(
     <StrictMode>
       <BillingFormScreen billing={null} onSaved={vi.fn()} />
     </StrictMode>,
@@ -644,7 +653,7 @@ it("creates the billing in one screen, with category, shares and an idempotency 
 
   const post = sent.find((entry) => entry.init.method === "POST");
 
-  expect(post?.path).toBe("/api/financial/billings");
+  expect(post?.path).toBe("billings");
   expect(JSON.parse(String(post?.init.body))).toMatchObject({
     recurrence: "once",
     totalCents: 10_000,
@@ -653,7 +662,7 @@ it("creates the billing in one screen, with category, shares and an idempotency 
     timezone: TIMEZONE,
     split: { mode: "shares", parts: [{ kind: "user", userId: "u1", shares: 1 }, { kind: "owner", shares: 1 }] },
   });
-  expect((post?.init.headers as Record<string, string>)["idempotency-key"]).toMatch(/\w/);
+  expect(new Headers(post?.init.headers).get("idempotency-key")).toMatch(/\w/);
   expect(onSaved).toHaveBeenCalledWith({ id: "b1", charges: [{ id: "c1" }] });
   // Clearing it here would flash the button back to idle while this screen is still on top.
   expect(createButton()).toBeDisabled();
@@ -765,7 +774,7 @@ it("offers the bell only on a conta a receber", async () => {
 });
 
 it("dims the bell of a participant who cannot be reached", async () => {
-  api((path) => (path.startsWith("/api/contacts") && !path.includes("search") ? Response.json({ contacts: [ana, carla], nextCursor: null }) : undefined));
+  api((path) => (path.startsWith("contacts") && !path.includes("search") ? Response.json({ contacts: [ana, carla], nextCursor: null }) : undefined));
 
   const { user } = renderForm();
 
@@ -785,7 +794,7 @@ it("dims the bell of a participant who cannot be reached", async () => {
 });
 
 it("hides the bell note entirely when no selected participant can be reached", async () => {
-  api((path) => (path.startsWith("/api/contacts") && !path.includes("search") ? Response.json({ contacts: [carla], nextCursor: null }) : undefined));
+  api((path) => (path.startsWith("contacts") && !path.includes("search") ? Response.json({ contacts: [carla], nextCursor: null }) : undefined));
 
   const { user } = renderForm();
 
@@ -812,7 +821,7 @@ it("never sends a stale Não notificar for a participant the agenda no longer sh
       return Response.json(quietBilling);
     }
 
-    if (path.startsWith("/api/contacts") && !path.includes("search")) {
+    if (path.startsWith("contacts") && !path.includes("search")) {
       return Response.json({ contacts: [carla], nextCursor: null });
     }
 
@@ -920,13 +929,13 @@ it("hides the form behind a single call to action when the account has no key", 
   const { user } = renderForm();
 
   expect(await screen.findByText("Cadastre um meio de pagamento")).toBeInTheDocument();
-  expect(routerMock.push).not.toHaveBeenCalled();
+  expect(navigate).not.toHaveBeenCalled();
   expect(screen.queryByRole("button", { name: /^Criar conta/ })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Valor total")).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Cadastrar meio de pagamento" }));
 
-  expect(routerMock.push).toHaveBeenCalledWith(PIX_SETUP);
+  expect(navigate).toHaveBeenCalledWith(PIX_SETUP);
   expect(window.sessionStorage.getItem("receivy.billingDraft")).toContain('"direction":"receivable"');
 });
 
@@ -962,7 +971,7 @@ it("never gates the form once a key exists", async () => {
 
   expect(await screen.findByRole("button", { name: "Receber por" })).toHaveTextContent("E-mail · ana@example.com");
   expect(screen.queryByText("Cadastre um meio de pagamento")).not.toBeInTheDocument();
-  expect(routerMock.push).not.toHaveBeenCalled();
+  expect(navigate).not.toHaveBeenCalled();
 });
 
 it("creates a conta a pagar without participants, naming the contact who receives and one of their keys", async () => {
@@ -983,7 +992,7 @@ it("creates a conta a pagar without participants, naming the contact who receive
   expect(screen.getByRole("button", { name: "Trocar Ana" })).toBeInTheDocument();
   // The seated contact's default key comes preselected.
   expect(await screen.findByRole("button", { name: "Pagar via Pix" })).toBeInTheDocument();
-  expect(sent.some((entry) => entry.path === "/api/financial/payment-methods?contactId=c1")).toBe(true);
+  expect(sent.some((entry) => entry.path === "payment-methods?contactId=c1")).toBe(true);
 
   await vi.waitFor(() => expect(screen.getByRole("button", { name: "Pagar via Pix" })).toHaveTextContent("E-mail · ana@example.com"));
 
@@ -1064,7 +1073,7 @@ it("re-picks the default key when the receiving seat moves to another contact", 
   await user.click(await within(panel).findByRole("checkbox", { name: "Bruno Lima" }));
   await user.click(within(panel).getByRole("button", { name: "Concluir" }));
 
-  await vi.waitFor(() => expect(sent.some((entry) => entry.path === "/api/financial/payment-methods?contactId=c2")).toBe(true));
+  await vi.waitFor(() => expect(sent.some((entry) => entry.path === "payment-methods?contactId=c2")).toBe(true));
 
   await user.type(screen.getByLabelText("Valor total"), "100,00");
   await user.click(createButton());
@@ -1084,7 +1093,7 @@ it("points at the contact form when the seated contact has no Pix key yet", asyn
   await user.type(screen.getByLabelText("Valor total"), "100,00");
   await user.click(screen.getByRole("button", { name: "Pagar via Pix" }));
 
-  expect(routerMock.push).toHaveBeenCalledWith("/contacts/c1/edit?returnTo=%2Fbillings%2Fnew");
+  expect(navigate).toHaveBeenCalledWith("/contacts/c1/edit?returnTo=%2Fbillings%2Fnew");
   expect(window.sessionStorage.getItem("receivy.billingDraft")).toContain("100,00");
   expect(sent.some((entry) => entry.init.method === "POST")).toBe(false);
 });
@@ -1135,7 +1144,7 @@ it("never gates a conta a pagar on a wallet key", async () => {
 
   expect(await screen.findByLabelText("Valor total")).toHaveValue("70,00");
   expect(screen.queryByText("Cadastre um meio de pagamento")).not.toBeInTheDocument();
-  expect(routerMock.push).not.toHaveBeenCalled();
+  expect(navigate).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Criar conta" })).toBeEnabled();
 });
 
@@ -1203,7 +1212,7 @@ it("freezes a finite billing and patches only category, Pix and reminders", asyn
 
   const patch = sent.find((entry) => entry.init.method === "PATCH");
 
-  expect(patch?.path).toBe("/api/financial/billings/b1");
+  expect(patch?.path).toBe("billings/b1");
   expect(JSON.parse(String(patch?.init.body))).toEqual({
     paymentMethodId: "pix-1",
     clearPaymentMethod: false,
@@ -1339,7 +1348,7 @@ it("seeds a conta a pagar with its receiving contact and its key, and patches th
   const patch = sent.find((entry) => entry.init.method === "PATCH");
   const body = JSON.parse(String(patch?.init.body));
 
-  expect(patch?.path).toBe("/api/financial/billings/b3");
+  expect(patch?.path).toBe("billings/b3");
   expect(body).toMatchObject({
     paymentMethodId: "pix-ana-2",
     clearPaymentMethod: false,
@@ -1362,9 +1371,20 @@ it("clears the key of a conta a pagar whose contact has none left", async () => 
   });
   const { user } = renderForm(payableBilling);
 
+  // The mount's own `Promise.all` (agenda, wallet) settles independently of the payee-keys fetch
+  // below and has no ordering guarantee against it; waiting for its one visible consequence first
+  // (the loading line clears once `ready` flips) keeps it from resolving after this test ends.
+  await waitFor(() => expect(screen.queryByText("Carregando dados…")).not.toBeInTheDocument());
   await vi.waitFor(() => expect(screen.getByRole("button", { name: "Pagar via Pix" })).toHaveTextContent("Sem chave no contato"));
 
   await user.click(screen.getByRole("button", { name: "Salvar conta" }));
+
+  // The category field locks while the save is in flight and unlocks once the response lands and
+  // `attempt` clears: waiting for it back (through testing-library's own `act`-wrapped `waitFor`,
+  // not `vi.waitFor`, which does not wrap React updates) gives the render the PATCH response
+  // actually produced, instead of a check on `sent` that is already true the instant the request
+  // goes out (apiFetch adds one more `await` hop than the old `browserFetch` before it resolves).
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Categoria" })).toBeEnabled());
 
   expect(JSON.parse(String(sent.find((entry) => entry.init.method === "PATCH")?.init.body))).toMatchObject({ clearPaymentMethod: true });
 });
@@ -1384,6 +1404,10 @@ it("asks for the scope when the key of a recorrente conta a pagar moves to anoth
   const sent = api((_path, init) => (init.method === "PATCH" ? Response.json(recurringPayable) : undefined));
   const { user } = renderForm(recurringPayable);
 
+  // The mount's own `Promise.all` (agenda, wallet) settles independently of the payee-keys fetch
+  // below and has no ordering guarantee against it; waiting for its one visible consequence first
+  // (the loading line clears once `ready` flips) keeps it from resolving after this test ends.
+  await waitFor(() => expect(screen.queryByText("Carregando dados…")).not.toBeInTheDocument());
   await vi.waitFor(() => expect(screen.getByRole("button", { name: "Pagar via Pix" })).toHaveTextContent("CPF · 529.982.247-25"));
 
   const panel = await openRow(user, "Pagar via Pix");
@@ -1396,6 +1420,10 @@ it("asks for the scope when the key of a recorrente conta a pagar moves to anoth
   expect(sent.some((entry) => entry.init.method === "PATCH")).toBe(false);
 
   await user.click(within(dialog).getByRole("button", { name: "Aplicar também às deste mês" }));
+
+  // Same signal as the plain save: the category field re-enables once `attempt` clears after the
+  // PATCH response lands, through testing-library's `act`-wrapped `waitFor` (not `vi.waitFor`).
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Categoria" })).toBeEnabled());
 
   expect(JSON.parse(String(sent.find((entry) => entry.init.method === "PATCH")?.init.body))).toMatchObject({ paymentMethodId: "pix-ana", applyTo: "current_month" });
 });
@@ -1427,7 +1455,7 @@ it("patches the receiving contact of a conta a pagar once the seat moves", async
 
   expect(within(dialog).getByRole("button", { name: "Trocar Bruno Lima" })).toBeInTheDocument();
 
-  await vi.waitFor(() => expect(sent.some((entry) => entry.path === "/api/financial/payment-methods?contactId=c2")).toBe(true));
+  await vi.waitFor(() => expect(sent.some((entry) => entry.path === "payment-methods?contactId=c2")).toBe(true));
 
   await user.click(within(dialog).getByRole("button", { name: "Pronto" }));
 
@@ -1633,7 +1661,7 @@ it("keeps the registro switch locked on edit and never moves its counterpart", a
 
   const patch = sent.find((entry) => entry.init.method === "PATCH");
 
-  expect(patch?.path).toBe("/api/financial/billings/b4");
+  expect(patch?.path).toBe("billings/b4");
   expect(JSON.parse(String(patch?.init.body))).toEqual({ category: "other" });
 });
 
@@ -1753,11 +1781,11 @@ const GROUPS = [
 /** The owner's own number connected, and two groups on it. */
 function connectedApi(extra: (path: string, init: RequestInit) => Response | undefined = () => undefined) {
   return api((path, init) => {
-    if (path === "/api/financial/whatsapp") {
+    if (path === "whatsapp") {
       return Response.json({ available: true, ownAvailable: true, sender: "own", instance: { state: "open" }, quota: null });
     }
 
-    if (path.startsWith("/api/financial/whatsapp/groups")) {
+    if (path.startsWith("whatsapp/groups")) {
       return Response.json({ groups: GROUPS });
     }
 
@@ -1788,7 +1816,7 @@ it("picks a group for the notices, quiets the bells and creates the billing with
   const dialog = screen.getByRole("dialog", { name: "Avisar no grupo" });
 
   expect(await within(dialog).findByText("Sugerido")).toBeInTheDocument();
-  expect(sent.some((entry) => entry.path === "/api/financial/whatsapp/groups?participants=u1")).toBe(true);
+  expect(sent.some((entry) => entry.path === "whatsapp/groups?participants=u1")).toBe(true);
 
   await user.type(within(dialog).getByLabelText("Buscar grupos"), "creche");
 

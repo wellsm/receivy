@@ -1,5 +1,5 @@
 import type { ChargeDetail, ProofUploadTicket } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { apiFetch } from "@/lib/api/client";
 import { responseMessage } from "@/lib/financial-response";
 
 const ACCEPTED = ["image/jpeg", "image/png", "application/pdf"];
@@ -14,7 +14,7 @@ export const UPLOAD_CONFLICT = "Já existe um comprovante em revisão ou um envi
 export const UPLOAD_UNCONFIRMED = "Não foi possível confirmar o envio. Atualize a página.";
 
 async function post<T>(path: string, body: object, fallback: string, conflict?: string): Promise<T> {
-  const response = await browserFetch(path, {
+  const response = await apiFetch(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -43,14 +43,15 @@ export async function uploadProofFile(base: string, file: File): Promise<ChargeD
     "Não foi possível iniciar o envio.",
     UPLOAD_CONFLICT,
   );
-  const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" });
+  // A PUT that never reaches the storage is the same failed upload as a refused one, not the browser's text.
+  const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" }).catch(() => null);
 
-  if (!put.ok) {
+  if (!put?.ok) {
     throw new Error("O arquivo não foi enviado. Aguarde cinco minutos para iniciar outro envio.");
   }
 
   // The client confirms the bytes landed; the bucket event does the same work where it exists.
-  const complete = await browserFetch(`${base}/proof/complete`, { method: "POST" });
+  const complete = await apiFetch(`${base}/proof/complete`, { method: "POST" });
 
   if (!complete.ok) {
     throw new Error(await responseMessage(complete, UPLOAD_UNCONFIRMED));

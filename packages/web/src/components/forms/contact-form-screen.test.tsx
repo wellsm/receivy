@@ -1,25 +1,28 @@
 import { EMPTY_BILLING_DRAFT, PaymentProvider, PhoneSource, PixKeyType, UserStatus, type Contact, type PaymentMethod } from "@receivy/common";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { saveDraft, takeDraft } from "@/lib/billing-draft";
 import { ContactFormScreen } from "@/components/forms/contact-form-screen";
 
-const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
+const navigate = vi.fn();
+const fetchMock = vi.fn();
+const API = "https://api.test";
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
 
 // Every existing test assumes the WhatsApp consent checkbox exists; the kill-switch tests flip it off themselves.
 beforeEach(() => {
-  vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true");
+  vi.stubEnv("VITE_API_URL", API);
+  vi.stubEnv("VITE_WHATSAPP_ENABLED", "true");
+  vi.stubGlobal("fetch", fetchMock);
 });
 
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   window.sessionStorage.clear();
 });
 
@@ -59,7 +62,7 @@ type Sent = { path: string; init: RequestInit };
 function api(contact = ana, keys: PaymentMethod[] = []) {
   const sent: Sent[] = [];
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
+  fetchMock.mockImplementation(async (path, init = {}) => {
     sent.push({ path, init });
 
     if (path.includes("payment-methods")) {
@@ -93,11 +96,11 @@ it("creates a contact with a nickname and an e-mail", async () => {
 
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/contacts"));
 
   const posted = sent.find(entry => entry.init.method === "POST");
 
-  expect(posted?.path).toBe("/api/contacts");
+  expect(posted?.path).toBe(`${API}/contacts`);
   expect(JSON.parse(String(posted?.init.body))).toEqual({ name: "Ana Souza", nickname: "Aninha", email: "ana@example.com", whatsappConsent: false });
 });
 
@@ -123,7 +126,7 @@ it("saves a contact without an e-mail and leaves the key out of the body", async
   await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/contacts"));
 
   const posted = sent.find(entry => entry.init.method === "POST");
 
@@ -131,7 +134,7 @@ it("saves a contact without an e-mail and leaves the key out of the body", async
 });
 
 it("hides the WhatsApp consent checkbox and omits the field when the kill switch is off", async () => {
-  vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+  vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
 
   const sent = api();
 
@@ -147,7 +150,7 @@ it("hides the WhatsApp consent checkbox and omits the field when the kill switch
   await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/contacts"));
 
   const posted = sent.find(entry => entry.init.method === "POST");
   const body = JSON.parse(String(posted?.init.body)) as Record<string, unknown>;
@@ -157,8 +160,8 @@ it("hides the WhatsApp consent checkbox and omits the field when the kill switch
 });
 
 it("keeps the WhatsApp consent checkbox with only the Evolution flag on", async () => {
-  vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
-  vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "true");
+  vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
+  vi.stubEnv("VITE_EVOLUTION_ENABLED", "true");
 
   api();
   render(<ContactFormScreen />);
@@ -171,22 +174,22 @@ it("loads a contact for editing and returns to its ledger", async () => {
 
   render(<ContactFormScreen contactId="c1" />);
 
-  await vi.waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveValue("Ana Souza"));
+  await waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveValue("Ana Souza"));
 
   expect(screen.getByLabelText("E-mail (opcional)")).toHaveValue("ana@example.com");
 
   await userEvent.setup().click(screen.getByRole("button", { name: "Salvar contato" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts/c1"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/contacts/c1"));
 
-  expect(sent.find(entry => entry.init.method === "PATCH")?.path).toBe("/api/contacts/c1");
+  expect(sent.find(entry => entry.init.method === "PATCH")?.path).toBe(`${API}/contacts/c1`);
 });
 
 it("locks every field but the nickname on a contact with an active account", async () => {
   api({ ...ana, status: UserStatus.Active });
   render(<ContactFormScreen contactId="c1" />);
 
-  await vi.waitFor(() => expect(screen.getByLabelText("Nome completo")).toBeDisabled());
+  await waitFor(() => expect(screen.getByLabelText("Nome completo")).toBeDisabled());
 
   expect(screen.getByLabelText("E-mail (opcional)")).toBeDisabled();
   expect(screen.getByLabelText("Apelido")).toBeEnabled();
@@ -204,7 +207,7 @@ it("hands the new contact's account back to the billing draft when it came from 
   await user.type(screen.getByLabelText("E-mail (opcional)"), "ana@example.com");
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/billings/new"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/billings/new"));
 
   expect(takeDraft()?.draft.selected).toEqual(["user-0", "user-saved"]);
 });
@@ -229,7 +232,7 @@ it("files the typed Pix key under the new contact", async () => {
 
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/contacts"));
 
   expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toEqual({
     name: "Ana Souza",
@@ -249,7 +252,7 @@ it("leaves the label out when only the key was typed", async () => {
   await user.type(screen.getByLabelText("E-mail Pix"), "ana@example.com");
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/contacts"));
 
   expect(JSON.parse(String(sent.find(entry => entry.init.method === "POST")?.init.body))).toEqual({
     name: "Ana Souza",
@@ -263,17 +266,17 @@ it("lists the contact's Pix keys on edit and promotes the one the owner picks", 
 
   render(<ContactFormScreen contactId="c1" />);
 
-  await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
+  await waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
 
-  expect(sent.some(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toBe(true);
+  expect(sent.some(entry => entry.path === `${API}/payment-methods?contactId=c1`)).toBe(true);
   expect(keyList().getByText("Padrão")).toBeInTheDocument();
   expect(keyList().getAllByRole("button", { name: "Definir padrão" })).toHaveLength(1);
 
   await userEvent.setup().click(keyList().getByRole("button", { name: "Definir padrão" }));
 
-  await vi.waitFor(() => expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(2));
+  await waitFor(() => expect(sent.filter(entry => entry.path === `${API}/payment-methods?contactId=c1`)).toHaveLength(2));
 
-  expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pm-2/default" && entry.init.method === "POST")).toBe(true);
+  expect(sent.some(entry => entry.path === `${API}/payment-methods/pm-2/default` && entry.init.method === "POST")).toBe(true);
 });
 
 it("archives one of the contact's keys only after the owner confirms, then reloads the list", async () => {
@@ -281,7 +284,7 @@ it("archives one of the contact's keys only after the owner confirms, then reloa
 
   render(<ContactFormScreen contactId="c1" />);
 
-  await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
+  await waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
 
   const user = userEvent.setup();
 
@@ -294,15 +297,15 @@ it("archives one of the contact's keys only after the owner confirms, then reloa
 
   await user.click(within(dialog).getByRole("button", { name: "Arquivar" }));
 
-  await vi.waitFor(() => expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pm-2/archive" && entry.init.method === "POST")).toBe(true));
+  await waitFor(() => expect(sent.some(entry => entry.path === `${API}/payment-methods/pm-2/archive` && entry.init.method === "POST")).toBe(true));
 
-  expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(2);
+  expect(sent.filter(entry => entry.path === `${API}/payment-methods?contactId=c1`)).toHaveLength(2);
 });
 
 it("closes the dialog and says why an archive failed", async () => {
   const sent: Sent[] = [];
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
+  fetchMock.mockImplementation(async (path, init = {}) => {
     sent.push({ path, init });
 
     if (path.endsWith("/archive")) {
@@ -318,7 +321,7 @@ it("closes the dialog and says why an archive failed", async () => {
 
   render(<ContactFormScreen contactId="c1" />);
 
-  await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
+  await waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
 
   const user = userEvent.setup();
 
@@ -329,7 +332,7 @@ it("closes the dialog and says why an archive failed", async () => {
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(sent.filter(entry => entry.path.endsWith("/archive"))).toHaveLength(1);
   // The list is only worth reloading when something actually changed.
-  expect(sent.filter(entry => entry.path === "/api/financial/payment-methods?contactId=c1")).toHaveLength(1);
+  expect(sent.filter(entry => entry.path === `${API}/payment-methods?contactId=c1`)).toHaveLength(1);
 });
 
 it("keeps the key when the archive confirmation is cancelled", async () => {
@@ -337,7 +340,7 @@ it("keeps the key when the archive confirmation is cancelled", async () => {
 
   render(<ContactFormScreen contactId="c1" />);
 
-  await vi.waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
+  await waitFor(() => expect(keyList().getAllByRole("listitem")).toHaveLength(2));
 
   const user = userEvent.setup();
   const trigger = keyList().getAllByRole("button", { name: "Arquivar" })[1]!;
@@ -362,7 +365,7 @@ it("never asks the API for keys while the contact does not exist yet", async () 
 });
 
 it("keeps the typed data when the server rejects the contact", async () => {
-  vi.mocked(browserFetch).mockResolvedValue(Response.json({ message: "Esse e-mail já está em uso: por outro contato seu ou por uma conta ativa. Só o apelido de um contato ativo pode mudar." }, { status: 409 }));
+  fetchMock.mockResolvedValue(Response.json({ message: "Esse e-mail já está em uso: por outro contato seu ou por uma conta ativa. Só o apelido de um contato ativo pode mudar." }, { status: 409 }));
   render(<ContactFormScreen />);
 
   const user = userEvent.setup();
@@ -373,7 +376,7 @@ it("keeps the typed data when the server rejects the contact", async () => {
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Esse e-mail já está em uso");
   expect(screen.getByLabelText("Nome completo")).toHaveValue("Ana Souza");
-  expect(routerMock.push).not.toHaveBeenCalled();
+  expect(navigate).not.toHaveBeenCalled();
 });
 
 it("sends the phone and the consent flag, and locks the phone the person typed", async () => {
@@ -383,13 +386,13 @@ it("sends the phone and the consent flag, and locks the phone the person typed",
 
   const user = userEvent.setup();
 
-  await vi.waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveValue("Ana Souza"));
+  await waitFor(() => expect(screen.getByLabelText("Nome completo")).toHaveValue("Ana Souza"));
 
   await user.type(screen.getByLabelText("WhatsApp"), "11988887777");
   await user.click(screen.getByLabelText("Essa pessoa concordou em receber cobranças por WhatsApp"));
   await user.click(screen.getByRole("button", { name: "Salvar contato" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/contacts/c1"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/contacts/c1"));
 
   const patched = sent.find(entry => entry.init.method === "PATCH");
   const body = JSON.parse(String(patched?.init.body));
@@ -403,4 +406,31 @@ it("sends the phone and the consent flag, and locks the phone the person typed",
 
   expect(await screen.findByText("Número informado pela própria pessoa")).toBeInTheDocument();
   expect(screen.getByLabelText("WhatsApp")).toBeDisabled();
+});
+
+it("shows the unavailable message when the contact cannot be loaded on the network", async () => {
+  fetchMock.mockImplementation(async (path: string) => {
+    if (path.includes("payment-methods")) {
+      return Response.json({ paymentMethods: [] });
+    }
+
+    throw new TypeError("Failed to fetch");
+  });
+  render(<ContactFormScreen contactId="c1" />);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Serviço indisponível. Tente novamente.");
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
+});
+
+it("shows the unavailable message when saving fails on the network", async () => {
+  fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+  render(<ContactFormScreen />);
+
+  const user = userEvent.setup();
+
+  await user.type(screen.getByLabelText("Nome completo"), "Ana Souza");
+  await user.click(screen.getByRole("button", { name: "Salvar contato" }));
+
+  expect(await screen.findByText("Serviço indisponível. Tente novamente.")).toBeInTheDocument();
+  expect(navigate).not.toHaveBeenCalled();
 });

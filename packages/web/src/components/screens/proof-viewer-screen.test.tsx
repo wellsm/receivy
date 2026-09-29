@@ -1,13 +1,19 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BillingRecurrence, ChargeState, Direction, ProofKind, ProofMime, ProofState, SharingState, type ChargeDetail, type ChargeProof } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ProofViewerScreen } from "@/components/screens/proof-viewer-screen";
+import { renderWithRouter } from "@/test/render";
 
-const routerMock = { push: vi.fn(), replace: vi.fn() };
+const navigate = vi.fn();
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
+
+const API = "https://api.test";
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+});
+
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
@@ -51,37 +57,64 @@ function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
   };
 }
 
-/** Routes the BFF calls the screen makes; the charge answers unknown paths and `swap` changes what it says. */
+/** Routes the API calls the screen makes; the charge answers unknown paths and `swap` changes what it says.
+ * A URL outside the API (the signed bucket PUT) answers 204 and is recorded in `calls` verbatim. */
 function serve(detail: ChargeDetail, extra: Record<string, (init?: RequestInit) => Response> = {}) {
   let current = detail;
+  const calls: [string, RequestInit | undefined][] = [];
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-    const key = `${init?.method ?? "GET"} ${String(path)}`;
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (!url.startsWith(`${API}/`)) {
+      calls.push([url, init]);
+
+      return new Response(null, { status: 204 });
+    }
+
+    const path = url.slice(API.length + 1);
+
+    calls.push([path, init]);
+
+    const key = `${init?.method ?? "GET"} ${path}`;
     const handler = Object.entries(extra).find(([route]) => route === key)?.[1];
 
     if (handler) {
       return handler(init);
     }
 
-    if (key === "GET /api/financial/charges/charge/proof/download") {
+    if (key === "GET charges/charge/proof/download") {
       return Response.json({ url: `https://files.test/${current.proof?.file?.name}` });
     }
 
     return Response.json(current);
   });
 
-  return (next: ChargeDetail) => {
-    current = next;
+  vi.stubGlobal("fetch", fetchMock);
+
+  return {
+    swap: (next: ChargeDetail) => {
+      current = next;
+    },
+    calls,
   };
 }
 
 describe("ProofViewerScreen", () => {
+  it("encodes the charge id from the URL into the API path", async () => {
+    const { calls } = serve(charge());
+
+    renderWithRouter(<ProofViewerScreen chargeId="a/b" />);
+
+    expect(await screen.findByRole("heading", { name: "comprovante.png" })).toBeInTheDocument();
+    expect(calls[0]?.[0]).toBe("charges/a%2Fb");
+    expect(calls.some(([path]) => path.startsWith("charges/a/b"))).toBe(false);
+  });
+
   it("shows the proof and lets the creditor accept it", async () => {
     const review = vi.fn(() => Response.json(charge({ state: ChargeState.Paid, proofState: ProofState.Accepted, proof: proof({ state: ProofState.Accepted }) })));
 
-    serve(charge(), { "POST /api/financial/charges/charge/proof/review": review });
+    serve(charge(), { "POST charges/charge/proof/review": review });
 
-    render(<ProofViewerScreen chargeId="charge" />);
+    renderWithRouter(<ProofViewerScreen chargeId="charge" />);
 
     expect(await screen.findByRole("heading", { name: "comprovante.png" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Comprovante comprovante.png" })).toHaveAttribute("src", "https://files.test/comprovante.png");
@@ -91,15 +124,15 @@ describe("ProofViewerScreen", () => {
 
     await waitFor(() => expect(review).toHaveBeenCalled());
 
-    expect(routerMock.push).toHaveBeenCalledWith("/charges/charge");
+    expect(navigate).toHaveBeenCalledWith("/charges/charge");
   });
 
   it("sends the optional reason along with a rejection", async () => {
     const review = vi.fn((init?: RequestInit) => Response.json(charge({ proofState: ProofState.Rejected, proof: proof({ state: ProofState.Rejected, reason: String(init?.body) }) })));
 
-    serve(charge(), { "POST /api/financial/charges/charge/proof/review": review });
+    serve(charge(), { "POST charges/charge/proof/review": review });
 
-    render(<ProofViewerScreen chargeId="charge" />);
+    renderWithRouter(<ProofViewerScreen chargeId="charge" />);
 
     fireEvent.change(await screen.findByLabelText("Motivo (opcional)"), { target: { value: "Valor diferente" } });
     fireEvent.click(screen.getByRole("button", { name: "Rejeitar comprovante" }));
@@ -110,11 +143,10 @@ describe("ProofViewerScreen", () => {
   });
 
   it("lets the debtor replace a rejected proof and previews the new file", async () => {
-    const put = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
     const rejected = charge({ direction: Direction.Payable, proofState: ProofState.Rejected, proof: proof({ state: ProofState.Rejected, reason: "Ilegível", file: { name: "antigo.pdf", mime: ProofMime.Pdf, size: 2048 } }) });
     const replaced = charge({ direction: Direction.Payable, proof: proof({ file: { name: "novo.png", mime: ProofMime.Png, size: 3 }, sentByViewer: true }) });
-    const swap = serve(rejected, {
-      "POST /api/financial/charges/charge/proof": () => {
+    const { swap, calls } = serve(rejected, {
+      "POST charges/charge/proof": () => {
         // The bucket event lands right after the PUT: the next read of the charge already carries the new file.
         swap(replaced);
 
@@ -122,7 +154,7 @@ describe("ProofViewerScreen", () => {
       },
     });
 
-    render(<ProofViewerScreen chargeId="charge" />);
+    renderWithRouter(<ProofViewerScreen chargeId="charge" />);
 
     expect(await screen.findByRole("heading", { name: "antigo.pdf" })).toBeInTheDocument();
     expect(screen.getByText("Comprovante rejeitado: Ilegível. Você pode enviar outro arquivo.")).toBeInTheDocument();
@@ -133,7 +165,7 @@ describe("ProofViewerScreen", () => {
     fireEvent.change(screen.getByLabelText("Enviar novo comprovante"), { target: { files: [file] } });
 
     expect(await screen.findByRole("heading", { name: "novo.png" })).toBeInTheDocument();
-    expect(put.mock.calls[0]?.[0]).toBe("https://upload.test/put");
+    expect(calls.some(([url, init]) => url === "https://upload.test/put" && init?.method === "PUT")).toBe(true);
     expect(screen.getByRole("img", { name: "Comprovante novo.png" })).toHaveAttribute("src", "https://files.test/novo.png");
     expect(screen.queryByRole("button", { name: "Enviar novo comprovante" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apagar e enviar outro" })).toBeInTheDocument();
@@ -142,23 +174,23 @@ describe("ProofViewerScreen", () => {
   it("lets the sender take back a pending proof and returns to the charge", async () => {
     const withdraw = vi.fn(() => new Response(null, { status: 204 }));
 
-    serve(charge({ direction: Direction.Payable, proof: proof({ sentByViewer: true }) }), { "DELETE /api/financial/charges/charge/proof": withdraw });
+    serve(charge({ direction: Direction.Payable, proof: proof({ sentByViewer: true }) }), { "DELETE charges/charge/proof": withdraw });
 
-    render(<ProofViewerScreen chargeId="charge" />);
+    renderWithRouter(<ProofViewerScreen chargeId="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Apagar e enviar outro" }));
 
     await waitFor(() => expect(withdraw).toHaveBeenCalled());
 
-    expect(routerMock.push).toHaveBeenCalledWith("/charges/charge");
+    expect(navigate).toHaveBeenCalledWith("/charges/charge");
   });
 
   it("explains when there is nothing to show", async () => {
-    serve(charge({ proofState: null, proof: null }));
+    const { calls } = serve(charge({ proofState: null, proof: null }));
 
-    render(<ProofViewerScreen chargeId="charge" />);
+    renderWithRouter(<ProofViewerScreen chargeId="charge" />);
 
     expect(await screen.findByText("Nenhum comprovante enviado.")).toBeInTheDocument();
-    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/charges/charge/proof/download", expect.anything());
+    expect(calls.some(([path]) => path === "charges/charge/proof/download")).toBe(false);
   });
 });

@@ -1,8 +1,7 @@
 import { Bell, ReceiptText, Rows3, UserRound } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { BackButton } from "@/components/app/back-button";
+import { Link } from "@/components/ui/link";
 
 /**
  * The sidebar links. Below `md` there is no tab bar (design 8a/8b): Feed and Contas draw their own
@@ -31,8 +30,8 @@ const DESKTOP_LINK_ACTIVE = `${DESKTOP_LINK} bg-primary-soft font-bold text-prim
 
 function Brand() {
   return (
-    <Link className="inline-flex min-h-12 items-center gap-[11px] font-display text-xl font-bold tracking-[-0.03em] text-ink" href="/" aria-label="Receivy — início">
-      <Image className="block h-[38px] w-[38px] rounded-[11px] object-cover" src="/brand-icon.png" alt="" width={38} height={38} priority />
+    <Link className="inline-flex min-h-12 items-center gap-[11px] font-display text-xl font-bold tracking-[-0.03em] text-ink" to="/" aria-label="Receivy — início">
+      <img className="block h-[38px] w-[38px] rounded-[11px] object-cover" src="/brand-icon.png" alt="" width={38} height={38} />
       <span>Receivy</span>
     </Link>
   );
@@ -40,7 +39,7 @@ function Brand() {
 
 function HeaderBell({ badge = false }: { badge?: boolean }) {
   return (
-    <Link className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-[11px] text-muted" href="/settings" aria-label="Notificações">
+    <Link className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-[11px] text-muted" to="/settings" aria-label="Notificações">
       <Bell aria-hidden="true" size={20} strokeWidth={1.8} />
       {badge && <span className="absolute top-[9px] right-[9px] h-[9px] w-[9px] rounded-full border-2 border-surface bg-payable" aria-hidden="true" data-testid="header-bell-dot" />}
     </Link>
@@ -54,7 +53,7 @@ function Navigation({ activePath = "/" }: { activePath?: string }) {
         const active = href === activePath;
 
         return (
-          <Link className={active ? DESKTOP_LINK_ACTIVE : DESKTOP_LINK} href={href} key={href} aria-current={active ? "page" : undefined}>
+          <Link className={active ? DESKTOP_LINK_ACTIVE : DESKTOP_LINK} to={href} key={href} aria-current={active ? "page" : undefined}>
             <Icon aria-hidden="true" size={21} strokeWidth={1.8} />
             <span>{label}</span>
           </Link>

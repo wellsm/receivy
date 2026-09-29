@@ -13,24 +13,23 @@ import {
   type ListChargeItem,
   SplitMode,
 } from "@receivy/common";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FeedScreen } from "@/components/screens/feed-screen";
+import { renderWithRouter } from "@/test/render";
 
-import { browserFetch } from "@/lib/auth/browser-fetch";
+const { navigate } = vi.hoisted(() => ({ navigate: vi.fn() }));
 
-const { replace, refresh } = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, refresh }) }));
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-
+const API = "https://api.test";
 const MONTH = "2026-09";
 const TODAY = calendarDate();
 
 /** `formatMoney` separates the symbol with a non-breaking space; the DOM matchers normalize it away. */
 function brl(amountCents: number): string {
-  return formatMoney({ amountCents, currency: "BRL" }).replace(/ /g, " ");
+  return formatMoney({ amountCents, currency: "BRL" }).replace(/\u00a0/g, " ");
 }
 
 function charge(overrides: Partial<ListChargeItem> = {}): ListChargeItem {
@@ -60,14 +59,18 @@ function payable(overrides: Partial<ListChargeItem> = {}): ListChargeItem {
   return charge({ type: Direction.Payable, ...overrides });
 }
 
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+});
+
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
 });
 
 describe("FeedScreen", () => {
-  it("sums each side of the month, open and settled, and counts only what is open", () => {
-    render(
+  it("sums each side of the month, open and settled, and counts only what is open", async () => {
+    renderWithRouter(
       <FeedScreen
         month={MONTH}
         filters={DEFAULT_FEED_FILTERS}
@@ -82,7 +85,7 @@ describe("FeedScreen", () => {
       />,
     );
 
-    const summary = screen.getByRole("region", { name: "Resumo do mês" });
+    const summary = await screen.findByRole("region", { name: "Resumo do mês" });
 
     expect(within(summary).getByText(brl(1620))).toBeInTheDocument();
     expect(within(summary).getByText(brl(700))).toBeInTheDocument();
@@ -93,8 +96,8 @@ describe("FeedScreen", () => {
     expect(within(summary).getByText(`+ ${brl(210)}`)).toBeInTheDocument();
   });
 
-  it("groups the charges by due date and heads each day with what it still owes", () => {
-    render(
+  it("groups the charges by due date and heads each day with what it still owes", async () => {
+    renderWithRouter(
       <FeedScreen
         month={MONTH}
         filters={DEFAULT_FEED_FILTERS}
@@ -107,17 +110,17 @@ describe("FeedScreen", () => {
       />,
     );
 
-    const first = screen.getByRole("heading", { name: new RegExp(feedDayLabel("2026-09-10", TODAY), "i") });
+    const first = await screen.findByRole("heading", { name: new RegExp(feedDayLabel("2026-09-10", TODAY), "i") });
 
     expect(first).toHaveTextContent(brl(1500));
     expect(screen.getByText(/Aluguel/)).toBeInTheDocument();
     expect(screen.getByText(/Academia/)).toBeInTheDocument();
   });
 
-  it("names the counterpart by join: the contact when the viewer pays, the debtor when they receive", () => {
+  it("names the counterpart by join: the contact when the viewer pays, the debtor when they receive", async () => {
     const viewerName = "Ana Silva";
 
-    render(
+    renderWithRouter(
       <FeedScreen
         month={MONTH}
         filters={DEFAULT_FEED_FILTERS}
@@ -142,57 +145,59 @@ describe("FeedScreen", () => {
       />,
     );
 
-    expect(screen.getByText(/Padaria da esquina/)).toBeInTheDocument();
+    expect(await screen.findByText(/Padaria da esquina/)).toBeInTheDocument();
     expect(screen.getByText(/Bruno/)).toBeInTheDocument();
     // The payable card names the contact, never the viewer's own name (the debtor on that side).
     expect(screen.queryByText(new RegExp(viewerName))).not.toBeInTheDocument();
   });
 
-  it("marks a day as settled once none of its charges is open", () => {
-    render(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[charge({ state: ChargeState.Paid })]} />);
+  it("marks a day as settled once none of its charges is open", async () => {
+    renderWithRouter(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[charge({ state: ChargeState.Paid })]} />);
 
-    expect(screen.getByText("liquidado")).toBeInTheDocument();
+    expect(await screen.findByText("liquidado")).toBeInTheDocument();
   });
 
-  it("invites the visitor to start when the month has no charge", () => {
-    render(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} />);
+  it("invites the visitor to start when the month has no charge", async () => {
+    renderWithRouter(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} />);
 
-    expect(screen.getByText("Sua timeline começa aqui")).toBeInTheDocument();
+    expect(await screen.findByText("Sua timeline começa aqui")).toBeInTheDocument();
   });
 
-  it("opens on the month it was given, with that tab pressed", () => {
-    render(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} />);
+  it("opens on the month it was given, with that tab pressed", async () => {
+    renderWithRouter(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} />);
 
-    expect(screen.getByRole("button", { name: monthLabel(MONTH) })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("button", { name: monthLabel(MONTH) })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: monthLabel("2026-08") })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("moves the selected month to the URL so the server renders that month", async () => {
-    render(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} />);
+    renderWithRouter(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} />);
 
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: monthLabel("2026-08") }));
+    await user.click(await screen.findByRole("button", { name: monthLabel("2026-08") }));
 
-    expect(replace).toHaveBeenCalledWith(`/feed?${feedFilterQuery(DEFAULT_FEED_FILTERS, TODAY, "2026-08")}`, { scroll: false });
+    expect(navigate).toHaveBeenCalledWith(`/feed?${feedFilterQuery(DEFAULT_FEED_FILTERS, TODAY, "2026-08")}`, { replace: true, resetScroll: false });
   });
 
   it("moves a chosen filter to the URL, keeping the month it is on", async () => {
-    render(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} />);
+    renderWithRouter(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} />);
 
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("combobox", { name: "Direção" }));
+    await user.click(await screen.findByRole("combobox", { name: "Direção" }));
     await user.click(screen.getByRole("option", { name: "A receber" }));
 
-    expect(replace).toHaveBeenCalledWith(
+    expect(navigate).toHaveBeenCalledWith(
       `/feed?${feedFilterQuery({ ...DEFAULT_FEED_FILTERS, direction: [Direction.Receivable] }, TODAY, MONTH)}`,
-      { scroll: false },
+      { replace: true, resetScroll: false },
     );
   });
   it("reminds an overdue debtor from the card after confirming, once", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ queued: true }));
-    render(
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ queued: true }));
+
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithRouter(
       <FeedScreen
         month={MONTH}
         filters={DEFAULT_FEED_FILTERS}
@@ -203,7 +208,7 @@ describe("FeedScreen", () => {
 
     const user = userEvent.setup();
 
-    expect(screen.getByText("Atrasado")).toBeInTheDocument();
+    expect(await screen.findByText("Atrasado")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Lembrar" }));
 
@@ -211,13 +216,16 @@ describe("FeedScreen", () => {
 
     await user.click(screen.getByRole("button", { name: "Enviar lembrete" }));
 
-    expect(browserFetch).toHaveBeenCalledWith("/api/financial/charges/late/reminders", { method: "POST" });
+    expect(fetchMock).toHaveBeenCalledWith(`${API}/charges/late/reminders`, expect.objectContaining({ method: "POST" }));
     expect(await screen.findByRole("button", { name: "Lembrete enviado" })).toBeDisabled();
   });
 
-  it("marks the viewer's own bill without Pix as paid and refreshes the server render", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({}));
-    render(
+  it("marks the viewer's own bill without Pix as paid and invalidates the router", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({}));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { router } = renderWithRouter(
       <FeedScreen
         month={MONTH}
         filters={DEFAULT_FEED_FILTERS}
@@ -226,19 +234,23 @@ describe("FeedScreen", () => {
       />,
     );
 
+    const invalidate = vi.spyOn(router, "invalidate");
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Marcar pago" }));
+    await user.click(await screen.findByRole("button", { name: "Marcar pago" }));
     await user.click(screen.getByRole("button", { name: "Marcar paga" }));
 
-    expect(browserFetch).toHaveBeenCalledWith("/api/financial/charges/own/pay", { method: "POST" });
+    expect(fetchMock).toHaveBeenCalledWith(`${API}/charges/own/pay`, expect.objectContaining({ method: "POST" }));
 
-    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    await waitFor(() => expect(invalidate).toHaveBeenCalled());
   });
 
   it("surfaces the API message when an action fails", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ message: "Cobrança já liquidada." }, { status: 409 }));
-    render(
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: "Cobrança já liquidada." }, { status: 409 }));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { router } = renderWithRouter(
       <FeedScreen
         month={MONTH}
         filters={DEFAULT_FEED_FILTERS}
@@ -247,9 +259,10 @@ describe("FeedScreen", () => {
       />,
     );
 
+    const invalidate = vi.spyOn(router, "invalidate");
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: "Marcar pago" }));
+    await user.click(await screen.findByRole("button", { name: "Marcar pago" }));
 
     const dialog = screen.getByRole("dialog", { name: "Marcar como pago?" });
 
@@ -257,15 +270,15 @@ describe("FeedScreen", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Marcar pago" }));
 
-    expect(browserFetch).toHaveBeenCalledWith("/api/financial/charges/own/proof/declaration", { method: "POST" });
+    expect(fetchMock).toHaveBeenCalledWith(`${API}/charges/own/proof/declaration`, expect.objectContaining({ method: "POST" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Cobrança já liquidada.");
-    expect(refresh).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
   });
 
-  it("greets the viewer in the narrow header, linking Perfil and Contas", () => {
-    render(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} user={{ name: "Wellington Silva", avatar: null }} />);
+  it("greets the viewer in the narrow header, linking Perfil and Contas", async () => {
+    renderWithRouter(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[]} user={{ name: "Wellington Silva", avatar: null }} />);
 
-    expect(screen.getByText("Olá, Wellington")).toBeInTheDocument();
+    expect(await screen.findByText("Olá, Wellington")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Perfil" })).toHaveAttribute("href", "/settings");
     expect(screen.getByRole("link", { name: "Contas" })).toHaveAttribute("href", "/billings");
     expect(screen.getByRole("link", { name: "Nova conta" })).toHaveAttribute("href", "/billings/new");
@@ -274,7 +287,7 @@ describe("FeedScreen", () => {
   it("searches the month from the footer, leaving the summary on the whole month", async () => {
     const user = userEvent.setup();
 
-    render(
+    renderWithRouter(
       <FeedScreen
         month={MONTH}
         filters={DEFAULT_FEED_FILTERS}
@@ -283,7 +296,7 @@ describe("FeedScreen", () => {
       />,
     );
 
-    await user.type(screen.getByRole("searchbox", { name: "Buscar cobrança" }), "marina");
+    await user.type(await screen.findByRole("searchbox", { name: "Buscar cobrança" }), "marina");
 
     expect(screen.getByRole("link", { name: "Abrir cobrança Aluguel" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Abrir cobrança Uber" })).not.toBeInTheDocument();
@@ -294,8 +307,8 @@ describe("FeedScreen", () => {
     expect(screen.getByText("Nenhuma cobrança encontrada.")).toBeInTheDocument();
   });
 
-  it("reads the second line of a narrow row: people and split of a shared billing", () => {
-    render(
+  it("reads the second line of a narrow row: people and split of a shared billing", async () => {
+    renderWithRouter(
       <FeedScreen
         month={MONTH}
         filters={DEFAULT_FEED_FILTERS}
@@ -309,18 +322,18 @@ describe("FeedScreen", () => {
       />,
     );
 
-    expect(screen.getByText("3 pessoas · igual")).toBeInTheDocument();
+    expect(await screen.findByText("3 pessoas · igual")).toBeInTheDocument();
   });
 
   it("opens the filters from the footer and moves the choice to the URL", async () => {
     const user = userEvent.setup();
 
-    render(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[charge()]} />);
+    renderWithRouter(<FeedScreen month={MONTH} filters={DEFAULT_FEED_FILTERS} today={TODAY} charges={[charge()]} />);
 
-    await user.click(screen.getByRole("button", { name: "Filtros" }));
+    await user.click(await screen.findByRole("button", { name: "Filtros" }));
     await user.click(within(screen.getByRole("dialog", { name: "Filtros" })).getByRole("button", { name: "Direção A pagar" }));
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
 
-    expect(replace).toHaveBeenCalledWith(expect.stringContaining("direction=payable"), { scroll: false });
+    expect(navigate).toHaveBeenCalledWith(expect.stringContaining("direction=payable"), { replace: true, resetScroll: false });
   });
 });

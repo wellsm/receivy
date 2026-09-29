@@ -1,18 +1,16 @@
-"use client";
-
 import { PlanTier, WhatsappInstanceState, WhatsappSender, type WhatsappInstanceView, type WhatsappSettings, chargeDateText } from "@receivy/common";
 import { Unplug } from "lucide-react";
-import Link from "next/link";
 import { type KeyboardEvent, type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Link } from "@/components/ui/link";
+import { apiFetch } from "@/lib/api/client";
 import { type WhatsappClient, whatsappClient } from "@/lib/whatsapp-client";
 import { evolutionEnabled, receivyEnabled, whatsappEnabled } from "@/lib/whatsapp-flag";
 
 type Props = { client?: WhatsappClient };
 
 async function loadPlan(): Promise<PlanTier> {
-  const response = await browserFetch("/api/financial/plan");
+  const response = await apiFetch("plan");
 
   if (!response.ok) {
     return PlanTier.Free;
@@ -299,7 +297,6 @@ function OwnNumberCard({ settings, client, onChange, disabled }: OwnProps) {
         ) : instance.qr ? (
           <>
             {/* A base64 data URI from the API, not an optimizable asset. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={instance.qr} alt="QR code para conectar" className="h-48 w-48" />
             <p className="m-0 text-xs text-muted">No celular: WhatsApp › Dispositivos conectados › Conectar dispositivo.</p>
           </>
@@ -520,7 +517,7 @@ export function WhatsappScreen({ client = whatsappClient }: Props) {
       {free ? (
         <div className="rounded-2xl border border-outline p-4">
           <p className="m-0 text-sm text-muted">Lembretes por WhatsApp fazem parte do plano Básico.</p>
-          <Link href="/settings/plan" className="mt-3 inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">
+          <Link to="/settings/plan" className="mt-3 inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">
             Assinar o Básico
           </Link>
         </div>

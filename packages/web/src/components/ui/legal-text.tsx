@@ -1,3 +1,5 @@
+import { readEnv } from "@/lib/env";
+
 type LegalTextProps = {
   kind: "terms" | "privacy";
 };
@@ -21,8 +23,7 @@ export function LegalText({ kind }: LegalTextProps) {
         arquivos é processada em segundo plano com novas tentativas. Avisos já enviados não podem ser recolhidos.
       </p>
       <p className="m-0">
-        Não afirmamos um prazo legal de retenção. Estas informações descrevem o produto, sem certificação jurídica. Contato do operador:{" "}
-        {process.env.NEXT_PUBLIC_OPERATOR_CONTACT ?? "a ser informado antes da disponibilização pública"}.
+        Não afirmamos um prazo legal de retenção. Estas informações descrevem o produto, sem certificação jurídica. Contato do operador: {readEnv().operatorContact || "a ser informado antes da disponibilização pública"}.
       </p>
     </div>
   );

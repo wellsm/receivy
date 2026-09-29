@@ -1,9 +1,8 @@
-"use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { paymentMethodText, PixKeyType, type PaymentMethod } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { apiFetch } from "@/lib/api/client";
 import { responseMessage } from "@/lib/financial-response";
+import { Link } from "@/components/ui/link";
 
 const FIELD = "min-h-12 rounded-xl border border-outline/50 bg-surface px-3 text-sm text-ink";
 const LABEL = "text-xs font-semibold text-muted";
@@ -12,7 +11,7 @@ export function FirstSharePix({ busy, publish }: { busy: boolean; publish: (id: 
   const [items, setItems] = useState<PaymentMethod[]>([]), [selected, setSelected] = useState("");
   const [key, setKey] = useState(""), [type, setType] = useState<PixKeyType>(PixKeyType.Email), [error, setError] = useState(""), [saving, setSaving] = useState(false);
 
-  useEffect(() => { void browserFetch("/api/financial/payment-methods").then(async response => { if (!response.ok) {
+  useEffect(() => { void apiFetch("payment-methods").then(async response => { if (!response.ok) {
     throw new Error("Não foi possível carregar as chaves.");
   }
 
@@ -21,7 +20,7 @@ export function FirstSharePix({ busy, publish }: { busy: boolean; publish: (id: 
   async function save() {
     setSaving(true); setError("");
 
-    try { const response = await browserFetch("/api/financial/payment-methods", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "pix", kind: type, value: key }) });
+    try { const response = await apiFetch("payment-methods", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "pix", kind: type, value: key }) });
 
  if (!response.ok) {
       throw new Error(await responseMessage(response, "Não foi possível salvar a chave."));
@@ -89,7 +88,7 @@ export function FirstSharePix({ busy, publish }: { busy: boolean; publish: (id: 
         </div>
       </details>
 
-      <Link href="/settings/payment-methods/new" className="text-xs font-semibold text-primary">
+      <Link to="/settings/payment-methods/new" className="text-xs font-semibold text-primary">
         Outros meios (InfinitePay)
       </Link>
 

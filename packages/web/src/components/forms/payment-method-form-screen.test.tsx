@@ -1,20 +1,25 @@
 import { EMPTY_BILLING_DRAFT, PlanTier, SubscriptionStatus, type PlanSummary } from "@receivy/common";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { saveDraft, takeDraft } from "@/lib/billing-draft";
 import { PaymentMethodFormScreen } from "@/components/forms/payment-method-form-screen";
+import { renderWithRouter } from "@/test/render";
 
-const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
+const navigate = vi.fn();
+const API = "https://api.test";
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+});
 
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   window.sessionStorage.clear();
 });
 
@@ -29,14 +34,14 @@ type ApiOptions = { existing?: unknown[]; save?: Response; plan?: PlanSummary };
 function api({ existing = [], save, plan = freePlan }: ApiOptions = {}) {
   const sent: Sent[] = [];
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init = {}) => {
+  vi.stubGlobal("fetch", vi.fn(async (path: string, init: RequestInit = {}) => {
     sent.push({ path, init });
 
-    if (path === "/api/financial/plan") {
+    if (path === `${API}/plan`) {
       return Response.json(plan);
     }
 
-    if (path === "/api/auth/me") {
+    if (path === `${API}/auth/me`) {
       return Response.json({ user: { email: "conta@example.com", phone: "+5511987654321" } });
     }
 
@@ -49,13 +54,13 @@ function api({ existing = [], save, plan = freePlan }: ApiOptions = {}) {
     }
 
     return Response.json({ paymentMethods: existing });
-  });
+  }));
 
   return sent;
 }
 
 function created(sent: Sent[]) {
-  return sent.find(entry => entry.init.method === "POST" && entry.path === "/api/financial/payment-methods");
+  return sent.find(entry => entry.init.method === "POST" && entry.path === `${API}/payment-methods`);
 }
 
 async function ready() {
@@ -70,7 +75,7 @@ it("prefills the e-mail key with the account e-mail and keeps it editable", asyn
 
   const field = await screen.findByLabelText("E-mail Pix");
 
-  await vi.waitFor(() => expect(field).toHaveValue("conta@example.com"));
+  await waitFor(() => expect(field).toHaveValue("conta@example.com"));
 
   await userEvent.setup().type(field, ".br");
 
@@ -81,7 +86,7 @@ it("prefills the phone key with the account phone once that type is picked", asy
   api();
   render(<PaymentMethodFormScreen />);
 
-  await vi.waitFor(() => expect(screen.getByLabelText("E-mail Pix")).toHaveValue("conta@example.com"));
+  await waitFor(() => expect(screen.getByLabelText("E-mail Pix")).toHaveValue("conta@example.com"));
 
   await userEvent.setup().click(screen.getByRole("radio", { name: "Celular" }));
 
@@ -118,7 +123,7 @@ it("pastes into the field and then offers to clear it", async () => {
   await user.click(screen.getByRole("radio", { name: "CPF" }));
   await user.click(screen.getByRole("button", { name: "Colar" }));
 
-  await vi.waitFor(() => expect(screen.getByLabelText("CPF do titular")).toHaveValue("529.982.247-25"));
+  await waitFor(() => expect(screen.getByLabelText("CPF do titular")).toHaveValue("529.982.247-25"));
 
   await user.click(screen.getByRole("button", { name: "Limpar" }));
 
@@ -140,10 +145,10 @@ it("saves the unmasked key without a nickname and promotes it to the main key", 
 
   await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/settings/payment-methods"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/settings/payment-methods"));
 
   expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "pix", kind: "cpf", value: "52998224725" });
-  expect(sent.some(entry => entry.path === "/api/financial/payment-methods/pix-1/default")).toBe(true);
+  expect(sent.some(entry => entry.path === `${API}/payment-methods/pix-1/default`)).toBe(true);
 });
 
 it("leaves the main key toggle off when the account already has keys", async () => {
@@ -153,12 +158,12 @@ it("leaves the main key toggle off when the account already has keys", async () 
 
   const user = await ready();
 
-  await vi.waitFor(() => expect(screen.getByLabelText("Definir como meio principal")).not.toBeChecked());
+  await waitFor(() => expect(screen.getByLabelText("Definir como meio principal")).not.toBeChecked());
 
   await user.type(screen.getByLabelText("E-mail Pix"), "outra@example.com");
   await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/settings/payment-methods"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/settings/payment-methods"));
 
   expect(sent.some(entry => entry.path.endsWith("/default"))).toBe(false);
 });
@@ -172,11 +177,11 @@ it("hands the new key back to the billing draft and returns to the form", async 
 
   expect(screen.getByText("Você precisa de um meio de pagamento para criar cobranças.")).toBeInTheDocument();
 
-  await vi.waitFor(() => expect(screen.getByLabelText("E-mail Pix")).toHaveValue("conta@example.com"));
+  await waitFor(() => expect(screen.getByLabelText("E-mail Pix")).toHaveValue("conta@example.com"));
 
   await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
-  await vi.waitFor(() => expect(routerMock.push).toHaveBeenCalledWith("/billings/new"));
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("/billings/new"));
 
   expect(takeDraft()?.draft.pix).toBe("pix-1");
 });
@@ -192,7 +197,7 @@ it("saves an InfiniteTag without the dollar sign", async () => {
   await user.type(screen.getByLabelText("InfiniteTag"), "$Minha.Loja");
   await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
-  await vi.waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "infinitepay", value: "$Minha.Loja" }));
+  await waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "infinitepay", value: "$Minha.Loja" }));
 });
 
 it("points at the InfinitePay switch when the checkout is off", async () => {
@@ -250,7 +255,7 @@ it("saves a PagBank token with its label", async () => {
   await user.type(screen.getByLabelText("Rótulo"), "Loja");
   await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
-  await vi.waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "pagseguro", token: "tok", label: "Loja" }));
+  await waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "pagseguro", token: "tok", label: "Loja" }));
 });
 
 it("shows the invalid token message from PagBank", async () => {
@@ -288,12 +293,12 @@ it("shows the kept-token placeholder when editing a PagBank method and omits an 
 
   await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
-  await vi.waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "pagseguro", label: "Loja" }));
+  await waitFor(() => expect(JSON.parse(String(created(sent)?.init.body))).toEqual({ provider: "pagseguro", label: "Loja" }));
 });
 
 it("locks InfinitePay and PagBank on the free plan and opens the paywall on click", async () => {
   api();
-  render(<PaymentMethodFormScreen />);
+  renderWithRouter(<PaymentMethodFormScreen />);
 
   const infinite = await screen.findByRole("radio", { name: /InfinitePay/ });
 
@@ -323,7 +328,7 @@ it("opens the paywall when the API answers 402 anyway", async () => {
 
   const user = userEvent.setup();
 
-  render(<PaymentMethodFormScreen />);
+  renderWithRouter(<PaymentMethodFormScreen />);
   await ready();
 
   await user.click(screen.getByRole("radio", { name: "InfinitePay" }));
@@ -331,4 +336,17 @@ it("opens the paywall when the API answers 402 anyway", async () => {
   await user.click(screen.getByRole("button", { name: "Salvar meio de pagamento" }));
 
   expect(await screen.findByRole("dialog", { name: "Plano Básico" })).toBeInTheDocument();
+});
+
+it("shows the Portuguese fallback when saving cannot reach the API", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+  render(<PaymentMethodFormScreen />);
+
+  const user = await ready();
+
+  await user.type(screen.getByLabelText("E-mail Pix"), "ana@example.com");
+  await user.click(screen.getByRole("button", { name: /Salvar/ }));
+
+  expect(await screen.findByText("Não foi possível salvar o meio de pagamento.")).toBeInTheDocument();
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
 });

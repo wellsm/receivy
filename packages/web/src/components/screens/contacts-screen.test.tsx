@@ -1,19 +1,16 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContactsScreen } from "@/components/screens/contacts-screen";
-import ContactsPage from "@/app/(protected)/contacts/page";
-import NewContactPage from "@/app/(protected)/contacts/new/page";
-import EditContactPage from "@/app/(protected)/contacts/[id]/edit/page";
-import ContactPage from "@/app/(protected)/contacts/[id]/page";
-import PaymentMethodsPage from "@/app/(protected)/settings/payment-methods/page";
-import NewPaymentMethodPage from "@/app/(protected)/settings/payment-methods/new/page";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { renderWithRouter } from "@/test/render";
 
-const routerMock = { push: vi.fn(), replace: vi.fn(), back: vi.fn() };
+const API = "https://api.test";
+const fetchMock = vi.fn();
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+  vi.stubGlobal("fetch", fetchMock);
+});
 
 afterEach(() => {
   cleanup();
@@ -40,8 +37,8 @@ const bruno = { ...ana, id: "bruno", userId: "user-bruno", name: "Bruno Lima", n
 
 describe("ContactsScreen", () => {
   it("lists contacts by display name with the pending badge and the phone subtitle", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ contacts: [ana, bruno], nextCursor: null }));
-    render(<ContactsScreen />);
+    fetchMock.mockResolvedValue(Response.json({ contacts: [ana, bruno], nextCursor: null }));
+    renderWithRouter(<ContactsScreen />);
 
     const card = await screen.findByRole("link", { name: "Contato Aninha" });
 
@@ -59,8 +56,8 @@ describe("ContactsScreen", () => {
   });
 
   it("tags a contact who never signed in instead of counting charges", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ contacts: [{ ...bruno, status: "pending", activeCharges: 1 }], nextCursor: null }));
-    render(<ContactsScreen />);
+    fetchMock.mockResolvedValue(Response.json({ contacts: [{ ...bruno, status: "pending", activeCharges: 1 }], nextCursor: null }));
+    renderWithRouter(<ContactsScreen />);
 
     const card = await screen.findByRole("link", { name: "Contato Bruno Lima" });
 
@@ -69,19 +66,19 @@ describe("ContactsScreen", () => {
   });
 
   it("searches the server agenda after the typing settles", async () => {
-    vi.mocked(browserFetch).mockImplementation(async path =>
+    fetchMock.mockImplementation(async path =>
       Response.json({ contacts: String(path).includes("search=Ana") ? [ana] : [], nextCursor: null }),
     );
-    render(<ContactsScreen />);
+    renderWithRouter(<ContactsScreen />);
 
-    await userEvent.setup().type(screen.getByLabelText("Buscar contatos"), "Ana");
+    await userEvent.setup().type(await screen.findByLabelText("Buscar contatos"), "Ana");
 
     expect(await screen.findByRole("link", { name: "Contato Aninha" })).toBeInTheDocument();
   });
 
   it("shows the empty state and no inline form", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ contacts: [], nextCursor: null }));
-    render(<ContactsScreen />);
+    fetchMock.mockResolvedValue(Response.json({ contacts: [], nextCursor: null }));
+    renderWithRouter(<ContactsScreen />);
 
     expect(await screen.findByText("Nenhum contato ainda")).toBeInTheDocument();
     expect(screen.queryByLabelText("Nome completo")).not.toBeInTheDocument();
@@ -89,15 +86,15 @@ describe("ContactsScreen", () => {
   });
 
   it("pages through the agenda", async () => {
-    vi.mocked(browserFetch)
+    fetchMock
       .mockResolvedValueOnce(Response.json({ contacts: [ana], nextCursor: "cursor-2" }))
       .mockResolvedValueOnce(Response.json({ contacts: [bruno], nextCursor: null }));
-    render(<ContactsScreen />);
+    renderWithRouter(<ContactsScreen />);
 
     await userEvent.setup().click(await screen.findByRole("button", { name: "Carregar mais" }));
 
     expect(await screen.findByRole("link", { name: "Contato Bruno Lima" })).toBeInTheDocument();
-    expect(browserFetch).toHaveBeenLastCalledWith(expect.stringContaining("cursor=cursor-2"));
+    expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining("cursor=cursor-2"), expect.anything());
   });
 
   it("ignores a slow Carregar mais page once a new search replaced the list", async () => {
@@ -107,7 +104,7 @@ describe("ContactsScreen", () => {
       release = resolve;
     });
 
-    vi.mocked(browserFetch).mockImplementation(async path => {
+    fetchMock.mockImplementation(async path => {
       const url = String(path);
 
       if (url.includes("cursor=cursor-2")) {
@@ -121,7 +118,7 @@ describe("ContactsScreen", () => {
       return Response.json({ contacts: [ana], nextCursor: "cursor-2" });
     });
 
-    render(<ContactsScreen />);
+    renderWithRouter(<ContactsScreen />);
 
     const user = userEvent.setup();
 
@@ -142,8 +139,8 @@ describe("ContactsScreen", () => {
   });
 
   it("sends the new contact button to the dedicated form, carrying the return path", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ contacts: [], nextCursor: null }));
-    render(<ContactsScreen returnTo="/billings/new" />);
+    fetchMock.mockResolvedValue(Response.json({ contacts: [], nextCursor: null }));
+    renderWithRouter(<ContactsScreen returnTo="/billings/new" />);
 
     await screen.findByText("Nenhum contato ainda");
 
@@ -153,87 +150,11 @@ describe("ContactsScreen", () => {
   });
 
   it("links to the plain form when the list was opened on its own", async () => {
-    vi.mocked(browserFetch).mockResolvedValue(Response.json({ contacts: [], nextCursor: null }));
-    render(<ContactsScreen />);
+    fetchMock.mockResolvedValue(Response.json({ contacts: [], nextCursor: null }));
+    renderWithRouter(<ContactsScreen />);
 
     await screen.findByText("Nenhum contato ainda");
 
     expect(screen.getAllByRole("link", { name: "Novo contato" })[0]).toHaveAttribute("href", "/contacts/new");
-  });
-});
-
-// The header back button goes one history entry back; its href stays the declared destination,
-// which is what a modified click and a pre-hydration click still use.
-describe("back button destinations", () => {
-  function emptyApi() {
-    vi.mocked(browserFetch).mockImplementation(async path =>
-      String(path).includes("payment-methods")
-        ? Response.json({ paymentMethods: [] })
-        : String(path) === "/api/auth/me"
-          ? Response.json({ user: { email: "conta@example.com" } })
-          : Response.json({ contacts: [], nextCursor: null, charges: [] }),
-    );
-  }
-
-  it("names the screen the contacts page came from", async () => {
-    emptyApi();
-    render(await ContactsPage({ searchParams: Promise.resolve({ returnTo: "/billings/new" }) }));
-
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/billings/new");
-  });
-
-  it("falls back to the profile when the contacts page was opened on its own", async () => {
-    emptyApi();
-    render(await ContactsPage({ searchParams: Promise.resolve({}) }));
-
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/settings");
-  });
-
-  it("sends the contact history back to the contact list", async () => {
-    emptyApi();
-    render(await ContactPage({ params: Promise.resolve({ id: "ana" }) }));
-
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/contacts");
-  });
-
-  it("sends the contact form back to the list, or to the screen that asked for it", async () => {
-    emptyApi();
-    render(await NewContactPage({ searchParams: Promise.resolve({}) }));
-
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/contacts");
-
-    cleanup();
-    render(await NewContactPage({ searchParams: Promise.resolve({ returnTo: "/billings/new" }) }));
-
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/billings/new");
-  });
-
-  it("sends the contact edit form back to the contact it came from", async () => {
-    emptyApi();
-    render(await EditContactPage({ params: Promise.resolve({ id: "ana" }), searchParams: Promise.resolve({}) }));
-
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/contacts/ana");
-  });
-
-  it("names the screen the payment methods page came from", async () => {
-    emptyApi();
-    render(await PaymentMethodsPage({ searchParams: Promise.resolve({ returnTo: "/billings/new", required: "1" }) }));
-
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/billings/new");
-    expect(screen.getByText("Você precisa de um meio de pagamento para criar cobranças.")).toBeInTheDocument();
-  });
-
-  it("falls back to the profile on the payment methods page", async () => {
-    emptyApi();
-    render(await PaymentMethodsPage({ searchParams: Promise.resolve({}) }));
-
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/settings");
-  });
-
-  it("sends the payment method form back to the method list", async () => {
-    emptyApi();
-    render(await NewPaymentMethodPage({ searchParams: Promise.resolve({}) }));
-
-    expect(screen.getByRole("link", { name: "← Voltar" })).toHaveAttribute("href", "/settings/payment-methods");
   });
 });

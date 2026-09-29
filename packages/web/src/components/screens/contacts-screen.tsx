@@ -1,12 +1,10 @@
-"use client";
-
 import { contactBadge, formatPhoneBR, initialsOf, type Contact, type ContactsPage } from "@receivy/common";
 import { ChevronRight, Plus, Search } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
+import { Link } from "@/components/ui/link";
 import { StatusTag } from "@/components/ui/status-tag";
+import { apiFetch } from "@/lib/api/client";
 
 const LIST_ERROR = "Não foi possível carregar os contatos.";
 const LINK_ONLY = "Só por link";
@@ -32,7 +30,8 @@ function ContactCard({ contact }: { contact: Contact }) {
 
   return (
     <Link
-      href={`/contacts/${contact.id}`}
+      to="/contacts/$id"
+      params={{ id: contact.id }}
       aria-label={`Contato ${contact.displayName}`}
       className="flex min-h-16 items-center gap-3 rounded-2xl border border-outline/40 bg-surface p-4 transition hover:border-outline"
     >
@@ -69,7 +68,7 @@ export function ContactsScreen({ returnTo }: { returnTo?: string }) {
 
   // The form lives on its own screen, so a side trip from the billing draft has
   // to keep travelling: the list hands its own return path to the new contact.
-  const newContactHref = returnTo ? `/contacts/new?returnTo=${encodeURIComponent(returnTo)}` : "/contacts/new";
+  const newContactSearch = returnTo ? { returnTo } : undefined;
 
   // Every request carries the version it was born with. A slower `Carregar mais`
   // must not append the previous query's page onto fresh search results, rewind
@@ -84,7 +83,7 @@ export function ContactsScreen({ returnTo }: { returnTo?: string }) {
       const mine = ++version.current;
       const query = new URLSearchParams({ ...(search ? { search } : {}), ...(after ? { cursor: after } : {}) });
 
-      return browserFetch(`/api/contacts?${query}`)
+      return apiFetch(`contacts?${query}`)
         .then(async response => {
           if (!response.ok) {
             throw new Error(LIST_ERROR);
@@ -165,7 +164,8 @@ export function ContactsScreen({ returnTo }: { returnTo?: string }) {
 
         {/* Floats over the list on phones; sits in the heading row once there is room. */}
         <Link
-          href={newContactHref}
+          to="/contacts/new"
+          search={newContactSearch}
           className="fixed right-5 bottom-24 z-20 flex h-14 items-center gap-2 rounded-full bg-primary px-5 font-bold text-on-primary shadow-lg transition active:scale-[0.98] md:static md:h-12 md:shadow-none"
         >
           <Plus size={18} aria-hidden="true" />

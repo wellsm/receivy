@@ -1,5 +1,3 @@
-"use client";
-
 import { canAcceptProof, canDeclarePayment, canMarkPaid, canUploadProof, canWithdrawProof, fileSizeText, momentText, proofNote, proofStateLabel, ProofKind, ProofState, type ChargeDetail } from "@receivy/common";
 import { Check, CloudUpload, Eye, FileText, Image as ImageIcon, Loader2, Receipt } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -75,8 +73,7 @@ function PickedPreview({ file, url, busy, sending, onPick, onSend }: { file: Fil
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-outline/30 bg-surface-muted/50 p-3">
       {url ? (
-        // A blob URL from the viewer's own device: nothing for next/image to optimise or serve.
-        // eslint-disable-next-line @next/next/no-img-element
+        // A blob URL from the viewer's own device: nothing to optimise or serve.
         <img src={url} alt={`Prévia de ${file.name}`} className="max-h-56 w-full rounded-lg object-contain" />
       ) : (
         <div className="flex h-24 items-center justify-center rounded-lg bg-surface">

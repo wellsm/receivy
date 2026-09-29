@@ -1,7 +1,5 @@
-"use client";
-
 import { Plus, Search, SlidersHorizontal } from "lucide-react";
-import Link from "next/link";
+import { Link } from "@/components/ui/link";
 
 type SearchFooterProps = {
   placeholder: string;
@@ -53,7 +51,7 @@ export function SearchFooter({
       </label>
 
       <Link
-        href="/billings/new"
+        to="/billings/new"
         aria-label="Nova conta"
         className="flex size-11 shrink-0 items-center justify-center rounded-[14px] bg-primary text-on-primary"
       >

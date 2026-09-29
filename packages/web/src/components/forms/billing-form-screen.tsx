@@ -1,5 +1,3 @@
-"use client";
-
 import {
   billingCategoryColor,
   billingCategoryLabel,
@@ -69,7 +67,6 @@ import {
   Loader2,
   Users,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -78,11 +75,6 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
-import { responseMessage } from "@/lib/financial-response";
-import { loadPlanSummary } from "@/lib/plan-summary";
-import { visibleChannels, whatsappEnabled } from "@/lib/whatsapp-flag";
 import { BillingDialog } from "@/components/app/billing-dialog";
 import { ContactPickerSheet } from "@/components/app/contact-picker-sheet";
 import { PlanPaywall } from "@/components/app/plan-paywall";
@@ -96,6 +88,13 @@ import { CategoryIcon } from "@/components/ui/category-icon";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { ProviderIcon } from "@/components/ui/provider-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
+import { apiFetch } from "@/lib/api/client";
+import { currentUser } from "@/lib/auth/flows";
+import { saveDraft, takeDraft, type StoredDraft } from "@/lib/billing-draft";
+import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
+import { loadPlanSummary } from "@/lib/plan-summary";
+import { visibleChannels, whatsappEnabled } from "@/lib/whatsapp-flag";
 import { DetailCard, DetailRow } from "./billing/detail-row";
 import {
   AmountTitleFields,
@@ -165,7 +164,7 @@ class PlanError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await browserFetch(path, init);
+  const response = await apiFetch(path, init);
 
   if (!response.ok) {
     const payload = await response
@@ -373,7 +372,7 @@ export function BillingFormScreen({
   billing,
   onSaved,
 }: BillingFormScreenProps) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [draft, setDraft] = useState<BillingDraft>(() =>
     billing
       ? draftFromBilling(billing)
@@ -418,7 +417,7 @@ export function BillingFormScreen({
   useEffect(() => {
     let live = true;
 
-    request<WhatsappSettings>("/api/financial/whatsapp")
+    request<WhatsappSettings>("whatsapp")
       .then((settings) => {
         if (live) {
           setGroupsReady(
@@ -439,7 +438,7 @@ export function BillingFormScreen({
   const loadGroups = useCallback(
     (participants: string[]) =>
       request<{ groups: WhatsappGroup[] }>(
-        `/api/financial/whatsapp/groups?participants=${encodeURIComponent(participants.join(","))}`,
+        `whatsapp/groups?participants=${encodeURIComponent(participants.join(","))}`,
       ).then((body) => body.groups),
     [],
   );
@@ -474,13 +473,13 @@ export function BillingFormScreen({
     let live = true;
 
     void Promise.all([
-      request<ContactsPage>("/api/contacts?sort=recent"),
+      request<ContactsPage>("contacts?sort=recent"),
       request<{ paymentMethods: PaymentMethod[] }>(
-        "/api/financial/payment-methods",
+        "payment-methods",
       ),
       billing || stored
         ? Promise.resolve(null)
-        : request<{ user: { timezone: string } }>("/api/auth/me"),
+        : currentUser(),
     ])
       .then(([agenda, keys, me]) => {
         if (!live) {
@@ -511,7 +510,7 @@ export function BillingFormScreen({
             ...base,
             pix,
             ...(me
-              ? { timezone: me.user.timezone, start: todayIn(me.user.timezone) }
+              ? { timezone: me.timezone, start: todayIn(me.timezone) }
               : {}),
           };
         });
@@ -548,7 +547,7 @@ export function BillingFormScreen({
 
     let live = true;
 
-    void request<ReminderSettings>("/api/financial/account/reminders")
+    void request<ReminderSettings>("account/reminders")
       .then((settings) => {
         if (live) {
           setEffective(settings.config.reminders);
@@ -574,7 +573,7 @@ export function BillingFormScreen({
     let live = true;
 
     void request<PaymentMethodsPage>(
-      `/api/financial/payment-methods?contactId=${contactId}`,
+      `payment-methods?contactId=${contactId}`,
     )
       .then((page) => {
         if (!live) {
@@ -671,7 +670,7 @@ export function BillingFormScreen({
 
   function leaveTo(path: string) {
     saveDraft(draft, RETURN_TO, step);
-    router.push(path);
+    navigate(path);
   }
 
   /** The key of a conta a pagar lives on the contact: the hint sends the owner there and back. */
@@ -681,7 +680,7 @@ export function BillingFormScreen({
 
     // An edit is not restorable from a stored draft: only a creation leaves one behind.
     if (editing) {
-      router.push(path);
+      navigate(path);
 
       return;
     }
@@ -710,7 +709,7 @@ export function BillingFormScreen({
     try {
       const saved = billing
         ? await request<BillingDetail>(
-            `/api/financial/billings/${billing.id}`,
+            `billings/${billing.id}`,
             {
               method: "PATCH",
               headers: { "content-type": "application/json" },
@@ -721,7 +720,7 @@ export function BillingFormScreen({
               ),
             },
           )
-        : await request<BillingDetail>("/api/financial/billings", {
+        : await request<BillingDetail>("billings", {
             method: "POST",
             headers: {
               "content-type": "application/json",

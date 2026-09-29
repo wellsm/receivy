@@ -2,10 +2,10 @@ import { PlanTier, SubscriptionStatus, type PlanSummary } from "@receivy/common"
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { PlanScreen } from "@/components/screens/plan-screen";
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
+const API = "https://api.test";
+
 vi.mock("@/lib/stripe", () => ({ stripePromise: () => Promise.resolve({}), stripeConfigured: () => true, PLAN_BASIC_PRICE_CENTS: 1990 }));
 vi.mock("@/components/app/plan-checkout", () => ({
   PlanCheckout: ({ mode, onDone }: { mode: string; onDone: (id?: string) => void }) => (
@@ -20,10 +20,10 @@ function api(summaries: PlanSummary[]) {
   const sent: { path: string; init?: RequestInit }[] = [];
   let reads = 0;
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init) => {
+  vi.stubGlobal("fetch", vi.fn(async (path: string, init?: RequestInit) => {
     sent.push({ path, init });
 
-    if (path === "/api/financial/plan" && !init?.method) {
+    if (path === `${API}/plan` && !init?.method) {
       const summary = summaries[Math.min(reads, summaries.length - 1)]!;
 
       reads += 1;
@@ -31,7 +31,7 @@ function api(summaries: PlanSummary[]) {
       return Response.json(summary);
     }
 
-    if (path === "/api/financial/plan/invoices") {
+    if (path === `${API}/plan/invoices`) {
       return Response.json({
         invoices: [
           { id: "in_1", amountCents: 1990, status: "paid", paidAt: "2026-09-19T12:00:00.000Z", pdfUrl: "https://stripe.example/in_1.pdf" },
@@ -40,21 +40,26 @@ function api(summaries: PlanSummary[]) {
       });
     }
 
-    if (path === "/api/financial/plan/subscribe" || path === "/api/financial/plan/payment-method") {
+    if (path === `${API}/plan/subscribe` || path === `${API}/plan/payment-method`) {
       return Response.json({ clientSecret: "secret" });
     }
 
     return new Response(null, { status: 204 });
-  });
+  }));
 
   return sent;
 }
 
-beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.resetAllMocks();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 it("describes the free plan with its usage and a subscribe button", async () => {
@@ -79,7 +84,7 @@ it("subscribes inline and polls until the plan turns basic", async () => {
   await act(async () => { await vi.advanceTimersByTimeAsync(4_100); });
 
   expect(await screen.findByText("Plano Básico ativo")).toBeInTheDocument();
-  expect(sent.some(({ path, init }) => path === "/api/financial/plan/subscribe" && init?.method === "POST")).toBe(true);
+  expect(sent.some(({ path, init }) => path === `${API}/plan/subscribe` && init?.method === "POST")).toBe(true);
 });
 
 it("shows the paid plan with card, renewal, invoices, cancel and card change", async () => {
@@ -95,11 +100,11 @@ it("shows the paid plan with card, renewal, invoices, cancel and card change", a
   expect(screen.queryByText("open")).not.toBeInTheDocument();
 
   await userEvent.click(screen.getByRole("button", { name: "Cancelar ao fim do período" }));
-  expect(sent.some(({ path, init }) => path === "/api/financial/plan/cancel" && init?.method === "POST")).toBe(true);
+  expect(sent.some(({ path, init }) => path === `${API}/plan/cancel` && init?.method === "POST")).toBe(true);
 
   await userEvent.click(screen.getByRole("button", { name: "Trocar cartão" }));
   await userEvent.click(await screen.findByRole("button", { name: "checkout:setup" }));
-  expect(sent.some(({ path, init }) => path === "/api/financial/plan/payment-method/confirm" && init?.body === JSON.stringify({ paymentMethodId: "pm_9" }))).toBe(true);
+  expect(sent.some(({ path, init }) => path === `${API}/plan/payment-method/confirm` && init?.body === JSON.stringify({ paymentMethodId: "pm_9" }))).toBe(true);
 });
 
 it("offers Retomar when the cancel is scheduled", async () => {
@@ -122,4 +127,12 @@ it("keeps the subscribe button hidden and shows a persistent message when the po
 
   expect(await screen.findByText("Ainda confirmando o pagamento. Recarregue a página em instantes ou confira seu e-mail.")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Assinar o Básico" })).not.toBeInTheDocument();
+});
+
+it("shows the Portuguese fallback when the plan cannot be reached", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+  render(<PlanScreen />);
+
+  expect(await screen.findByText("Não foi possível carregar seu plano.")).toBeInTheDocument();
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
 });

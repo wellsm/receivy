@@ -1,15 +1,16 @@
 import { PlanTier, SubscriptionStatus, type PlanSummary } from "@receivy/common";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BillingsScreen } from "@/components/screens/billings-screen";
+import { renderWithRouter } from "@/test/render";
 
-const router = { push: vi.fn(), replace: vi.fn() };
+const navigate = vi.fn();
 const writeText = vi.fn(async () => {});
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
+
+const API = "https://api.test";
 
 /** userEvent installs its own clipboard stub on setup, so ours has to land afterwards. */
 function setup(options: Parameters<typeof userEvent.setup>[0] = {}) {
@@ -19,6 +20,10 @@ function setup(options: Parameters<typeof userEvent.setup>[0] = {}) {
 
   return user;
 }
+
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+});
 
 afterEach(() => {
   cleanup();
@@ -61,13 +66,13 @@ function shiftDays(days: number): string {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-type Handler = (path: string, init?: RequestInit) => Response | undefined;
+type Handler = (url: string, init?: RequestInit) => Response | undefined;
 
-function isList(path: string): boolean {
-  return path === "/api/financial/billings" || path.startsWith("/api/financial/billings?");
+function isList(url: string): boolean {
+  return url === `${API}/billings` || url.startsWith(`${API}/billings?`);
 }
 
-/** A recorded call (`GET /api/...`) that listed billings. */
+/** A recorded call (`GET https://api.test/...`) that listed billings. */
 function isListCall(call: string): boolean {
   return isList(call.replace(/^[A-Z]+ /, ""));
 }
@@ -78,21 +83,23 @@ const defaultPlan: PlanSummary = { plan: PlanTier.Free, status: null, currentPer
 function mockApi(handler: Handler): string[] {
   const calls: string[] = [];
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-    calls.push(`${init?.method ?? "GET"} ${path}`);
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push(`${init?.method ?? "GET"} ${url}`);
 
-    const custom = handler(path, init);
+    const custom = handler(url, init);
 
     if (custom) {
       return custom;
     }
 
-    if (path === "/api/financial/plan") {
+    if (url === `${API}/plan`) {
       return Response.json(defaultPlan);
     }
 
     return Response.json({ billings: [], nextCursor: null });
   });
+
+  vi.stubGlobal("fetch", fetchMock);
 
   return calls;
 }
@@ -100,13 +107,13 @@ function mockApi(handler: Handler): string[] {
 const COUNTS = { active: 7, paused: 1, ended: 4, monthCharges: 23 };
 
 function listOnly(billings: unknown[], nextCursor: string | null = null): string[] {
-  return mockApi((path) => (isList(path) ? Response.json({ billings, nextCursor, counts: COUNTS }) : undefined));
+  return mockApi((url) => (isList(url) ? Response.json({ billings, nextCursor, counts: COUNTS }) : undefined));
 }
 
 it("renders one card per billing with badges, relative due date, amount and next due date", async () => {
   listOnly([summary(), summary({ id: "b2", description: "Aluguel", nextDueDate: shiftDays(-1), category: "housing", participantCount: 1 })]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const card = await screen.findByRole("article", { name: "Cobrança Churrasco" });
 
@@ -123,14 +130,17 @@ it("renders one card per billing with badges, relative due date, amount and next
 });
 
 it("sends the search term after the debounce without a state filter", async () => {
-  vi.useFakeTimers();
-
   const calls = listOnly([summary()]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
+
+  // The router resolves the initial route on real timers; fake timers only take over once it has settled.
+  const search = await screen.findByLabelText("Buscar por título ou descrição");
+
+  vi.useFakeTimers();
 
   // userEvent's async wrapper deadlocks under vitest fake timers, so this one drives the DOM directly.
-  fireEvent.change(screen.getByLabelText("Buscar por título ou descrição"), { target: { value: "churr" } });
+  fireEvent.change(search, { target: { value: "churr" } });
   expect(calls.filter((call) => call.includes("search="))).toEqual([]);
 
   await act(async () => {
@@ -151,7 +161,7 @@ it("shows only active billings by default and switches state without asking the 
     summary({ id: "b3", description: "Academia", recurrence: "indefinite", state: "paused" }),
   ]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const user = setup();
 
@@ -167,13 +177,13 @@ it("shows only active billings by default and switches state without asking the 
   await user.click(screen.getByRole("radio", { name: "Pausadas" }));
 
   expect(screen.getByRole("article", { name: "Cobrança Academia" })).toBeInTheDocument();
-  expect(calls.filter((call) => call.startsWith("GET /api/financial/billings"))).toHaveLength(1);
+  expect(calls.filter((call) => call.startsWith(`GET ${API}/billings`))).toHaveLength(1);
 });
 
 it("explains an empty state filter instead of hiding everything silently", async () => {
   listOnly([summary()]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const user = setup();
 
@@ -185,70 +195,70 @@ it("explains an empty state filter instead of hiding everything silently", async
 });
 
 it("shares the public link of the only pending charge", async () => {
-  const calls = mockApi((path, init) => {
-    if (path === "/api/financial/charges/c9/public-link" && init?.method === "POST") {
+  const calls = mockApi((url, init) => {
+    if (url === `${API}/charges/c9/public-link` && init?.method === "POST") {
       return Response.json({ token: "tk", expiresAt: "2026-10-08T00:00:00Z" });
     }
-    if (isList(path)) {
+    if (isList(url)) {
       return Response.json({ billings: [summary({ shareChargeId: "c9" })], nextCursor: null });
     }
 
     return undefined;
   });
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const user = setup();
 
   await user.click(await screen.findByRole("button", { name: "Compartilhar" }));
 
-  expect(calls).toContain("POST /api/financial/charges/c9/public-link");
+  expect(calls).toContain(`POST ${API}/charges/c9/public-link`);
   expect(writeText).toHaveBeenCalledWith("http://localhost:3000/pay/tk");
   expect(await screen.findByRole("status")).toHaveTextContent("Link copiado");
 });
 
 it("opens the charge when the public link cannot be published", async () => {
-  mockApi((path, init) => {
-    if (path === "/api/financial/charges/c9/public-link" && init?.method === "POST") {
+  mockApi((url, init) => {
+    if (url === `${API}/charges/c9/public-link` && init?.method === "POST") {
       return Response.json({ message: "Cadastre uma chave Pix." }, { status: 422 });
     }
-    if (isList(path)) {
+    if (isList(url)) {
       return Response.json({ billings: [summary({ shareChargeId: "c9" })], nextCursor: null });
     }
 
     return undefined;
   });
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const user = setup();
 
   await user.click(await screen.findByRole("button", { name: "Compartilhar" }));
 
-  expect(router.push).toHaveBeenCalledWith("/charges/c9");
+  expect(navigate).toHaveBeenCalledWith("/charges/c9");
 });
 
 it("opens the billing detail route when there is no single charge to share, and from the card itself", async () => {
   listOnly([summary()]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const user = setup();
 
   await user.click(await screen.findByRole("button", { name: "Compartilhar" }));
 
-  expect(router.push).toHaveBeenCalledWith("/billings/b1");
+  expect(navigate).toHaveBeenCalledWith("/billings/b1");
 
   await user.click(screen.getByRole("button", { name: "Abrir Churrasco" }));
 
-  expect(router.push).toHaveBeenCalledTimes(2);
-  expect(router.push).toHaveBeenLastCalledWith("/billings/b1");
+  expect(navigate).toHaveBeenCalledTimes(2);
+  expect(navigate).toHaveBeenLastCalledWith("/billings/b1");
 });
 
 it("filters one direction on the loaded list without asking the API again", async () => {
   const calls = listOnly([summary(), summary({ id: "b2", description: "Streaming", type: "payable", contact: ana, counterpart: ana })]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const user = setup();
 
@@ -267,7 +277,7 @@ it("filters one direction on the loaded list without asking the API again", asyn
 it("reads the API counts in the narrow header and on the state tabs", async () => {
   listOnly([summary()]);
 
-  render(<BillingsScreen user={{ name: "Wellington Silva", avatar: null }} />);
+  renderWithRouter(<BillingsScreen user={{ name: "Wellington Silva", avatar: null }} />);
 
   expect(await screen.findByText("7 ativas · 23 cobranças no mês")).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Pausadas (1)" })).toHaveAttribute("aria-selected", "false");
@@ -279,7 +289,7 @@ it("reads the API counts in the narrow header and on the state tabs", async () =
 it("filters by frequency and category from the footer sheet", async () => {
   listOnly([summary(), summary({ id: "b2", description: "Youtube", recurrence: "indefinite", category: "subscription" })]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const user = setup();
 
@@ -297,7 +307,7 @@ it("filters by frequency and category from the footer sheet", async () => {
 it("shows the narrow card chips and next due date", async () => {
   listOnly([summary({ recurrence: "until", installmentCount: 12, paidCount: 2, chargeCount: 12, splitMode: "shares" })]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const card = await screen.findByRole("article", { name: "Cobrança Churrasco" });
 
@@ -309,7 +319,7 @@ it("shows the narrow card chips and next due date", async () => {
 it("opens a conta a pagar from its card action instead of sharing a link", async () => {
   const calls = listOnly([summary({ type: "payable", contact: ana, counterpart: ana, shareChargeId: "c9" })]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const user = setup();
 
@@ -321,14 +331,14 @@ it("opens a conta a pagar from its card action instead of sharing a link", async
 
   await user.click(within(card).getByRole("button", { name: "Ver conta" }));
 
-  expect(router.push).toHaveBeenCalledWith("/billings/b1");
+  expect(navigate).toHaveBeenCalledWith("/billings/b1");
   expect(calls.some((call) => call.includes("public-link"))).toBe(false);
 });
 
 it("shows the empty state and keeps the + of the footer to create a billing", async () => {
   listOnly([]);
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   expect(await screen.findByText("Nenhuma conta ainda")).toBeInTheDocument();
 
@@ -344,18 +354,18 @@ it("shows the empty state and keeps the + of the footer to create a billing", as
 });
 
 it("loads the next page when asked", async () => {
-  const calls = mockApi((path) => {
-    if (path.includes("cursor=c2")) {
+  const calls = mockApi((url) => {
+    if (url.includes("cursor=c2")) {
       return Response.json({ billings: [summary({ id: "b2", description: "Aluguel" })], nextCursor: null });
     }
-    if (isList(path)) {
+    if (isList(url)) {
       return Response.json({ billings: [summary()], nextCursor: "c2" });
     }
 
     return undefined;
   });
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const user = setup();
 
@@ -369,9 +379,9 @@ it("loads the next page when asked", async () => {
 it("shows the usage pill next to Nova conta when close to the plan limit", async () => {
   const basicUsage: PlanSummary = { plan: PlanTier.Basic, status: SubscriptionStatus.Active, currentPeriodEnd: "2026-10-19T12:00:00.000Z", cancelAtPeriodEnd: false, usage: { indefinite: { used: 4, limit: 5 } }, checkoutLinks: true, card: null };
 
-  mockApi((path) => (path === "/api/financial/plan" ? Response.json(basicUsage) : undefined));
+  mockApi((url) => (url === `${API}/plan` ? Response.json(basicUsage) : undefined));
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   const pill = await screen.findByRole("link", { name: "4 de 5 cobranças indefinidas" });
 
@@ -381,12 +391,12 @@ it("shows the usage pill next to Nova conta when close to the plan limit", async
 it("hides the usage pill when far from the plan limit", async () => {
   const farFromLimit: PlanSummary = { plan: PlanTier.Free, status: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, usage: { indefinite: { used: 2, limit: 5 } }, checkoutLinks: false, card: null };
 
-  const calls = mockApi((path) => (path === "/api/financial/plan" ? Response.json(farFromLimit) : undefined));
+  const calls = mockApi((url) => (url === `${API}/plan` ? Response.json(farFromLimit) : undefined));
 
-  render(<BillingsScreen />);
+  renderWithRouter(<BillingsScreen />);
 
   await screen.findByText("Nenhuma conta ainda");
-  await vi.waitFor(() => expect(calls).toContain("GET /api/financial/plan"));
+  await vi.waitFor(() => expect(calls).toContain(`GET ${API}/plan`));
 
   expect(screen.queryByRole("link", { name: /cobranças indefinidas/ })).not.toBeInTheDocument();
 });

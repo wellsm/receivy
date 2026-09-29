@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -19,16 +19,20 @@ import {
   type ChargeDetail,
   type ChargeProof,
 } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
 import { ChargeDetailScreen } from "@/components/screens/charge-detail-screen";
+import { renderWithRouter } from "@/test/render";
 
-const routerMock = { push: vi.fn(), replace: vi.fn() };
+const navigate = vi.fn();
 
-vi.mock("@/lib/auth/browser-fetch", () => ({ browserFetch: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => routerMock }));
+vi.mock("@/lib/navigate", () => ({ useAppNavigate: () => navigate }));
+
+const API = "https://api.test";
 
 // Every existing test assumes WhatsApp shows in the reminder preview; the kill-switch test flips the flag off itself.
-beforeEach(() => { vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "true"); });
+beforeEach(() => {
+  vi.stubEnv("VITE_API_URL", API);
+  vi.stubEnv("VITE_WHATSAPP_ENABLED", "true");
+});
 afterEach(() => { cleanup(); vi.resetAllMocks(); vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 function charge(overrides: Partial<ChargeDetail> = {}): ChargeDetail {
@@ -72,14 +76,16 @@ function proof(overrides: Partial<ChargeProof> = {}): ChargeProof {
   };
 }
 
-/** Routes the BFF calls the screen makes; unknown paths answer with the charge itself. Also records every call made. */
+/** Routes the API calls the screen makes; unknown paths answer with the charge itself. Also records every call made. */
 function serve(detail: ChargeDetail, extra: Record<string, () => Response> = {}) {
   const calls: [string, RequestInit | undefined][] = [];
 
-  vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-    calls.push([String(path), init]);
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const path = url.startsWith(`${API}/`) ? url.slice(API.length + 1) : url;
 
-    const key = `${init?.method ?? "GET"} ${String(path)}`;
+    calls.push([path, init]);
+
+    const key = `${init?.method ?? "GET"} ${path}`;
     const handler = Object.entries(extra).find(([route]) => route === key)?.[1];
 
     if (handler) {
@@ -88,6 +94,8 @@ function serve(detail: ChargeDetail, extra: Record<string, () => Response> = {})
 
     return Response.json(detail);
   });
+
+  vi.stubGlobal("fetch", fetchMock);
 
   return calls;
 }
@@ -100,9 +108,19 @@ async function confirmMarkPaid() {
 }
 
 describe("ChargeDetailScreen", () => {
+  it("encodes the id from the URL into the API path", async () => {
+    const calls = serve(charge());
+
+    renderWithRouter(<ChargeDetailScreen id="a/b" />);
+
+    expect(await screen.findByRole("heading", { name: "Aluguel" })).toBeInTheDocument();
+    expect(calls[0]?.[0]).toBe("charges/a%2Fb");
+    expect(calls.some(([path]) => path.startsWith("charges/a/b"))).toBe(false);
+  });
+
   it("selects an owned Pix explicitly before first publication", async () => {
-    serve(charge({ direction: Direction.Receivable, payment: null, sharingState: SharingState.PixRequired }), {
-      "GET /api/financial/payment-methods": () =>
+    const calls = serve(charge({ direction: Direction.Receivable, payment: null, sharingState: SharingState.PixRequired }), {
+      "GET payment-methods": () =>
         Response.json({
           paymentMethods: [
             {
@@ -118,23 +136,25 @@ describe("ChargeDetailScreen", () => {
             },
           ],
         }),
-      "POST /api/financial/charges/charge/public-link": () => Response.json({ token: "fixture", expiresAt: "2030-01-01" }),
+      "POST charges/charge/public-link": () => Response.json({ token: "fixture", expiresAt: "2030-01-01" }),
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     await screen.findByRole("option", { name: "E-mail · pix@example.com" });
 
     fireEvent.change(await screen.findByLabelText("Pix para esta cobrança"), { target: { value: "method" } });
     fireEvent.click(screen.getByRole("button", { name: "Publicar com este meio" }));
 
-    await waitFor(() => expect(browserFetch).toHaveBeenCalledWith("/api/financial/charges/charge/public-link", expect.objectContaining({ body: JSON.stringify({ paymentMethodId: "method" }) })));
+    await waitFor(() =>
+      expect(calls).toContainEqual(["charges/charge/public-link", expect.objectContaining({ body: JSON.stringify({ paymentMethodId: "method" }) })]),
+    );
   });
 
   it("shows honest manual-history guidance for a legacy published null snapshot", async () => {
     serve(charge({ direction: Direction.Receivable, payment: null, sharingState: SharingState.LegacyWithoutPix }));
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText(/publicada sem Pix/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Compartilhar" })).not.toBeInTheDocument();
@@ -146,7 +166,7 @@ describe("ChargeDetailScreen", () => {
   ])("does not instruct a debtor to pay a %s charge", async (state, guidance) => {
     serve(charge({ state, cancelledAt: state === "cancelled" ? "2026-09-01" : null, paidAt: state === "paid" ? "2026-09-01" : null }));
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText(guidance)).toBeInTheDocument();
     expect(screen.queryByText(/antes de transferir|Faça o Pix|Pague usando/)).not.toBeInTheDocument();
@@ -156,7 +176,7 @@ describe("ChargeDetailScreen", () => {
   it("keeps the debtor read-only with the hero, amount and upload card", async () => {
     serve(charge());
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByRole("heading", { name: "Aluguel" })).toBeInTheDocument();
     expect(screen.getByText("Parcela 2 de 3")).toBeInTheDocument();
@@ -178,16 +198,20 @@ describe("ChargeDetailScreen", () => {
     });
     const put = vi.fn(async () => new Response(null, { status: 200 }));
 
-    vi.stubGlobal("fetch", put);
-    vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-      if (init?.method === "POST" && path === "/api/financial/charges/charge/proof") {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT" && url === "https://bucket.test/put") {
+        return put();
+      }
+      if (init?.method === "POST" && url === `${API}/charges/charge/proof`) {
         return ticket();
       }
 
       return Response.json(current);
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     const input = await screen.findByLabelText("Comprovante JPG, PNG ou PDF");
 
@@ -201,10 +225,10 @@ describe("ChargeDetailScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
 
     await waitFor(() => expect(ticket).toHaveBeenCalled());
-    await waitFor(() => expect(put).toHaveBeenCalledWith("https://bucket.test/put", expect.objectContaining({ method: "PUT" })));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("https://bucket.test/put", expect.objectContaining({ method: "PUT" })));
 
     expect(await screen.findByText("Comprovante enviado para revisão.")).toBeInTheDocument();
-    expect(routerMock.push).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
   });
@@ -212,7 +236,7 @@ describe("ChargeDetailScreen", () => {
   it("offers a replacement only after the last proof was rejected", async () => {
     serve(charge({ proofState: ProofState.Rejected, proof: proof({ state: ProofState.Rejected, reason: "Ilegível", sentByViewer: true }) }));
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText("Comprovante rejeitado: Ilegível. Você pode enviar outro arquivo.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Substituir" })).toBeInTheDocument();
@@ -223,9 +247,9 @@ describe("ChargeDetailScreen", () => {
     const pending = charge({ direction: Direction.Receivable, proofState: ProofState.Pending, proof: proof() });
     const review = vi.fn(() => Response.json({ ...pending, state: "paid", proofState: "accepted", proof: proof({ state: ProofState.Accepted }), paidAt: "2026-09-08T12:00:00Z" }));
 
-    serve(pending, { "POST /api/financial/charges/charge/proof/review": review });
+    const calls = serve(pending, { "POST charges/charge/proof/review": review });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText("Valor a receber")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Marcar como pago" }));
@@ -235,7 +259,7 @@ describe("ChargeDetailScreen", () => {
 
     await waitFor(() => expect(review).toHaveBeenCalled());
 
-    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/charges/charge/pay", expect.anything());
+    expect(calls.some(([path]) => path === "charges/charge/pay")).toBe(false);
     expect(await screen.findByText("Comprovante aceito e pagamento registrado.")).toBeInTheDocument();
     expect(screen.getByText("Aceito")).toBeInTheDocument();
   });
@@ -244,9 +268,9 @@ describe("ChargeDetailScreen", () => {
     const paid = charge({ direction: Direction.Payable, ownedByViewer: true, hasPix: true, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z" });
     const pay = vi.fn(() => Response.json(paid));
 
-    serve(charge({ direction: Direction.Payable, ownedByViewer: true, hasPix: true }), { "POST /api/financial/charges/charge/pay": pay });
+    serve(charge({ direction: Direction.Payable, ownedByViewer: true, hasPix: true }), { "POST charges/charge/pay": pay });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText("Minha conta")).toBeInTheDocument();
     expect(screen.getByText("Vai receber de você")).toBeInTheDocument();
@@ -274,7 +298,7 @@ describe("ChargeDetailScreen", () => {
   it("names a conta a pagar without payee as the owner's alone", async () => {
     serve(charge({ direction: Direction.Payable, ownedByViewer: true, hasPix: false, payment: null, counterpartName: "Você", recipient: { userId: null, name: "Você", email: null }, debtorId: null }));
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText("Conta só sua")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Marcar como pago" })).toBeInTheDocument();
@@ -286,9 +310,9 @@ describe("ChargeDetailScreen", () => {
     const pending = charge({ direction: Direction.Receivable, ownedByViewer: false, hasPix: true, proofState: ProofState.Pending, proof: proof() });
     const review = vi.fn(() => Response.json({ ...pending, state: "paid", proofState: "accepted", proof: proof({ state: ProofState.Accepted }) }));
 
-    serve(pending, { "POST /api/financial/charges/charge/proof/review": review });
+    const calls = serve(pending, { "POST charges/charge/proof/review": review });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText("Vai pagar para você")).toBeInTheDocument();
     expect(screen.queryByText("Minha conta")).not.toBeInTheDocument();
@@ -305,7 +329,7 @@ describe("ChargeDetailScreen", () => {
 
     await waitFor(() => expect(review).toHaveBeenCalled());
 
-    expect(browserFetch).not.toHaveBeenCalledWith("/api/financial/charges/charge/pay", expect.anything());
+    expect(calls.some(([path]) => path === "charges/charge/pay")).toBe(false);
   });
 
   it("marks a charge without proof as paid directly and reminds the debtor", async () => {
@@ -314,12 +338,12 @@ describe("ChargeDetailScreen", () => {
     const remind = vi.fn(() => Response.json({ channels: [NoticeChannel.Push], dropped: [] }));
 
     serve(charge({ direction: Direction.Receivable }), {
-      "GET /api/financial/charges/charge/reminders/preview": () => Response.json({ channels: [NoticeChannel.Push], dropped: [] }),
-      "POST /api/financial/charges/charge/pay": pay,
-      "POST /api/financial/charges/charge/reminders": remind,
+      "GET charges/charge/reminders/preview": () => Response.json({ channels: [NoticeChannel.Push], dropped: [] }),
+      "POST charges/charge/pay": pay,
+      "POST charges/charge/reminders": remind,
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
 
@@ -346,13 +370,13 @@ describe("ChargeDetailScreen", () => {
 
   it("previews the reminder channels before sending and reports what went out", async () => {
     serve(charge({ direction: Direction.Receivable }), {
-      "GET /api/financial/charges/charge/reminders/preview": () =>
+      "GET charges/charge/reminders/preview": () =>
         Response.json({ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }),
-      "POST /api/financial/charges/charge/reminders": () =>
+      "POST charges/charge/reminders": () =>
         Response.json({ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }),
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
 
@@ -365,13 +389,13 @@ describe("ChargeDetailScreen", () => {
   });
 
   it("drops WhatsApp from the reminder preview when the kill switch is off", async () => {
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
     serve(charge({ direction: Direction.Receivable }), {
-      "GET /api/financial/charges/charge/reminders/preview": () =>
+      "GET charges/charge/reminders/preview": () =>
         Response.json({ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }),
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
 
@@ -380,14 +404,14 @@ describe("ChargeDetailScreen", () => {
   });
 
   it("keeps WhatsApp in the reminder preview with only the Evolution flag on", async () => {
-    vi.stubEnv("NEXT_PUBLIC_WHATSAPP_ENABLED", "false");
-    vi.stubEnv("NEXT_PUBLIC_EVOLUTION_ENABLED", "true");
+    vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
+    vi.stubEnv("VITE_EVOLUTION_ENABLED", "true");
     serve(charge({ direction: Direction.Receivable }), {
-      "GET /api/financial/charges/charge/reminders/preview": () =>
+      "GET charges/charge/reminders/preview": () =>
         Response.json({ channels: [NoticeChannel.Push, NoticeChannel.Email], dropped: [{ channel: NoticeChannel.WhatsApp, reason: DropReason.NoPhone }] }),
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
 
@@ -396,10 +420,10 @@ describe("ChargeDetailScreen", () => {
 
   it("disables sending when nobody is reachable", async () => {
     serve(charge({ direction: Direction.Receivable }), {
-      "GET /api/financial/charges/charge/reminders/preview": () => Response.json({ channels: [], dropped: [{ channel: NoticeChannel.Email, reason: DropReason.NoEmail }] }),
+      "GET charges/charge/reminders/preview": () => Response.json({ channels: [], dropped: [{ channel: NoticeChannel.Email, reason: DropReason.NoEmail }] }),
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
 
@@ -411,11 +435,11 @@ describe("ChargeDetailScreen", () => {
     const remind = vi.fn(() => Response.json({ channels: [NoticeChannel.Push], dropped: [] }));
 
     serve(charge({ direction: Direction.Receivable }), {
-      "GET /api/financial/charges/charge/reminders/preview": () => Response.json({ message: "boom" }, { status: 500 }),
-      "POST /api/financial/charges/charge/reminders": remind,
+      "GET charges/charge/reminders/preview": () => Response.json({ message: "boom" }, { status: 500 }),
+      "POST charges/charge/reminders": remind,
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     await userEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
 
@@ -431,8 +455,8 @@ describe("ChargeDetailScreen", () => {
   it("keeps the newest preview when a stale request resolves after the dialog reopens", async () => {
     const previews: ((result: { channels: NoticeChannel[]; dropped: { channel: NoticeChannel; reason: DropReason }[] }) => void)[] = [];
 
-    vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-      if ((init?.method ?? "GET") === "GET" && String(path) === "/api/financial/charges/charge/reminders/preview") {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url === `${API}/charges/charge/reminders/preview`) {
         return new Promise<Response>((resolve) => {
           previews.push((result) => resolve(Response.json(result)));
         });
@@ -441,7 +465,9 @@ describe("ChargeDetailScreen", () => {
       return Response.json(charge({ direction: Direction.Receivable }));
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Lembrar" }));
 
@@ -476,9 +502,9 @@ describe("ChargeDetailScreen", () => {
     const reopened = charge({ direction: Direction.Receivable });
     const reopen = vi.fn(() => Response.json(reopened));
 
-    serve(charge({ direction: Direction.Receivable, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z" }), { "POST /api/financial/charges/charge/reopen": reopen });
+    serve(charge({ direction: Direction.Receivable, state: ChargeState.Paid, paidAt: "2026-09-08T12:00:00Z" }), { "POST charges/charge/reopen": reopen });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText("Valor a receber")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Marcar pago" })).not.toBeInTheDocument();
@@ -502,7 +528,7 @@ describe("ChargeDetailScreen", () => {
   it("hides Lembrar when the debtor cannot be reached", async () => {
     serve(charge({ direction: Direction.Receivable, counterpartReachable: false }));
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByRole("button", { name: "Compartilhar" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Lembrar" })).not.toBeInTheDocument();
@@ -513,9 +539,9 @@ describe("ChargeDetailScreen", () => {
     const writeText = vi.fn(async () => {});
 
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    serve(detail, { "POST /api/financial/charges/charge/public-link": () => Response.json({ token: "tk", expiresAt: "2030-01-01" }) });
+    serve(detail, { "POST charges/charge/public-link": () => Response.json({ token: "tk", expiresAt: "2030-01-01" }) });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Compartilhar" }));
 
@@ -534,10 +560,10 @@ describe("ChargeDetailScreen", () => {
     });
 
     serve(charge({ confirmationRequired: true }), {
-      "POST /api/financial/charges/charge/proof/declaration": () => Response.json(declared),
+      "POST charges/charge/proof/declaration": () => Response.json(declared),
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Já paguei" }));
 
@@ -561,9 +587,9 @@ describe("ChargeDetailScreen", () => {
     });
     const refused = { ...declared, proofState: ProofState.Rejected, proof: proof({ kind: ProofKind.Declaration, file: null, state: ProofState.Rejected, reason: "Não caiu" }) };
 
-    serve(declared, { "POST /api/financial/charges/charge/proof/review": () => Response.json(refused) });
+    const calls = serve(declared, { "POST charges/charge/proof/review": () => Response.json(refused) });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText(/Ana informou que pagou/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirmar recebimento" })).toBeInTheDocument();
@@ -576,10 +602,7 @@ describe("ChargeDetailScreen", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Não recebi" }));
 
     await waitFor(() =>
-      expect(browserFetch).toHaveBeenCalledWith(
-        "/api/financial/charges/charge/proof/review",
-        expect.objectContaining({ body: JSON.stringify({ decision: "rejected", reason: "Não caiu" }) }),
-      ),
+      expect(calls).toContainEqual(["charges/charge/proof/review", expect.objectContaining({ body: JSON.stringify({ decision: "rejected", reason: "Não caiu" }) })]),
     );
   });
 
@@ -593,9 +616,9 @@ describe("ChargeDetailScreen", () => {
     });
     const pay = vi.fn(() => Response.json({ ...refused, state: "paid", paidAt: "2026-09-08T12:00:00Z" }));
 
-    serve(refused, { "POST /api/financial/charges/charge/pay": pay });
+    serve(refused, { "POST charges/charge/pay": pay });
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText(/Ana informou que pagou/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Confirmar recebimento" })).not.toBeInTheDocument();
@@ -617,7 +640,7 @@ describe("ChargeDetailScreen", () => {
       }),
     );
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Não recebi" }));
 
@@ -636,15 +659,17 @@ describe("ChargeDetailScreen", () => {
   it("pauses and resumes the notices of one charge, keeping Lembrar", async () => {
     const put = vi.fn((notify: boolean) => Response.json(charge({ direction: Direction.Receivable, notify })));
 
-    vi.mocked(browserFetch).mockImplementation(async (path, init) => {
-      if (init?.method === "PUT" && path === "/api/financial/charges/charge/notify") {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT" && url === `${API}/charges/charge/notify`) {
         return put(JSON.parse(String(init.body)).notify);
       }
 
       return Response.json(charge({ direction: Direction.Receivable }));
     });
 
-    render(<ChargeDetailScreen id="charge" />);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Não notificar esta cobrança" }));
 
@@ -663,7 +688,7 @@ describe("ChargeDetailScreen", () => {
   it("offers no notice switch to whoever owes", async () => {
     serve(charge());
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText("Valor a pagar")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Não notificar esta cobrança" })).not.toBeInTheDocument();
@@ -683,7 +708,7 @@ describe("ChargeDetailScreen", () => {
       }),
     );
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByText("Registro")).toBeInTheDocument();
     expect(screen.getByText("Empresa X")).toBeInTheDocument();
@@ -703,7 +728,7 @@ describe("ChargeDetailScreen", () => {
       }),
     );
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     const pay = await screen.findByRole("link", { name: "Pagar pelo link" });
 
@@ -726,7 +751,7 @@ describe("ChargeDetailScreen", () => {
       }),
     );
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     await user.click(await screen.findByRole("button", { name: "Copiar link de pagamento" }));
 
@@ -744,14 +769,14 @@ describe("ChargeDetailScreen", () => {
       }),
     );
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
 
     expect(await screen.findByRole("link", { name: "Pagar pelo link" })).toHaveAttribute("href", "https://checkout/pagbank");
 
     cleanup();
     serve(charge({ direction: Direction.Payable, paymentLink: { url: "https://checkout/pix", state: PaymentLinkState.Ready } }));
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
     await screen.findByText("Aluguel");
 
     expect(screen.queryByRole("link", { name: "Pagar pelo link" })).not.toBeInTheDocument();
@@ -768,13 +793,15 @@ describe("ChargeDetailScreen", () => {
     const answers = [pending, pending, { ...pending, state: ChargeState.Paid, paidAt: "2026-09-19" }];
     const calls: string[] = [];
 
-    vi.mocked(browserFetch).mockImplementation(async (path) => {
-      calls.push(String(path));
+    const fetchMock = vi.fn(async (url: string) => {
+      calls.push(url);
 
       return Response.json(answers[Math.min(calls.length - 1, answers.length - 1)]);
     });
 
-    render(<ChargeDetailScreen id="charge" returned />);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithRouter(<ChargeDetailScreen id="charge" returned />);
 
     // `findBy` polls with real timers; under fake ones the first load is flushed by hand.
     await act(() => vi.advanceTimersByTimeAsync(0));
@@ -806,7 +833,7 @@ describe("ChargeDetailScreen", () => {
       }),
     );
 
-    render(<ChargeDetailScreen id="charge" returned />);
+    renderWithRouter(<ChargeDetailScreen id="charge" returned />);
     await screen.findByText("Aluguel");
 
     expect(screen.queryByText(/Pagamento em confirmação/)).not.toBeInTheDocument();
@@ -823,9 +850,9 @@ describe("ChargeDetailScreen", () => {
       }),
     );
 
-    render(<ChargeDetailScreen id="charge" />);
+    renderWithRouter(<ChargeDetailScreen id="charge" />);
     await user.click(await screen.findByRole("button", { name: "Gerar link de novo" }));
 
-    await waitFor(() => expect(calls.some(([path, init]) => path.endsWith("/charges/charge/payment-link") && init?.method === "POST")).toBe(true));
+    await waitFor(() => expect(calls.some(([path, init]) => path.endsWith("charges/charge/payment-link") && init?.method === "POST")).toBe(true));
   });
 });

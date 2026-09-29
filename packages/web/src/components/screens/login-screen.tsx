@@ -1,15 +1,12 @@
-"use client";
-
 import { Apple, ArrowRight, Loader2, Mail } from "lucide-react";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { GoogleMark } from "@/components/app/brand-marks";
+import { requestEmailCode, startOauth } from "@/lib/auth/flows";
+import { OAuthProvider } from "@/lib/auth/oauth";
 import type { LoginProviders } from "@/lib/auth/login-providers";
-import { isProviderAuthorizationUrl } from "@/lib/auth/oauth";
 import { writePendingLogin } from "@/lib/auth/pending-login";
-import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
 
 type LoginScreenProps = {
   nextPath: string;
@@ -18,38 +15,26 @@ type LoginScreenProps = {
   oauthError?: boolean;
 };
 
+const OAUTH_FAILED_MESSAGE = "Não foi possível concluir o login. Tente novamente ou use seu e-mail.";
+
 const SOCIAL_BUTTON = "flex h-14 w-full items-center justify-center gap-3 rounded-2xl text-base font-bold transition active:opacity-80 disabled:opacity-40";
 
 export function LoginScreen({ nextPath, providers, oauthError = false }: LoginScreenProps) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(oauthError ? "Não foi possível concluir o login. Tente novamente ou use seu e-mail." : null);
+  const [error, setError] = useState<string | null>(oauthError ? OAUTH_FAILED_MESSAGE : null);
 
-  async function socialLogin(provider: "google" | "apple") {
+  async function socialLogin(provider: OAuthProvider) {
     setBusy(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/oauth/start", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider }),
-      });
-
-      if (!response.ok) {
-        throw new Error();
-      }
-
-      const { authorizationUrl } = await response.json();
-
-      if (!isProviderAuthorizationUrl(authorizationUrl, provider)) {
-        throw new Error();
-      }
+      const authorizationUrl = await startOauth(provider);
 
       window.location.assign(authorizationUrl);
     } catch {
-      setError("Não foi possível concluir o login. Tente novamente ou use seu e-mail.");
+      setError(OAUTH_FAILED_MESSAGE);
       setBusy(false);
     }
   }
@@ -60,25 +45,14 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/email/code", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-
-      if (!response.ok) {
-        setError(await responseMessage(response, "Não foi possível enviar o código agora."));
-        setBusy(false);
-
-        return;
-      }
+      await requestEmailCode(email);
 
       writePendingLogin({ email, sentAt: Date.now(), nextPath });
       // Left busy on purpose: the route change unmounts this screen, and clearing it here
       // would flash the button back to idle while the old screen is still on top.
-      router.push("/login/code");
-    } catch {
-      setError("Não foi possível enviar o código agora.");
+      navigate("/login/code");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Não foi possível enviar o código agora.");
       setBusy(false);
     }
   }
@@ -88,7 +62,7 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-8 md:max-w-lg">
       <div className="flex flex-col items-center text-center">
-        <Image src="/brand-icon.png" alt="" width={96} height={96} priority className="h-24 w-24 rounded-3xl shadow-[0_8px_16px_rgba(46,36,151,0.25)]" />
+        <img src="/brand-icon.png" alt="" width={96} height={96} className="h-24 w-24 rounded-3xl shadow-[0_8px_16px_rgba(46,36,151,0.25)]" />
         <h1 className="m-0 mt-5 text-4xl font-extrabold tracking-tight text-primary-strong md:text-5xl">Receivy</h1>
         <p className="m-0 mt-2 text-base text-muted md:text-lg">Controle o que tem a receber e a pagar</p>
       </div>
@@ -96,14 +70,14 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
       <div>
         <div className="flex flex-col gap-3 rounded-3xl border border-outline/60 bg-surface p-5 md:p-7">
           {providers.google && (
-            <button type="button" disabled={busy} onClick={() => void socialLogin("google")} className={`${SOCIAL_BUTTON} border border-outline bg-surface text-ink hover:bg-surface-muted`}>
+            <button type="button" disabled={busy} onClick={() => void socialLogin(OAuthProvider.Google)} className={`${SOCIAL_BUTTON} border border-outline bg-surface text-ink hover:bg-surface-muted`}>
               <GoogleMark />
               Continuar com Google
             </button>
           )}
 
           {providers.apple && (
-            <button type="button" disabled={busy} onClick={() => void socialLogin("apple")} className={`${SOCIAL_BUTTON} bg-ink text-surface`}>
+            <button type="button" disabled={busy} onClick={() => void socialLogin(OAuthProvider.Apple)} className={`${SOCIAL_BUTTON} bg-ink text-surface`}>
               <Apple aria-hidden="true" size={20} />
               Continuar com Apple
             </button>

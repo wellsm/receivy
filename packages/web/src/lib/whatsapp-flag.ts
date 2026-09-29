@@ -1,13 +1,14 @@
 import type { ChannelSet } from "@receivy/common";
+import { readEnv } from "@/lib/env";
 
 /** Build-time flag: only the literal string "true" turns the Receivy number (Meta) option on. */
 export function receivyEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_WHATSAPP_ENABLED === "true";
+  return readEnv().whatsappEnabled;
 }
 
 /** Build-time flag: only the literal string "true" turns the own number (Evolution) option on. */
 export function evolutionEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_EVOLUTION_ENABLED === "true";
+  return readEnv().evolutionEnabled;
 }
 
 /** Build-time kill switch: on when either sender option is on. */

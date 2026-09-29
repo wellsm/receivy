@@ -1,5 +1,3 @@
-"use client";
-
 import type { UserAvatar } from "@receivy/common";
 import { useState } from "react";
 
@@ -22,8 +20,7 @@ export function InitialsAvatar({ name, size = 28, inverted = false, avatar }: In
 
   if (avatar && failed !== avatar.url) {
     return (
-      // A signed bucket URL that changes on every response: nothing for next/image to optimise or cache.
-      // eslint-disable-next-line @next/next/no-img-element
+      // A signed bucket URL that changes on every response: nothing to optimise or cache.
       <img
         src={avatar.url}
         alt=""

@@ -1,5 +1,3 @@
-"use client";
-
 import { endOfMonthOptions } from "@receivy/common";
 import { CalendarDays, Check, ChevronDown } from "lucide-react";
 import { useId, useRef, useState } from "react";

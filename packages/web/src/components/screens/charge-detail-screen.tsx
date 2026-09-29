@@ -1,5 +1,3 @@
-"use client";
-
 import {
   BillingKind,
   calendarDate,
@@ -30,12 +28,7 @@ import {
   REMINDER_QUOTA_MESSAGE,
 } from "@receivy/common";
 import { Bell, BellOff, CalendarDays, Check, CircleStop, CloudUpload, Copy, CreditCard, Eye, Link2, Loader2, RefreshCw, RotateCcw, Share2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { responseMessage } from "@/lib/financial-response";
-import { uploadProofFile } from "@/lib/proof-upload";
-import { publicLinkUrl } from "@/lib/public-link-url";
 import { FirstSharePix } from "@/components/app/first-share-pix";
 import { ProofCard } from "@/components/app/proof-card";
 import { RemindDialog } from "@/components/app/remind-dialog";
@@ -45,6 +38,11 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { ScreenFooter } from "@/components/ui/screen-footer";
 import { StatusTag } from "@/components/ui/status-tag";
+import { apiFetch } from "@/lib/api/client";
+import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
+import { uploadProofFile } from "@/lib/proof-upload";
+import { publicLinkUrl } from "@/lib/public-link-url";
 
 const LOAD_ERROR = "Não foi possível carregar a cobrança.";
 const CONFIRMING_NOTICE = "Pagamento em confirmação: se você pagou, isto atualiza em instantes.";
@@ -70,7 +68,7 @@ function providerNameOf(provider: PaymentProvider): { name: string; da: string; 
 }
 
 async function request<T>(path: string, init: RequestInit = {}, fallback = LOAD_ERROR): Promise<T> {
-  const response = await browserFetch(path, init);
+  const response = await apiFetch(path, init);
 
   if (!response.ok) {
     throw new Error(await responseMessage(response, fallback));
@@ -107,7 +105,7 @@ function payableGuidance(charge: ChargeDetail): string | null {
 
 /** `returned`: the visitor just came back from the checkout, so a pending charge is shown as confirming and refetched for a while. */
 export function ChargeDetailScreen({ id, returned = false }: { id: string; returned?: boolean }) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [charge, setCharge] = useState<ChargeDetail | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
@@ -130,7 +128,7 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
 
-  const base = `/api/financial/charges/${id}`;
+  const base = `charges/${encodeURIComponent(id)}`;
 
   const load = useCallback(() => {
     let live = true;
@@ -323,7 +321,7 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
 
   async function remind(detail: ChargeDetail) {
     const result = await run(async () => {
-      const response = await browserFetch(`${base}/reminders`, { method: "POST" });
+      const response = await apiFetch(`${base}/reminders`, { method: "POST" });
 
       if (response.status === 429) {
         throw new Error(REMINDER_QUOTA_MESSAGE);
@@ -358,7 +356,7 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
     setError("");
 
     try {
-      const response = await browserFetch(`${base}/payment-link`, { method: "POST" });
+      const response = await apiFetch(`${base}/payment-link`, { method: "POST" });
 
       if (!response.ok) {
         throw new Error(await responseMessage(response, "Não foi possível gerar o link."));
@@ -529,7 +527,7 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
                   <ActionTile label="Gerando link" icon={Loader2} hint={`O link ${providerNameOf(charge.payment!.provider).da} está sendo criado`} disabled onClick={() => {}} />
                 )}
                 {(!receivable || ownBill) && proof && !declaration && (
-                  <ActionTile label="Comprovante" icon={Eye} tone="primary" hint="Abre o comprovante enviado" disabled={busy} onClick={() => router.push(`/charges/${id}/proof`)} />
+                  <ActionTile label="Comprovante" icon={Eye} tone="primary" hint="Abre o comprovante enviado" disabled={busy} onClick={() => navigate(`/charges/${id}/proof`)} />
                 )}
                 {reopenable && <ActionTile label="Reabrir" icon={RotateCcw} hint="Desfaz o pagamento e volta a cobrança para pendente" disabled={busy} onClick={() => setConfirmReopen(true)} />}
                 {record && markable && <ActionTile label="Marcar como pago" icon={Check} tone="primary" disabled={busy} onClick={() => setConfirmPaid("pay")} />}
@@ -566,7 +564,7 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
               busy={busy}
               sending={sending}
               picked={picked}
-              onView={() => router.push(`/charges/${id}/proof`)}
+              onView={() => navigate(`/charges/${id}/proof`)}
               onPick={setPicked}
               onSend={markable ? sendPicked : undefined}
               onAccept={() => setConfirmPaid(acceptProof ? "review" : "pay")}
@@ -592,7 +590,7 @@ export function ChargeDetailScreen({ id, returned = false }: { id: string; retur
             type="button"
             disabled={busy || (uploadAllowed && !picked)}
             aria-busy={sending}
-            onClick={() => (uploadAllowed ? sendPicked() : router.push(`/charges/${id}/proof`))}
+            onClick={() => (uploadAllowed ? sendPicked() : navigate(`/charges/${id}/proof`))}
             className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-bold text-on-primary transition hover:bg-primary-strong disabled:opacity-50"
           >
             {sending ? <Loader2 size={18} aria-hidden="true" className="animate-spin" /> : uploadAllowed ? <CloudUpload size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}

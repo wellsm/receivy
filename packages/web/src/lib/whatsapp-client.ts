@@ -1,12 +1,12 @@
 import { PlanTier, WhatsappInstanceState, WhatsappSender, type WhatsappInstanceView, type WhatsappSettings } from "@receivy/common";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { apiFetch } from "@/lib/api/client";
 import { responseMessage } from "@/lib/financial-response";
 import { evolutionEnabled, receivyEnabled } from "@/lib/whatsapp-flag";
 
 const LOAD_ERROR = "Não foi possível carregar o WhatsApp.";
 
 async function request<T>(path: string, init?: RequestInit, fallback = LOAD_ERROR): Promise<T> {
-  const response = await browserFetch(`/api/financial/${path}`, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } });
+  const response = await apiFetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } });
 
   if (!response.ok) {
     throw new Error(await responseMessage(response, fallback));

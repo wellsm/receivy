@@ -1,11 +1,9 @@
-"use client";
-
 import { billingCategoryLabel, formatMoney, type BillingRecurrence, type InviteAcceptResult, type PublicInviteView } from "@receivy/common";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { Link } from "@/components/ui/link";
+import { apiFetch } from "@/lib/api/client";
 import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
 
 type JoinInviteScreenProps = { token: string; view: PublicInviteView; authenticated: boolean };
 
@@ -37,7 +35,7 @@ export function InviteUnavailable() {
 }
 
 export function JoinInviteScreen({ token, view, authenticated }: JoinInviteScreenProps) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,7 +44,7 @@ export function JoinInviteScreen({ token, view, authenticated }: JoinInviteScree
     setError("");
 
     try {
-      const response = await browserFetch(`/api/financial/invites/${encodeURIComponent(token)}/accept`, { method: "POST" });
+      const response = await apiFetch(`invites/${encodeURIComponent(token)}/accept`, { method: "POST" });
 
       if (response.status === 404) {
         throw new Error(EXPIRED);
@@ -67,12 +65,12 @@ export function JoinInviteScreen({ token, view, authenticated }: JoinInviteScree
       }
 
       if (result.awaitingOwner) {
-        router.replace("/");
+        navigate("/", { replace: true });
 
         return;
       }
 
-      router.replace(result.chargeId ? `/charges/${result.chargeId}` : "/");
+      navigate(result.chargeId ? `/charges/${result.chargeId}` : "/", { replace: true });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Não foi possível entrar na cobrança.");
     } finally {
@@ -111,7 +109,7 @@ export function JoinInviteScreen({ token, view, authenticated }: JoinInviteScree
           </dl>
 
           {!authenticated && (
-            <Link className={PRIMARY_BUTTON} href={`/login?next=${encodeURIComponent(`/join/${token}`)}`}>
+            <Link className={PRIMARY_BUTTON} to="/login" search={{ next: `/join/${encodeURIComponent(token)}` }}>
               Entrar para participar
             </Link>
           )}

@@ -1,9 +1,7 @@
-"use client";
-
 import type { Contact, ContactsPage } from "@receivy/common";
 import { Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
+import { apiFetch } from "@/lib/api/client";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 type ContactPickerSheetProps = {
@@ -36,7 +34,7 @@ export function ContactPickerSheet({ selected, by = "userId", onToggle, onSeen, 
     (after?: string) => {
       const query = new URLSearchParams({ ...(search ? { search } : {}), ...(after ? { cursor: after } : {}) });
 
-      return browserFetch(`/api/contacts?${query}`)
+      return apiFetch(`contacts?${query}`)
         .then(async response => {
           if (!response.ok) {
             throw new Error(LOAD_ERROR);

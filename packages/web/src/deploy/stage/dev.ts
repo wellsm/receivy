@@ -7,7 +7,7 @@ export type ApiDomain = "f6whczszrf.execute-api.sa-east-1.amazonaws.com";
 
 /**
  * CNAMEs of the dev distribution. The distribution also keeps answering on its `*.cloudfront.net` host, which is
- * where the DNS record of the domain points (`pnpm --filter @receivy/web-spa output:dev` prints it).
+ * where the DNS record of the domain points (`pnpm --filter @receivy/web output:dev` prints it).
  */
 export type WebAliases = ["receivy.wellsm.dev"];
 /**

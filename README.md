@@ -2,11 +2,11 @@
 
 Receivy organiza, em uma única timeline, cobranças que você criou e valores a
 pagar vinculados ao seu e-mail. Este repositório contém a fundação do MVP: shell
-responsivo web, BFF Next, API EZ4, app Expo e contratos compartilhados.
+web (SPA), API EZ4, app Expo e contratos compartilhados.
 
 ## Estrutura
 
-- `packages/web`: Next.js responsivo e BFF; o navegador não acessa a API EZ4 diretamente.
+- `packages/web`: SPA responsiva em Vite + TanStack Router; o navegador chama a API EZ4 direto.
 - `packages/api`: backend EZ4 em Node.js 24.
 - `packages/mobile`: Expo SDK 56, Expo Router e Uniwind.
 - `packages/common`: contratos, regras puras e tokens visuais portáveis.
@@ -14,7 +14,7 @@ responsivo web, BFF Next, API EZ4, app Expo e contratos compartilhados.
 ## Pré-requisitos
 
 - Node.js 24 e Corepack.
-- Docker Desktop para o Postgres local e para construir a imagem web.
+- Docker Desktop para o Postgres local.
 - Xcode 26.4 ou superior para builds iOS do Expo SDK 56.
 - Android Studio para builds Android.
 - Um simulador ou dispositivo de desenvolvimento confiável. O fluxo nativo usa
@@ -65,7 +65,6 @@ Para validar tudo localmente:
 
 ```bash
 pnpm verify
-docker build -f packages/web/Dockerfile -t receivy-web:foundation .
 ```
 
 ## Endereços locais
@@ -75,12 +74,12 @@ docker build -f packages/web/Dockerfile -t receivy-web:foundation .
 | Web | `http://127.0.0.1:3000` |
 | API EZ4 | `http://127.0.0.1:3735/local-receivy-api` |
 | Health da API | `http://127.0.0.1:3735/local-receivy-api/health` |
-| Health via BFF | `http://127.0.0.1:3000/api/health` |
 | Postgres | `127.0.0.1:55434` |
 
-Defina `EZ4_API_URL=http://127.0.0.1:3735/local-receivy-api` apenas no ambiente
-de execução do servidor Next. Nenhum segredo de API entra no bundle do navegador
-ou como argumento de build da imagem.
+Copie `packages/web/.env.example` para `packages/web/.env.local`. O
+`VITE_API_URL=http://127.0.0.1:3735/local-receivy-api` aponta o web para a API
+local. Toda variável `VITE_*` entra no bundle do navegador: nenhum segredo vai
+ali. Deploy do web: [guia do SPA](docs/web-spa-deploy.md).
 
 ## Autenticação local
 
@@ -119,7 +118,7 @@ explícita, depois de reproduzir os problemas já observados nesse SDK.
 
 ## Escopo desta entrega
 
-Estão implementados o login por e-mail/código na API, BFF/web e Expo, e a
+Estão implementados o login por e-mail/código na API, no web e no Expo, e a
 integração OAuth Google/Apple com validação OIDC e retorno vinculado ao cliente.
 Ativação e testes reais de Google/Apple dependem das credenciais e callbacks
 configurados conforme [configuração OAuth](docs/oauth-setup.md).

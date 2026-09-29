@@ -1,17 +1,16 @@
-"use client";
-
 import { normalizeContact, onlyDigits, paymentMethodText, PhoneSource, pixKeyField, PaymentProvider, PixKeyType, type Contact, type ContactPaymentMethodInput, type PaymentMethod, type PaymentMethodsPage } from "@receivy/common";
-import { useRouter } from "next/navigation";
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { browserFetch } from "@/lib/auth/browser-fetch";
-import { patchDraft } from "@/lib/billing-draft";
-import { responseMessage } from "@/lib/financial-response";
-import { whatsappEnabled } from "@/lib/whatsapp-flag";
 import { PixKeyFields } from "@/components/app/pix-key-fields";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ProviderIcon } from "@/components/ui/provider-icon";
 import { ScreenFooter } from "@/components/ui/screen-footer";
+import { apiFetch, apiJson } from "@/lib/api/client";
+import { patchDraft } from "@/lib/billing-draft";
+import { contactErrorMessage } from "@/lib/contacts-errors";
+import { responseMessage } from "@/lib/financial-response";
+import { useAppNavigate } from "@/lib/navigate";
+import { whatsappEnabled } from "@/lib/whatsapp-flag";
 
 type ContactFormScreenProps = { contactId?: string; returnTo?: string };
 
@@ -20,8 +19,6 @@ const LINKED_NOTE = "Contato vinculado a uma conta: só o apelido pode mudar.";
 const EMAIL_NOTE = "Sem e-mail, a pessoa só recebe pelo link compartilhado. Quando ela entrar por um convite, você confirma quem é.";
 const PHONE_LOCKED_NOTE = "Número informado pela própria pessoa";
 const PIX_NOTE = "A chave que você usa para pagar esta pessoa. Ela entra como a chave padrão do contato.";
-const LOAD_ERROR = "Não foi possível carregar o contato.";
-const SAVE_ERROR = "Não foi possível salvar o contato.";
 const KEYS_ERROR = "Não foi possível carregar as chaves Pix do contato.";
 const KEYS_UPDATE_ERROR = "Não foi possível atualizar as chaves Pix do contato.";
 
@@ -40,23 +37,8 @@ function Field({ id, label, hint, children }: { id: string; label: string; hint?
   );
 }
 
-/** The contacts proxy already speaks pt-BR: it answers with a `message`, not an error code. */
-async function contactError(response: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await response.json()) as { message?: unknown };
-
-    if (typeof body.message === "string" && body.message) {
-      return body.message;
-    }
-
-    return fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProps) {
-  const router = useRouter();
+  const navigate = useAppNavigate();
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
@@ -80,7 +62,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       return Promise.resolve();
     }
 
-    return browserFetch(`/api/financial/payment-methods?contactId=${contactId}`)
+    return apiFetch(`payment-methods?contactId=${encodeURIComponent(contactId)}`)
       .then(async response => {
         if (!response.ok) {
           throw new Error(await responseMessage(response, KEYS_ERROR));
@@ -104,14 +86,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
 
     let live = true;
 
-    void browserFetch(`/api/contacts/${contactId}`)
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(await contactError(response, LOAD_ERROR));
-        }
-
-        return response.json() as Promise<Contact>;
-      })
+    void apiJson<Contact>(`contacts/${encodeURIComponent(contactId)}`)
       .then((contact) => {
         if (!live) {
           return;
@@ -127,7 +102,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       })
       .catch((reason) => {
         if (live) {
-          setError(reason instanceof Error ? reason.message : LOAD_ERROR);
+          setError(contactErrorMessage(reason));
         }
       });
 
@@ -170,7 +145,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     setError("");
 
     try {
-      const response = await browserFetch(`/api/financial/payment-methods/${id}/${action}`, { method: "POST" });
+      const response = await apiFetch(`payment-methods/${id}/${action}`, { method: "POST" });
 
       if (!response.ok) {
         throw new Error(await responseMessage(response, KEYS_UPDATE_ERROR));
@@ -208,20 +183,14 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
     setBusy(true);
 
     try {
-      const response = await browserFetch(contactId ? `/api/contacts/${contactId}` : "/api/contacts", {
+      const saved = await apiJson<Contact>(contactId ? `contacts/${contactId}` : "contacts", {
         method: contactId ? "PATCH" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(input),
       });
 
-      if (!response.ok) {
-        throw new Error(await contactError(response, SAVE_ERROR));
-      }
-
-      const saved = (await response.json()) as Contact;
-
       if (contactId) {
-        router.push(returnTo ?? `/contacts/${contactId}`);
+        navigate(returnTo ?? `/contacts/${contactId}`);
 
         return;
       }
@@ -230,14 +199,14 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
       // account and the one who receives by agenda entry.
       if (returnTo) {
         patchDraft({ contact: { id: saved.id, userId: saved.userId } });
-        router.push(returnTo);
+        navigate(returnTo);
 
         return;
       }
 
-      router.push("/contacts");
+      navigate("/contacts");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : SAVE_ERROR);
+      setError(contactErrorMessage(reason));
     } finally {
       setBusy(false);
     }

@@ -219,7 +219,7 @@ export function ProofViewerScreen({ chargeId }: { chargeId: string }) {
       </div>
 
       {(accept || replaceAllowed || withdrawAllowed) && (
-        <ScreenFooter className="-mx-1 mt-2 flex gap-2 border-t border-outline/20 bg-canvas/95 px-1 py-3 backdrop-blur-md">
+        <ScreenFooter className="-mx-1 mt-2 flex gap-2 border-t border-outline/20 bg-canvas/95 px-1 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md">
           {accept && (
             <>
               <button

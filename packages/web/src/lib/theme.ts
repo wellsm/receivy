@@ -1,9 +1,12 @@
-import { parseThemePreference, resolveTheme, ThemePreference } from "@receivy/common";
+import { parseThemePreference, ResolvedTheme, resolveTheme, ThemePreference } from "@receivy/common";
 import { useCallback, useEffect, useState } from "react";
 
 export const THEME_STORAGE_KEY = "receivy-theme";
 
 const SYSTEM_DARK = "(prefers-color-scheme: dark)";
+// `--color-canvas` of each theme: what the browser paints the status bar with. Same values in index.html and public/theme.js.
+const LIGHT_THEME_COLOR = "#f7f6fb";
+const DARK_THEME_COLOR = "#121122";
 
 function systemDark(): boolean {
   return typeof window.matchMedia === "function" && window.matchMedia(SYSTEM_DARK).matches;
@@ -32,6 +35,11 @@ export function applyTheme(preference: ThemePreference): void {
 
   root.dataset.theme = theme;
   root.style.colorScheme = theme;
+
+  // The tags of index.html follow the system scheme; a theme pinned in the app has to win over it.
+  for (const tag of document.querySelectorAll('meta[name="theme-color"]')) {
+    tag.setAttribute("content", theme === ResolvedTheme.Dark ? DARK_THEME_COLOR : LIGHT_THEME_COLOR);
+  }
 }
 
 /** The stored choice is read after mount, so the server render and the first client render agree. */

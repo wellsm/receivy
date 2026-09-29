@@ -95,7 +95,7 @@ export function ContactPickerSheet({ selected, by = "userId", onToggle, onSeen, 
       }}
     >
       <div
-        className="flex max-h-[85vh] w-full max-w-md flex-col gap-3 rounded-t-3xl bg-canvas p-5 shadow-2xl sm:rounded-3xl"
+        className="flex max-h-[85vh] w-full max-w-md flex-col gap-3 rounded-t-3xl bg-canvas p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-3xl sm:pb-5"
         role="dialog"
         aria-label="Contatos"
         aria-modal="true"

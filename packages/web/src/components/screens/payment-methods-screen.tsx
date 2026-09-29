@@ -196,7 +196,7 @@ export function PaymentMethodsScreen({ returnTo, required = false }: PaymentMeth
         </div>
       </aside>
 
-      <ScreenFooter className="-mx-1 bg-canvas/95 px-1 pb-2 pt-3 backdrop-blur-md">
+      <ScreenFooter className="-mx-1 bg-canvas/95 px-1 pt-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md">
         <Link
           className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-on-primary transition active:scale-[0.98]"
           to="/settings/payment-methods/new"

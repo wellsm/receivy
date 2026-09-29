@@ -1,6 +1,7 @@
 import { Bell, ReceiptText, Rows3, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { BackButton } from "@/components/app/back-button";
+import { InstallBanner } from "@/components/app/install-banner";
 import { Link } from "@/components/ui/link";
 
 /**
@@ -127,7 +128,11 @@ export function AppShell({ children, activePath = "/", notificationsBadge = fals
       <div className="min-h-screen">
         <ScreenHeader title={title} back={back} activePath={activePath} />
 
-        <main className={`mx-auto w-full max-w-270 px-5 pb-24 md:px-8 md:pt-7 md:pb-22.5 xl:px-10 ${back ? "pt-4" : "pt-[max(1rem,env(safe-area-inset-top))]"}`}>{children}</main>
+        <main className={`mx-auto w-full max-w-270 px-5 pb-24 md:px-8 md:pt-7 md:pb-22.5 xl:px-10 ${back ? "pt-4" : "pt-[max(1rem,env(safe-area-inset-top))]"}`}>
+          {/* Only on the three roots: a form or a detail is no place to be asked anything else. */}
+          {!back && <InstallBanner />}
+          {children}
+        </main>
       </div>
     </div>
   );

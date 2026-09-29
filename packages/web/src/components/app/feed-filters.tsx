@@ -200,7 +200,7 @@ export function FeedFiltersSheet({ value, onApply, onClose }: FeedFiltersSheetPr
       }}
     >
       <div
-        className="flex max-h-[85vh] w-full flex-col gap-5 overflow-y-auto rounded-t-3xl bg-canvas p-5 pb-8 shadow-2xl"
+        className="flex max-h-[85vh] w-full flex-col gap-5 overflow-y-auto rounded-t-3xl bg-canvas p-5 pb-[max(2rem,env(safe-area-inset-bottom))] shadow-2xl"
         role="dialog"
         aria-label="Filtros"
         aria-modal="true"

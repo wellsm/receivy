@@ -22,11 +22,26 @@ function stubSystem(dark: boolean) {
   };
 }
 
+/** The two tags of index.html: the browser picks one by the system scheme, so both carry the app's theme. */
+function themeColorTags(): HTMLMetaElement[] {
+  return ["light", "dark"].map(scheme => {
+    const tag = document.createElement("meta");
+
+    tag.name = "theme-color";
+    tag.media = `(prefers-color-scheme: ${scheme})`;
+    tag.content = scheme === "dark" ? "#121122" : "#f7f6fb";
+    document.head.append(tag);
+
+    return tag;
+  });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   window.localStorage.clear();
   delete document.documentElement.dataset.theme;
   document.documentElement.style.colorScheme = "";
+  document.head.querySelectorAll('meta[name="theme-color"]').forEach(tag => tag.remove());
 });
 
 describe("theme preference", () => {
@@ -50,6 +65,18 @@ describe("theme preference", () => {
 
     applyTheme(ThemePreference.System);
     expect(document.documentElement.dataset.theme).toBe("light");
+  });
+
+  it("paints the status bar with the theme the app shows, not the one the system prefers", () => {
+    stubSystem(false);
+
+    const tags = themeColorTags();
+
+    applyTheme(ThemePreference.Dark);
+    expect(tags.map(tag => tag.content)).toEqual(["#121122", "#121122"]);
+
+    applyTheme(ThemePreference.Light);
+    expect(tags.map(tag => tag.content)).toEqual(["#f7f6fb", "#f7f6fb"]);
   });
 
   it("follows the system while the preference is Sistema and stops once a theme is pinned", () => {

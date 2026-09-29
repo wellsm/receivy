@@ -345,7 +345,7 @@ export function ContactFormScreen({ contactId, returnTo }: ContactFormScreenProp
         </p>
       )}
 
-      <ScreenFooter className="-mx-1 border-t border-outline/30 bg-canvas/95 px-1 pb-2 pt-4 backdrop-blur-md">
+      <ScreenFooter className="-mx-1 border-t border-outline/30 bg-canvas/95 px-1 pt-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md">
         <button
           type="submit"
           disabled={busy}

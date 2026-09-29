@@ -52,7 +52,7 @@ export function BillingDialog({ title, trailing, doneLabel = "Pronto", children,
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="flex max-h-[88vh] w-full flex-col rounded-t-3xl border-t border-outline/30 bg-canvas px-5 pb-6 pt-3 shadow-2xl outline-none sm:max-w-lg sm:rounded-3xl sm:border sm:p-6"
+        className="flex max-h-[88vh] w-full flex-col rounded-t-3xl border-t border-outline/30 bg-canvas px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl outline-none sm:max-w-lg sm:rounded-3xl sm:border sm:p-6"
       >
         <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-outline sm:hidden" aria-hidden="true" />
         <div className="mb-3 flex items-center justify-between gap-3">

@@ -3,9 +3,11 @@ import { useNavigate } from "@tanstack/react-router";
 type NavigateOptions = {
   replace?: boolean;
   search?: Record<string, string | undefined>;
+  /** false keeps the scroll position, like Next's `router.replace(url, { scroll: false })`. */
+  resetScroll?: boolean;
 };
 
-type LooseNavigate = (options: { to?: string; href?: string; replace?: boolean; search?: Record<string, string | undefined> }) => void;
+type LooseNavigate = (options: { to?: string; href?: string; replace?: boolean; search?: Record<string, string | undefined>; resetScroll?: boolean }) => void;
 
 /**
  * Loosely typed wrapper around TanStack Router's `useNavigate`, for the dynamic string

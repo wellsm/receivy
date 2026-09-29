@@ -1,3 +1,4 @@
+import { needsOnboarding, UserStatus } from "@receivy/common";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { render, waitFor } from "@testing-library/react";
 import { currentUser } from "@/lib/auth/flows";
@@ -34,8 +35,13 @@ describe("protected layout", () => {
   });
 
   it("sends an unnamed profile to /onboarding carrying next", async () => {
-    storeSession({ accessToken: "a", refreshToken: "r", user: { id: "u1", name: null } } as never);
-    vi.mocked(currentUser).mockResolvedValue({ id: "u1", name: null } as never);
+    // A pending profile: the person has not confirmed name and phone yet.
+    const pending = { id: "u1", name: null, status: UserStatus.Pending };
+
+    expect(needsOnboarding(pending)).toBe(true);
+
+    storeSession({ accessToken: "a", refreshToken: "r", user: pending } as never);
+    vi.mocked(currentUser).mockResolvedValue(pending as never);
 
     const router = renderAt("/feed");
 

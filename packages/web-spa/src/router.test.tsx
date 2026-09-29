@@ -1,5 +1,5 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { clearSession } from "@/lib/auth/session";
 import { createAppRouter, redirectToLogin } from "./router";
 
@@ -28,7 +28,9 @@ describe("redirectToLogin", () => {
     // An unknown path renders the not-found page, so no route guard interferes.
     const router = await mountAt("/nowhere?x=1");
 
-    redirectToLogin(router);
+    await act(async () => {
+      redirectToLogin(router);
+    });
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
 

@@ -15,7 +15,25 @@ import { Route as ProtectedIndexRouteImport } from "./routes/_protected/index";
 import { Route as ProtectedFeedRouteImport } from "./routes/_protected/feed";
 import { Route as LoginIndexRouteImport } from "./routes/login/index";
 import { Route as LoginCodeRouteImport } from "./routes/login/code";
+import { Route as ProtectedBillingsIndexRouteImport } from "./routes/_protected/billings/index";
+import { Route as ProtectedBillingsNewRouteImport } from "./routes/_protected/billings/new";
+import { Route as ProtectedContactsIndexRouteImport } from "./routes/_protected/contacts/index";
+import { Route as ProtectedContactsNewRouteImport } from "./routes/_protected/contacts/new";
+import { Route as ProtectedSettingsIndexRouteImport } from "./routes/_protected/settings/index";
+import { Route as ProtectedSettingsPlanRouteImport } from "./routes/_protected/settings/plan";
+import { Route as ProtectedSettingsRemindersRouteImport } from "./routes/_protected/settings/reminders";
+import { Route as ProtectedSettingsWhatsappRouteImport } from "./routes/_protected/settings/whatsapp";
 import { Route as AuthOauthCallbackRouteImport } from "./routes/auth/oauth/callback";
+import { Route as ProtectedBillingsIdIndexRouteImport } from "./routes/_protected/billings/$id/index";
+import { Route as ProtectedBillingsIdEditRouteImport } from "./routes/_protected/billings/$id/edit";
+import { Route as ProtectedChargesIdIndexRouteImport } from "./routes/_protected/charges/$id/index";
+import { Route as ProtectedChargesIdProofRouteImport } from "./routes/_protected/charges/$id/proof";
+import { Route as ProtectedContactsIdIndexRouteImport } from "./routes/_protected/contacts/$id/index";
+import { Route as ProtectedContactsIdEditRouteImport } from "./routes/_protected/contacts/$id/edit";
+import { Route as ProtectedSettingsPaymentMethodsIndexRouteImport } from "./routes/_protected/settings/payment-methods/index";
+import { Route as ProtectedSettingsPaymentMethodsNewRouteImport } from "./routes/_protected/settings/payment-methods/new";
+import { Route as ProtectedSettingsPixIndexRouteImport } from "./routes/_protected/settings/pix/index";
+import { Route as ProtectedSettingsPixNewRouteImport } from "./routes/_protected/settings/pix/new";
 
 const ProtectedRoute = ProtectedRouteImport.update({
   id: "/_protected",
@@ -46,10 +64,107 @@ const LoginCodeRoute = LoginCodeRouteImport.update({
   path: "/login/code",
   getParentRoute: () => rootRouteImport,
 } as any);
+const ProtectedBillingsIndexRoute = ProtectedBillingsIndexRouteImport.update({
+  id: "/billings/",
+  path: "/billings/",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedBillingsNewRoute = ProtectedBillingsNewRouteImport.update({
+  id: "/billings/new",
+  path: "/billings/new",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedContactsIndexRoute = ProtectedContactsIndexRouteImport.update({
+  id: "/contacts/",
+  path: "/contacts/",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedContactsNewRoute = ProtectedContactsNewRouteImport.update({
+  id: "/contacts/new",
+  path: "/contacts/new",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedSettingsIndexRoute = ProtectedSettingsIndexRouteImport.update({
+  id: "/settings/",
+  path: "/settings/",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedSettingsPlanRoute = ProtectedSettingsPlanRouteImport.update({
+  id: "/settings/plan",
+  path: "/settings/plan",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedSettingsRemindersRoute =
+  ProtectedSettingsRemindersRouteImport.update({
+    id: "/settings/reminders",
+    path: "/settings/reminders",
+    getParentRoute: () => ProtectedRoute,
+  } as any);
+const ProtectedSettingsWhatsappRoute =
+  ProtectedSettingsWhatsappRouteImport.update({
+    id: "/settings/whatsapp",
+    path: "/settings/whatsapp",
+    getParentRoute: () => ProtectedRoute,
+  } as any);
 const AuthOauthCallbackRoute = AuthOauthCallbackRouteImport.update({
   id: "/auth/oauth/callback",
   path: "/auth/oauth/callback",
   getParentRoute: () => rootRouteImport,
+} as any);
+const ProtectedBillingsIdIndexRoute =
+  ProtectedBillingsIdIndexRouteImport.update({
+    id: "/billings/$id/",
+    path: "/billings/$id/",
+    getParentRoute: () => ProtectedRoute,
+  } as any);
+const ProtectedBillingsIdEditRoute = ProtectedBillingsIdEditRouteImport.update({
+  id: "/billings/$id/edit",
+  path: "/billings/$id/edit",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedChargesIdIndexRoute = ProtectedChargesIdIndexRouteImport.update({
+  id: "/charges/$id/",
+  path: "/charges/$id/",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedChargesIdProofRoute = ProtectedChargesIdProofRouteImport.update({
+  id: "/charges/$id/proof",
+  path: "/charges/$id/proof",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedContactsIdIndexRoute =
+  ProtectedContactsIdIndexRouteImport.update({
+    id: "/contacts/$id/",
+    path: "/contacts/$id/",
+    getParentRoute: () => ProtectedRoute,
+  } as any);
+const ProtectedContactsIdEditRoute = ProtectedContactsIdEditRouteImport.update({
+  id: "/contacts/$id/edit",
+  path: "/contacts/$id/edit",
+  getParentRoute: () => ProtectedRoute,
+} as any);
+const ProtectedSettingsPaymentMethodsIndexRoute =
+  ProtectedSettingsPaymentMethodsIndexRouteImport.update({
+    id: "/settings/payment-methods/",
+    path: "/settings/payment-methods/",
+    getParentRoute: () => ProtectedRoute,
+  } as any);
+const ProtectedSettingsPaymentMethodsNewRoute =
+  ProtectedSettingsPaymentMethodsNewRouteImport.update({
+    id: "/settings/payment-methods/new",
+    path: "/settings/payment-methods/new",
+    getParentRoute: () => ProtectedRoute,
+  } as any);
+const ProtectedSettingsPixIndexRoute =
+  ProtectedSettingsPixIndexRouteImport.update({
+    id: "/settings/pix/",
+    path: "/settings/pix/",
+    getParentRoute: () => ProtectedRoute,
+  } as any);
+const ProtectedSettingsPixNewRoute = ProtectedSettingsPixNewRouteImport.update({
+  id: "/settings/pix/new",
+  path: "/settings/pix/new",
+  getParentRoute: () => ProtectedRoute,
 } as any);
 
 export interface FileRoutesByFullPath {
@@ -58,7 +173,25 @@ export interface FileRoutesByFullPath {
   "/feed": typeof ProtectedFeedRoute;
   "/login/code": typeof LoginCodeRoute;
   "/login/": typeof LoginIndexRoute;
+  "/billings/new": typeof ProtectedBillingsNewRoute;
+  "/contacts/new": typeof ProtectedContactsNewRoute;
+  "/settings/plan": typeof ProtectedSettingsPlanRoute;
+  "/settings/reminders": typeof ProtectedSettingsRemindersRoute;
+  "/settings/whatsapp": typeof ProtectedSettingsWhatsappRoute;
   "/auth/oauth/callback": typeof AuthOauthCallbackRoute;
+  "/billings/": typeof ProtectedBillingsIndexRoute;
+  "/contacts/": typeof ProtectedContactsIndexRoute;
+  "/settings/": typeof ProtectedSettingsIndexRoute;
+  "/billings/$id/edit": typeof ProtectedBillingsIdEditRoute;
+  "/charges/$id/proof": typeof ProtectedChargesIdProofRoute;
+  "/contacts/$id/edit": typeof ProtectedContactsIdEditRoute;
+  "/settings/payment-methods/new": typeof ProtectedSettingsPaymentMethodsNewRoute;
+  "/settings/pix/new": typeof ProtectedSettingsPixNewRoute;
+  "/billings/$id/": typeof ProtectedBillingsIdIndexRoute;
+  "/charges/$id/": typeof ProtectedChargesIdIndexRoute;
+  "/contacts/$id/": typeof ProtectedContactsIdIndexRoute;
+  "/settings/payment-methods/": typeof ProtectedSettingsPaymentMethodsIndexRoute;
+  "/settings/pix/": typeof ProtectedSettingsPixIndexRoute;
 }
 export interface FileRoutesByTo {
   "/onboarding": typeof OnboardingRoute;
@@ -66,7 +199,25 @@ export interface FileRoutesByTo {
   "/login/code": typeof LoginCodeRoute;
   "/": typeof ProtectedIndexRoute;
   "/login": typeof LoginIndexRoute;
+  "/billings/new": typeof ProtectedBillingsNewRoute;
+  "/contacts/new": typeof ProtectedContactsNewRoute;
+  "/settings/plan": typeof ProtectedSettingsPlanRoute;
+  "/settings/reminders": typeof ProtectedSettingsRemindersRoute;
+  "/settings/whatsapp": typeof ProtectedSettingsWhatsappRoute;
   "/auth/oauth/callback": typeof AuthOauthCallbackRoute;
+  "/billings": typeof ProtectedBillingsIndexRoute;
+  "/contacts": typeof ProtectedContactsIndexRoute;
+  "/settings": typeof ProtectedSettingsIndexRoute;
+  "/billings/$id/edit": typeof ProtectedBillingsIdEditRoute;
+  "/charges/$id/proof": typeof ProtectedChargesIdProofRoute;
+  "/contacts/$id/edit": typeof ProtectedContactsIdEditRoute;
+  "/settings/payment-methods/new": typeof ProtectedSettingsPaymentMethodsNewRoute;
+  "/settings/pix/new": typeof ProtectedSettingsPixNewRoute;
+  "/billings/$id": typeof ProtectedBillingsIdIndexRoute;
+  "/charges/$id": typeof ProtectedChargesIdIndexRoute;
+  "/contacts/$id": typeof ProtectedContactsIdIndexRoute;
+  "/settings/payment-methods": typeof ProtectedSettingsPaymentMethodsIndexRoute;
+  "/settings/pix": typeof ProtectedSettingsPixIndexRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -76,7 +227,25 @@ export interface FileRoutesById {
   "/login/code": typeof LoginCodeRoute;
   "/_protected/": typeof ProtectedIndexRoute;
   "/login/": typeof LoginIndexRoute;
+  "/_protected/billings/new": typeof ProtectedBillingsNewRoute;
+  "/_protected/contacts/new": typeof ProtectedContactsNewRoute;
+  "/_protected/settings/plan": typeof ProtectedSettingsPlanRoute;
+  "/_protected/settings/reminders": typeof ProtectedSettingsRemindersRoute;
+  "/_protected/settings/whatsapp": typeof ProtectedSettingsWhatsappRoute;
   "/auth/oauth/callback": typeof AuthOauthCallbackRoute;
+  "/_protected/billings/": typeof ProtectedBillingsIndexRoute;
+  "/_protected/contacts/": typeof ProtectedContactsIndexRoute;
+  "/_protected/settings/": typeof ProtectedSettingsIndexRoute;
+  "/_protected/billings/$id/edit": typeof ProtectedBillingsIdEditRoute;
+  "/_protected/charges/$id/proof": typeof ProtectedChargesIdProofRoute;
+  "/_protected/contacts/$id/edit": typeof ProtectedContactsIdEditRoute;
+  "/_protected/settings/payment-methods/new": typeof ProtectedSettingsPaymentMethodsNewRoute;
+  "/_protected/settings/pix/new": typeof ProtectedSettingsPixNewRoute;
+  "/_protected/billings/$id/": typeof ProtectedBillingsIdIndexRoute;
+  "/_protected/charges/$id/": typeof ProtectedChargesIdIndexRoute;
+  "/_protected/contacts/$id/": typeof ProtectedContactsIdIndexRoute;
+  "/_protected/settings/payment-methods/": typeof ProtectedSettingsPaymentMethodsIndexRoute;
+  "/_protected/settings/pix/": typeof ProtectedSettingsPixIndexRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -86,7 +255,25 @@ export interface FileRouteTypes {
     | "/feed"
     | "/login/code"
     | "/login/"
-    | "/auth/oauth/callback";
+    | "/billings/new"
+    | "/contacts/new"
+    | "/settings/plan"
+    | "/settings/reminders"
+    | "/settings/whatsapp"
+    | "/auth/oauth/callback"
+    | "/billings/"
+    | "/contacts/"
+    | "/settings/"
+    | "/billings/$id/edit"
+    | "/charges/$id/proof"
+    | "/contacts/$id/edit"
+    | "/settings/payment-methods/new"
+    | "/settings/pix/new"
+    | "/billings/$id/"
+    | "/charges/$id/"
+    | "/contacts/$id/"
+    | "/settings/payment-methods/"
+    | "/settings/pix/";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/onboarding"
@@ -94,7 +281,25 @@ export interface FileRouteTypes {
     | "/login/code"
     | "/"
     | "/login"
-    | "/auth/oauth/callback";
+    | "/billings/new"
+    | "/contacts/new"
+    | "/settings/plan"
+    | "/settings/reminders"
+    | "/settings/whatsapp"
+    | "/auth/oauth/callback"
+    | "/billings"
+    | "/contacts"
+    | "/settings"
+    | "/billings/$id/edit"
+    | "/charges/$id/proof"
+    | "/contacts/$id/edit"
+    | "/settings/payment-methods/new"
+    | "/settings/pix/new"
+    | "/billings/$id"
+    | "/charges/$id"
+    | "/contacts/$id"
+    | "/settings/payment-methods"
+    | "/settings/pix";
   id:
     | "__root__"
     | "/_protected"
@@ -103,7 +308,25 @@ export interface FileRouteTypes {
     | "/login/code"
     | "/_protected/"
     | "/login/"
-    | "/auth/oauth/callback";
+    | "/_protected/billings/new"
+    | "/_protected/contacts/new"
+    | "/_protected/settings/plan"
+    | "/_protected/settings/reminders"
+    | "/_protected/settings/whatsapp"
+    | "/auth/oauth/callback"
+    | "/_protected/billings/"
+    | "/_protected/contacts/"
+    | "/_protected/settings/"
+    | "/_protected/billings/$id/edit"
+    | "/_protected/charges/$id/proof"
+    | "/_protected/contacts/$id/edit"
+    | "/_protected/settings/payment-methods/new"
+    | "/_protected/settings/pix/new"
+    | "/_protected/billings/$id/"
+    | "/_protected/charges/$id/"
+    | "/_protected/contacts/$id/"
+    | "/_protected/settings/payment-methods/"
+    | "/_protected/settings/pix/";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -158,6 +381,62 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof LoginCodeRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/_protected/billings/": {
+      id: "/_protected/billings/";
+      path: "/billings";
+      fullPath: "/billings/";
+      preLoaderRoute: typeof ProtectedBillingsIndexRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/billings/new": {
+      id: "/_protected/billings/new";
+      path: "/billings/new";
+      fullPath: "/billings/new";
+      preLoaderRoute: typeof ProtectedBillingsNewRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/contacts/": {
+      id: "/_protected/contacts/";
+      path: "/contacts";
+      fullPath: "/contacts/";
+      preLoaderRoute: typeof ProtectedContactsIndexRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/contacts/new": {
+      id: "/_protected/contacts/new";
+      path: "/contacts/new";
+      fullPath: "/contacts/new";
+      preLoaderRoute: typeof ProtectedContactsNewRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/settings/": {
+      id: "/_protected/settings/";
+      path: "/settings";
+      fullPath: "/settings/";
+      preLoaderRoute: typeof ProtectedSettingsIndexRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/settings/plan": {
+      id: "/_protected/settings/plan";
+      path: "/settings/plan";
+      fullPath: "/settings/plan";
+      preLoaderRoute: typeof ProtectedSettingsPlanRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/settings/reminders": {
+      id: "/_protected/settings/reminders";
+      path: "/settings/reminders";
+      fullPath: "/settings/reminders";
+      preLoaderRoute: typeof ProtectedSettingsRemindersRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/settings/whatsapp": {
+      id: "/_protected/settings/whatsapp";
+      path: "/settings/whatsapp";
+      fullPath: "/settings/whatsapp";
+      preLoaderRoute: typeof ProtectedSettingsWhatsappRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
     "/auth/oauth/callback": {
       id: "/auth/oauth/callback";
       path: "/auth/oauth/callback";
@@ -165,17 +444,125 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthOauthCallbackRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/_protected/billings/$id/": {
+      id: "/_protected/billings/$id/";
+      path: "/billings/$id";
+      fullPath: "/billings/$id/";
+      preLoaderRoute: typeof ProtectedBillingsIdIndexRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/billings/$id/edit": {
+      id: "/_protected/billings/$id/edit";
+      path: "/billings/$id/edit";
+      fullPath: "/billings/$id/edit";
+      preLoaderRoute: typeof ProtectedBillingsIdEditRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/charges/$id/": {
+      id: "/_protected/charges/$id/";
+      path: "/charges/$id";
+      fullPath: "/charges/$id/";
+      preLoaderRoute: typeof ProtectedChargesIdIndexRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/charges/$id/proof": {
+      id: "/_protected/charges/$id/proof";
+      path: "/charges/$id/proof";
+      fullPath: "/charges/$id/proof";
+      preLoaderRoute: typeof ProtectedChargesIdProofRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/contacts/$id/": {
+      id: "/_protected/contacts/$id/";
+      path: "/contacts/$id";
+      fullPath: "/contacts/$id/";
+      preLoaderRoute: typeof ProtectedContactsIdIndexRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/contacts/$id/edit": {
+      id: "/_protected/contacts/$id/edit";
+      path: "/contacts/$id/edit";
+      fullPath: "/contacts/$id/edit";
+      preLoaderRoute: typeof ProtectedContactsIdEditRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/settings/payment-methods/": {
+      id: "/_protected/settings/payment-methods/";
+      path: "/settings/payment-methods";
+      fullPath: "/settings/payment-methods/";
+      preLoaderRoute: typeof ProtectedSettingsPaymentMethodsIndexRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/settings/payment-methods/new": {
+      id: "/_protected/settings/payment-methods/new";
+      path: "/settings/payment-methods/new";
+      fullPath: "/settings/payment-methods/new";
+      preLoaderRoute: typeof ProtectedSettingsPaymentMethodsNewRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/settings/pix/": {
+      id: "/_protected/settings/pix/";
+      path: "/settings/pix";
+      fullPath: "/settings/pix/";
+      preLoaderRoute: typeof ProtectedSettingsPixIndexRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
+    "/_protected/settings/pix/new": {
+      id: "/_protected/settings/pix/new";
+      path: "/settings/pix/new";
+      fullPath: "/settings/pix/new";
+      preLoaderRoute: typeof ProtectedSettingsPixNewRouteImport;
+      parentRoute: typeof ProtectedRoute;
+    };
   }
 }
 
 interface ProtectedRouteChildren {
   ProtectedFeedRoute: typeof ProtectedFeedRoute;
   ProtectedIndexRoute: typeof ProtectedIndexRoute;
+  ProtectedBillingsNewRoute: typeof ProtectedBillingsNewRoute;
+  ProtectedContactsNewRoute: typeof ProtectedContactsNewRoute;
+  ProtectedSettingsPlanRoute: typeof ProtectedSettingsPlanRoute;
+  ProtectedSettingsRemindersRoute: typeof ProtectedSettingsRemindersRoute;
+  ProtectedSettingsWhatsappRoute: typeof ProtectedSettingsWhatsappRoute;
+  ProtectedBillingsIndexRoute: typeof ProtectedBillingsIndexRoute;
+  ProtectedContactsIndexRoute: typeof ProtectedContactsIndexRoute;
+  ProtectedSettingsIndexRoute: typeof ProtectedSettingsIndexRoute;
+  ProtectedBillingsIdEditRoute: typeof ProtectedBillingsIdEditRoute;
+  ProtectedChargesIdProofRoute: typeof ProtectedChargesIdProofRoute;
+  ProtectedContactsIdEditRoute: typeof ProtectedContactsIdEditRoute;
+  ProtectedSettingsPaymentMethodsNewRoute: typeof ProtectedSettingsPaymentMethodsNewRoute;
+  ProtectedSettingsPixNewRoute: typeof ProtectedSettingsPixNewRoute;
+  ProtectedBillingsIdIndexRoute: typeof ProtectedBillingsIdIndexRoute;
+  ProtectedChargesIdIndexRoute: typeof ProtectedChargesIdIndexRoute;
+  ProtectedContactsIdIndexRoute: typeof ProtectedContactsIdIndexRoute;
+  ProtectedSettingsPaymentMethodsIndexRoute: typeof ProtectedSettingsPaymentMethodsIndexRoute;
+  ProtectedSettingsPixIndexRoute: typeof ProtectedSettingsPixIndexRoute;
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedFeedRoute: ProtectedFeedRoute,
   ProtectedIndexRoute: ProtectedIndexRoute,
+  ProtectedBillingsNewRoute: ProtectedBillingsNewRoute,
+  ProtectedContactsNewRoute: ProtectedContactsNewRoute,
+  ProtectedSettingsPlanRoute: ProtectedSettingsPlanRoute,
+  ProtectedSettingsRemindersRoute: ProtectedSettingsRemindersRoute,
+  ProtectedSettingsWhatsappRoute: ProtectedSettingsWhatsappRoute,
+  ProtectedBillingsIndexRoute: ProtectedBillingsIndexRoute,
+  ProtectedContactsIndexRoute: ProtectedContactsIndexRoute,
+  ProtectedSettingsIndexRoute: ProtectedSettingsIndexRoute,
+  ProtectedBillingsIdEditRoute: ProtectedBillingsIdEditRoute,
+  ProtectedChargesIdProofRoute: ProtectedChargesIdProofRoute,
+  ProtectedContactsIdEditRoute: ProtectedContactsIdEditRoute,
+  ProtectedSettingsPaymentMethodsNewRoute:
+    ProtectedSettingsPaymentMethodsNewRoute,
+  ProtectedSettingsPixNewRoute: ProtectedSettingsPixNewRoute,
+  ProtectedBillingsIdIndexRoute: ProtectedBillingsIdIndexRoute,
+  ProtectedChargesIdIndexRoute: ProtectedChargesIdIndexRoute,
+  ProtectedContactsIdIndexRoute: ProtectedContactsIdIndexRoute,
+  ProtectedSettingsPaymentMethodsIndexRoute:
+    ProtectedSettingsPaymentMethodsIndexRoute,
+  ProtectedSettingsPixIndexRoute: ProtectedSettingsPixIndexRoute,
 };
 
 const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(

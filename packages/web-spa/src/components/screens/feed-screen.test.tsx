@@ -177,7 +177,7 @@ describe("FeedScreen", () => {
 
     await user.click(await screen.findByRole("button", { name: monthLabel("2026-08") }));
 
-    expect(navigate).toHaveBeenCalledWith(`/feed?${feedFilterQuery(DEFAULT_FEED_FILTERS, TODAY, "2026-08")}`, { replace: true });
+    expect(navigate).toHaveBeenCalledWith(`/feed?${feedFilterQuery(DEFAULT_FEED_FILTERS, TODAY, "2026-08")}`, { replace: true, resetScroll: false });
   });
 
   it("moves a chosen filter to the URL, keeping the month it is on", async () => {
@@ -190,7 +190,7 @@ describe("FeedScreen", () => {
 
     expect(navigate).toHaveBeenCalledWith(
       `/feed?${feedFilterQuery({ ...DEFAULT_FEED_FILTERS, direction: [Direction.Receivable] }, TODAY, MONTH)}`,
-      { replace: true },
+      { replace: true, resetScroll: false },
     );
   });
   it("reminds an overdue debtor from the card after confirming, once", async () => {
@@ -334,6 +334,6 @@ describe("FeedScreen", () => {
     await user.click(within(screen.getByRole("dialog", { name: "Filtros" })).getByRole("button", { name: "Direção A pagar" }));
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
 
-    expect(navigate).toHaveBeenCalledWith(expect.stringContaining("direction=payable"), { replace: true });
+    expect(navigate).toHaveBeenCalledWith(expect.stringContaining("direction=payable"), { replace: true, resetScroll: false });
   });
 });

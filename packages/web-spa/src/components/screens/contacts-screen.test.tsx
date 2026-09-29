@@ -158,16 +158,3 @@ describe("ContactsScreen", () => {
     expect(screen.getAllByRole("link", { name: "Novo contato" })[0]).toHaveAttribute("href", "/contacts/new");
   });
 });
-
-// The header back button lives in the route files (Task 9b), which own these destinations; the
-// assertions move to the route tests there and the titles stay here so none is lost.
-describe("back button destinations", () => {
-  it.todo("names the screen the contacts page came from");
-  it.todo("falls back to the profile when the contacts page was opened on its own");
-  it.todo("sends the contact history back to the contact list");
-  it.todo("sends the contact form back to the list, or to the screen that asked for it");
-  it.todo("sends the contact edit form back to the contact it came from");
-  it.todo("names the screen the payment methods page came from");
-  it.todo("falls back to the profile on the payment methods page");
-  it.todo("sends the payment method form back to the method list");
-});

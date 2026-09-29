@@ -86,7 +86,7 @@ export function FeedScreen({ charges, filters, month, today, user }: Props) {
 
   // Every knob of the feed lives in the URL, so changing one re-runs the server render.
   function go(next: FeedFilters, nextMonth = month) {
-    navigate(`/feed?${feedFilterQuery(next, today, nextMonth)}`, { replace: true });
+    navigate(`/feed?${feedFilterQuery(next, today, nextMonth)}`, { replace: true, resetScroll: false });
   }
 
   async function run(fallback: string, action: () => Promise<void>) {

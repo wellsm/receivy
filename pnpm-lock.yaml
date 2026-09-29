@@ -68,7 +68,7 @@ catalogs:
       version: 3.2.7
 
 overrides:
-  '@ez4/aws-cloudfront': file:./vendor/ez4-aws-cloudfront-0.53.0-cdn-output.tgz
+  '@ez4/aws-cloudfront': file:./vendor/ez4-aws-cloudfront-0.53.0-cdn-output-2.tgz
   '@ez4/aws-common': file:./vendor/ez4-aws-common-0.53.0.tgz
   '@ez4/raw-pg': file:./vendor/ez4-raw-pg-0.53.0.tgz
 
@@ -468,8 +468,8 @@ importers:
         specifier: 0.53.0
         version: 0.53.0
       '@ez4/aws-cloudfront':
-        specifier: file:../../vendor/ez4-aws-cloudfront-0.53.0-cdn-output.tgz
-        version: file:vendor/ez4-aws-cloudfront-0.53.0-cdn-output.tgz
+        specifier: file:../../vendor/ez4-aws-cloudfront-0.53.0-cdn-output-2.tgz
+        version: file:vendor/ez4-aws-cloudfront-0.53.0-cdn-output-2.tgz
       '@ez4/common':
         specifier: 0.53.0
         version: 0.53.0
@@ -1769,8 +1769,8 @@ packages:
     resolution: {integrity: sha512-JfYQaAx0RgpmPk2+Bh51m+Vi+W4UYKa2M5XIe8oxQ5X7x3zPE/OIEFECAPAOQcD56IqQbk6/fAkbzuyjaDvZeA==}
     engines: {node: '>=22.7'}
 
-  '@ez4/aws-cloudfront@file:vendor/ez4-aws-cloudfront-0.53.0-cdn-output.tgz':
-    resolution: {integrity: sha512-hKsaRSnjpvwlhnbakVb4ct6nqiXNOQuoOfCt8dXq+/g/F+jss+3ImEflz751yJC7Wt2NWtYunipi29f4yISl7Q==, tarball: file:vendor/ez4-aws-cloudfront-0.53.0-cdn-output.tgz}
+  '@ez4/aws-cloudfront@file:vendor/ez4-aws-cloudfront-0.53.0-cdn-output-2.tgz':
+    resolution: {integrity: sha512-J6q4Uah9dV2qU+jVl04E95RmakvOwkRokJSPN2ePr6WHB/UTYT5SAYj55hEIVXDFneqhbLKsFzivN4VNKhejEA==, tarball: file:vendor/ez4-aws-cloudfront-0.53.0-cdn-output-2.tgz}
     version: 0.53.0
     engines: {node: '>=22.7'}
 
@@ -8126,7 +8126,7 @@ snapshots:
   '@aws-sdk/credential-provider-login@3.972.78':
     dependencies:
       '@aws-sdk/core': 3.978.1
-      '@aws-sdk/nested-clients': 3.997.45
+      '@aws-sdk/nested-clients': 3.997.46
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
@@ -8325,7 +8325,7 @@ snapshots:
   '@aws-sdk/token-providers@3.1129.0':
     dependencies:
       '@aws-sdk/core': 3.978.1
-      '@aws-sdk/nested-clients': 3.997.45
+      '@aws-sdk/nested-clients': 3.997.46
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.0
       '@smithy/types': 4.19.0
@@ -9561,7 +9561,7 @@ snapshots:
       '@ez4/utils': 0.53.0
       mime: 3.0.0
 
-  '@ez4/aws-cloudfront@file:vendor/ez4-aws-cloudfront-0.53.0-cdn-output.tgz':
+  '@ez4/aws-cloudfront@file:vendor/ez4-aws-cloudfront-0.53.0-cdn-output-2.tgz':
     dependencies:
       '@aws-sdk/client-cloudfront': 3.1141.0
       '@ez4/aws-bucket': 0.53.0

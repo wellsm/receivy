@@ -8,6 +8,11 @@ import type { WebFiles } from "./storage";
  * Apple only accepts a Return URL on a verifiable domain, and the API lives on an execute-api host. CloudFront
  * keeps the request path, so the web paths are the API's own (`/api/auth/google/callback`, `/api/auth/apple/callback`).
  * Deploy-only: the app never imports this file, so Vite leaves it out of the bundle.
+ *
+ * The tag below is the label printed with the site URL after a deploy, and the distribution's comment in CloudFront.
+ * It has to be a JSDoc tag: `Cdn.Service` rejects a `description` property.
+ *
+ * @description Receivy
  */
 export declare class WebCdn extends Cdn.Service {
   defaultIndex: "index.html";
@@ -20,7 +25,10 @@ export declare class WebCdn extends Cdn.Service {
     bucket: Environment.Service<WebFiles>;
     rewrite: [
       // Client-side routes (/login, /pay/<token>, /auth/callback...) all serve index.html; only static files are fetched as themselves.
-      Cdn.UseRewriteRule<{ from: "!*.{js|css|txt|png|svg|ico|jpg|webp|woff|woff2|map|json}"; to: "/" }>,
+      Cdn.UseRewriteRule<{
+        from: "!*.{js|css|txt|png|svg|ico|jpg|webp|woff|woff2|map|json}";
+        to: "/";
+      }>,
     ];
   }>;
 

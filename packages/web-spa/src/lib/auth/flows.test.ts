@@ -38,6 +38,9 @@ beforeEach(() => {
 
 describe("requestEmailCode", () => {
   it("posts the email unauthenticated", async () => {
+    // A stored session makes the "no authorization header" assertion able to fail.
+    storeSession({ accessToken: "stale", refreshToken: "r0", expiresIn: 900 });
+
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 
     vi.stubGlobal("fetch", fetchMock);
@@ -63,6 +66,9 @@ describe("requestEmailCode", () => {
 
 describe("confirmEmailCode", () => {
   it("stores the session and returns the user", async () => {
+    // A stored session makes the "no authorization header" assertion able to fail.
+    storeSession({ accessToken: "stale", refreshToken: "r0", expiresIn: 900 });
+
     const fetchMock = vi.fn().mockResolvedValue(json({ accessToken: "a1", refreshToken: "r1", expiresIn: 900, user }));
 
     vi.stubGlobal("fetch", fetchMock);
@@ -106,6 +112,9 @@ describe("confirmEmailCode", () => {
 
 describe("startOauth", () => {
   it("saves the verifier, posts the challenge and returns a valid authorization url", async () => {
+    // A stored session makes the "no authorization header" assertion able to fail.
+    storeSession({ accessToken: "stale", refreshToken: "r0", expiresIn: 900 });
+
     const fetchMock = vi.fn().mockResolvedValue(json({ authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth?x=1" }));
 
     vi.stubGlobal("fetch", fetchMock);
@@ -143,6 +152,9 @@ describe("startOauth", () => {
 
 describe("completeOauth", () => {
   it("exchanges the popped verifier and stores the session", async () => {
+    // A stored session makes the "no authorization header" assertion able to fail.
+    storeSession({ accessToken: "stale", refreshToken: "r0", expiresIn: 900 });
+
     saveOauthVerifier("verifier-1");
 
     const fetchMock = vi.fn().mockResolvedValue(json({ accessToken: "a2", refreshToken: "r2", expiresIn: 900, user }));
@@ -257,6 +269,9 @@ describe("currentUser quiet expiry", () => {
 
 describe("oauthProviders", () => {
   it("returns the providers the API reports", async () => {
+    // A stored session makes the "no authorization header" assertion able to fail.
+    storeSession({ accessToken: "stale", refreshToken: "r0", expiresIn: 900 });
+
     const fetchMock = vi.fn().mockResolvedValue(json({ google: true, apple: false }));
 
     vi.stubGlobal("fetch", fetchMock);

@@ -46,23 +46,22 @@ describe("short opt-out link", () => {
   });
 
   it("does the same when the API cannot be reached", async () => {
-    vi.stubEnv("VITE_API_URL", "https://api.test");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (url.includes("/public/opt-out/short/")) {
-          throw new Error("down");
-        }
-
-        return new Response(null, { status: 404 });
-      }),
-    );
+    const fetchMock = stubApi({
+      "GET /public/opt-out/short/K7m2xQ": () => {
+        throw new TypeError("Failed to fetch");
+      },
+      "POST /public/notices/opt-out/K7m2xQ": () => {
+        throw new TypeError("Failed to fetch");
+      },
+    });
 
     const router = open("K7m2xQ");
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/opt-out/K7m2xQ"));
 
-    expect(await screen.findByText("Página não encontrada")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Tentar de novo" })).toBeInTheDocument();
+    expect(requested(fetchMock)).toEqual(["GET /public/opt-out/short/K7m2xQ", "POST /public/notices/opt-out/K7m2xQ"]);
+    expect(screen.queryByText("Página não encontrada")).toBeNull();
     expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
 });

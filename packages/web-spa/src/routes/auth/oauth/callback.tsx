@@ -42,6 +42,7 @@ function OauthCallbackPage() {
       });
   }, [code, navigate]);
 
+  // A missing code is derived here (not set in the effect): the effect must not set state synchronously.
   if (failed || !code) {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-canvas px-5 text-center">

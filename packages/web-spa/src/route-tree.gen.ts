@@ -10,20 +10,15 @@
 
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as ProtectedRouteImport } from "./routes/_protected";
-import { Route as LoginRouteImport } from "./routes/login";
 import { Route as OnboardingRouteImport } from "./routes/onboarding";
 import { Route as ProtectedIndexRouteImport } from "./routes/_protected/index";
 import { Route as ProtectedFeedRouteImport } from "./routes/_protected/feed";
+import { Route as LoginIndexRouteImport } from "./routes/login/index";
 import { Route as LoginCodeRouteImport } from "./routes/login/code";
 import { Route as AuthOauthCallbackRouteImport } from "./routes/auth/oauth/callback";
 
 const ProtectedRoute = ProtectedRouteImport.update({
   id: "/_protected",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const LoginRoute = LoginRouteImport.update({
-  id: "/login",
-  path: "/login",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OnboardingRoute = OnboardingRouteImport.update({
@@ -41,10 +36,15 @@ const ProtectedFeedRoute = ProtectedFeedRouteImport.update({
   path: "/feed",
   getParentRoute: () => ProtectedRoute,
 } as any);
+const LoginIndexRoute = LoginIndexRouteImport.update({
+  id: "/login/",
+  path: "/login/",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const LoginCodeRoute = LoginCodeRouteImport.update({
-  id: "/code",
-  path: "/code",
-  getParentRoute: () => LoginRoute,
+  id: "/login/code",
+  path: "/login/code",
+  getParentRoute: () => rootRouteImport,
 } as any);
 const AuthOauthCallbackRoute = AuthOauthCallbackRouteImport.update({
   id: "/auth/oauth/callback",
@@ -54,62 +54,63 @@ const AuthOauthCallbackRoute = AuthOauthCallbackRouteImport.update({
 
 export interface FileRoutesByFullPath {
   "/": typeof ProtectedIndexRoute;
-  "/login": typeof LoginRouteWithChildren;
   "/onboarding": typeof OnboardingRoute;
   "/feed": typeof ProtectedFeedRoute;
   "/login/code": typeof LoginCodeRoute;
+  "/login/": typeof LoginIndexRoute;
   "/auth/oauth/callback": typeof AuthOauthCallbackRoute;
 }
 export interface FileRoutesByTo {
-  "/login": typeof LoginRouteWithChildren;
   "/onboarding": typeof OnboardingRoute;
   "/feed": typeof ProtectedFeedRoute;
   "/login/code": typeof LoginCodeRoute;
   "/": typeof ProtectedIndexRoute;
+  "/login": typeof LoginIndexRoute;
   "/auth/oauth/callback": typeof AuthOauthCallbackRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/_protected": typeof ProtectedRouteWithChildren;
-  "/login": typeof LoginRouteWithChildren;
   "/onboarding": typeof OnboardingRoute;
   "/_protected/feed": typeof ProtectedFeedRoute;
   "/login/code": typeof LoginCodeRoute;
   "/_protected/": typeof ProtectedIndexRoute;
+  "/login/": typeof LoginIndexRoute;
   "/auth/oauth/callback": typeof AuthOauthCallbackRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | "/"
-    | "/login"
     | "/onboarding"
     | "/feed"
     | "/login/code"
+    | "/login/"
     | "/auth/oauth/callback";
   fileRoutesByTo: FileRoutesByTo;
   to:
-    | "/login"
     | "/onboarding"
     | "/feed"
     | "/login/code"
     | "/"
+    | "/login"
     | "/auth/oauth/callback";
   id:
     | "__root__"
     | "/_protected"
-    | "/login"
     | "/onboarding"
     | "/_protected/feed"
     | "/login/code"
     | "/_protected/"
+    | "/login/"
     | "/auth/oauth/callback";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
   ProtectedRoute: typeof ProtectedRouteWithChildren;
-  LoginRoute: typeof LoginRouteWithChildren;
   OnboardingRoute: typeof OnboardingRoute;
+  LoginCodeRoute: typeof LoginCodeRoute;
+  LoginIndexRoute: typeof LoginIndexRoute;
   AuthOauthCallbackRoute: typeof AuthOauthCallbackRoute;
 }
 
@@ -120,13 +121,6 @@ declare module "@tanstack/react-router" {
       path: "";
       fullPath: "/";
       preLoaderRoute: typeof ProtectedRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/login": {
-      id: "/login";
-      path: "/login";
-      fullPath: "/login";
-      preLoaderRoute: typeof LoginRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/onboarding": {
@@ -150,12 +144,19 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ProtectedFeedRouteImport;
       parentRoute: typeof ProtectedRoute;
     };
+    "/login/": {
+      id: "/login/";
+      path: "/login";
+      fullPath: "/login/";
+      preLoaderRoute: typeof LoginIndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/login/code": {
       id: "/login/code";
-      path: "/code";
+      path: "/login/code";
       fullPath: "/login/code";
       preLoaderRoute: typeof LoginCodeRouteImport;
-      parentRoute: typeof LoginRoute;
+      parentRoute: typeof rootRouteImport;
     };
     "/auth/oauth/callback": {
       id: "/auth/oauth/callback";
@@ -181,20 +182,11 @@ const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
   ProtectedRouteChildren,
 );
 
-interface LoginRouteChildren {
-  LoginCodeRoute: typeof LoginCodeRoute;
-}
-
-const LoginRouteChildren: LoginRouteChildren = {
-  LoginCodeRoute: LoginCodeRoute,
-};
-
-const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren);
-
 const rootRouteChildren: RootRouteChildren = {
   ProtectedRoute: ProtectedRouteWithChildren,
-  LoginRoute: LoginRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
+  LoginCodeRoute: LoginCodeRoute,
+  LoginIndexRoute: LoginIndexRoute,
   AuthOauthCallbackRoute: AuthOauthCallbackRoute,
 };
 export const routeTree = rootRouteImport

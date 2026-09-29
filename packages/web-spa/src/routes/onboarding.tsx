@@ -14,12 +14,13 @@ export const Route = createFileRoute("/onboarding")({
       throw redirect({ to: "/login", search: { next: search.next } });
     }
   },
-  loader: async ({ location }) => {
+  loaderDeps: ({ search }) => ({ next: search.next }),
+  loader: async ({ deps }) => {
     const user = await currentUser();
-    const nextPath = safeNextPath(new URLSearchParams(location.searchStr).get("next"));
 
     if (user && !needsOnboarding(user)) {
-      throw redirect({ to: nextPath });
+      // href, not to: the safe path may carry search and hash.
+      throw redirect({ href: safeNextPath(deps.next ?? null) });
     }
 
     return { user };

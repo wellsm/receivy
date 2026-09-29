@@ -5,7 +5,7 @@ type NavigateOptions = {
   search?: Record<string, string | undefined>;
 };
 
-type LooseNavigate = (options: { to: string; replace?: boolean; search?: Record<string, string | undefined> }) => void;
+type LooseNavigate = (options: { to?: string; href?: string; replace?: boolean; search?: Record<string, string | undefined> }) => void;
 
 /**
  * Loosely typed wrapper around TanStack Router's `useNavigate`, for the dynamic string
@@ -16,6 +16,13 @@ export function useAppNavigate(): (to: string, options?: NavigateOptions) => voi
   const navigate = useNavigate() as unknown as LooseNavigate;
 
   return (to, options) => {
+    // A target with search or hash only survives as a whole href; `to` is a bare path.
+    if (to.includes("?") || to.includes("#")) {
+      navigate({ href: to, ...options });
+
+      return;
+    }
+
     navigate({ to, ...options });
   };
 }

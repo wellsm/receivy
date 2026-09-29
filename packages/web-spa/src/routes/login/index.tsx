@@ -6,7 +6,7 @@ import { hasSession } from "@/lib/auth/session";
 
 type LoginSearch = { next?: string; error?: string };
 
-export const Route = createFileRoute("/login")({
+export const Route = createFileRoute("/login/")({
   validateSearch: (search: Record<string, unknown>): LoginSearch => ({
     ...(typeof search.next === "string" ? { next: search.next } : {}),
     ...(typeof search.error === "string" ? { error: search.error } : {}),

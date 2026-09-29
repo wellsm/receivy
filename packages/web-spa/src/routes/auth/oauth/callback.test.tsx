@@ -56,4 +56,23 @@ describe("oauth callback route", () => {
     expect(await screen.findByText("Não foi possível entrar")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Tentar de novo" })).toHaveAttribute("href", "/login?error=oauth");
   });
+
+  it("shows the failure without calling the exchange when the URL has no code", async () => {
+    vi.mocked(completeOauth).mockClear();
+
+    renderAt("/auth/oauth/callback");
+
+    expect(await screen.findByText("Não foi possível entrar")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Tentar de novo" })).toHaveAttribute("href", "/login?error=oauth");
+    expect(completeOauth).not.toHaveBeenCalled();
+  });
+
+  it("shows the failure when the exchange rejects", async () => {
+    vi.mocked(completeOauth).mockRejectedValue(new Error("boom"));
+
+    renderAt("/auth/oauth/callback?code=abc");
+
+    expect(await screen.findByText("Não foi possível entrar")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Tentar de novo" })).toBeInTheDocument();
+  });
 });

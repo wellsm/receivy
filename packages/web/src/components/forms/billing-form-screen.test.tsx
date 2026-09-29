@@ -1258,6 +1258,10 @@ it("shows the inherited default and only sends reminders after customising", asy
 });
 
 it("shows the inherited default as e-mail, never WhatsApp, when the kill switch is off", async () => {
+  // Stubbed, not assumed: a developer's `.env.local` may turn the flags on.
+  vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
+  vi.stubEnv("VITE_EVOLUTION_ENABLED", "false");
+
   const billing = arrangeBilling({ reminders: null, effectiveReminders: [{ offsetDays: 0, enabled: true, channels: { email: false, whatsapp: true } }] });
   const { user } = renderForm(billing);
 
@@ -1293,6 +1297,10 @@ it("customises, sends the rules, and clears back to the default", async () => {
 });
 
 it("hides the reminder channel picker and sends a stored whatsapp rule as e-mail, when the kill switch is off", async () => {
+  // Stubbed, not assumed: a developer's `.env.local` may turn the flags on.
+  vi.stubEnv("VITE_WHATSAPP_ENABLED", "false");
+  vi.stubEnv("VITE_EVOLUTION_ENABLED", "false");
+
   const billing = arrangeBilling({
     reminders: [{ offsetDays: 3, enabled: true, channels: { email: false, whatsapp: true } }],
     effectiveReminders: [{ offsetDays: 3, enabled: true, channels: { email: false, whatsapp: true } }],

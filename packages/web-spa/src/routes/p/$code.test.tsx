@@ -1,5 +1,5 @@
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAppRouter } from "@/router";
 import { requested, stubApi } from "@/test/stub-api";
@@ -22,12 +22,13 @@ describe("short payment link", () => {
   it("resolves the code and opens the pay page with its signed token", async () => {
     const fetchMock = stubApi({
       "GET /public/short/K7m2xQ9aB": () => Response.json({ token: "public-id.123.sig", expiresAt: "2026-12-01T00:00:00Z" }),
-      "GET /public/charges/public-id.123.sig": () => Response.json({ state: "paid", creditorFirstName: "Lucas", description: "x", amount: { amountCents: 1, currency: "BRL" }, dueDate: "2026-10-10", uploadsEnabled: false }),
+      "GET /public/charges/public-id.123.sig": () => Response.json({ state: "paid", creditorFirstName: "Lucas", description: "Churrasco", amount: { amountCents: 1, currency: "BRL" }, dueDate: "2026-10-10", uploadsEnabled: false }),
     });
 
     const router = open("K7m2xQ9aB");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/pay/public-id.123.sig"));
+    expect(await screen.findByRole("heading", { name: "Churrasco" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/pay/public-id.123.sig");
 
     expect(requested(fetchMock)).toContain("GET /public/short/K7m2xQ9aB");
     expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ headers: expect.any(Headers) }));

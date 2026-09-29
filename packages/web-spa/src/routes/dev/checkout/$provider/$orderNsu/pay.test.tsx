@@ -78,6 +78,7 @@ describe("dev checkout pay route", () => {
 
     open(`?redirect=${encodeURIComponent(`${TARGET}?returned=1`)}`);
 
+    expect(await screen.findByText("Voltando para a cobrança…")).toBeInTheDocument();
     await waitFor(() => expect(assign).toHaveBeenCalledOnce());
 
     expect(requested(fetchMock)).toEqual(["POST /dev/checkout/pagseguro/order-1/pay"]);
@@ -90,6 +91,8 @@ describe("dev checkout pay route", () => {
 
     open(`?redirect=${encodeURIComponent(TARGET)}`);
 
+    expect(await screen.findByText("Voltando para a cobrança…")).toBeInTheDocument();
     await waitFor(() => expect(assign).toHaveBeenCalledWith(`${TARGET}?returned=1`));
+    expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
 });

@@ -108,9 +108,9 @@ export async function logout(): Promise<void> {
   }
 }
 
-export async function currentUser(): Promise<AuthUser | null> {
+export async function currentUser(options: { quietExpiry?: boolean } = {}): Promise<AuthUser | null> {
   try {
-    const response = await apiJson<{ user: AuthUser }>("auth/me");
+    const response = await apiJson<{ user: AuthUser }>("auth/me", { quietExpiry: options.quietExpiry });
 
     return response.user;
   } catch {

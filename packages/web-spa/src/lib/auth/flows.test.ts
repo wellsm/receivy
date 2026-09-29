@@ -1,4 +1,5 @@
 import type { AuthUser } from "@receivy/common";
+import { onSessionExpired } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 import { clearSession, getAccessToken, loadRefreshToken, storeSession } from "@/lib/auth/session";
 import {
@@ -220,6 +221,36 @@ describe("currentUser", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
 
     await expect(currentUser()).resolves.toBeNull();
+  });
+});
+
+describe("currentUser quiet expiry", () => {
+  afterEach(() => {
+    onSessionExpired(null);
+  });
+
+  it("does not fire the session-expired handler when asked for a quiet expiry", async () => {
+    const handler = vi.fn();
+
+    storeSession({ accessToken: "a1", refreshToken: "r1", expiresIn: 900 });
+    onSessionExpired(handler);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
+
+    await expect(currentUser({ quietExpiry: true })).resolves.toBeNull();
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("keeps firing it by default", async () => {
+    const handler = vi.fn();
+
+    storeSession({ accessToken: "a1", refreshToken: "r1", expiresIn: 900 });
+    onSessionExpired(handler);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
+
+    await expect(currentUser()).resolves.toBeNull();
+
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 });
 

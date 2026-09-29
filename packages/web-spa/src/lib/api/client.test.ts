@@ -193,6 +193,21 @@ describe("onSessionExpired", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
+  it("does not call the handler when the caller asked for a quiet expiry, and still throws and clears the session", async () => {
+    const handler = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(null, { status: 401 })).mockResolvedValueOnce(new Response(null, { status: 401 }));
+
+    onSessionExpired(handler);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(apiFetch("auth/me", { quietExpiry: true })).rejects.toBeInstanceOf(SessionExpiredError);
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(getAccessToken()).toBeNull();
+    expect(localStorage.getItem("receivy.session")).toBeNull();
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty("quietExpiry");
+  });
+
   it("stays quiet when the refresh fails on the network", async () => {
     const handler = vi.fn();
 

@@ -53,7 +53,7 @@ export async function ownChargeIdByToken(token: string): Promise<string | null> 
   }
 
   try {
-    const response = await apiFetch(`charges/by-link/${encodeURIComponent(token)}`, { method: "GET" });
+    const response = await apiFetch(`charges/by-link/${encodeURIComponent(token)}`, { method: "GET", quietExpiry: true });
 
     if (!response.ok) {
       return null;

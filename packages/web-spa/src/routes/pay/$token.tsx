@@ -11,6 +11,8 @@ export const Route = createFileRoute("/pay/$token")({
     ...pick(search, "slug"),
     ...pick(search, "returned"),
   }),
+  // The loader has a side effect on the provider return: history back to this url must not POST it again (a full reload still does, as the Next page did).
+  staleTime: Infinity,
   loaderDeps: ({ search }) => search,
   loader: async ({ params, deps }) => {
     const charge = await loadPublicCharge(params.token, deps);

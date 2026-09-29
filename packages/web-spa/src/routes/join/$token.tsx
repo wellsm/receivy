@@ -14,14 +14,15 @@ export const Route = createFileRoute("/join/$token")({
       return { view: null, authenticated: false };
     }
 
-    const authenticated = hasSession();
+    // A dead session peeks quietly: currentUser answers null and the visitor is treated as signed out, not sent to the login.
+    const user = hasSession() ? await currentUser({ quietExpiry: true }) : null;
 
     // The invite names the guest by their profile name: a fresh account finishes onboarding first and comes back here.
-    if (authenticated && needsOnboarding(await currentUser())) {
+    if (user && needsOnboarding(user)) {
       throw redirect({ to: "/onboarding", search: { next: `/join/${params.token}` } });
     }
 
-    return { view, authenticated };
+    return { view, authenticated: user !== null };
   },
   head: () => ({ meta: [{ title: "Convite | Receivy" }, { name: "robots", content: "noindex, nofollow" }, { name: "referrer", content: "no-referrer" }] }),
   component: JoinPage,

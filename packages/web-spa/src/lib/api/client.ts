@@ -9,6 +9,8 @@ export type ApiInit = RequestInit & {
   /** false for the unauthenticated auth routes: no Bearer, no refresh on 401. */
   auth?: boolean;
   idempotencyKey?: string;
+  /** true for a public page that only peeks at the session: a dead one still clears and throws, but does not send the tab to the login. */
+  quietExpiry?: boolean;
 };
 
 /** Two rounds cover a sibling tab that rotated first (409); more than that is a dead session. */
@@ -46,6 +48,9 @@ export function apiUrl(path: string): string {
 async function send(path: string, init: ApiInit): Promise<Response> {
   const { auth = true, idempotencyKey, headers, ...rest } = init;
   const merged = new Headers(headers);
+
+  // Ours, not fetch's.
+  delete rest.quietExpiry;
 
   merged.set("content-type", "application/json");
 
@@ -130,7 +135,9 @@ export async function apiFetch(path: string, init: ApiInit = {}): Promise<Respon
   const outcome = await refreshSession();
 
   if (outcome === RefreshOutcome.Expired) {
-    sessionExpiredHandler?.();
+    if (!init.quietExpiry) {
+      sessionExpiredHandler?.();
+    }
 
     throw new SessionExpiredError();
   }

@@ -11,15 +11,20 @@ export const Route = createFileRoute("/pay/$token")({
     ...pick(search, "slug"),
     ...pick(search, "returned"),
   }),
-  // The loader has a side effect on the provider return: history back to this url must not POST it again (a full reload still does, as the Next page did).
-  staleTime: Infinity,
   loaderDeps: ({ search }) => search,
   loader: async ({ params, deps }) => {
+    // Back from InfinitePay: close the charge with the ids, then take them out of the address bar and the history
+    // (replace), so going back or reloading never posts the return again. The loader then runs for `?returned=1`.
+    if (deps.order_nsu && deps.transaction_nsu && deps.slug) {
+      await loadPublicCharge(params.token, deps);
+
+      throw redirect({ to: "/pay/$token", params, search: { returned: "1" }, replace: true });
+    }
+
     const charge = await loadPublicCharge(params.token, deps);
-    const returned = Boolean(deps.order_nsu && deps.transaction_nsu && deps.slug) || deps.returned === "1";
     // Back from the checkout with a session: a participant lands on their own charge screen, not the public one.
     // Any other visit (a creditor previewing the link, a payer without account) stays here.
-    const ownChargeId = charge && returned ? await ownChargeIdByToken(params.token) : null;
+    const ownChargeId = charge && deps.returned === "1" ? await ownChargeIdByToken(params.token) : null;
 
     if (ownChargeId) {
       throw redirect({ to: "/charges/$id", params: { id: ownChargeId }, search: { returned: "1" }, replace: true });

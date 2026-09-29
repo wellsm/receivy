@@ -269,9 +269,11 @@ export function ProfileScreen() {
     let deleted: boolean;
 
     try {
-      // No automatic retry/redirect: a 401 cannot certify that deletion committed.
+      // apiFetch refreshes and retries once on a 401; a refused refresh stays quiet (no login redirect) so the
+      // screen shows its own outcome: a dead session cannot certify that the deletion committed.
       const response = await apiFetch("account", {
         method: "DELETE",
+        quietExpiry: true,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ confirmation }),
       });

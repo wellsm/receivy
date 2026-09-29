@@ -15,13 +15,15 @@ type LoginScreenProps = {
   oauthError?: boolean;
 };
 
+const OAUTH_FAILED_MESSAGE = "Não foi possível concluir o login. Tente novamente ou use seu e-mail.";
+
 const SOCIAL_BUTTON = "flex h-14 w-full items-center justify-center gap-3 rounded-2xl text-base font-bold transition active:opacity-80 disabled:opacity-40";
 
 export function LoginScreen({ nextPath, providers, oauthError = false }: LoginScreenProps) {
   const navigate = useAppNavigate();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(oauthError ? "Não foi possível concluir o login. Tente novamente ou use seu e-mail." : null);
+  const [error, setError] = useState<string | null>(oauthError ? OAUTH_FAILED_MESSAGE : null);
 
   async function socialLogin(provider: OAuthProvider) {
     setBusy(true);
@@ -31,8 +33,8 @@ export function LoginScreen({ nextPath, providers, oauthError = false }: LoginSc
       const authorizationUrl = await startOauth(provider);
 
       window.location.assign(authorizationUrl);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Não foi possível concluir o login. Tente novamente ou use seu e-mail.");
+    } catch {
+      setError(OAUTH_FAILED_MESSAGE);
       setBusy(false);
     }
   }

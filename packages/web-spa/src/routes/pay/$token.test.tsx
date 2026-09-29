@@ -133,26 +133,54 @@ describe("pay route", () => {
     expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
 
-  it("posts the provider return with the ids from the url as strings", async () => {
-    const fetchMock = stubApi({ "POST /public/charges/tok/provider-return": () => Response.json(charge) });
+  it("posts the provider return with the ids from the url as strings, then drops the ids from the url", async () => {
+    const fetchMock = stubApi({
+      "POST /public/charges/tok/provider-return": () => Response.json(charge),
+      "GET /public/charges/tok": () => Response.json(charge),
+    });
 
-    renderAt("/pay/tok?order_nsu=123&transaction_nsu=456&slug=shop");
+    const router = renderAt("/pay/tok?order_nsu=123&transaction_nsu=456&slug=shop");
 
     expect(await screen.findByRole("heading", { name: "Churrasco" })).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.href).toBe("/pay/tok?returned=1"));
 
     const posts = fetchMock.mock.calls.filter(([url, init]) => url.endsWith("/public/charges/tok/provider-return") && init?.method === "POST");
 
     expect(posts).toHaveLength(1);
     expect(JSON.parse(String(posts[0]?.[1]?.body))).toEqual({ orderNsu: "123", transactionNsu: "456", slug: "shop" });
+    expect(router.history.length).toBe(1);
     expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
 
-  it("does not post the provider return again when history brings the visitor back to the url", async () => {
-    const fetchMock = stubApi({ "POST /public/charges/tok/provider-return": () => Response.json(charge) });
+  it("sends a signed-in participant back from the provider return to their own charge, posting once", async () => {
+    const fetchMock = stubApi({
+      "POST /public/charges/tok/provider-return": () => Response.json(charge),
+      "GET /public/charges/tok": () => Response.json(charge),
+      "GET /charges/by-link/tok": () => Response.json({ id: "c1" }),
+      "GET /auth/me": () => Response.json({ user: { id: "u1", name: "Ana", status: "active" } }),
+      "GET /charges/c1": () => Response.json(ownCharge),
+    });
+
+    storeSession({ accessToken: "a", refreshToken: "r", user: { id: "u1" } } as never);
+
+    const router = renderAt("/pay/tok?order_nsu=123&transaction_nsu=456&slug=shop");
+
+    expect(await screen.findByText("Aluguel do mês")).toBeInTheDocument();
+    expect(router.state.location.href).toBe("/charges/c1?returned=1");
+    expect(requested(fetchMock).filter((call) => call === "POST /public/charges/tok/provider-return")).toHaveLength(1);
+    expect(screen.queryByText("Algo deu errado")).toBeNull();
+  });
+
+  it("does not post the provider return again when history brings the visitor back", async () => {
+    const fetchMock = stubApi({
+      "POST /public/charges/tok/provider-return": () => Response.json(charge),
+      "GET /public/charges/tok": () => Response.json(charge),
+    });
 
     const router = renderAt("/pay/tok?order_nsu=123&transaction_nsu=456&slug=shop");
 
     await screen.findByRole("heading", { name: "Churrasco" });
+    await waitFor(() => expect(router.state.location.href).toBe("/pay/tok?returned=1"));
     await act(async () => {
       await router.navigate({ to: "/privacy" });
     });
@@ -163,8 +191,40 @@ describe("pay route", () => {
     });
 
     expect(await screen.findByRole("heading", { name: "Churrasco" })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/pay/tok");
+    expect(router.state.location.href).toBe("/pay/tok?returned=1");
     expect(requested(fetchMock).filter((call) => call === "POST /public/charges/tok/provider-return")).toHaveLength(1);
+    expect(screen.queryByText("Algo deu errado")).toBeNull();
+  });
+
+  it("asks for the charge again on a later visit after an outage instead of keeping the unavailable state", async () => {
+    let down = true;
+
+    stubApi({
+      "GET /public/charges/tok": () => {
+        if (down) {
+          throw new TypeError("Failed to fetch");
+        }
+
+        return Response.json(charge);
+      },
+    });
+
+    const router = renderAt("/pay/tok");
+
+    expect(await screen.findByRole("heading", { name: "Link indisponível" })).toBeInTheDocument();
+
+    down = false;
+
+    await act(async () => {
+      await router.navigate({ to: "/privacy" });
+    });
+    expect(await screen.findByRole("heading", { name: "Privacidade" })).toBeInTheDocument();
+
+    await act(async () => {
+      await router.navigate({ to: "/pay/$token", params: { token: "tok" } });
+    });
+
+    expect(await screen.findByRole("heading", { name: "Churrasco" })).toBeInTheDocument();
     expect(screen.queryByText("Algo deu errado")).toBeNull();
   });
 

@@ -228,3 +228,21 @@ it("does not remember an upload whose bytes never reached the storage", async ()
   expect(screen.getByLabelText("Comprovante JPG, PNG ou PDF")).toBeEnabled();
   expect(screen.getByText("recibo.pdf")).toBeTruthy();
 });
+it("shows the Portuguese upload failure, not the browser text, when the storage cannot be reached", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    if (init?.method === "PUT") {
+      throw new TypeError("Failed to fetch");
+    }
+    if (init?.method === "POST") {
+      return ticket();
+    }
+
+    return empty();
+  });
+  render(<ProofPanel base={BASE} state={ChargeState.Pending} />);
+  fireEvent.change(screen.getByLabelText("Comprovante JPG, PNG ou PDF"), { target: { files: [pdf()] } });
+  fireEvent.click(screen.getByRole("button", { name: "Enviar comprovante" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("O arquivo não foi enviado. Tente novamente.");
+  expect(screen.queryByText(/failed to fetch/i)).toBeNull();
+});

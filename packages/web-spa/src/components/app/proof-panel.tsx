@@ -162,9 +162,10 @@ export function ProofPanel({ base, state, uploadsEnabled = true, onChanged, cred
       }
 
       const ticket = await response.json() as ProofUploadTicket;
-      const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" });
+      // A PUT that never reaches the storage is the same failed upload as a refused one, not the browser's text.
+      const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file, credentials: "omit", referrerPolicy: "no-referrer" }).catch(() => null);
 
-      if (!put.ok) {
+      if (!put?.ok) {
         throw new Error("O arquivo não foi enviado. Tente novamente.");
       }
 

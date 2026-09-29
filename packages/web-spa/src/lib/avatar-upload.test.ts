@@ -49,3 +49,18 @@ it("explains a rejected file", async () => {
 
   await expect(uploadAvatar(new Blob(["x"], { type: "image/jpeg" }))).rejects.toThrow("Envie uma imagem JPG ou PNG de até 2 MB.");
 });
+
+it("reports a PUT that never reached the storage with the photo failure copy", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+    if (url === `${API}/account/avatar`) {
+      return Response.json({ uploadUrl: "https://bucket.test/put", expiresAt: "x" });
+    }
+
+    throw new TypeError("Failed to fetch");
+  });
+
+  const failure = uploadAvatar(new Blob(["x"], { type: "image/jpeg" }));
+
+  await expect(failure).rejects.toThrow("A foto não foi enviada. Tente novamente.");
+  await expect(failure).rejects.not.toThrow(/failed to fetch/i);
+});

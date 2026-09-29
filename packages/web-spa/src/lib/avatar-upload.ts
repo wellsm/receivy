@@ -45,9 +45,10 @@ export async function uploadAvatar(blob: Blob): Promise<UserAvatar> {
   }
 
   const ticket = (await reserve.json()) as AvatarUploadTicket;
-  const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": AvatarMime.Jpeg }, body: blob, credentials: "omit", referrerPolicy: "no-referrer" });
+  // A PUT that never reaches the storage is the same failed upload as a refused one, not the browser's text.
+  const put = await fetch(ticket.uploadUrl, { method: "PUT", headers: { "content-type": AvatarMime.Jpeg }, body: blob, credentials: "omit", referrerPolicy: "no-referrer" }).catch(() => null);
 
-  if (!put.ok) {
+  if (!put?.ok) {
     throw new Error("A foto não foi enviada. Tente novamente.");
   }
 

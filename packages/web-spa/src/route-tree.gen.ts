@@ -41,6 +41,7 @@ import { Route as ProtectedSettingsPaymentMethodsIndexRouteImport } from "./rout
 import { Route as ProtectedSettingsPaymentMethodsNewRouteImport } from "./routes/_protected/settings/payment-methods/new";
 import { Route as ProtectedSettingsPixIndexRouteImport } from "./routes/_protected/settings/pix/index";
 import { Route as ProtectedSettingsPixNewRouteImport } from "./routes/_protected/settings/pix/new";
+import { Route as DevCheckoutProviderOrderNsuIndexRouteImport } from "./routes/dev/checkout/$provider/$orderNsu/index";
 import { Route as DevCheckoutProviderOrderNsuPayRouteImport } from "./routes/dev/checkout/$provider/$orderNsu/pay";
 
 const ProtectedRoute = ProtectedRouteImport.update({
@@ -209,6 +210,12 @@ const ProtectedSettingsPixNewRoute = ProtectedSettingsPixNewRouteImport.update({
   path: "/settings/pix/new",
   getParentRoute: () => ProtectedRoute,
 } as any);
+const DevCheckoutProviderOrderNsuIndexRoute =
+  DevCheckoutProviderOrderNsuIndexRouteImport.update({
+    id: "/dev/checkout/$provider/$orderNsu/",
+    path: "/dev/checkout/$provider/$orderNsu/",
+    getParentRoute: () => rootRouteImport,
+  } as any);
 const DevCheckoutProviderOrderNsuPayRoute =
   DevCheckoutProviderOrderNsuPayRouteImport.update({
     id: "/dev/checkout/$provider/$orderNsu/pay",
@@ -249,6 +256,7 @@ export interface FileRoutesByFullPath {
   "/settings/payment-methods/": typeof ProtectedSettingsPaymentMethodsIndexRoute;
   "/settings/pix/": typeof ProtectedSettingsPixIndexRoute;
   "/dev/checkout/$provider/$orderNsu/pay": typeof DevCheckoutProviderOrderNsuPayRoute;
+  "/dev/checkout/$provider/$orderNsu/": typeof DevCheckoutProviderOrderNsuIndexRoute;
 }
 export interface FileRoutesByTo {
   "/onboarding": typeof OnboardingRoute;
@@ -283,6 +291,7 @@ export interface FileRoutesByTo {
   "/settings/payment-methods": typeof ProtectedSettingsPaymentMethodsIndexRoute;
   "/settings/pix": typeof ProtectedSettingsPixIndexRoute;
   "/dev/checkout/$provider/$orderNsu/pay": typeof DevCheckoutProviderOrderNsuPayRoute;
+  "/dev/checkout/$provider/$orderNsu": typeof DevCheckoutProviderOrderNsuIndexRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -319,6 +328,7 @@ export interface FileRoutesById {
   "/_protected/settings/payment-methods/": typeof ProtectedSettingsPaymentMethodsIndexRoute;
   "/_protected/settings/pix/": typeof ProtectedSettingsPixIndexRoute;
   "/dev/checkout/$provider/$orderNsu/pay": typeof DevCheckoutProviderOrderNsuPayRoute;
+  "/dev/checkout/$provider/$orderNsu/": typeof DevCheckoutProviderOrderNsuIndexRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -354,7 +364,8 @@ export interface FileRouteTypes {
     | "/contacts/$id/"
     | "/settings/payment-methods/"
     | "/settings/pix/"
-    | "/dev/checkout/$provider/$orderNsu/pay";
+    | "/dev/checkout/$provider/$orderNsu/pay"
+    | "/dev/checkout/$provider/$orderNsu/";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/onboarding"
@@ -388,7 +399,8 @@ export interface FileRouteTypes {
     | "/contacts/$id"
     | "/settings/payment-methods"
     | "/settings/pix"
-    | "/dev/checkout/$provider/$orderNsu/pay";
+    | "/dev/checkout/$provider/$orderNsu/pay"
+    | "/dev/checkout/$provider/$orderNsu";
   id:
     | "__root__"
     | "/_protected"
@@ -423,7 +435,8 @@ export interface FileRouteTypes {
     | "/_protected/contacts/$id/"
     | "/_protected/settings/payment-methods/"
     | "/_protected/settings/pix/"
-    | "/dev/checkout/$provider/$orderNsu/pay";
+    | "/dev/checkout/$provider/$orderNsu/pay"
+    | "/dev/checkout/$provider/$orderNsu/";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -440,6 +453,7 @@ export interface RootRouteChildren {
   LoginIndexRoute: typeof LoginIndexRoute;
   AuthOauthCallbackRoute: typeof AuthOauthCallbackRoute;
   DevCheckoutProviderOrderNsuPayRoute: typeof DevCheckoutProviderOrderNsuPayRoute;
+  DevCheckoutProviderOrderNsuIndexRoute: typeof DevCheckoutProviderOrderNsuIndexRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -668,6 +682,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ProtectedSettingsPixNewRouteImport;
       parentRoute: typeof ProtectedRoute;
     };
+    "/dev/checkout/$provider/$orderNsu/": {
+      id: "/dev/checkout/$provider/$orderNsu/";
+      path: "/dev/checkout/$provider/$orderNsu";
+      fullPath: "/dev/checkout/$provider/$orderNsu/";
+      preLoaderRoute: typeof DevCheckoutProviderOrderNsuIndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/dev/checkout/$provider/$orderNsu/pay": {
       id: "/dev/checkout/$provider/$orderNsu/pay";
       path: "/dev/checkout/$provider/$orderNsu/pay";
@@ -744,6 +765,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginIndexRoute: LoginIndexRoute,
   AuthOauthCallbackRoute: AuthOauthCallbackRoute,
   DevCheckoutProviderOrderNsuPayRoute: DevCheckoutProviderOrderNsuPayRoute,
+  DevCheckoutProviderOrderNsuIndexRoute: DevCheckoutProviderOrderNsuIndexRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

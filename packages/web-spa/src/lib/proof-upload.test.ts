@@ -63,3 +63,18 @@ it("rejects a file the API would refuse before reserving anything", async () => 
 
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it("reports a PUT that never reached the storage with the upload failure copy", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    if (init?.method === "PUT") {
+      throw new TypeError("Failed to fetch");
+    }
+
+    return ticket();
+  });
+
+  const failure = uploadProofFile(base, file);
+
+  await expect(failure).rejects.toThrow("O arquivo não foi enviado. Aguarde cinco minutos para iniciar outro envio.");
+  await expect(failure).rejects.not.toThrow(/failed to fetch/i);
+});

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LoginScreen } from "@/components/screens/login-screen";
+import { ApiError } from "@/lib/api/errors";
 import { requestEmailCode, startOauth } from "@/lib/auth/flows";
 import { PENDING_LOGIN_KEY } from "@/lib/auth/pending-login";
 import { renderWithRouter } from "@/test/render";
@@ -105,5 +106,31 @@ describe("LoginScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Não foi possível concluir o login. Tente novamente ou use seu e-mail.",
     );
+  });
+
+  it("shows the Next sentence, pointing at the e-mail, when the social login cannot start", async () => {
+    vi.mocked(startOauth).mockRejectedValue(new ApiError(503, "Não foi possível iniciar o login. Tente novamente."));
+
+    const user = userEvent.setup();
+
+    await open(<LoginScreen nextPath="/" providers={ALL} />);
+    await user.click(screen.getByRole("button", { name: /Continuar com Google/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível concluir o login. Tente novamente ou use seu e-mail.");
+    expect(screen.queryByText("Não foi possível iniciar o login. Tente novamente.")).toBeNull();
+    expect(screen.getByRole("button", { name: /Continuar com Google/ })).toBeEnabled();
+  });
+
+  it("shows the Next sentence when the e-mail code cannot be sent", async () => {
+    vi.mocked(requestEmailCode).mockRejectedValue(new ApiError(503, "Não foi possível enviar o código agora."));
+
+    const user = userEvent.setup();
+
+    await open(<LoginScreen nextPath="/" providers={ALL} />);
+    await user.type(screen.getByLabelText("Seu e-mail"), "ana@example.com");
+    await user.click(screen.getByRole("button", { name: "Continuar com E-mail" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Não foi possível enviar o código agora.");
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

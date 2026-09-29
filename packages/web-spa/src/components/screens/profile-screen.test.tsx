@@ -3,7 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ACCOUNT_DELETED, ACCOUNT_DELETION_UNCONFIRMED, PlanTier, UserStatus, WhatsappSender, type AuthUser } from "@receivy/common";
 import { ProfileScreen } from "@/components/screens/profile-screen";
+import { onSessionExpired } from "@/lib/api/client";
 import { currentUser, logout } from "@/lib/auth/flows";
+import { clearSession, storeSession } from "@/lib/auth/session";
 import { renderWithRouter } from "@/test/render";
 
 const navigate = vi.fn();
@@ -26,6 +28,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  onSessionExpired(null);
+  clearSession();
   vi.resetAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -248,6 +252,47 @@ describe("ProfileScreen", () => {
     expect(screen.getByRole("link", { name: "Voltar ao login" })).toHaveAttribute("href", "/login");
     expect(navigate).not.toHaveBeenCalled();
     expect(logout).toHaveBeenCalled();
+  });
+
+  it("keeps its own unconfirmed outcome instead of the login when the session dies during the deletion", async () => {
+    const expired = vi.fn();
+
+    loadAccount();
+    vi.mocked(logout).mockResolvedValue(undefined);
+    storeSession({ accessToken: "a1", refreshToken: "r1", expiresIn: 900 });
+    onSessionExpired(expired);
+
+    stubFetch({
+      "DELETE account": () => new Response(null, { status: 401 }),
+      "POST auth/refresh": () => new Response(null, { status: 401 }),
+    });
+
+    renderWithRouter(<ProfileScreen />);
+
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Excluir conta" }));
+    await user.type(screen.getByLabelText("Digite EXCLUIR para confirmar"), "EXCLUIR");
+    await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
+
+    expect(await screen.findByText(ACCOUNT_DELETION_UNCONFIRMED)).toBeInTheDocument();
+    expect(expired).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("still goes to the login on a plain logout when the logout request fails", async () => {
+    loadAccount();
+    vi.mocked(logout).mockRejectedValue(new Error("network"));
+
+    renderWithRouter(<ProfileScreen />);
+
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Sair da conta" }));
+    await user.click(screen.getByRole("button", { name: "Sair" }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/login", { replace: true }));
+    expect(logout).toHaveBeenCalledTimes(1);
   });
 
   // authLogout() clears the local session in its own `finally` block, whether or not the POST
